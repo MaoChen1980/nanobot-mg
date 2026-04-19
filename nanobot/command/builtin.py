@@ -37,7 +37,7 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
             loop._clear_pending_user_turn(session)
             loop._clear_runtime_checkpoint(session)
             session.add_message(
-                "system",
+                "user",
                 "[Task cancelled by user via /stop — do NOT retry or continue "
                 "the previous task; it was intentionally abandoned.]"
             )
@@ -363,7 +363,7 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.priority("/stop", cmd_stop)
     router.priority("/restart", cmd_restart)
     router.priority("/status", cmd_status)
-    router.exact("/new", cmd_new)
+    router.priority("/new", cmd_new)
     router.exact("/status", cmd_status)
     router.exact("/dream", cmd_dream)
     router.exact("/dream-log", cmd_dream_log)
@@ -371,3 +371,14 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.exact("/dream-restore", cmd_dream_restore)
     router.prefix("/dream-restore ", cmd_dream_restore)
     router.exact("/help", cmd_help)
+
+    async def cmd_unknown(ctx: CommandContext) -> OutboundMessage | None:
+        raw = ctx.raw.strip()
+        if raw.startswith("/") and not raw.startswith("//"):
+            return OutboundMessage(
+                channel=ctx.msg.channel, chat_id=ctx.msg.chat_id,
+                content=f"Unknown command: {raw.split()[0]}. Type /help for available commands.",
+                metadata=dict(ctx.msg.metadata or {}),
+            )
+        return None
+    router.intercept(cmd_unknown)
