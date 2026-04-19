@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
 import inspect
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
-from nanobot.utils.prompt_templates import render_template
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.providers.base import LLMProvider, ToolCallRequest
 from nanobot.utils.helpers import (
@@ -22,6 +21,7 @@ from nanobot.utils.helpers import (
     maybe_persist_tool_result,
     truncate_text,
 )
+from nanobot.utils.prompt_templates import render_template
 from nanobot.utils.runtime import (
     EMPTY_FINAL_RESPONSE_MESSAGE,
     build_finalization_retry_message,
@@ -74,6 +74,9 @@ class AgentRunSpec:
     retry_wait_callback: Any | None = None
     checkpoint_callback: Any | None = None
     injection_callback: Any | None = None
+    # Queue of user messages that arrived mid-task (from AgentLoop._pending_queues).
+    # Drained after each tool batch so the LLM sees corrections before continuing.
+    pending_queue: asyncio.Queue | None = None
 
 
 @dataclass(slots=True)
@@ -323,6 +326,23 @@ class AgentRunner:
                     }
                     messages.append(tool_message)
                     completed_tool_results.append(tool_message)
+
+                # Mid-task user messages: drain pending queue and inject so the
+                # LLM sees the user's correction before deciding the next step.
+                # This runs after every tool batch, so "don't move word docs" is
+                # visible to the LLM before it schedules the next move operation.
+                if spec.pending_queue is not None:
+                    while not spec.pending_queue.empty():
+                        try:
+                            pending_msg = spec.pending_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+                        messages.append({"role": "user", "content": pending_msg.content})
+                        logger.info(
+                            "Injected mid-task pending message for session {}",
+                            spec.session_key or "default",
+                        )
+
                 if fatal_error is not None:
                     error = f"Error: {type(fatal_error).__name__}: {fatal_error}"
                     final_content = error

@@ -2679,6 +2679,75 @@ async def test_drain_injections_on_max_iterations():
 
 
 @pytest.mark.asyncio
+async def test_mid_task_pending_queue_injected_after_tool_batch():
+    """Messages in spec.pending_queue should be injected after each tool batch.
+
+    This tests the fix for the "word documents don't move" scenario: when a
+    long-running task fires multiple tool calls, user messages that arrive
+    mid-task are injected into the LLM context before the next tool batch,
+    so the LLM can act on them immediately rather than after all tools finish.
+    """
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+    from nanobot.bus.events import InboundMessage
+
+    provider = MagicMock()
+    call_count = {"n": 0}
+    captured_messages: list[list[dict]] = []
+
+    async def chat_with_retry(*, messages, **kwargs):
+        call_count["n"] += 1
+        captured_messages.append([dict(m) for m in messages])
+        if call_count["n"] == 1:
+            # Return multiple tool calls in one batch
+            return LLMResponse(
+                content="moving files",
+                tool_calls=[
+                    ToolCallRequest(id="call_1", name="exec", arguments={"cmd": "mv a.txt folder/"}),
+                    ToolCallRequest(id="call_2", name="exec", arguments={"cmd": "mv b.txt folder/"}),
+                ],
+                usage={},
+            )
+        # Second call: check that the mid-task message was injected
+        user_contents = [
+            m["content"] for m in messages if m.get("role") == "user"
+        ]
+        has_mid_task_msg = any("don't move" in str(c) for c in user_contents)
+        if has_mid_task_msg:
+            return LLMResponse(content="stopped — user said don't move", tool_calls=[], usage={})
+        return LLMResponse(content="continuing", tool_calls=[], usage={})
+
+    provider.chat_with_retry = chat_with_retry
+    tools = MagicMock()
+    tools.get_definitions.return_value = []
+    tools.execute = AsyncMock(return_value="ok")
+
+    # Simulate a user message arriving while tools are in-flight
+    pending_queue = asyncio.Queue()
+    await pending_queue.put(InboundMessage(
+        channel="cli",
+        sender_id="u",
+        chat_id="c",
+        content="don't move word docs!",
+    ))
+
+    runner = AgentRunner(provider)
+    result = await runner.run(AgentRunSpec(
+        initial_messages=[{"role": "user", "content": "organize files"}],
+        tools=tools,
+        model="test-model",
+        max_iterations=5,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        pending_queue=pending_queue,
+    ))
+
+    # The second LLM call should have seen the mid-task message
+    assert call_count["n"] == 2, f"Expected 2 LLM calls, got {call_count['n']}"
+    assert result.final_content == "stopped — user said don't move"
+    assert pending_queue.empty(), "pending_queue should be fully drained"
+
+
+
+@pytest.mark.asyncio
 async def test_drain_injections_set_flag_when_followup_arrives_after_last_iteration():
     """Late follow-ups drained in max_iterations should still flip had_injections."""
     from nanobot.agent.hook import AgentHook

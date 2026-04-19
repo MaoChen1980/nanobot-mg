@@ -26,6 +26,25 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
             pass
     sub_cancelled = await loop.subagents.cancel_by_session(msg.session_key)
     total = cancelled + sub_cancelled
+
+    # Inject cancellation notice so the LLM knows the previous task was
+    # intentionally cancelled and won't retry it on the next message.
+    if total > 0:
+        try:
+            session = loop.sessions.get_or_create(msg.session_key)
+            # Remove pending turn marker so the cancelled task's turn is not
+            # treated as incomplete.
+            loop._clear_pending_user_turn(session)
+            loop._clear_runtime_checkpoint(session)
+            session.add_message(
+                "system",
+                "[Task cancelled by user via /stop — do NOT retry or continue "
+                "the previous task; it was intentionally abandoned.]"
+            )
+            loop.sessions.save(session)
+        except Exception:
+            pass
+
     content = f"Stopped {total} task(s)." if total else "No active task to stop."
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id, content=content,
@@ -60,7 +79,7 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
         pass
     if ctx_est <= 0:
         ctx_est = loop._last_usage.get("prompt_tokens", 0)
-    
+
     # Fetch web search provider usage (best-effort, never blocks the response)
     search_usage_text: str | None = None
     try:
