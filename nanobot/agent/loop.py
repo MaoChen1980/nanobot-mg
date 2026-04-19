@@ -772,18 +772,28 @@ class AgentLoop:
             self.sessions.save(session)
             user_persisted_early = True
 
-        final_content, _, all_msgs, stop_reason, had_injections = await self._run_agent_loop(
-            initial_messages,
-            on_progress=on_progress or _bus_progress,
-            on_stream=on_stream,
-            on_stream_end=on_stream_end,
-            on_retry_wait=_on_retry_wait,
-            session=session,
-            channel=msg.channel,
-            chat_id=msg.chat_id,
-            message_id=msg.metadata.get("message_id"),
-            pending_queue=pending_queue,
-        )
+        try:
+            final_content, _, all_msgs, stop_reason, had_injections = await self._run_agent_loop(
+                initial_messages,
+                on_progress=on_progress or _bus_progress,
+                on_stream=on_stream,
+                on_stream_end=on_stream_end,
+                on_retry_wait=_on_retry_wait,
+                session=session,
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                message_id=msg.metadata.get("message_id"),
+                pending_queue=pending_queue,
+            )
+        except asyncio.CancelledError:
+            # Session metadata (pending_user_turn, runtime_checkpoint) is still
+            # set from before the agent loop ran.  Clear it so the next message
+            # does not restore a stale pending-turn or checkpoint and produce a
+            # corrupted session state.
+            self._clear_pending_user_turn(session)
+            self._clear_runtime_checkpoint(session)
+            self.sessions.save(session)
+            raise
 
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE

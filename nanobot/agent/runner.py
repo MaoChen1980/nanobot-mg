@@ -303,7 +303,7 @@ class AgentRunner:
 
                 await hook.before_execute_tools(context)
 
-                results, new_events, fatal_error = await self._execute_tools(
+                results, new_events, fatal_error, pending_tool_calls = await self._execute_tools(
                     spec,
                     response.tool_calls,
                     external_lookup_counts,
@@ -326,6 +326,31 @@ class AgentRunner:
                     }
                     messages.append(tool_message)
                     completed_tool_results.append(tool_message)
+
+                # If tool execution was interrupted (e.g. by /stop), inform the LLM
+                # about what ran, what didn't, and let it decide the next step.
+                if pending_tool_calls:
+                    pending_list = ", ".join(
+                        f"{tc.name}({tc.arguments})" for tc in pending_tool_calls
+                    )
+                    completed_list = "\n".join(
+                        f"- {tc.name}: {r!r}" if r is not None else f"- {tc.name}: (none)"
+                        for tc, r in zip(response.tool_calls, results)
+                    )
+                    inject = (
+                        "⚠️ Tool execution was interrupted. "
+                        f"The following tool(s) were NOT executed and will NOT run:\n"
+                        f"  {pending_list}\n\n"
+                        f"The following tool(s) completed:\n"
+                        f"{completed_list}\n\n"
+                        "What would you like to do next?"
+                    )
+                    messages.append({"role": "user", "content": inject})
+                    logger.info(
+                        "Tool execution interrupted for session {}, {} tool(s) pending",
+                        spec.session_key or "default",
+                        len(pending_tool_calls),
+                    )
 
                 # Mid-task user messages: drain pending queue and inject so the
                 # LLM sees the user's correction before deciding the next step.
@@ -368,7 +393,7 @@ class AgentRunner:
                         "model": spec.model,
                         "assistant_message": assistant_message,
                         "completed_tool_results": completed_tool_results,
-                        "pending_tool_calls": [],
+                        "pending_tool_calls": [tc.to_openai_tool_call() for tc in pending_tool_calls],
                     },
                 )
                 empty_content_retries = 0
@@ -644,18 +669,33 @@ class AgentRunner:
         spec: AgentRunSpec,
         tool_calls: list[ToolCallRequest],
         external_lookup_counts: dict[str, int],
-    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None]:
+    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None, list[ToolCallRequest]]:
+        """Execute tool calls and return (results, events, fatal_error, pending_tool_calls).
+
+        pending_tool_calls is the list of tool calls that were NOT executed because
+        execution was interrupted (e.g. by CancelledError).  An empty list means
+        all calls completed normally.
+        """
         batches = self._partition_tool_batches(spec, tool_calls)
         tool_results: list[tuple[Any, dict[str, str], BaseException | None]] = []
+        pending: list[ToolCallRequest] = []
         for batch in batches:
-            if spec.concurrent_tools and len(batch) > 1:
-                tool_results.extend(await asyncio.gather(*(
-                    self._run_tool(spec, tool_call, external_lookup_counts)
-                    for tool_call in batch
-                )))
-            else:
-                for tool_call in batch:
-                    tool_results.append(await self._run_tool(spec, tool_call, external_lookup_counts))
+            try:
+                if spec.concurrent_tools and len(batch) > 1:
+                    tool_results.extend(await asyncio.gather(*(
+                        self._run_tool(spec, tool_call, external_lookup_counts)
+                        for tool_call in batch
+                    )))
+                else:
+                    for tool_call in batch:
+                        tool_results.append(await self._run_tool(spec, tool_call, external_lookup_counts))
+            except asyncio.CancelledError:
+                # Record which tool calls in this batch (and all subsequent batches)
+                # were NOT executed.
+                for remaining_batch in batches[batches.index(batch):]:
+                    for tc in remaining_batch:
+                        pending.append(tc)
+                break
 
         results: list[Any] = []
         events: list[dict[str, str]] = []
@@ -665,7 +705,7 @@ class AgentRunner:
             events.append(event)
             if error is not None and fatal_error is None:
                 fatal_error = error
-        return results, events, fatal_error
+        return results, events, fatal_error, pending
 
     async def _run_tool(
         self,

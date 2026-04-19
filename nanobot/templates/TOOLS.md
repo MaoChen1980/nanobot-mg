@@ -1,4 +1,4 @@
-# Tool Usage Notes
+# system Tool Usage Notes for assistant using
 
 Tool signatures are provided automatically via function calling.
 This file documents non-obvious constraints and usage patterns.
