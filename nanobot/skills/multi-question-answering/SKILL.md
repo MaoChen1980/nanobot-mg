@@ -3,7 +3,7 @@ name: multi-question-answering
 description: Multi-choice question answering - when user asks multiple choice questions simultaneously, answer directly with option numbers/letters. Used when answering multiple questions that have options.
 ---
 
-# Multi-Question Answering
+# Multi-Question Answering, rules from user
 
 Multi-choice question answering technique.
 

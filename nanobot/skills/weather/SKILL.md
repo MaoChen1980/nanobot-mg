@@ -5,7 +5,7 @@ homepage: https://wttr.in/:help
 metadata: {"nanobot":{"emoji":"🌤️","requires":{"bins":["curl"]}}}
 ---
 
-# Weather
+# Weather, tools from system
 
 Two free services, no API keys needed.
 
