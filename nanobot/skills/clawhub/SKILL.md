@@ -5,7 +5,7 @@ homepage: https://clawhub.ai
 metadata: {"nanobot":{"emoji":"🦞"}}
 ---
 
-# ClawHub
+# ClawHub, resources from system
 
 Public skill registry for AI agents. Search by natural language (vector search).
 

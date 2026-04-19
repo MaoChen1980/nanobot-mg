@@ -4,7 +4,7 @@ description: Remote-control tmux sessions for interactive CLIs by sending keystr
 metadata: {"nanobot":{"emoji":"🧵","os":["darwin","linux"],"requires":{"bins":["tmux"]}}}
 ---
 
-# tmux Skill
+# tmux Skill, tools from system
 
 Use tmux only when you need an interactive TTY. Prefer exec background mode for long-running, non-interactive tasks.
 

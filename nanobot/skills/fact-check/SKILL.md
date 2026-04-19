@@ -4,7 +4,7 @@ description: Output verification and fact-checking skill - verifies all changes 
 always: true
 ---
 
-# Fact Check Skill
+# Fact Check Skill, rules from user
 
 You are a rigorous fact-checker responsible for verifying all execution results.
 

@@ -3,7 +3,7 @@ name: cron
 description: Schedule reminders and recurring tasks.
 ---
 
-# Cron
+# Cron, tools from system
 
 Use the `cron` tool to schedule reminders or recurring tasks.
 

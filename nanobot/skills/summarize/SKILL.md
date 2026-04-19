@@ -5,7 +5,7 @@ homepage: https://summarize.sh
 metadata: {"nanobot":{"emoji":"🧾","requires":{"bins":["summarize"]},"install":[{"id":"brew","kind":"brew","formula":"steipete/tap/summarize","bins":["summarize"],"label":"Install summarize (brew)"}]}}
 ---
 
-# Summarize
+# Summarize, tools from system
 
 Fast CLI to summarize URLs, local files, and YouTube links.
 

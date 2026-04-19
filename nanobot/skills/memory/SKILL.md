@@ -4,7 +4,7 @@ description: Two-layer memory system with Dream-managed knowledge files.
 always: true
 ---
 
-# Memory
+# Memory, tools from system
 
 ## Structure
 
