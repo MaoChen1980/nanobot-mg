@@ -1052,7 +1052,7 @@ class FeishuChannel(BaseChannel):
 
         return None, f"[{msg_type}: download failed]"
 
-    _REPLY_CONTEXT_MAX_LEN = 200
+    _REPLY_CONTEXT_MAX_LEN = 1000
 
     def _get_message_content_sync(self, message_id: str) -> str | None:
         """Fetch the text content of a Feishu message by ID (synchronous).
@@ -1061,9 +1061,16 @@ class FeishuChannel(BaseChannel):
         """
         from lark_oapi.api.im.v1 import GetMessageRequest
 
+        logger.info("Feishu: _get_message_content_sync START, message_id={}", message_id)
         try:
             request = GetMessageRequest.builder().message_id(message_id).build()
             response = self._client.im.v1.message.get(request)
+            logger.info(
+                "Feishu: GetMessageRequest response: success={}, code={}, msg={}",
+                response.success(),
+                getattr(response, "code", None),
+                getattr(response, "msg", None),
+            )
             if not response.success():
                 logger.debug(
                     "Feishu: could not fetch parent message {}: code={}, msg={}",
@@ -1073,18 +1080,26 @@ class FeishuChannel(BaseChannel):
                 )
                 return None
             items = getattr(response.data, "items", None)
+            logger.info("Feishu: items={}, type={}", items, type(items))
             if not items:
+                logger.info("Feishu: items is empty or None")
                 return None
             msg_obj = items[0]
+            logger.info("Feishu: msg_obj type={}, msg_type={}", type(msg_obj), getattr(msg_obj, "msg_type", None))
             raw_content = getattr(msg_obj, "body", None)
+            logger.info("Feishu: raw_content (body)={}", raw_content)
             raw_content = getattr(raw_content, "content", None) if raw_content else None
+            logger.info("Feishu: raw_content (content attr)={}", raw_content)
             if not raw_content:
+                logger.info("Feishu: raw_content is empty")
                 return None
             try:
                 content_json = json.loads(raw_content)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.info("Feishu: json.loads failed: {}", e)
                 return None
             msg_type = getattr(msg_obj, "msg_type", "")
+            logger.info("Feishu: final msg_type={}", msg_type)
             if msg_type == "text":
                 text = content_json.get("text", "").strip()
             elif msg_type == "post":
@@ -1092,13 +1107,17 @@ class FeishuChannel(BaseChannel):
                 text = text.strip()
             else:
                 text = ""
+            logger.info("Feishu: extracted text={}", text[:100] if text else text)
             if not text:
+                logger.info("Feishu: text is empty after extraction")
                 return None
             if len(text) > self._REPLY_CONTEXT_MAX_LEN:
                 text = text[: self._REPLY_CONTEXT_MAX_LEN] + "..."
-            return f"[Reply to: {text}]"
+            result = f"[Reply to: {text}]"
+            logger.info("Feishu: _get_message_content_sync END, result={}", result[:100])
+            return result
         except Exception as e:
-            logger.debug("Feishu: error fetching parent message {}: {}", message_id, e)
+            logger.info("Feishu: error fetching parent message {}: {}", message_id, e)
             return None
 
     def _reply_message_sync(self, parent_message_id: str, msg_type: str, content: str) -> bool:
@@ -1519,6 +1538,13 @@ class FeishuChannel(BaseChannel):
 
             logger.debug("Feishu raw message: {}", message.content)
             logger.debug("Feishu mentions: {}", getattr(message, "mentions", None))
+            logger.info(
+                "Feishu message object attributes: message_id={}, parent_id={}, root_id={}, thread_id={}",
+                getattr(message, "message_id", None),
+                getattr(message, "parent_id", None),
+                getattr(message, "root_id", None),
+                getattr(message, "thread_id", None),
+            )
 
             # Deduplication check
             message_id = message.message_id
@@ -1610,12 +1636,22 @@ class FeishuChannel(BaseChannel):
             root_id = getattr(message, "root_id", None) or None
             thread_id = getattr(message, "thread_id", None) or None
 
+            logger.debug(
+                "Feishu reply context: message_id={}, parent_id={}, root_id={}, thread_id={}",
+                message_id,
+                parent_id,
+                root_id,
+                thread_id,
+            )
+
             # Prepend quoted message text when the user replied to another message
             if parent_id and self._client:
+                logger.debug("Feishu: fetching parent message content for parent_id={}", parent_id)
                 loop = asyncio.get_running_loop()
                 reply_ctx = await loop.run_in_executor(
                     None, self._get_message_content_sync, parent_id
                 )
+                logger.debug("Feishu: got reply_ctx={}", reply_ctx)
                 if reply_ctx:
                     content_parts.insert(0, reply_ctx)
 
