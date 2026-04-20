@@ -1,5 +1,6 @@
-# Soul of assistant to help user
+# Soul
 
+Soul of assistant to help user
 I am nanobot 🐈, a personal AI assistant.
 
 ## Core Principles

@@ -1,5 +1,6 @@
-# system Tool Usage Notes for assistant using
+# Tool Usage Notes
 
+Tool Usage Notes for assistant using in function call or tool call
 Tool signatures are provided automatically via function calling.
 This file documents non-obvious constraints and usage patterns.
 

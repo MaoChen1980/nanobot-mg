@@ -223,6 +223,15 @@ class ToolsConfig(Base):
     ssrf_whitelist: list[str] = Field(default_factory=list)  # CIDR ranges to exempt from SSRF blocking (e.g. ["100.64.0.0/10"] for Tailscale)
 
 
+class LogConfig(Base):
+    """Logging configuration."""
+
+    enabled: bool = True  # Whether to enable logging
+    level: str = "INFO"  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    file: str | None = "logs/nanobot.log"  # Log file path relative to data directory
+    console: bool = True  # Whether to log to console
+
+
 class Config(BaseSettings):
     """Root configuration for nanobot."""
 
@@ -232,6 +241,7 @@ class Config(BaseSettings):
     api: ApiConfig = Field(default_factory=ApiConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    logging: LogConfig = Field(default_factory=LogConfig)
 
     @property
     def workspace_path(self) -> Path:
