@@ -106,13 +106,13 @@ class _LoopHook(AgentHook):
             await self._on_progress(tool_hint, tool_hint=True)
         for tc in context.tool_calls:
             args_str = json.dumps(tc.arguments, ensure_ascii=False)
-            logger.info("Tool call: {}({})", tc.name, args_str[:200])
+            logger.info("Tool call start: {}({})", tc.name, args_str)
         self._loop._set_tool_context(self._channel, self._chat_id, self._message_id)
 
     async def after_iteration(self, context: AgentHookContext) -> None:
         u = context.usage or {}
         logger.debug(
-            "LLM usage: prompt={} completion={} cached={}",
+            "after_iteration LLM usage: prompt={} completion={} cached={}",
             u.get("prompt_tokens", 0),
             u.get("completion_tokens", 0),
             u.get("cached_tokens", 0),
@@ -504,8 +504,9 @@ class AgentLoop:
                     )
                 else:
                     logger.info(
-                        "Routed follow-up message to pending queue for session {}",
+                        "Routed follow-up message to pending queue for session {}: {}",
                         effective_key,
+                        pending_msg.content,
                     )
                     continue
             # Compute the effective session key before dispatching

@@ -1620,6 +1620,12 @@ class FeishuChannel(BaseChannel):
                     content_parts.insert(0, reply_ctx)
 
             content = "\n".join(content_parts) if content_parts else ""
+            logger.info(
+                "Feishu received message from {} ({}): {}",
+                sender_id,
+                chat_id,
+                content,
+            )
 
             if not content and not media_paths:
                 return
