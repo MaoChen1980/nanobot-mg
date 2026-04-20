@@ -35,7 +35,7 @@ _DEFAULT_ERROR_MESSAGE = "Sorry, I encountered an error calling the AI model."
 _PERSISTED_MODEL_ERROR_PLACEHOLDER = "[Assistant reply unavailable due to model error.]"
 _MAX_EMPTY_RETRIES = 2
 _MAX_LENGTH_RECOVERIES = 3
-_MAX_INJECTIONS_PER_TURN = 3
+_MAX_INJECTIONS_PER_TURN = 10
 _MAX_INJECTION_CYCLES = 5
 _SNIP_SAFETY_BUFFER = 1024
 _MICROCOMPACT_KEEP_RECENT = 10
@@ -176,9 +176,11 @@ class AgentRunner:
                     },
                 )
         self._append_injected_messages(messages, injections)
+        # Extract message contents for logging
+        message_contents = [msg.get("content", "") for msg in injections]
         logger.info(
-            "Injected {} follow-up message(s) {} ({}/{})",
-            len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
+            "Injected {} follow-up message(s) {} ({}/{}): {}",
+            len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES, message_contents,
         )
         return True, injection_cycles
 
@@ -313,16 +315,22 @@ class AgentRunner:
                 context.tool_events = list(new_events)
                 completed_tool_results: list[dict[str, Any]] = []
                 for tool_call, result in zip(response.tool_calls, results):
+                    normalized = self._normalize_tool_result(
+                        spec,
+                        tool_call.id,
+                        tool_call.name,
+                        result,
+                    )
+                    logger.info(
+                        "Tool result for {}: {}",
+                        tool_call.name,
+                        normalized,
+                    )
                     tool_message = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "name": tool_call.name,
-                        "content": self._normalize_tool_result(
-                            spec,
-                            tool_call.id,
-                            tool_call.name,
-                            result,
-                        ),
+                        "content": normalized,
                     }
                     messages.append(tool_message)
                     completed_tool_results.append(tool_message)
@@ -364,8 +372,9 @@ class AgentRunner:
                             break
                         messages.append({"role": "user", "content": pending_msg.content})
                         logger.info(
-                            "Injected mid-task pending message for session {}",
+                            "Injected mid-task pending message for session {}: {}",
                             spec.session_key or "default",
+                            pending_msg.content,
                         )
 
                 if fatal_error is not None:
@@ -693,6 +702,15 @@ class AgentRunner:
                 # Record which tool calls in this batch (and all subsequent batches)
                 # were NOT executed.
                 for remaining_batch in batches[batches.index(batch):]:
+                    for tc in remaining_batch:
+                        pending.append(tc)
+                break
+
+            # Check for mid-task user messages after each batch.
+            # If new messages arrived, abandon remaining tool calls so the LLM
+            # can re-plan based on the fresh context (completed results + new input).
+            if spec.pending_queue is not None and not spec.pending_queue.empty():
+                for remaining_batch in batches[batches.index(batch) + 1:]:
                     for tc in remaining_batch:
                         pending.append(tc)
                 break

@@ -4,12 +4,25 @@ Tool Usage Notes for assistant using in function call or tool call
 Tool signatures are provided automatically via function calling.
 This file documents non-obvious constraints and usage patterns.
 
+## General
+
+- Answer all pending user questions in one response if possible. If tool results are available, use them.
+- If a task was cancelled or interrupted, inform the user explicitly.
+- Do not leave questions unanswered if you have the information to answer them.
+
 ## exec — Safety Limits
 
 - Commands have a configurable timeout (default 60s)
 - Dangerous commands are blocked (rm -rf, format, dd, shutdown, etc.)
 - Output is truncated at 10,000 characters
 - `restrictToWorkspace` config can limit file access to the workspace
+
+## exec — Chinese Characters & URLs
+
+- On Windows, `cmd.exe` uses GBK encoding by default, which corrupts Chinese characters in URLs
+- For Chinese city names in URLs, use `powershell -Command` instead of bare `curl`, or URL-encode the city name
+- Example: `powershell -Command "curl -s 'https://wttr.in/%E8%A5%BF%E5%AE%89?format=3'"` (西安 URL-encoded)
+- Better alternative for weather: use `web_search` to find the weather, or use Open-Meteo with coordinates (no Chinese in URL)
 
 ## glob — File Discovery
 

@@ -121,6 +121,19 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
 async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     """Start a fresh session."""
     loop = ctx.loop
+    msg = ctx.msg
+
+    # Stop any active tasks for this session first (same as /stop)
+    tasks = loop._active_tasks.pop(msg.session_key, [])
+    cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
+    for t in tasks:
+        try:
+            await t
+        except (asyncio.CancelledError, Exception):
+            pass
+    await loop.subagents.cancel_by_session(msg.session_key)
+
+    # Archive unconsolidated messages in background
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
     snapshot = session.messages[session.last_consolidated:]
     session.clear()
@@ -128,10 +141,12 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     loop.sessions.invalidate(session.key)
     if snapshot:
         loop._schedule_background(loop.consolidator.archive(snapshot))
+
+    stopped = f"已停止 {cancelled} 个进行中的任务。" if cancelled else "没有进行中的任务。"
     return OutboundMessage(
-        channel=ctx.msg.channel, chat_id=ctx.msg.chat_id,
-        content="New session started.",
-        metadata=dict(ctx.msg.metadata or {})
+        channel=msg.channel, chat_id=msg.chat_id,
+        content=f"新对话开始。{stopped}",
+        metadata=dict(msg.metadata or {})
     )
 
 
