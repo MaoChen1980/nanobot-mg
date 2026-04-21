@@ -48,3 +48,9 @@ This file documents non-obvious constraints and usage patterns.
 ## cron — Scheduled Reminders
 
 - Please refer to cron skill for usage.
+
+## recall — Memory Search
+
+- Use `recall` to search memories before answering questions about prior work, decisions, dates, people, preferences, or facts.
+- After calling recall, absorb the results into your context — do NOT simply forward the raw memory output to the user.
+- If recall returns relevant memories, incorporate that context into your response naturally.
