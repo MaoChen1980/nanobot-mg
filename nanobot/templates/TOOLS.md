@@ -59,8 +59,8 @@ This file documents non-obvious constraints and usage patterns.
 - Anything you might have forgotten or weren't present for
 
 **How to use:**
-1. When user asks about past events → call recall first
-2. After getting results, absorb the context into your answer
-3. Do NOT simply dump raw memory output to user — synthesize it
+1. **First check**: Use a broad keyword (or no keyword) to see if relevant memories exist
+2. **Then narrow**: If found, use start/end dates or more specific keywords to get context
+3. **Absorb and answer**: Do NOT dump raw output — synthesize results into your answer
 
 **Proactive recall is required, not optional.** If you're unsure, call recall.
