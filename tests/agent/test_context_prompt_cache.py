@@ -159,7 +159,7 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
     prompt = builder.build_system_prompt()
     assert "single-step tasks" in prompt
     assert "multi-step tasks" in prompt
-    assert "Read before you write" in prompt
+    assert "if you want to change a file, read it first" in prompt
     assert "verify the result" in prompt
 
 
