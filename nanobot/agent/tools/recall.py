@@ -90,10 +90,17 @@ class RecallTool(Tool):
         return True
 
     def _match_keyword(self, content: str, keyword: str | None) -> bool:
-        """Check if content matches keyword (case-insensitive)."""
+        """Check if content matches keyword (case-insensitive).
+
+        Supports multiple keywords separated by spaces.
+        Uses OR logic: content matches if ANY keyword is found.
+        """
         if not keyword:
             return True
-        return keyword.lower() in content.lower()
+        content_lower = content.lower()
+        # Split by whitespace and match if ANY keyword is found
+        keywords = keyword.lower().split()
+        return any(kw in content_lower for kw in keywords)
 
     async def execute(
         self,
