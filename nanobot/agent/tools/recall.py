@@ -111,12 +111,10 @@ class RecallTool(Tool):
 
         results: list[tuple[str, str]] = []  # (timestamp, content)
 
-        # Search MEMORY.md (no timestamp)
+        # Search MEMORY.md (no timestamp - always included if keyword matches)
         memory = self._store.read_memory()
         if memory and self._match_keyword(memory, keyword):
-            # MEMORY.md has no timestamp, include it only if no date filter
-            if not start_dt and not end_dt:
-                results.append(("", memory))
+            results.append(("", memory))
 
         # Search history.jsonl
         history_file = self._store.history_file
