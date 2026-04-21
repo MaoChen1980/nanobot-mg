@@ -39,11 +39,15 @@ class RecallTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Search and retrieve relevant memories from the conversation history. "
-            "Use this when you need to recall past facts, decisions, or context "
-            "that may help respond to the current query. "
-            "Specify start/end dates (YYYY-MM-DD or YYYY-MM-DD HH:MM) to narrow the time range, "
-            "and optionally filter by keyword."
+            "Mandatory recall step: search memories before answering questions about prior work, "
+            "decisions, dates, people, preferences, or facts that may have been discussed before.\n\n"
+            "Searches MEMORY.md (long-term memory) and conversation history.\n\n"
+            "Parameters:\n"
+            "- start: Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive\n"
+            "- end: End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive\n"
+            "- keyword: Optional keyword to filter memories\n\n"
+            "Returns relevant snippets with timestamps. "
+            "Use this proactively when you need to recall context from past sessions."
         )
 
     @property
