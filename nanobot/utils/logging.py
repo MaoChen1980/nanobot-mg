@@ -31,7 +31,7 @@ class LoggerConfig:
             logger.add(
                 sink=lambda msg: print(msg, end=""),
                 level=log_config.level,
-                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS UTC}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS %z}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
             )
 
         # Add file handler if file path is provided
@@ -42,7 +42,7 @@ class LoggerConfig:
             logger.add(
                 sink=log_path,
                 level=log_config.level,
-                format="{time:YYYY-MM-DD HH:mm:ss.SSS UTC} | {level: <8} | {name}:{function}:{line} - {message}",
+                format="{time:YYYY-MM-DD HH:mm:ss.SSS %z} | {level: <8} | {name}:{function}:{line} - {message}",
                 rotation="50MB",
                 compression="zip",
             )

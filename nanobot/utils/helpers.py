@@ -103,15 +103,20 @@ def current_time_str(timezone: str | None = None) -> str:
     """Return the current time string."""
     from zoneinfo import ZoneInfo
 
-    try:
-        tz = ZoneInfo(timezone) if timezone else None
-    except (KeyError, Exception):
-        tz = None
+    # If no timezone provided, use system local timezone
+    if timezone is None:
+        # Use astimezone() without argument to get local timezone
+        now = datetime.now().astimezone()
+    else:
+        try:
+            tz = ZoneInfo(timezone) if timezone else None
+        except (KeyError, Exception):
+            tz = None
+        now = datetime.now(tz=tz) if tz else datetime.now().astimezone()
 
-    now = datetime.now(tz=tz) if tz else datetime.now().astimezone()
     offset = now.strftime("%z")
     offset_fmt = f"{offset[:3]}:{offset[3:]}" if len(offset) == 5 else offset
-    tz_name = timezone or (time.strftime("%Z") or "UTC")
+    tz_name = getattr(now.tzinfo, 'key', None) or str(now.tzinfo) or "UTC"
     return f"{now.strftime('%Y-%m-%d %H:%M (%A)')} ({tz_name}, UTC{offset_fmt})"
 
 
