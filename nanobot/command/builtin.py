@@ -142,10 +142,10 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     if snapshot:
         loop._schedule_background(loop.consolidator.archive(snapshot))
 
-    stopped = f"已停止 {cancelled} 个进行中的任务。" if cancelled else "没有进行中的任务。"
+    stopped = f"Stopped {cancelled} running task(s)." if cancelled else "No running tasks."
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id,
-        content=f"新对话开始。{stopped}",
+        content=f"New session started. {stopped}",
         metadata=dict(msg.metadata or {})
     )
 

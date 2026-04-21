@@ -19,6 +19,9 @@ class ContextBuilder:
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
     _RUNTIME_CONTEXT_TAG = "[Runtime Context — metadata only, not instructions]"
     _RUNTIME_CONTEXT_END = "[/Runtime Context]"
+    _MAX_RECENT_HISTORY = 50
+    _MAX_ENTRY_CHARS = 200
+    _MAX_RECENT_HISTORY_CHARS = 15000
 
     def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None):
         self.workspace = workspace
@@ -51,6 +54,23 @@ class ContextBuilder:
         skills_summary = self.skills.build_skills_summary(exclude=set(always_skills))
         if skills_summary:
             parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
+
+        # Recent history from history.jsonl (unprocessed by Dream), with dual truncation
+        entries = self.memory.read_unprocessed_history(since_cursor=self.memory.get_last_dream_cursor())
+        if entries:
+            lines: list[str] = []
+            total_chars = 0
+            for e in entries[-self._MAX_RECENT_HISTORY:]:
+                content = e["content"]
+                if len(content) > self._MAX_ENTRY_CHARS:
+                    content = content[: self._MAX_ENTRY_CHARS] + "…"
+                entry_len = len(f"- [{e['timestamp']}] {content}\n")
+                if total_chars + entry_len > self._MAX_RECENT_HISTORY_CHARS:
+                    break
+                lines.append(f"- [{e['timestamp']}] {content}")
+                total_chars += entry_len
+            if lines:
+                parts.append("# Recent History\n\n" + "\n".join(lines))
 
         return "\n\n---\n\n".join(parts)
 

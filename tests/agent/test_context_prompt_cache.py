@@ -99,7 +99,7 @@ def test_unprocessed_history_injected_into_system_prompt(tmp_path) -> None:
     assert "# Recent History" in prompt
     assert "User asked about weather in Tokyo" in prompt
     assert "Agent fetched forecast via web_search" in prompt
-    assert re.search(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]", prompt)
+    assert re.search(r"\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", prompt)
 
 
 def test_recent_history_capped_at_max(tmp_path) -> None:
