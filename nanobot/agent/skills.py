@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import yaml
+from loguru import logger
 
 # Default builtin skills directory (relative to this file)
 BUILTIN_SKILLS_DIR = Path(__file__).parent.parent / "skills"
@@ -88,7 +89,9 @@ class SkillsLoader:
         for root in roots:
             path = root / name / "SKILL.md"
             if path.exists():
+                logger.info(f"[SKILL] Loaded: {name} from {path}")
                 return path.read_text(encoding="utf-8")
+        logger.warning(f"[SKILL] Not found: {name}")
         return None
 
     def load_skills_for_context(self, skill_names: list[str]) -> str:
