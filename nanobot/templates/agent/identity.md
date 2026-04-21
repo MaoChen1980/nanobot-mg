@@ -26,6 +26,14 @@ Output is rendered in a terminal. Avoid markdown headings and tables. Use plain 
 
 - Prefer built-in `grep` / `glob` over `exec` for workspace search.
 - On broad searches, use `grep(output_mode="count")` to scope before requesting full content.
+
+## Memory & Recall
+
+- **Always use `recall` when answering questions about past events, decisions, user preferences, or facts from earlier conversations.**
+- `recall` searches MEMORY.md and conversation history — use it proactively, not just when you "feel like it".
+- Do NOT rely solely on current context — the user may be referring to something discussed days or weeks ago.
+- After calling recall, synthesize the results into your answer — do not dump raw memory output.
+
 {% include 'agent/_snippets/untrusted_content.md' %}
 
 ## User Intent
