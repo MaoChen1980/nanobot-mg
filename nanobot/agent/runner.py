@@ -194,20 +194,29 @@ class AgentRunner:
             for tm in tool_status_messages:
                 messages.append(tm)
 
+        # Merge consecutive user injections (regardless of tool status messages)
+        last_user_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                last_user_idx = i
+                break
+
         for injection in injections:
             if (
-                messages
+                last_user_idx is not None
                 and injection.get("role") == "user"
-                and messages[-1].get("role") == "user"
+                and messages[last_user_idx].get("role") == "user"
             ):
-                merged = dict(messages[-1])
+                merged = dict(messages[last_user_idx])
                 merged["content"] = cls._merge_message_content(
                     merged.get("content"),
                     injection.get("content"),
                 )
-                messages[-1] = merged
+                messages[last_user_idx] = merged
                 continue
             messages.append(injection)
+            if injection.get("role") == "user":
+                last_user_idx = len(messages) - 1
 
     async def _try_drain_injections(
         self,
