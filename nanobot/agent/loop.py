@@ -367,12 +367,14 @@ class AgentLoop:
         """
         tasks = self._active_tasks.pop(key, [])
         cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
+        logger.info("_cancel_active_tasks: key={}, dispatch_tasks={}, cancelled={}", key, len(tasks), cancelled)
         for t in tasks:
             try:
                 await t
             except (asyncio.CancelledError, Exception):
                 pass
         sub_cancelled = await self.subagents.cancel_by_session(key)
+        logger.info("_cancel_active_tasks: key={}, sub_cancelled={}, total={}", key, sub_cancelled, cancelled + sub_cancelled)
         return cancelled + sub_cancelled
 
     def _effective_session_key(self, msg: InboundMessage) -> str:
