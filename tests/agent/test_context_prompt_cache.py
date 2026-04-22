@@ -61,8 +61,8 @@ def test_system_prompt_reflects_current_dream_memory_contract(tmp_path) -> None:
     assert "write important facts here" not in prompt
 
 
-def test_runtime_context_is_separate_untrusted_user_message(tmp_path) -> None:
-    """Runtime metadata should be merged with the user message."""
+def test_runtime_context_is_in_system_prompt_not_user_message(tmp_path) -> None:
+    """Runtime metadata lives in system prompt, not merged into user message."""
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
@@ -74,17 +74,19 @@ def test_runtime_context_is_separate_untrusted_user_message(tmp_path) -> None:
     )
 
     assert messages[0]["role"] == "system"
-    assert "## Current Session" not in messages[0]["content"]
+    # Runtime context should be in system prompt (metadata section)
+    assert ContextBuilder._RUNTIME_CONTEXT_TAG in messages[0]["content"]
+    assert "Current Time:" in messages[0]["content"]
+    assert "Channel: cli" in messages[0]["content"]
+    assert "Chat ID: direct" in messages[0]["content"]
 
-    # Runtime context is now merged with user message into a single message
+    # User message should contain only actual user content
     assert messages[-1]["role"] == "user"
     user_content = messages[-1]["content"]
     assert isinstance(user_content, str)
-    assert ContextBuilder._RUNTIME_CONTEXT_TAG in user_content
-    assert "Current Time:" in user_content
-    assert "Channel: cli" in user_content
-    assert "Chat ID: direct" in user_content
     assert "Return exactly: OK" in user_content
+    assert ContextBuilder._RUNTIME_CONTEXT_TAG not in user_content
+    assert "Current Time:" not in user_content
 
 
 def test_unprocessed_history_injected_into_system_prompt(tmp_path) -> None:
@@ -96,10 +98,10 @@ def test_unprocessed_history_injected_into_system_prompt(tmp_path) -> None:
     builder.memory.append_history("Agent fetched forecast via web_search")
 
     prompt = builder.build_system_prompt()
-    assert "# Recent History" in prompt
+    assert "=== Recent History ===" in prompt
     assert "User asked about weather in Tokyo" in prompt
     assert "Agent fetched forecast via web_search" in prompt
-    assert re.search(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]", prompt)
+    assert re.search(r"\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", prompt)
 
 
 def test_recent_history_capped_at_max(tmp_path) -> None:
@@ -125,7 +127,7 @@ def test_no_recent_history_when_dream_has_processed_all(tmp_path) -> None:
     builder.memory.set_last_dream_cursor(cursor)
 
     prompt = builder.build_system_prompt()
-    assert "# Recent History" not in prompt
+    assert "=== Recent History ===" not in prompt
 
 
 def test_partial_dream_processing_shows_only_remainder(tmp_path) -> None:
@@ -141,7 +143,7 @@ def test_partial_dream_processing_shows_only_remainder(tmp_path) -> None:
     builder.memory.set_last_dream_cursor(c2)
 
     prompt = builder.build_system_prompt()
-    assert "# Recent History" in prompt
+    assert "=== Recent History ===" in prompt
     assert "old conversation about Python" not in prompt
     assert "old conversation about Rust" not in prompt
     assert "recent question about Docker" in prompt
@@ -252,11 +254,11 @@ def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
     prompt = builder.build_system_prompt()
 
     # memory skill should be in Active Skills section
-    assert "# Active Skills" in prompt
+    assert "=== Active Skills ===" in prompt
     assert "### Skill: memory" in prompt
 
     # memory skill should NOT appear in the skills index
-    skills_section = prompt.split("# Skills\n", 1)
+    skills_section = prompt.split("=== Skills ===\n", 1)
     if len(skills_section) > 1:
         index_text = skills_section[1].split("\n\n---")[0]
         assert "**memory**" not in index_text
@@ -271,11 +273,11 @@ def test_template_memory_md_is_skipped(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     prompt = builder.build_system_prompt()
 
-    # The "# Memory\n\n## Long-term Memory" block is produced only by
+    # The "=== Memory ===\n## Long-term Memory" block is produced only by
     # build_system_prompt() when MEMORY.md is injected.  The memory skill
     # also contains "# Memory" but is followed by "## Structure", not
     # "## Long-term Memory".
-    assert "# Memory\n\n## Long-term Memory" not in prompt
+    assert "=== Memory ===\n## Long-term Memory" not in prompt
     assert "This file is automatically updated by nanobot" not in prompt
 
 
@@ -292,5 +294,5 @@ def test_customized_memory_md_is_injected(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     prompt = builder.build_system_prompt()
 
-    assert "# Memory\n\n## Long-term Memory" in prompt
+    assert "=== Memory ===\n## Long-term Memory" in prompt
     assert "User prefers dark mode" in prompt
