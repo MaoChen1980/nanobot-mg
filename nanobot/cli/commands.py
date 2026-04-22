@@ -50,6 +50,7 @@ from nanobot.cli.stream import StreamRenderer, ThinkingSpinner
 from nanobot.config.paths import get_workspace_path, is_default_workspace
 from nanobot.config.schema import Config
 from nanobot.utils.helpers import sync_workspace_templates
+from nanobot.utils.logging import logger_config
 from nanobot.utils.restart import (
     consume_restart_notice_from_env,
     format_restart_completed_message,
@@ -498,6 +499,10 @@ def _load_runtime_config(config: str | None = None, workspace: str | None = None
     _warn_deprecated_config_keys(config_path)
     if workspace:
         loaded.agents.defaults.workspace = workspace
+
+    # Configure logging
+    logger_config.configure(loaded.logging)
+
     return loaded
 
 

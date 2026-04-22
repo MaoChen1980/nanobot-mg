@@ -114,12 +114,86 @@ class AgentRunner:
         return _to_blocks(left) + _to_blocks(right)
 
     @classmethod
+    def _build_tool_call_status_messages_when_injecting(
+        cls,
+        messages: list[dict[str, Any]],
+        has_new_injections: bool = False,
+    ) -> list[dict[str, Any]] | None:
+        """Build standardized tool result messages for injection context.
+
+        Returns tool messages for all pending/in-progress tool calls:
+        - Completed: excluded (already have tool results in messages)
+        - Abandoned: [ABANDONED] status (when has_new_injections=True)
+        - Pending: [PENDING] status (when has_new_injections=False)
+
+        Args:
+            messages: The conversation history
+            has_new_injections: If True, pending tool calls are being abandoned (cancelled)
+        """
+        if not messages:
+            return None
+
+        # Find all assistant messages with tool_calls
+        tool_calls_by_id: dict[str, dict[str, Any]] = {}
+        completed_ids: set[str] = set()
+
+        for msg in messages:
+            if msg.get("role") == "assistant":
+                for tc in msg.get("tool_calls", []):
+                    tool_calls_by_id[tc.get("id")] = {
+                        "id": tc.get("id"),
+                        "name": tc.get("function", {}).get("name", "unknown"),
+                    }
+            elif msg.get("role") == "tool":
+                tool_id = msg.get("tool_call_id")
+                if tool_id:
+                    completed_ids.add(tool_id)
+
+        if not tool_calls_by_id:
+            return None
+
+        # Build tool messages for non-completed tool calls
+        tool_messages = []
+        for tid, tc in tool_calls_by_id.items():
+            if tid in completed_ids:
+                # Already has tool result, skip
+                continue
+
+            if has_new_injections:
+                # Abandoned due to new user message
+                content = f"[ABANDONED] Tool '{tc['name']}' (id: {tid}) was interrupted by new user instruction."
+            else:
+                # Still in progress
+                content = f"[PENDING] Tool '{tc['name']}' (id: {tid}) is still in progress, waiting for result."
+
+            tool_messages.append({
+                "role": "tool",
+                "tool_call_id": tid,
+                "name": tc["name"],
+                "content": content,
+            })
+
+        return tool_messages if tool_messages else None
+
+    @classmethod
     def _append_injected_messages(
         cls,
         messages: list[dict[str, Any]],
         injections: list[dict[str, Any]],
     ) -> None:
-        """Append injected user messages while preserving role alternation."""
+        """Append injected user messages while preserving role alternation.
+
+        Also injects standardized tool messages for pending/abandoned tool calls.
+        """
+        # Build tool status messages for pending/abandoned tool calls
+        has_new_injections = bool(injections)
+        tool_status_messages = cls._build_tool_call_status_messages_when_injecting(messages, has_new_injections)
+
+        # Add tool status messages before user injections (if any)
+        if tool_status_messages:
+            for tm in tool_status_messages:
+                messages.append(tm)
+
         for injection in injections:
             if (
                 messages
