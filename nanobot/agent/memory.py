@@ -221,7 +221,7 @@ class MemoryStore:
 
     # -- history.jsonl — append-only, JSONL format ---------------------------
 
-    def append_history(self, entry: str) -> int:
+    def append_history(self, entry: str, timestamp: str | None = None) -> int:
         """Append *entry* to history.jsonl and return its auto-incrementing cursor.
 
         Entries are passed through `strip_think` to drop template-level leaks
@@ -230,9 +230,13 @@ class MemoryStore:
         the record is persisted with an empty string rather than falling back
         to the raw leak — otherwise `strip_think`'s guarantees would be
         undone by history replay / consolidation downstream.
+
+        Args:
+            entry: The content to append.
+            timestamp: Optional ISO 8601 timestamp. Defaults to current time.
         """
         cursor = self._next_cursor()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        ts = timestamp or datetime.now().isoformat()
         raw = entry.rstrip()
         content = strip_think(raw)
         if raw and not content:
@@ -373,11 +377,15 @@ class MemoryStore:
             )
         return "\n".join(lines)
 
-    def raw_archive(self, messages: list[dict]) -> None:
+    def raw_archive(self, messages: list[dict], timestamp: str | None = None) -> None:
         """Fallback: dump raw messages to history.jsonl without LLM summarization."""
+        if timestamp is None:
+            timestamps = [m.get("timestamp") for m in messages if m.get("timestamp")]
+            timestamp = timestamps[0] if timestamps else None
         self.append_history(
             f"[RAW] {len(messages)} messages\n"
-            f"{self._format_messages(messages)}"
+            f"{self._format_messages(messages)}",
+            timestamp=timestamp,
         )
         logger.warning(
             "Memory consolidation degraded: raw-archived {} messages", len(messages)
@@ -486,13 +494,22 @@ class Consolidator:
             self._get_tool_definitions(),
         )
 
-    async def archive(self, messages: list[dict]) -> str | None:
+    async def archive(self, messages: list[dict], timestamp: str | None = None) -> str | None:
         """Summarize messages via LLM and append to history.jsonl.
 
         Returns the summary text on success, None if nothing to archive.
+
+        Args:
+            messages: The messages to archive.
+            timestamp: Optional ISO 8601 timestamp for the entry. Defaults to
+                the timestamp of the earliest message, or current time if not available.
         """
         if not messages:
             return None
+        if timestamp is None:
+            # Use the earliest message's timestamp to preserve timeline
+            timestamps = [m.get("timestamp") for m in messages if m.get("timestamp")]
+            timestamp = timestamps[0] if timestamps else None
         try:
             formatted = MemoryStore._format_messages(messages)
             response = await self.provider.chat_with_retry(
@@ -513,7 +530,7 @@ class Consolidator:
             if response.finish_reason == "error":
                 raise RuntimeError(f"LLM returned error: {response.content}")
             summary = response.content or "[no summary]"
-            self.store.append_history(summary)
+            self.store.append_history(summary, timestamp=timestamp)
             return summary
         except Exception:
             logger.warning("Consolidation LLM call failed, raw-dumping to history")

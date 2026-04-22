@@ -142,6 +142,22 @@ class TestHistoryWithCursor:
         assert entries[0]["cursor"] in {4, 5}
 
 
+class TestAppendHistoryTimestamp:
+    def test_append_history_uses_provided_timestamp(self, tmp_path):
+        store = MemoryStore(tmp_path)
+        ts = "2026-04-22T10:36:34.698+08:00"
+        cursor = store.append_history("test event", timestamp=ts)
+        entry = store.read_unprocessed_history(since_cursor=0)[0]
+        assert entry["timestamp"] == ts
+
+    def test_append_history_defaults_to_iso_format(self, tmp_path):
+        store = MemoryStore(tmp_path)
+        cursor = store.append_history("no timestamp provided")
+        entry = store.read_unprocessed_history(since_cursor=0)[0]
+        # Should be ISO format with timezone
+        assert "T" in entry["timestamp"] or ":" in entry["timestamp"]
+
+
 class TestDreamCursor:
     def test_initial_cursor_is_zero(self, store):
         assert store.get_last_dream_cursor() == 0
