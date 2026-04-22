@@ -1292,6 +1292,7 @@ def test_gateway_health_endpoint_binds_and_serves_expected_responses(
         def __init__(self, **_kwargs) -> None:
             self.model = "test-model"
             self.dream = _FakeDream()
+            self.sessions = MagicMock()
 
         async def run(self) -> None:
             await asyncio.Event().wait()
