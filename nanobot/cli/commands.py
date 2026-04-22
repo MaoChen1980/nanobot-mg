@@ -50,7 +50,6 @@ from nanobot.cli.stream import StreamRenderer, ThinkingSpinner
 from nanobot.config.paths import get_workspace_path, is_default_workspace
 from nanobot.config.schema import Config
 from nanobot.utils.helpers import sync_workspace_templates
-from nanobot.utils.logging import logger_config
 from nanobot.utils.restart import (
     consume_restart_notice_from_env,
     format_restart_completed_message,
@@ -499,10 +498,6 @@ def _load_runtime_config(config: str | None = None, workspace: str | None = None
     _warn_deprecated_config_keys(config_path)
     if workspace:
         loaded.agents.defaults.workspace = workspace
-    
-    # Configure logging
-    logger_config.configure(loaded.logging)
-    
     return loaded
 
 
@@ -564,8 +559,10 @@ def serve(
     from nanobot.bus.queue import MessageBus
     from nanobot.session.manager import SessionManager
 
-    # Logging is already configured via config.json
-    pass
+    if verbose:
+        logger.enable("nanobot")
+    else:
+        logger.disable("nanobot")
 
     runtime_config = _load_runtime_config(config, workspace)
     api_cfg = runtime_config.api
@@ -639,7 +636,10 @@ def gateway(
     config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
 ):
     """Start the nanobot gateway."""
-    # Logging is already configured via config.json
+    if verbose:
+        import logging
+
+        logging.basicConfig(level=logging.DEBUG)
     cfg = _load_runtime_config(config, workspace)
     _run_gateway(cfg, port=port)
 
@@ -661,8 +661,7 @@ def _run_gateway(
 
     port = port if port is not None else config.gateway.port
 
-    from loguru import logger
-    logger.critical(f"Starting nanobot gateway version {__version__} on port {port}...")
+    console.print(f"{__logo__} Starting nanobot gateway version {__version__} on port {port}...")
     sync_workspace_templates(config.workspace_path)
     bus = MessageBus()
     provider = _make_provider(config)
@@ -829,15 +828,15 @@ def _run_gateway(
     )
 
     if channels.enabled_channels:
-        logger.critical(f"Channels enabled: {', '.join(channels.enabled_channels)}")
+        console.print(f"[green]✓[/green] Channels enabled: {', '.join(channels.enabled_channels)}")
     else:
-        logger.critical("No channels enabled")
+        console.print("[yellow]Warning: No channels enabled[/yellow]")
 
     cron_status = cron.status()
     if cron_status["jobs"] > 0:
-        logger.critical(f"Cron: {cron_status['jobs']} scheduled jobs")
+        console.print(f"[green]✓[/green] Cron: {cron_status['jobs']} scheduled jobs")
 
-    logger.critical(f"Heartbeat: every {hb_cfg.interval_s}s")
+    console.print(f"[green]✓[/green] Heartbeat: every {hb_cfg.interval_s}s")
 
     async def _health_server(host: str, health_port: int):
         """Lightweight HTTP health endpoint on the gateway port."""
@@ -878,7 +877,7 @@ def _run_gateway(
             writer.close()
 
         server = await asyncio.start_server(handle, host, health_port)
-        logger.critical(f"Health endpoint: http://{host}:{health_port}/health")
+        console.print(f"[green]✓[/green] Health endpoint: http://{host}:{health_port}/health")
         async with server:
             await server.serve_forever()
     # Register Dream system job (always-on, idempotent on restart)
@@ -895,7 +894,7 @@ def _run_gateway(
         schedule=dream_cfg.build_schedule(config.agents.defaults.timezone),
         payload=CronPayload(kind="system_event"),
     ))
-    logger.critical(f"Dream: {dream_cfg.describe_schedule()}")
+    console.print(f"[green]✓[/green] Dream: {dream_cfg.describe_schedule()}")
 
     async def _open_browser_when_ready() -> None:
         """Wait for the gateway to bind, then point the user's browser at the webui."""
@@ -986,10 +985,9 @@ def agent(
     cron_store_path = config.workspace_path / "cron" / "jobs.json"
     cron = CronService(cron_store_path)
 
-    # The --logs flag overrides the config setting for this run
     if logs:
         logger.enable("nanobot")
-    elif not config.logging.enabled:
+    else:
         logger.disable("nanobot")
 
     agent_loop = AgentLoop(

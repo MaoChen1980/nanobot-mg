@@ -26,10 +26,9 @@ from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.notebook import NotebookEditTool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.search import GlobTool, GrepTool
-from nanobot.agent.tools.self import MyTool
 from nanobot.agent.tools.shell import ExecTool
+from nanobot.agent.tools.self import MyTool
 from nanobot.agent.tools.spawn import SpawnTool
-from nanobot.agent.tools.recall import RecallTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
@@ -107,13 +106,13 @@ class _LoopHook(AgentHook):
             await self._on_progress(tool_hint, tool_hint=True)
         for tc in context.tool_calls:
             args_str = json.dumps(tc.arguments, ensure_ascii=False)
-            logger.info("Tool call start: {}({})", tc.name, args_str)
+            logger.info("Tool call: {}({})", tc.name, args_str[:200])
         self._loop._set_tool_context(self._channel, self._chat_id, self._message_id)
 
     async def after_iteration(self, context: AgentHookContext) -> None:
         u = context.usage or {}
         logger.debug(
-            "after_iteration LLM usage: prompt={} completion={} cached={}",
+            "LLM usage: prompt={} completion={} cached={}",
             u.get("prompt_tokens", 0),
             u.get("completion_tokens", 0),
             u.get("cached_tokens", 0),
@@ -289,7 +288,6 @@ class AgentLoop:
             )
             self.tools.register(WebFetchTool(proxy=self.web_config.proxy))
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound))
-        self.tools.register(RecallTool(store=self.context.memory))
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(
@@ -470,7 +468,6 @@ class AgentLoop:
             retry_wait_callback=on_retry_wait,
             checkpoint_callback=_checkpoint,
             injection_callback=_drain_pending,
-            pending_queue=pending_queue,
         ))
         self._last_usage = result.usage
         if result.stop_reason == "max_iterations":
@@ -544,9 +541,8 @@ class AgentLoop:
                     )
                 else:
                     logger.info(
-                        "Routed follow-up message to pending queue for session {}: {}",
+                        "Routed follow-up message to pending queue for session {}",
                         effective_key,
-                        pending_msg.content,
                     )
                     continue
             # Compute the effective session key before dispatching
@@ -842,28 +838,18 @@ class AgentLoop:
             self.sessions.save(session)
             user_persisted_early = True
 
-        try:
-            final_content, _, all_msgs, stop_reason, had_injections = await self._run_agent_loop(
-                initial_messages,
-                on_progress=on_progress or _bus_progress,
-                on_stream=on_stream,
-                on_stream_end=on_stream_end,
-                on_retry_wait=_on_retry_wait,
-                session=session,
-                channel=msg.channel,
-                chat_id=msg.chat_id,
-                message_id=msg.metadata.get("message_id"),
-                pending_queue=pending_queue,
-            )
-        except asyncio.CancelledError:
-            # Session metadata (pending_user_turn, runtime_checkpoint) is still
-            # set from before the agent loop ran.  Clear it so the next message
-            # does not restore a stale pending-turn or checkpoint and produce a
-            # corrupted session state.
-            self._clear_pending_user_turn(session)
-            self._clear_runtime_checkpoint(session)
-            self.sessions.save(session)
-            raise
+        final_content, _, all_msgs, stop_reason, had_injections = await self._run_agent_loop(
+            initial_messages,
+            on_progress=on_progress or _bus_progress,
+            on_stream=on_stream,
+            on_stream_end=on_stream_end,
+            on_retry_wait=_on_retry_wait,
+            session=session,
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            message_id=msg.metadata.get("message_id"),
+            pending_queue=pending_queue,
+        )
 
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE

@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 from dataclasses import dataclass, field
+import inspect
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
+from nanobot.utils.prompt_templates import render_template
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.providers.base import LLMProvider, ToolCallRequest
 from nanobot.utils.helpers import (
@@ -21,7 +22,6 @@ from nanobot.utils.helpers import (
     maybe_persist_tool_result,
     truncate_text,
 )
-from nanobot.utils.prompt_templates import render_template
 from nanobot.utils.runtime import (
     EMPTY_FINAL_RESPONSE_MESSAGE,
     build_finalization_retry_message,
@@ -35,7 +35,7 @@ _DEFAULT_ERROR_MESSAGE = "Sorry, I encountered an error calling the AI model."
 _PERSISTED_MODEL_ERROR_PLACEHOLDER = "[Assistant reply unavailable due to model error.]"
 _MAX_EMPTY_RETRIES = 2
 _MAX_LENGTH_RECOVERIES = 3
-_MAX_INJECTIONS_PER_TURN = 10
+_MAX_INJECTIONS_PER_TURN = 3
 _MAX_INJECTION_CYCLES = 5
 _SNIP_SAFETY_BUFFER = 1024
 _MICROCOMPACT_KEEP_RECENT = 10
@@ -74,9 +74,6 @@ class AgentRunSpec:
     retry_wait_callback: Any | None = None
     checkpoint_callback: Any | None = None
     injection_callback: Any | None = None
-    # Queue of user messages that arrived mid-task (from AgentLoop._pending_queues).
-    # Drained after each tool batch so the LLM sees corrections before continuing.
-    pending_queue: asyncio.Queue | None = None
 
 
 @dataclass(slots=True)
@@ -176,11 +173,9 @@ class AgentRunner:
                     },
                 )
         self._append_injected_messages(messages, injections)
-        # Extract message contents for logging
-        message_contents = [msg.get("content", "") for msg in injections]
         logger.info(
-            "Injected {} follow-up message(s) {} ({}/{}): {}",
-            len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES, message_contents,
+            "Injected {} follow-up message(s) {} ({}/{})",
+            len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
         )
         return True, injection_cycles
 
@@ -305,42 +300,7 @@ class AgentRunner:
 
                 await hook.before_execute_tools(context)
 
-                # If new messages arrived while LLM was thinking (before tools start),
-                # skip tool execution entirely and let LLM re-plan.
-                if spec.pending_queue is not None and not spec.pending_queue.empty():
-                    pending_list = ", ".join(
-                        f"{tc.name}({tc.arguments})" for tc in response.tool_calls
-                    )
-                    messages.append({
-                        "role": "user",
-                        "content": (
-                            "The previous task has been cancelled. Please review the context and the user's latest input to re-understand the original task and decide the next step.\n\n"
-                            f"New message received. The following tool(s) were NOT executed "
-                            f"and will NOT run:\n  {pending_list}\n\n"
-                            "Use the new user message below to decide what to do next."
-                        ),
-                    })
-                    logger.info(
-                        "Skipped tool execution for session {} due to pending messages: {}",
-                        spec.session_key or "default",
-                        pending_list,
-                    )
-                    while not spec.pending_queue.empty():
-                        try:
-                            pending_msg = spec.pending_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
-                        messages.append({"role": "user", "content": pending_msg.content})
-                        logger.info(
-                            "Injected pending message for session {}: {}",
-                            spec.session_key or "default",
-                            pending_msg.content,
-                        )
-                    await hook.after_iteration(context)
-                    pending_tool_calls = []
-                    continue
-
-                results, new_events, fatal_error, pending_tool_calls = await self._execute_tools(
+                results, new_events, fatal_error = await self._execute_tools(
                     spec,
                     response.tool_calls,
                     external_lookup_counts,
@@ -348,121 +308,21 @@ class AgentRunner:
                 tool_events.extend(new_events)
                 context.tool_results = list(results)
                 context.tool_events = list(new_events)
-
-                # After tool execution: check if new user messages arrived while tools
-                # were running. If so, abandon remaining tool calls, carry forward
-                # completed results, and let LLM re-plan.
-                if pending_tool_calls and spec.pending_queue is not None and not spec.pending_queue.empty():
-                    abandoned_list = ", ".join(
-                        f"{tc.name}({tc.arguments})" for tc in pending_tool_calls
-                    )
-                    completed_list = "\n".join(
-                        f"- {tc.name}: {r!r}" if r is not None else f"- {tc.name}: (none)"
-                        for tc, r in zip(response.tool_calls, results)
-                        if tc not in pending_tool_calls
-                    )
-                    messages.append({
-                        "role": "user",
-                        "content": (
-                            "The previous task has been cancelled. Please review the context and the user's latest input to re-understand the original task and decide the next step.\n\n"
-                            f"⚠️ New message received while tools were executing.\n"
-                            f"The following tool(s) were abandoned and will NOT run:\n"
-                            f"  {abandoned_list}\n\n"
-                            f"The following tool(s) completed:\n"
-                            f"{completed_list}\n\n"
-                            "Use the completed results and the new user message below "
-                            "to decide what to do next."
-                        ),
-                    })
-                    logger.info(
-                        "Tool execution abandoned for session {} due to pending messages: {}",
-                        spec.session_key or "default",
-                        abandoned_list,
-                    )
-                    # Drain and inject pending messages
-                    while not spec.pending_queue.empty():
-                        try:
-                            pending_msg = spec.pending_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
-                        messages.append({"role": "user", "content": pending_msg.content})
-                        logger.info(
-                            "Injected pending message for session {}: {}",
-                            spec.session_key or "default",
-                            pending_msg.content,
-                        )
-                    await hook.after_iteration(context)
-                    continue
-
                 completed_tool_results: list[dict[str, Any]] = []
                 for tool_call, result in zip(response.tool_calls, results):
-                    normalized = self._normalize_tool_result(
-                        spec,
-                        tool_call.id,
-                        tool_call.name,
-                        result,
-                    )
-                    logger.info(
-                        "Tool result for {}: {}",
-                        tool_call.name,
-                        normalized,
-                    )
                     tool_message = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "name": tool_call.name,
-                        "content": normalized,
+                        "content": self._normalize_tool_result(
+                            spec,
+                            tool_call.id,
+                            tool_call.name,
+                            result,
+                        ),
                     }
                     messages.append(tool_message)
                     completed_tool_results.append(tool_message)
-
-                # If tool execution was interrupted (e.g. by /stop), inform the LLM
-                # about what ran, what didn't, and let it decide the next step.
-                if pending_tool_calls:
-                    pending_list = ", ".join(
-                        f"{tc.name}({tc.arguments})" for tc in pending_tool_calls
-                    )
-                    completed_list = "\n".join(
-                        f"- {tc.name}: {r!r}" if r is not None else f"- {tc.name}: (none)"
-                        for tc, r in zip(response.tool_calls, results)
-                    )
-                    inject = (
-                        "⚠️ Tool execution was interrupted. "
-                        f"The following tool(s) were NOT executed and will NOT run:\n"
-                        f"  {pending_list}\n\n"
-                        f"The following tool(s) completed:\n"
-                        f"{completed_list}\n\n"
-                        "What would you like to do next?"
-                    )
-                    messages.append({"role": "user", "content": inject})
-                    logger.info(
-                        "Tool execution interrupted for session {}, {} tool(s) pending",
-                        spec.session_key or "default",
-                        len(pending_tool_calls),
-                    )
-
-                # Mid-task user messages: drain pending queue and inject so the
-                # LLM sees the user's correction before deciding the next step.
-                # This runs after every tool batch, so "don't move word docs" is
-                # visible to the LLM before it schedules the next move operation.
-                if spec.pending_queue is not None:
-                    # Prepend proactive cancel text so LLM knows the previous task is cancelled
-                    messages.append({
-                        "role": "user",
-                        "content": "The previous task has been cancelled. Please review the context and the user's latest input to re-understand the original task and decide the next step.",
-                    })
-                    while not spec.pending_queue.empty():
-                        try:
-                            pending_msg = spec.pending_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
-                        messages.append({"role": "user", "content": pending_msg.content})
-                        logger.info(
-                            "Injected mid-task pending message for session {}: {}",
-                            spec.session_key or "default",
-                            pending_msg.content,
-                        )
-
                 if fatal_error is not None:
                     error = f"Error: {type(fatal_error).__name__}: {fatal_error}"
                     final_content = error
@@ -488,7 +348,7 @@ class AgentRunner:
                         "model": spec.model,
                         "assistant_message": assistant_message,
                         "completed_tool_results": completed_tool_results,
-                        "pending_tool_calls": [tc.to_openai_tool_call() for tc in pending_tool_calls],
+                        "pending_tool_calls": [],
                     },
                 )
                 empty_content_retries = 0
@@ -764,42 +624,18 @@ class AgentRunner:
         spec: AgentRunSpec,
         tool_calls: list[ToolCallRequest],
         external_lookup_counts: dict[str, int],
-    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None, list[ToolCallRequest]]:
-        """Execute tool calls and return (results, events, fatal_error, pending_tool_calls).
-
-        pending_tool_calls is the list of tool calls that were NOT executed because
-        execution was interrupted (e.g. by CancelledError).  An empty list means
-        all calls completed normally.
-        """
+    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None]:
         batches = self._partition_tool_batches(spec, tool_calls)
         tool_results: list[tuple[Any, dict[str, str], BaseException | None]] = []
-        pending: list[ToolCallRequest] = []
         for batch in batches:
-            try:
-                if spec.concurrent_tools and len(batch) > 1:
-                    tool_results.extend(await asyncio.gather(*(
-                        self._run_tool(spec, tool_call, external_lookup_counts)
-                        for tool_call in batch
-                    )))
-                else:
-                    for tool_call in batch:
-                        tool_results.append(await self._run_tool(spec, tool_call, external_lookup_counts))
-            except asyncio.CancelledError:
-                # Record which tool calls in this batch (and all subsequent batches)
-                # were NOT executed.
-                for remaining_batch in batches[batches.index(batch):]:
-                    for tc in remaining_batch:
-                        pending.append(tc)
-                break
-
-            # Check for mid-task user messages after each batch.
-            # If new messages arrived, abandon remaining tool calls so the LLM
-            # can re-plan based on the fresh context (completed results + new input).
-            if spec.pending_queue is not None and not spec.pending_queue.empty():
-                for remaining_batch in batches[batches.index(batch) + 1:]:
-                    for tc in remaining_batch:
-                        pending.append(tc)
-                break
+            if spec.concurrent_tools and len(batch) > 1:
+                tool_results.extend(await asyncio.gather(*(
+                    self._run_tool(spec, tool_call, external_lookup_counts)
+                    for tool_call in batch
+                )))
+            else:
+                for tool_call in batch:
+                    tool_results.append(await self._run_tool(spec, tool_call, external_lookup_counts))
 
         results: list[Any] = []
         events: list[dict[str, str]] = []
@@ -809,7 +645,7 @@ class AgentRunner:
             events.append(event)
             if error is not None and fatal_error is None:
                 fatal_error = error
-        return results, events, fatal_error, pending
+        return results, events, fatal_error
 
     async def _run_tool(
         self,

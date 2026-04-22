@@ -17,33 +17,7 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
     """Cancel all active tasks and subagents for the session."""
     loop = ctx.loop
     msg = ctx.msg
-    tasks = loop._active_tasks.pop(msg.session_key, [])
-    cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
-    for t in tasks:
-        try:
-            await t
-        except (asyncio.CancelledError, Exception):
-            pass
-    sub_cancelled = await loop.subagents.cancel_by_session(msg.session_key)
-    total = cancelled + sub_cancelled
-
-    # Inject cancellation notice so the LLM knows the previous task was
-    # intentionally cancelled and won't retry it on the next message.
-    if total > 0:
-        try:
-            session = loop.sessions.get_or_create(msg.session_key)
-            # Remove pending turn marker so the cancelled task's turn is not
-            # treated as incomplete.
-            loop._clear_pending_user_turn(session)
-            loop._clear_runtime_checkpoint(session)
-            session.add_message(
-                "user",
-                "[Task cancelled by user via /stop — do NOT retry or continue "
-                "the previous task; it was intentionally abandoned.]"
-            )
-            loop.sessions.save(session)
-        except Exception:
-            pass
+    total = await loop._cancel_active_tasks(msg.session_key)
     content = f"Stopped {total} task(s)." if total else "No active task to stop."
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id, content=content,
@@ -121,16 +95,7 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     """Stop active task and start a fresh session."""
     loop = ctx.loop
     msg = ctx.msg
-
-    # Stop any active tasks for this session first (same as /stop)
-    tasks = loop._active_tasks.pop(msg.session_key, [])
-    cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
-    for t in tasks:
-        try:
-            await t
-        except (asyncio.CancelledError, Exception):
-            pass
-    await loop.subagents.cancel_by_session(msg.session_key)
+    cancelled = await loop._cancel_active_tasks(ctx.key)
 
     # Archive unconsolidated messages in background
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
@@ -377,7 +342,7 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.priority("/stop", cmd_stop)
     router.priority("/restart", cmd_restart)
     router.priority("/status", cmd_status)
-    router.priority("/new", cmd_new)
+    router.exact("/new", cmd_new)
     router.exact("/status", cmd_status)
     router.exact("/dream", cmd_dream)
     router.exact("/dream-log", cmd_dream_log)

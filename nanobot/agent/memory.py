@@ -12,16 +12,12 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 from loguru import logger
 
-from nanobot.agent.runner import AgentRunner, AgentRunSpec
+from nanobot.utils.prompt_templates import render_template
+from nanobot.utils.helpers import ensure_dir, estimate_message_tokens, estimate_prompt_tokens_chain, strip_think
+
+from nanobot.agent.runner import AgentRunSpec, AgentRunner
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.utils.gitstore import GitStore
-from nanobot.utils.helpers import (
-    ensure_dir,
-    estimate_message_tokens,
-    estimate_prompt_tokens_chain,
-    strip_think,
-)
-from nanobot.utils.prompt_templates import render_template
 
 if TYPE_CHECKING:
     from nanobot.providers.base import LLMProvider
@@ -31,7 +27,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # MemoryStore — pure file I/O layer
 # ---------------------------------------------------------------------------
-
 
 class MemoryStore:
     """Pure file I/O for memory files: MEMORY.md, history.jsonl, SOUL.md, USER.md."""
@@ -43,9 +38,7 @@ class MemoryStore:
         r"^\[\d{4}-\d{2}-\d{2}[^\]]*\]\s+[A-Z][A-Z0-9_]*(?:\s+\[tools:\s*[^\]]+\])?:"
     )
 
-    def __init__(
-        self, workspace: Path, max_history_entries: int = _DEFAULT_MAX_HISTORY
-    ):
+    def __init__(self, workspace: Path, max_history_entries: int = _DEFAULT_MAX_HISTORY):
         self.workspace = workspace
         self.max_history_entries = max_history_entries
         self.memory_dir = ensure_dir(workspace / "memory")
@@ -57,16 +50,9 @@ class MemoryStore:
         self._cursor_file = self.memory_dir / ".cursor"
         self._dream_cursor_file = self.memory_dir / ".dream_cursor"
         self._corruption_logged = False  # rate-limit non-int cursor warning
-        self._git = GitStore(
-            workspace,
-            tracked_files=[
-                "SOUL.md",
-                "USER.md",
-                "memory/MEMORY.md",
-            ],
-        )
-        # Content cache: key -> (content, mtime)
-        self._file_cache: dict[str, tuple[str, float]] = {}
+        self._git = GitStore(workspace, tracked_files=[
+            "SOUL.md", "USER.md", "memory/MEMORY.md",
+        ])
         self._maybe_migrate_legacy_history()
 
     @property
@@ -74,29 +60,6 @@ class MemoryStore:
         return self._git
 
     # -- generic helpers -----------------------------------------------------
-
-    # -- cached file I/O -----------------------------------------------------
-
-    def _read_cached(self, path: Path, cache_key: str) -> str:
-        """Read file, using cache if mtime hasn't changed."""
-        try:
-            current_mtime = path.stat().st_mtime
-        except OSError:
-            current_mtime = 0.0
-
-        if cache_key in self._file_cache:
-            cached_content, cached_mtime = self._file_cache[cache_key]
-            if cached_mtime == current_mtime:
-                return cached_content
-
-        content = self.read_file(path)
-
-        self._file_cache[cache_key] = (content, current_mtime)
-        return content
-
-    def _invalidate_cache(self, cache_key: str) -> None:
-        """Invalidate cache entry on write."""
-        self._file_cache.pop(cache_key, None)
 
     @staticmethod
     def read_file(path: Path) -> str:
@@ -159,17 +122,15 @@ class MemoryStore:
             match = self._LEGACY_TIMESTAMP_RE.match(chunk)
             if match:
                 timestamp = match.group(1)
-                remainder = chunk[match.end() :].lstrip()
+                remainder = chunk[match.end():].lstrip()
                 if remainder:
                     content = remainder
 
-            entries.append(
-                {
-                    "cursor": cursor,
-                    "timestamp": timestamp,
-                    "content": content,
-                }
-            )
+            entries.append({
+                "cursor": cursor,
+                "timestamp": timestamp,
+                "content": content,
+            })
         return entries
 
     def _split_legacy_history_chunks(self, text: str) -> list[str]:
@@ -201,9 +162,7 @@ class MemoryStore:
             return False
         if not self._LEGACY_ENTRY_START_RE.match(line):
             return False
-        if self._is_raw_legacy_chunk(current) and self._LEGACY_RAW_MESSAGE_RE.match(
-            line
-        ):
+        if self._is_raw_legacy_chunk(current) and self._LEGACY_RAW_MESSAGE_RE.match(line):
             return False
         return True
 
@@ -212,15 +171,15 @@ class MemoryStore:
         match = self._LEGACY_TIMESTAMP_RE.match(first_nonempty)
         if not match:
             return False
-        return first_nonempty[match.end() :].lstrip().startswith("[RAW]")
+        return first_nonempty[match.end():].lstrip().startswith("[RAW]")
 
     def _legacy_fallback_timestamp(self) -> str:
         try:
             return datetime.fromtimestamp(
                 self.legacy_history_file.stat().st_mtime,
-            ).astimezone().isoformat()
+            ).strftime("%Y-%m-%d %H:%M")
         except OSError:
-            return datetime.now().astimezone().isoformat()
+            return datetime.now().strftime("%Y-%m-%d %H:%M")
 
     def _next_legacy_backup_path(self) -> Path:
         candidate = self.memory_dir / "HISTORY.md.bak"
@@ -233,29 +192,26 @@ class MemoryStore:
     # -- MEMORY.md (long-term facts) -----------------------------------------
 
     def read_memory(self) -> str:
-        return self._read_cached(self.memory_file, "memory")
+        return self.read_file(self.memory_file)
 
     def write_memory(self, content: str) -> None:
         self.memory_file.write_text(content, encoding="utf-8")
-        self._invalidate_cache("memory")
 
     # -- SOUL.md -------------------------------------------------------------
 
     def read_soul(self) -> str:
-        return self._read_cached(self.soul_file, "soul")
+        return self.read_file(self.soul_file)
 
     def write_soul(self, content: str) -> None:
         self.soul_file.write_text(content, encoding="utf-8")
-        self._invalidate_cache("soul")
 
     # -- USER.md -------------------------------------------------------------
 
     def read_user(self) -> str:
-        return self._read_cached(self.user_file, "user")
+        return self.read_file(self.user_file)
 
     def write_user(self, content: str) -> None:
         self.user_file.write_text(content, encoding="utf-8")
-        self._invalidate_cache("user")
 
     # -- context injection (used by context.py) ------------------------------
 
@@ -276,7 +232,7 @@ class MemoryStore:
         undone by history replay / consolidation downstream.
         """
         cursor = self._next_cursor()
-        ts = datetime.now().astimezone().isoformat()
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
         raw = entry.rstrip()
         content = strip_think(raw)
         if raw and not content:
@@ -345,7 +301,7 @@ class MemoryStore:
         entries = self._read_entries()
         if len(entries) <= self.max_history_entries:
             return
-        kept = entries[-self.max_history_entries :]
+        kept = entries[-self.max_history_entries:]
         self._write_entries(kept)
 
     # -- JSONL helpers -------------------------------------------------------
@@ -411,11 +367,7 @@ class MemoryStore:
         for message in messages:
             if not message.get("content"):
                 continue
-            tools = (
-                f" [tools: {', '.join(message['tools_used'])}]"
-                if message.get("tools_used")
-                else ""
-            )
+            tools = f" [tools: {', '.join(message['tools_used'])}]" if message.get("tools_used") else ""
             lines.append(
                 f"[{message.get('timestamp', '?')[:16]}] {message['role'].upper()}{tools}: {message['content']}"
             )
@@ -424,11 +376,13 @@ class MemoryStore:
     def raw_archive(self, messages: list[dict]) -> None:
         """Fallback: dump raw messages to history.jsonl without LLM summarization."""
         self.append_history(
-            f"[RAW] {len(messages)} messages\n{self._format_messages(messages)}"
+            f"[RAW] {len(messages)} messages\n"
+            f"{self._format_messages(messages)}"
         )
         logger.warning(
             "Memory consolidation degraded: raw-archived {} messages", len(messages)
         )
+
 
 
 # ---------------------------------------------------------------------------
@@ -517,9 +471,7 @@ class Consolidator:
     ) -> tuple[int, str]:
         """Estimate current prompt size for the normal session history view."""
         history = session.get_history(max_messages=0)
-        channel, chat_id = (
-            session.key.split(":", 1) if ":" in session.key else (None, None)
-        )
+        channel, chat_id = (session.key.split(":", 1) if ":" in session.key else (None, None))
         probe_messages = self._build_messages(
             history=history,
             current_message="[token-probe]",
@@ -584,11 +536,7 @@ class Consolidator:
 
         lock = self.get_lock(session.key)
         async with lock:
-            budget = (
-                self.context_window_tokens
-                - self.max_completion_tokens
-                - self._SAFETY_BUFFER
-            )
+            budget = self.context_window_tokens - self.max_completion_tokens - self._SAFETY_BUFFER
             target = budget // 2
             try:
                 estimated, source = self.estimate_session_prompt_tokens(
@@ -617,9 +565,7 @@ class Consolidator:
                 if estimated <= target:
                     break
 
-                boundary = self.pick_consolidation_boundary(
-                    session, max(1, estimated - target)
-                )
+                boundary = self.pick_consolidation_boundary(session, max(1, estimated - target))
                 if boundary is None:
                     logger.debug(
                         "Token consolidation: no safe boundary for {} (round {})",
@@ -638,7 +584,7 @@ class Consolidator:
                     )
                     break
 
-                chunk = session.messages[session.last_consolidated : end_idx]
+                chunk = session.messages[session.last_consolidated:end_idx]
                 if not chunk:
                     break
 
@@ -729,23 +675,17 @@ class Dream:
     def _build_tools(self) -> ToolRegistry:
         """Build a minimal tool registry for the Dream agent."""
         from nanobot.agent.skills import BUILTIN_SKILLS_DIR
-        from nanobot.agent.tools.filesystem import (
-            EditFileTool,
-            ReadFileTool,
-            WriteFileTool,
-        )
+        from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
 
         tools = ToolRegistry()
         workspace = self.store.workspace
         # Allow reading builtin skills for reference during skill creation
         extra_read = [BUILTIN_SKILLS_DIR] if BUILTIN_SKILLS_DIR.exists() else None
-        tools.register(
-            ReadFileTool(
-                workspace=workspace,
-                allowed_dir=workspace,
-                extra_allowed_dirs=extra_read,
-            )
-        )
+        tools.register(ReadFileTool(
+            workspace=workspace,
+            allowed_dir=workspace,
+            extra_allowed_dirs=extra_read,
+        ))
         tools.register(EditFileTool(workspace=workspace, allowed_dir=workspace))
         # write_file resolves relative paths from workspace root, but can only
         # write under skills/ so the prompt can safely use skills/<name>/SKILL.md.
@@ -812,9 +752,7 @@ class Dream:
         if len(lines) != len(ages):
             logger.debug(
                 "line_ages length mismatch for {} (lines={}, ages={}); skipping annotation",
-                file_path,
-                len(lines),
-                len(ages),
+                file_path, len(lines), len(ages),
             )
             return content
 
@@ -844,14 +782,13 @@ class Dream:
         batch = entries[: self.max_batch_size]
         logger.info(
             "Dream: processing {} entries (cursor {}→{}), batch={}",
-            len(entries),
-            last_cursor,
-            batch[-1]["cursor"],
-            len(batch),
+            len(entries), last_cursor, batch[-1]["cursor"], len(batch),
         )
 
         # Build history text for LLM
-        history_text = "\n".join(f"[{e['timestamp']}] {e['content']}" for e in batch)
+        history_text = "\n".join(
+            f"[{e['timestamp']}] {e['content']}" for e in batch
+        )
 
         # Current file contents + per-line age annotations (MEMORY.md only)
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -872,7 +809,9 @@ class Dream:
         )
 
         # Phase 1: Analyze (no skills list — dedup is Phase 2's job)
-        phase1_prompt = f"## Conversation History\n{history_text}\n\n{file_context}"
+        phase1_prompt = (
+            f"## Conversation History\n{history_text}\n\n{file_context}"
+        )
 
         try:
             phase1_response = await self.provider.chat_with_retry(
@@ -892,9 +831,7 @@ class Dream:
                 tool_choice=None,
             )
             analysis = phase1_response.content or ""
-            logger.debug(
-                "Dream Phase 1 analysis ({} chars): {}", len(analysis), analysis[:500]
-            )
+            logger.debug("Dream Phase 1 analysis ({} chars): {}", len(analysis), analysis[:500])
         except Exception:
             logger.exception("Dream Phase 1 failed")
             return False
@@ -903,12 +840,11 @@ class Dream:
         existing_skills = self._list_existing_skills()
         skills_section = ""
         if existing_skills:
-            skills_section = "\n\n## Existing Skills\n" + "\n".join(
-                f"- {s}" for s in existing_skills
+            skills_section = (
+                "\n\n## Existing Skills\n"
+                + "\n".join(f"- {s}" for s in existing_skills)
             )
-        phase2_prompt = (
-            f"## Analysis Result\n{analysis}\n\n{file_context}{skills_section}"
-        )
+        phase2_prompt = f"## Analysis Result\n{analysis}\n\n{file_context}{skills_section}"
 
         tools = self._tools
         skill_creator_path = BUILTIN_SKILLS_DIR / "skill-creator" / "SKILL.md"
@@ -925,28 +861,20 @@ class Dream:
         ]
 
         try:
-            result = await self._runner.run(
-                AgentRunSpec(
-                    initial_messages=messages,
-                    tools=tools,
-                    model=self.model,
-                    max_iterations=self.max_iterations,
-                    max_tool_result_chars=self.max_tool_result_chars,
-                    fail_on_tool_error=False,
-                )
-            )
+            result = await self._runner.run(AgentRunSpec(
+                initial_messages=messages,
+                tools=tools,
+                model=self.model,
+                max_iterations=self.max_iterations,
+                max_tool_result_chars=self.max_tool_result_chars,
+                fail_on_tool_error=False,
+            ))
             logger.debug(
                 "Dream Phase 2 complete: stop_reason={}, tool_events={}",
-                result.stop_reason,
-                len(result.tool_events),
+                result.stop_reason, len(result.tool_events),
             )
-            for ev in result.tool_events or []:
-                logger.info(
-                    "Dream tool_event: name={}, status={}, detail={}",
-                    ev.get("name"),
-                    ev.get("status"),
-                    ev.get("detail", "")[:200],
-                )
+            for ev in (result.tool_events or []):
+                logger.info("Dream tool_event: name={}, status={}, detail={}", ev.get("name"), ev.get("status"), ev.get("detail", "")[:200])
         except Exception:
             logger.exception("Dream Phase 2 failed")
             result = None
@@ -966,15 +894,13 @@ class Dream:
         if result and result.stop_reason == "completed":
             logger.info(
                 "Dream done: {} change(s), cursor advanced to {}",
-                len(changelog),
-                new_cursor,
+                len(changelog), new_cursor,
             )
         else:
             reason = result.stop_reason if result else "exception"
             logger.warning(
                 "Dream incomplete ({}): cursor advanced to {}",
-                reason,
-                new_cursor,
+                reason, new_cursor,
             )
 
         # Git auto-commit (only when there are actual changes)

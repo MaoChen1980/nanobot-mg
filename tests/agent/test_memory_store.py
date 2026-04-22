@@ -184,7 +184,7 @@ class TestLegacyHistoryMigration:
         store = MemoryStore(tmp_path)
         fallback_timestamp = datetime.fromtimestamp(
             (memory_dir / "HISTORY.md.bak").stat().st_mtime,
-        ).astimezone().isoformat()
+        ).strftime("%Y-%m-%d %H:%M")
 
         entries = store.read_unprocessed_history(since_cursor=0)
         assert [entry["cursor"] for entry in entries] == [1, 2, 3]
@@ -253,7 +253,7 @@ class TestLegacyHistoryMigration:
         store = MemoryStore(tmp_path)
         fallback_timestamp = datetime.fromtimestamp(
             (memory_dir / "HISTORY.md.bak").stat().st_mtime,
-        ).astimezone().isoformat()
+        ).strftime("%Y-%m-%d %H:%M")
 
         entries = store.read_unprocessed_history(since_cursor=0)
         assert len(entries) == 2

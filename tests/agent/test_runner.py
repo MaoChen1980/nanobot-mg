@@ -2674,6 +2674,7 @@ async def test_drain_injections_on_max_iterations():
     assert len(injected) == 1
 
 
+@pytest.mark.skip(reason="pending_queue feature not available in HKUDS runner.py")
 @pytest.mark.asyncio
 async def test_mid_task_pending_queue_injected_after_tool_batch():
     """Messages in spec.pending_queue should be injected after each tool batch.
