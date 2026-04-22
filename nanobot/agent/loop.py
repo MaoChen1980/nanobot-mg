@@ -366,8 +366,10 @@ class AgentLoop:
         Returns the total number of cancelled tasks + subagents.
         """
         tasks = self._active_tasks.pop(key, [])
-        cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
-        logger.info("_cancel_active_tasks: key={}, dispatch_tasks={}, cancelled={}", key, len(tasks), cancelled)
+        current = asyncio.current_task()
+        pending = [t for t in tasks if t is not current]
+        cancelled = sum(1 for t in pending if not t.done() and t.cancel())
+        logger.info("_cancel_active_tasks: key={}, dispatch_tasks={}, cancelled={}, skipped_self={}", key, len(tasks), cancelled, 1 if current in tasks else 0)
         for t in tasks:
             try:
                 await t
