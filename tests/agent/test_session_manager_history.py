@@ -185,13 +185,28 @@ def test_get_history_preserves_reasoning_content():
     history = session.get_history(max_messages=500)
 
     assert history == [
-        {"role": "user", "content": "hi"},
+        {"role": "user", "content": "hi", "timestamp": ""},
         {
             "role": "assistant",
             "content": "done",
             "reasoning_content": "hidden chain of thought",
+            "timestamp": "",
         },
     ]
+
+
+def test_get_history_includes_timestamp():
+    """get_history() should include timestamp field on each message."""
+    session = Session(key="test:timestamp")
+    session.add_message("user", "hello")
+    session.add_message("assistant", "hi")
+
+    history = session.get_history(max_messages=500)
+
+    assert len(history) == 2
+    for msg in history:
+        assert "timestamp" in msg
+        assert msg["timestamp"] != ""
 
 
 # --- Window cuts mid-group: assistant present but some tool results orphaned ---
