@@ -1031,13 +1031,15 @@ async def test_next_turn_after_llm_error_keeps_turn_boundary(tmp_path):
 
     request_messages = provider.chat_with_retry.await_args_list[1].kwargs["messages"]
     non_system = [message for message in request_messages if message.get("role") != "system"]
-    assert non_system[0] == {"role": "user", "content": "first question"}
-    assert non_system[1] == {
+    # Filter to role+content only (timestamp may be present)
+    stripped = [{k: v for k, v in m.items() if k in ("role", "content")} for m in non_system]
+    assert stripped[0] == {"role": "user", "content": "first question"}
+    assert stripped[1] == {
         "role": "assistant",
         "content": _PERSISTED_MODEL_ERROR_PLACEHOLDER,
     }
-    assert non_system[2]["role"] == "user"
-    assert "second question" in non_system[2]["content"]
+    assert stripped[2]["role"] == "user"
+    assert "second question" in stripped[2]["content"]
 
 
 @pytest.mark.asyncio
@@ -1970,10 +1972,10 @@ async def test_checkpoint1_injects_after_tool_execution():
 
     assert result.had_injections is True
     assert result.final_content == "final answer"
-    # The second call should have the injected user message
+    # The second call should have the injected user message (merged with prior user message)
     assert call_count["n"] == 2
     last_messages = captured_messages[-1]
-    injected = [m for m in last_messages if m.get("role") == "user" and m.get("content") == "follow-up question"]
+    injected = [m for m in last_messages if m.get("role") == "user" and "follow-up question" in (m.get("content") or "")]
     assert len(injected) == 1
 
 
@@ -2076,11 +2078,11 @@ async def test_checkpoint2_preserves_final_response_in_history_before_followup()
 
     assert result.final_content == "second answer"
     assert call_count["n"] == 2
-    assert captured_messages[-1] == [
-        {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "first answer"},
-        {"role": "user", "content": "follow-up question"},
-    ]
+    # Injected follow-up is merged with the prior user message
+    last = captured_messages[-1]
+    user_msgs = [m for m in last if m.get("role") == "user"]
+    assert len(user_msgs) == 1
+    assert user_msgs[0].get("content") == "hello\n\nfollow-up question"
     assert [
         {"role": message["role"], "content": message["content"]}
         for message in result.messages
@@ -2199,8 +2201,9 @@ async def test_runner_merges_multiple_injected_user_messages_without_losing_medi
     assert call_count["n"] == 2
     second_call = captured_messages[-1]
     user_messages = [message for message in second_call if message.get("role") == "user"]
-    assert len(user_messages) == 2
-    injected = user_messages[-1]
+    # Multiple consecutive user injections are merged into one user message
+    assert len(user_messages) == 1
+    injected = user_messages[0]
     assert isinstance(injected["content"], list)
     assert any(
         block.get("type") == "image_url"
@@ -2505,10 +2508,10 @@ async def test_drain_injections_on_fatal_tool_error():
 
     assert result.had_injections is True
     assert result.final_content == "reply to follow-up"
-    # The injection should be in the messages history
+    # The injection is merged with the prior user message
     injected = [
         m for m in result.messages
-        if m.get("role") == "user" and m.get("content") == "follow-up after error"
+        if m.get("role") == "user" and "follow-up after error" in (m.get("content") or "")
     ]
     assert len(injected) == 1
 
@@ -2669,7 +2672,7 @@ async def test_drain_injections_on_max_iterations():
     # The injection message is appended to conversation history
     injected = [
         m for m in result.messages
-        if m.get("role") == "user" and m.get("content") == "follow-up after max iters"
+        if m.get("role") == "user" and "follow-up after max iters" in (m.get("content") or "")
     ]
     assert len(injected) == 1
 
@@ -2802,7 +2805,7 @@ async def test_drain_injections_set_flag_when_followup_arrives_after_last_iterat
     assert injection_queue.empty()
     injected = [
         m for m in result.messages
-        if m.get("role") == "user" and m.get("content") == "late follow-up after max iters"
+        if m.get("role") == "user" and "late follow-up after max iters" in (m.get("content") or "")
     ]
     assert len(injected) == 1
 

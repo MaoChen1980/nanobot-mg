@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+from nanobot.agent.context_vars import _current_messages_for_subagent
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.utils.prompt_templates import render_template
@@ -321,6 +322,9 @@ class AgentRunner:
         length_recovery_count = 0
         had_injections = False
         injection_cycles = 0
+
+        # Set context variable for subagent spawn
+        _current_messages_for_subagent.set(messages)
 
         for iteration in range(spec.max_iterations):
             try:

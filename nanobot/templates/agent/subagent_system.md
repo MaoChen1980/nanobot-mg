@@ -17,3 +17,9 @@ Read SKILL.md with read_file to use a skill.
 
 {{ skills_summary }}
 {% endif %}
+{% if context %}
+
+---
+
+{{ context }}
+{% endif %}
