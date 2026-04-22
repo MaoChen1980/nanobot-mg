@@ -44,7 +44,6 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
             loop.sessions.save(session)
         except Exception:
             pass
-
     content = f"Stopped {total} task(s)." if total else "No active task to stop."
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id, content=content,
@@ -119,7 +118,7 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
 
 
 async def cmd_new(ctx: CommandContext) -> OutboundMessage:
-    """Start a fresh session."""
+    """Stop active task and start a fresh session."""
     loop = ctx.loop
     msg = ctx.msg
 
@@ -361,7 +360,7 @@ def build_help_text() -> str:
     """Build canonical help text shared across channels."""
     lines = [
         "🐈 nanobot commands:",
-        "/new — Start a new conversation",
+        "/new — Stop current task and start a new conversation",
         "/stop — Stop the current task",
         "/restart — Restart the bot",
         "/status — Show bot status",
