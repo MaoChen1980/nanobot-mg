@@ -1053,8 +1053,12 @@ def _prompt_main_menu_exit(has_unsaved_changes: bool) -> str:
 
 
 def _auto_set_local_timezone(config: Config) -> None:
-    """Auto-detect and set local timezone for new configs."""
-    from datetime import datetime, timezone, timedelta
+    """Auto-detect and set local timezone for new configs (only if still at default UTC)."""
+    # Only auto-set if timezone is still at the default UTC
+    if config.agents.defaults.timezone != "UTC":
+        return
+
+    from datetime import datetime
 
     try:
         now = datetime.now().astimezone()
@@ -1087,7 +1091,7 @@ def _auto_set_local_timezone(config: Config) -> None:
             12: "Pacific/Auckland",
         }
         tz_key = _OFFSET_TO_TZ.get(offset_hours)
-        if tz_key:
+        if tz_key and tz_key != "UTC":
             config.agents.defaults.timezone = tz_key
             console.print(f"[dim]+ Auto-detected timezone: {tz_key}[/dim]")
     except Exception:
