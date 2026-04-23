@@ -24,6 +24,8 @@
 ## 📢 News
 
 - **2026-04-23** 🐈 Agent hardening — session timestamp preservation, graceful shutdown, refined message merging; SOUL template adds logging-first code analysis.
+- **2026-04-22** 🛡️ Self-healing suite — watchdog daemon, dev thread, and self-monitor for 24/7 reliability.
+- **2026-04-22** 📄 Office document reading — DOCX, XLSX, PPTX support via `read_file` tool.
 - **2026-04-21** 🚀 Released **v0.1.5.post2** — Windows & Python 3.14 support, Office document reading, SSE streaming for the OpenAI-compatible API, and stronger reliability across sessions, memory, and channels. Please see [release notes](https://github.com/HKUDS/nanobot/releases/tag/v0.1.5.post2) for details.
 - **2026-04-20** 🎨 Kimi K2.6 support, Telegram long-message split, WebUI typography & dark-mode polish.
 - **2026-04-19** 🌐 WebUI i18n locale switcher, atomic session writes with auto-repair.
