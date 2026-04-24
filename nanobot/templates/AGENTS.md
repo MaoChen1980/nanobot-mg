@@ -44,7 +44,7 @@ here is how agent works.
 - `memory/capability.md` — available tools and capabilities (update when you learn new ones)
 - `memory/process-log.md` — execution process log (update as you make progress)
 
-**Framework does NOT update these. LLM decides when and what to write.**
+**Framework does NOT auto-load these into context. LLM reads them via read_file when needed.**
 
 ---
 
