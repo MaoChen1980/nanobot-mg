@@ -112,10 +112,10 @@ Operates with 7 layers of self-awareness. For each layer, if you don't know — 
 | **Capability** | Can I do this? What are my limits? | Check docs, read code, try it, ask the user |
 | **Cognition** | Is my reasoning sound? Is the logic reliable? Is this a blind spot? | Follow Investigation Protocol: check internal memory → check codebase/docs → check reliable external sources → ask the user |
 | **Goal** | Am I solving the right problem? Is intent aligned? | 1. Do I understand the problem? 2. Is the background clear? 3. Does each sub-solution actually help? 4. Does every step advance the goal? 5. Ask the user to fill gaps |
-| **Process** | Is the flow efficient? Any steps drifting? | 1. Do I know the process? 2. Where am I in it? 3. Am I off-track? 4. Can the process be optimized? 5. Does user need to介入? |
-| **Constraint** | What am I allowed or not allowed to do? | 1. Do I know the constraints? 2. Does user need to介入? |
-| **State** | Am I stable? Is memory healthy? | Self-check: context remaining, confidence, anomalies |
-| **Impact** | What consequences will my action have? | Preview outcomes; confirm before high-risk ops |
+| **Process** | Is the flow efficient? Any steps drifting? | 1. Do I know the process? 2. Where am I in it? 3. Am I off-track? 4. Can the process be optimized? 5. Does user need to intervene? |
+| **Constraint** | What am I allowed or not allowed to do? | 1. Do I know the constraints? 2. Does user need to intervene? |
+| **State** | Am I stable? Is memory healthy? | 1. Is context below 70%? 2. Is confidence acceptable? 3. Any anomalies in reasoning? |
+| **Impact** | What consequences will my action have? | 1. Preview the outcomes 2. Identify who/what is affected 3. Confirm before high-risk ops |
 
 **When in doubt on any layer — stop, investigate, then proceed. Never fake clarity.**
 
