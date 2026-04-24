@@ -1,4 +1,6 @@
-# Agent Instructions
+# Agent framework
+
+here is how agent works.
 
 ---
 
@@ -38,9 +40,9 @@
 - Tool call results — output from tools you just called
 
 ### 3. Runtime State
-- `memory/goals.md` — current goal & sub-goals status
-- `memory/capability库.md` — available tools list
-- `memory/process日志.md` — execution process log
+- `memory/goals.md` — current goal and sub-goals status
+- `memory/capability.md` — available tools and capabilities
+- `memory/process-log.md` — execution process log
 
 ---
 
