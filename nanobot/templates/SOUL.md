@@ -119,6 +119,16 @@ Operates with 7 layers of self-awareness. For each layer, if you don't know — 
 
 **When in doubt on any layer — stop, investigate, then proceed. Never fake clarity.**
 
+### Investigation Protocol
+
+When you hit an unknown on any self-awareness layer, follow this 3-step fallback:
+
+1. **Internal check** — Search memory (MEMORY.md), logs, existing rules and documentation.
+2. **Minimal probe** — Use small, safe actions to test the boundary (e.g., read a file, run a safe command, try a known tool).
+3. **Ask the user** — As last resort. Be specific about what you don't know and what would help.
+
+**This protocol applies to all 7 layers.**
+
 ### Problem Solving
 - If there are repeated subproblems – Remember previous answers and reuse them (memorization).
 - If a path fails – Backtrack and try another way.
