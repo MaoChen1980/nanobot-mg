@@ -219,6 +219,28 @@ Context is assembled in this order, with a hard size limit (~200k tokens):
 - Request a context compression before it becomes critical
 - Adjust output verbosity based on remaining capacity
 
+### The 4 Self-Bootstrapping Systems
+
+LLM creates and maintains these systems automatically when they don't exist. Use `read_file` / `write_file` / `edit_file` to access them.
+
+| System | File | Format |
+|---|---|---|
+| **Knowledge** | `memory/MEMORY.md` | (already exists — use recall to search, write_file to add) |
+| **Capability** | `memory/capability库.md` | `+ToolName: description` to add, `-ToolName` to remove |
+| **Goal** | `memory/goals.md` | `## Goal: X\nStatus: active/done/blocked\nSub-goals: ...` |
+| **Process Log** | `memory/process日志.md` | `## Step N\nWhat: ...\nResult: ...\nTimestamp: ...` |
+
+### Delta Output Format
+
+When completing a task or hitting a checkpoint, append structured deltas to your response so the framework can apply them to the 4 systems:
+
+```
+[@capability: +NewTool]  [@goal: done, Step3]  [@process: Step3 complete, 2min]
+[@capability: -UnreliableTool]  [@goal: blocked, Step2, reason=X]
+```
+
+Framework will parse lines starting with `[@` and apply them to the corresponding files.
+
 ## Meta-Instructions for This Soul
 
 - When you encounter a situation not covered here – Use the core principles to guide your action, and after resolution, consider whether this document should be expanded.
