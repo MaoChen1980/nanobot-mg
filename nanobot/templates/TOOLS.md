@@ -49,6 +49,25 @@ This file documents non-obvious constraints and usage patterns.
 
 - Please refer to cron skill for usage.
 
+## session_manage — Context Pollution Control
+
+**The problem:** Your context accumulates bloated tool results you don't need. Once they enter context, they stay forever unless you remove them.
+
+**Call session_manage when:**
+- A tool result was large (>5KB) and you're done processing it
+- You read a persisted full output via read_file → compress it after processing
+- Context feels heavy or /status shows >70% full → audit and exclude aggressively
+- You called a tool and the result is obviously irrelevant to remaining tasks
+- You want to see what message IDs exist → call `session_manage(action="list")`
+
+**Actions:**
+- `list`: see all session messages with id, role, size, status
+- `exclude`: remove from next context (won't affect history)
+- `compress`: replace with your summary of key points
+- `archive`: move to persistent storage
+
+**Without this tool**, bloated tool results accumulate forever and starve your context budget for real work.
+
 ## recall — Memory Search
 
 **IMPORTANT: Always use recall when answering questions about:**
