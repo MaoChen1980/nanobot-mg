@@ -46,16 +46,21 @@ class SessionManageTool(Tool):
 
     @property
     def description(self) -> str:
-        return """Manage session messages: list, exclude, compress, archive.
+        return """Your context gets polluted with bloated tool results you don't need.
 
-Use this to actively control your context. You can:
-- list: see all messages in session with their id, role, size, status
-- exclude: mark a message as excluded (won't enter context)
-- compress: replace message content with your summary
-- archive: move to persistent history
+Use session_manage when:
+- A tool result was large (>5KB) and you're done processing it
+- You called read_file on a persisted full output → compress it after
+- Context feels heavy or >70% full → audit and exclude aggressively
+- You want to see what's taking up space → call list
 
-Every message has an id (e.g. msg_001). Use the id to refer to it.
-"""
+Actions:
+- list: see all messages with id, role, size, status
+- exclude: remove from context (won't affect history)
+- compress: replace with your summary of key points
+- archive: move to persistent storage
+
+Without this tool, bloated tool results accumulate forever and starve your context budget."""
 
     @property
     def read_only(self) -> bool:
