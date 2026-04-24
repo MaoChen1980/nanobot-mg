@@ -39,10 +39,12 @@ here is how agent works.
 - Session messages — current conversation context
 - Tool call results — output from tools you just called
 
-### 3. Runtime State
-- `memory/goals.md` — current goal and sub-goals status
-- `memory/capability.md` — available tools and capabilities
-- `memory/process-log.md` — execution process log
+### 3. Runtime State (LLM-managed, optional)
+- `memory/goals.md` — current goal and sub-goals status (create and update yourself via write_file)
+- `memory/capability.md` — available tools and capabilities (update when you learn new ones)
+- `memory/process-log.md` — execution process log (update as you make progress)
+
+**Framework does NOT update these. LLM decides when and what to write.**
 
 ---
 
