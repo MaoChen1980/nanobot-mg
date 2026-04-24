@@ -28,9 +28,11 @@ class Session:
     def add_message(self, role: str, content: str, **kwargs: Any) -> None:
         """Add a message to the session."""
         msg = {
+            "id": f"msg_{len(self.messages) + 1}",
             "role": role,
             "content": content,
             "timestamp": datetime.now().isoformat(),
+            "status": "active",
             **kwargs
         }
         self.messages.append(msg)
@@ -54,12 +56,14 @@ class Session:
 
         out: list[dict[str, Any]] = []
         for message in sliced:
+            if message.get("status") in ("excluded", "archived"):
+                continue
             entry: dict[str, Any] = {
                 "role": message["role"],
                 "content": message.get("content", ""),
                 "timestamp": message.get("timestamp", ""),
             }
-            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content"):
+            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "id", "status"):
                 if key in message:
                     entry[key] = message[key]
             out.append(entry)

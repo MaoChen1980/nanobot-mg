@@ -24,4 +24,6 @@ __all__ = [
     "ToolRegistry",
     "tool_parameters",
     "tool_parameters_schema",
+    "SessionManageTool",
 ]
+from nanobot.agent.tools.session_manage import SessionManageTool
