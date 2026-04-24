@@ -40,17 +40,19 @@ class RecallTool(Tool):
     def description(self) -> str:
         return (
             "MANDATORY before answering questions about past events: use this to search memories.\n\n"
-            "Use when user asks about:\n"
-            "- What was discussed or decided before\n"
-            "- User's preferences, habits, or personal details\n"
-            "- Past work, decisions, or projects\n"
-            "- Dates, events, or facts from earlier conversations\n\n"
+            "You tend to forget: past decisions, user preferences, what was agreed, what was tried.\n\n"
+            "Use when:\n"
+            "- User says 'as we discussed', 'remember when', 'earlier we'\n"
+            "- User references a past project, decision, or conversation\n"
+            "- You feel like you've had this conversation before but can't recall details\n"
+            "- User's behavior seems inconsistent with what they asked before\n\n"
             "Parameters:\n"
             "- start: Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive\n"
             "- end: End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive\n"
             "- keyword: Optional keyword to filter\n\n"
             "Returns relevant snippets with timestamps.\n"
-            "IMPORTANT: Do not dump raw results — synthesize into your answer."
+            "IMPORTANT: Do not dump raw results — synthesize into your answer.\n\n"
+            "Without this tool, you work with no memory of the user or past sessions."
         )
 
     @property
