@@ -14,13 +14,14 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.utils.prompt_templates import render_template
 from nanobot.agent.runner import AgentRunSpec, AgentRunner
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
-from nanobot.agent.tools.filesystem import ListDirTool, ReadFileTool
+from nanobot.agent.tools.filesystem import ListDirTool, ReadFileTool, WriteFileTool, EditFileTool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
+from nanobot.agent.tools.shell import ExecTool
 from nanobot.bus.events import InboundMessage
 from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import WebToolsConfig
+from nanobot.config.schema import ExecToolConfig, WebToolsConfig
 from nanobot.providers.base import LLMProvider
 
 
@@ -77,7 +78,7 @@ class SubagentManager:
         max_tool_result_chars: int,
         model: str | None = None,
         web_config: "WebToolsConfig | None" = None,
-        exec_config: Any = None,  # Deprecated: exec tools removed from subagent
+        exec_config: "ExecToolConfig | None" = None,
         restrict_to_workspace: bool = False,
         disabled_skills: list[str] | None = None,
     ):
@@ -86,6 +87,7 @@ class SubagentManager:
         self.bus = bus
         self.model = model or provider.get_default_model()
         self.web_config = web_config or WebToolsConfig()
+        self.exec_config = exec_config or ExecToolConfig()
         self.max_tool_result_chars = max_tool_result_chars
         self.restrict_to_workspace = restrict_to_workspace
         self.disabled_skills = set(disabled_skills or [])
@@ -158,7 +160,7 @@ class SubagentManager:
             status.iteration = payload.get("iteration", status.iteration)
 
         try:
-            # Build subagent tools (read-only only, no spawn, no write)
+            # Build subagent tools (read + write, no spawn)
             tools = ToolRegistry()
             allowed_dir = self.workspace if self.restrict_to_workspace else None
             extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
@@ -166,9 +168,22 @@ class SubagentManager:
             tools.register(ListDirTool(workspace=self.workspace, allowed_dir=allowed_dir))
             tools.register(GlobTool(workspace=self.workspace, allowed_dir=allowed_dir))
             tools.register(GrepTool(workspace=self.workspace, allowed_dir=allowed_dir))
+            for cls in (WriteFileTool, EditFileTool):
+                tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
             if self.web_config.enable:
                 tools.register(WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy))
                 tools.register(WebFetchTool(proxy=self.web_config.proxy))
+            if self.exec_config.enable:
+                tools.register(
+                    ExecTool(
+                        working_dir=str(self.workspace),
+                        timeout=self.exec_config.timeout,
+                        restrict_to_workspace=self.restrict_to_workspace,
+                        sandbox=self.exec_config.sandbox,
+                        path_append=self.exec_config.path_append,
+                        allowed_env_keys=self.exec_config.allowed_env_keys,
+                    )
+                )
             system_prompt = self._build_subagent_prompt(context)
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},

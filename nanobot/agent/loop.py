@@ -37,6 +37,8 @@ from nanobot.agent.tools.self import MyTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
+from nanobot.agent.tools.session_manage import SessionManageTool
+from nanobot.agent.tools.recall import RecallTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.command import CommandContext, CommandRouter, register_builtin_commands
@@ -369,7 +371,8 @@ class AgentLoop:
             )
             self.tools.register(WebFetchTool(proxy=self.web_config.proxy))
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound, workspace=self.workspace))
-        self.tools.register(SessionManageTool(workspace=self.workspace))
+        self.tools.register(SessionManageTool(loop=self))
+        self.tools.register(RecallTool(store=self.context.memory))
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(
