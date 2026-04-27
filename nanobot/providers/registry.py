@@ -71,6 +71,10 @@ class ProviderSpec:
     # "reasoning_split" — {"reasoning_split": true/false}  (MiniMax)
     thinking_style: str = ""
 
+    # Default reasoning_effort for this provider when not explicitly set.
+    # E.g. DeepSeek defaults to "high" (thinking enabled at max effort).
+    default_reasoning_effort: str | None = None
+
     # When True, treat the "reasoning" response field as formal content
     # when "content" is empty.  Only set this for providers (e.g. StepFun)
     # whose API returns the actual answer in "reasoning" instead of "content".
@@ -251,6 +255,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.deepseek.com",
         thinking_style="thinking_type",
+        default_reasoning_effort="high",
     ),
     # Gemini: Google's OpenAI-compatible endpoint
     ProviderSpec(
