@@ -433,6 +433,13 @@ class OpenAICompatProvider(LLMProvider):
         messages: list[dict[str, Any]],
         reasoning_effort: str | None,
     ) -> list[dict[str, Any]]:
+        """Patch DeepSeek assistant messages missing reasoning_content.
+
+        DeepSeek V4 rejects requests where an assistant message carrying
+        tool_calls has no reasoning_content — even on turns where the model
+        legitimately had no thinking.  We backfill an empty string so the API
+        accepts the request, without losing any messages.
+        """
         if (
             not self._spec
             or self._spec.name != "deepseek"
@@ -441,33 +448,22 @@ class OpenAICompatProvider(LLMProvider):
         ):
             return messages
 
-        bad_idx = None
-        for idx, msg in enumerate(messages):
+        fixed = 0
+        for msg in messages:
             if (
                 msg.get("role") == "assistant"
                 and msg.get("tool_calls")
                 and not msg.get("reasoning_content")
             ):
-                bad_idx = idx
-        if bad_idx is None:
-            return messages
+                msg["reasoning_content"] = ""
+                fixed += 1
 
-        keep_from = None
-        for idx in range(bad_idx + 1, len(messages)):
-            if messages[idx].get("role") == "user":
-                keep_from = idx
-                break
-
-        if keep_from is None:
-            trimmed = messages[:bad_idx]
-        else:
-            prefix = [msg for msg in messages[:keep_from] if msg.get("role") == "system"]
-            trimmed = prefix + messages[keep_from:]
-        logger.warning(
-            "Dropped {} DeepSeek thinking history message(s) with incomplete reasoning_content",
-            len(messages) - len(trimmed),
-        )
-        return trimmed
+        if fixed:
+            logger.info(
+                "Patched {} DeepSeek assistant message(s) with missing reasoning_content",
+                fixed,
+            )
+        return messages
 
     # ------------------------------------------------------------------
     # Build kwargs

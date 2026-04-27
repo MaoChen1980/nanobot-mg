@@ -182,8 +182,8 @@ async def test_passthrough_preserves_reasoning_content_on_assistant_messages() -
 # ── _drop_deepseek_incomplete_reasoning_history ────────────────────────────────
 
 
-def test_drop_removes_assistant_messages_with_tool_calls_but_no_reasoning() -> None:
-    """Messages with tool_calls but missing reasoning_content are dropped."""
+def test_drop_patches_assistant_messages_with_tool_calls_but_no_reasoning() -> None:
+    """Messages with tool_calls but missing reasoning_content are patched (not dropped)."""
     with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
         provider = OpenAICompatProvider(spec=_DEEPSEEK_SPEC)
 
@@ -194,7 +194,7 @@ def test_drop_removes_assistant_messages_with_tool_calls_but_no_reasoning() -> N
             "role": "assistant",
             "content": None,
             "tool_calls": [{"id": "1", "function": {"name": "list_dir", "arguments": "{}"}}],
-            # Missing reasoning_content - this is the problem case
+            # Missing reasoning_content - patched to empty string
         },
         {"role": "tool", "tool_call_id": "1", "name": "list_dir", "content": "file1.txt"},
         {"role": "user", "content": "How many?"},
@@ -202,10 +202,12 @@ def test_drop_removes_assistant_messages_with_tool_calls_but_no_reasoning() -> N
 
     result = provider._drop_deepseek_incomplete_reasoning_history(messages, "high")
 
-    # Should keep only system and the last user message
+    # All messages preserved, bad one is patched to have empty reasoning_content
     roles = [m.get("role") for m in result]
-    assert "assistant" not in roles  # Assistant with incomplete reasoning was dropped
-    assert roles == ["system", "user"]
+    assert roles == ["system", "user", "assistant", "tool", "user"]
+    assistant_msgs = [m for m in result if m.get("role") == "assistant"]
+    assert len(assistant_msgs) == 1
+    assert assistant_msgs[0].get("reasoning_content") == ""
 
 
 def test_drop_preserves_messages_with_reasoning_content() -> None:
