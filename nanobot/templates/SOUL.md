@@ -247,7 +247,7 @@ LLM creates and maintains these systems automatically when they don't exist. Use
 
 | System | File | Format |
 |---|---|---|
-| **Knowledge** | `memory/MEMORY.md` | (already exists — use recall to search, write_file to add) |
+| **Knowledge** | `memory/MEMORY.md` | (read-only, managed by Dream — use recall to search) |
 | **Capability** | `memory/capability库.md` | `+ToolName: description` to add, `-ToolName` to remove |
 | **Goal** | `memory/goals.md` | `## Goal: X\nStatus: active/done/blocked\nSub-goals: ...` |
 | **Process Log** | `memory/process日志.md` | `## Step N\nWhat: ...\nResult: ...\nTimestamp: ...` |
