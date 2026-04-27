@@ -4,26 +4,110 @@ here is how agent works.
 
 ---
 
+## How an Agent Works
+
+### Message Flow
+
+```
+User sends message
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 1. INBOUND                                                   │
+│    Channel (Feishu/Slack/CLI/etc.) sends InboundMessage     │
+│    to AgentLoop via message bus                              │
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 2. DISPATCH (per-session serial)                           │
+│    - Priority commands (/stop, /new) handled immediately    │
+│    - Session lock ensures one task per session at a time    │
+│    - If session busy: message queued for mid-turn injection│
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 3. CONTEXT ASSEMBLY                                         │
+│    ContextBuilder.build_messages() produces:                 │
+│    [system prompt] + [history] + [current message]          │
+│                                                             │
+│    System prompt includes:                                   │
+│    - workspace metadata, runtime, platform policy           │
+│    - bootstrap files (AGENTS.md, SOUL.md, USER.md,          │
+│      TOOLS.md)                                              │
+│    - memory/MEMORY.md (long-term facts, read-only)           │
+│    - active skills + skills summary                           │
+│    - recent history from session.messages                    │
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 4. LLM CALL → Runner loop                                  │
+│    AgentRunner.run() calls provider.chat()                  │
+│    Provider returns LLMResponse                             │
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 5. TOOL EXECUTION LOOP (iterations)                       │
+│    For each LLM response:                                   │
+│    a. If no tool_calls → return final content              │
+│    b. If has tool_calls → execute tools in parallel        │
+│    c. Collect results, append as tool messages             │
+│    d. Send back to LLM for next response                   │
+│    e. Max iterations reached → stop                        │
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 6. SUBAGENT                                               │
+│    LLM calls spawn tool → SubagentManager creates         │
+│    independent background task with:                       │
+│    - Minimal context (runtime_context + skills_summary)     │
+│    - Read-only tools (read_file, grep, glob, web_* )      │
+│    - Result announced back when complete                  │
+│    User messages do NOT interrupt subagents               │
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 7. RESPONSE                                               │
+│    Final content sent via channel's OutboundMessage        │
+│    AskUser options extracted if stop_reason == "ask_user"  │
+└─────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 8. SESSION PERSISTENCE                                    │
+│    - Messages saved to session.messages                    │
+│    - Session saved to sessions/*.jsonl                     │
+│    - File cap enforced (old messages archived)            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Agent Context Assembly
 
 ### Main Agent Context
 
-**1. System Prompt (assembled in order):**
-- `metadata` — workspace, runtime, platform policy
-- `instructions` — behavioral rules
-- `runtime_context` — current time, Channel, Chat ID
-- `bootstrap files` — AGENTS.md + SOUL.md + USER.md + TOOLS.md
-- `memory/MEMORY.md` — long-term memory
-- `active skills` + `skills summary` — available skills list
-- `history.jsonl` — last 50 history entries
+**System Prompt (assembled in order):**
+1. `metadata` — workspace, runtime, platform policy
+2. `instructions` — behavioral rules
+3. `runtime_context` — current time, Channel, Chat ID
+4. `bootstrap files` — AGENTS.md + SOUL.md + USER.md + TOOLS.md
+5. `memory/MEMORY.md` — long-term memory (read-only, managed by Dream)
+6. `active skills` + `skills summary` — available skills list
+7. `Recent history` — last 50 entries from session.messages
 
-**2. Messages:**
-- `history` — previous conversation messages
-- `current_message` — your most recent message (may include images/video)
+**Messages:**
+- `history` — previous conversation messages (from session.messages)
+- `current_message` — user's most recent message (may include images/video)
 
 ### Subagent Context (when spawned)
 
-- System Prompt only: `runtime_context` + `skills_summary` + `context` passed at spawn time
+- Minimal system prompt: `runtime_context` + `skills_summary` + `context` passed at spawn time
 - **No** bootstrap files, memory, or history
 - Tools are read-only: `read_file`, `grep`, `glob`, `web_search`, `web_fetch`
 
@@ -31,20 +115,20 @@ here is how agent works.
 
 ## Agent Data Storage
 
-### 1. Long-term Memory
-- `memory/MEMORY.md` — important facts, project context, user preferences
-- `memory/history.jsonl` — all conversation history (JSONL format)
+### 1. Long-term Memory (Dream-managed)
+- `memory/MEMORY.md` — important facts, project context, user preferences (read-only for LLM)
+- `memory/history.jsonl` — all conversation history (append-only JSONL)
 
-### 2. Current Session
-- Session messages — current conversation context
-- Tool call results — output from tools you just called
+### 2. Current Session (runtime)
+- `session.messages` — current conversation context, persisted to JSONL
+- Tool call results stored within session messages
 
 ### 3. Runtime State (LLM-managed, optional)
-- `memory/goals.md` — current goal and sub-goals status (create and update yourself via write_file)
-- `memory/capability.md` — available tools and capabilities (update when you learn new ones)
-- `memory/process-log.md` — execution process log (update as you make progress)
+- `memory/goals.md` — current goal and sub-goals status
+- `memory/capability.md` — available tools and capabilities
+- `memory/process-log.md` — execution process log
 
-**Framework does NOT auto-load these into context. LLM reads them via read_file when needed.**
+**Framework does NOT auto-load runtime state into context. LLM reads via read_file when needed.**
 
 ---
 
@@ -61,10 +145,21 @@ here is how agent works.
 
 ---
 
+## Skills
+
+Skills are loaded from `nanobot/skills/` and `workspace/skills/`.
+
+- `always: true` skills are always included in system prompt
+- Other skills: listed in skills summary, LLM decides when to use
+- Skills content injected into `skills summary` section of system prompt
+- Framework does not invoke skills automatically — LLM chooses
+
+---
+
 ## User Message Interruption
 
-- **Main Agent**: While executing tools, user can send new message → interrupt current flow, inject new message, re-decide
-- **Subagent**: Independent background task, not affected by user messages, notified when complete
+- **Main Agent**: While executing tools, user sends new message → queued for mid-turn injection, processed after current turn
+- **Subagent**: Independent background task, not affected by user messages, result announced when complete
 
 ---
 
