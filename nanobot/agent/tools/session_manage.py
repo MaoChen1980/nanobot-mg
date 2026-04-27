@@ -40,6 +40,9 @@ class SessionManageTool(Tool):
     - archive: move to persistent history
     """
 
+    def __init__(self, loop: "AgentLoop") -> None:
+        self._loop = loop
+
     @property
     def name(self) -> str:
         return "session_manage"
