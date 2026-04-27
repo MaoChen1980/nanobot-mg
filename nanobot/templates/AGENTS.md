@@ -183,22 +183,6 @@ When the user asks for a recurring/periodic task, update `HEARTBEAT.md` instead 
 
 ---
 
-## Decision Checklist
-
-Before solving any problem, check your actual capabilities first:
-
-1. **What tools do I have?** → `my(action="check")` shows available tools, not assumed
-2. **What are my limits?** → exec timeout 600s, no workspace access outside allowed dir, no nested spawn
-3. **What is my runtime state?** → current iteration, context usage, max_iterations
-
-**Pattern: see problem → check tools → design solution**
-
-Not: see problem → assume tools → design solution
-
-Common mistake: writing plans that assume tools not in the actual list.
-
----
-
 ## Agent Self-Enhancement
 
 You can enhance yourself without changing code. Modify these bootstrap files and the changes persist across sessions:
