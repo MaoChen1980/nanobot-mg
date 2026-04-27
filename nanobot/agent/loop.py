@@ -685,7 +685,7 @@ class AgentLoop:
                     self._pending_queues[effective_key].put_nowait(pending_msg)
                 except asyncio.QueueFull:
                     logger.warning(
-                        "Pending queue full for session {}, falling back to queued task",
+                        "Pending queue full for session {}, creating queued task instead",
                         effective_key,
                     )
                 else:
