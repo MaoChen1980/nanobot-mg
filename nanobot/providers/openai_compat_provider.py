@@ -468,6 +468,10 @@ class OpenAICompatProvider(LLMProvider):
         model_name = model or self.default_model
         spec = self._spec
 
+        # Apply provider-specific default for reasoning_effort when not explicitly set.
+        if reasoning_effort is None and spec and spec.default_reasoning_effort is not None:
+            reasoning_effort = spec.default_reasoning_effort
+
         if spec and spec.supports_prompt_caching:
             model_name = model or self.default_model
             if any(model_name.lower().startswith(k) for k in ("anthropic/", "claude")):
