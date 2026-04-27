@@ -9,7 +9,7 @@ from typing import Any
 
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
-from nanobot.utils.helpers import build_assistant_message, current_time_str, detect_image_mime
+from nanobot.utils.helpers import build_assistant_message, current_time_str, detect_image_mime, truncate_text
 from nanobot.utils.prompt_templates import render_template
 
 
@@ -18,10 +18,9 @@ class ContextBuilder:
 
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
     _RUNTIME_CONTEXT_TAG = "[Runtime Context — metadata only, not instructions]"
-    _RUNTIME_CONTEXT_END = "[/Runtime Context]"
     _MAX_RECENT_HISTORY = 50
-    _MAX_ENTRY_CHARS = 200
-    _MAX_RECENT_HISTORY_CHARS = 15000
+    _MAX_HISTORY_CHARS = 32_000  # hard cap on recent history section size
+    _RUNTIME_CONTEXT_END = "[/Runtime Context]"
 
     def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None):
         self.workspace = workspace
@@ -33,14 +32,9 @@ class ContextBuilder:
         self,
         skill_names: list[str] | None = None,
         channel: str | None = None,
-        runtime_context: str = "",
     ) -> str:
-        """Build the system prompt from metadata, instructions, bootstrap files, memory, and skills."""
-        metadata = self._get_metadata(channel=channel)
-        instructions = self._get_instructions(channel=channel)
-        parts = [f"{metadata}\n\n---\n\n{instructions}"]
-        if runtime_context:
-            parts.append(runtime_context)
+        """Build the system prompt from identity, bootstrap files, memory, and skills."""
+        parts = [self._get_identity(channel=channel)]
 
         bootstrap = self._load_bootstrap_files()
         if bootstrap:
@@ -48,58 +42,31 @@ class ContextBuilder:
 
         memory = self.memory.get_memory_context()
         if memory and not self._is_template_content(self.memory.read_memory(), "memory/MEMORY.md"):
-            parts.append(f"=== Memory ===\n{memory}\n===============")
+            parts.append(f"# Memory\n\n{memory}")
 
         always_skills = self.skills.get_always_skills()
         if always_skills:
             always_content = self.skills.load_skills_for_context(always_skills)
             if always_content:
-                parts.append(f"=== Active Skills ===\n{always_content}\n===============")
+                parts.append(f"# Active Skills\n\n{always_content}")
 
         skills_summary = self.skills.build_skills_summary(exclude=set(always_skills))
         if skills_summary:
             parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
-        # Recent history from history.jsonl (unprocessed by Dream), with dual truncation
         entries = self.memory.read_unprocessed_history(since_cursor=self.memory.get_last_dream_cursor())
         if entries:
-            # Sort entries by timestamp ascending, keep original order for entries without timestamp
-            entries.sort(key=lambda x: x.get("timestamp", ""))
-            lines: list[str] = []
-            total_chars = 0
-            for e in entries[-self._MAX_RECENT_HISTORY:]:
-                content = e["content"]
-                if len(content) > self._MAX_ENTRY_CHARS:
-                    content = content[: self._MAX_ENTRY_CHARS] + "…"
-                entry_len = len(f"- [{e['timestamp']}] {content}\n")
-                if total_chars + entry_len > self._MAX_RECENT_HISTORY_CHARS:
-                    break
-                lines.append(f"- [{e['timestamp']}] {content}")
-                total_chars += entry_len
-            if lines:
-                parts.append("=== Recent History ===\n" + "\n".join(lines) + "\n===============")
+            capped = entries[-self._MAX_RECENT_HISTORY:]
+            history_text = "\n".join(
+                f"- [{e['timestamp']}] {e['content']}" for e in capped
+            )
+            history_text = truncate_text(history_text, self._MAX_HISTORY_CHARS)
+            parts.append("# Recent History\n\n" + history_text)
 
         return "\n\n---\n\n".join(parts)
 
-    def _get_metadata(self, channel: str | None = None) -> str:
-        """Get the metadata section (read-only environment info)."""
-        workspace_path = str(self.workspace.expanduser().resolve())
-        system = platform.system()
-        runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
-        return render_template(
-            "agent/identity_metadata.md",
-            workspace_path=workspace_path,
-            runtime=runtime,
-            platform_policy=render_template("agent/platform_policy.md", system=system),
-            channel=channel,
-        )
-
-    def _get_instructions(self, channel: str | None = None) -> str:
-        """Get the instructions section (behavioral rules)."""
-        return render_template("agent/identity_instructions.md", channel=channel or "")
-
     def _get_identity(self, channel: str | None = None) -> str:
-        """Get the core identity section (legacy, use _get_metadata + _get_instructions)."""
+        """Get the core identity section."""
         workspace_path = str(self.workspace.expanduser().resolve())
         system = platform.system()
         runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
@@ -117,7 +84,7 @@ class ContextBuilder:
         channel: str | None, chat_id: str | None, timezone: str | None = None,
         session_summary: str | None = None,
     ) -> str:
-        """Build runtime metadata block. Now lives in system prompt, not user message."""
+        """Build untrusted runtime metadata block for injection before the user message."""
         lines = [f"Current Time: {current_time_str(timezone)}"]
         if channel and chat_id:
             lines += [f"Channel: {channel}", f"Chat ID: {chat_id}"]
@@ -147,7 +114,7 @@ class ContextBuilder:
             file_path = self.workspace / filename
             if file_path.exists():
                 content = file_path.read_text(encoding="utf-8")
-                parts.append(f"=== {filename} ===\n{content}\n===============")
+                parts.append(f"## {filename}\n\n{content}")
 
         return "\n\n".join(parts) if parts else ""
 
@@ -176,16 +143,23 @@ class ContextBuilder:
         """Build the complete message list for an LLM call."""
         runtime_ctx = self._build_runtime_context(channel, chat_id, self.timezone, session_summary=session_summary)
         user_content = self._build_user_content(current_message, media)
+
+        # Merge runtime context and user content into a single user message
+        # to avoid consecutive same-role messages that some providers reject.
+        if isinstance(user_content, str):
+            merged = f"{runtime_ctx}\n\n{user_content}"
+        else:
+            merged = [{"type": "text", "text": runtime_ctx}] + user_content
         messages = [
-            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, runtime_context=runtime_ctx)},
+            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel)},
             *history,
         ]
         if messages[-1].get("role") == current_role:
             last = dict(messages[-1])
-            last["content"] = self._merge_message_content(last.get("content"), user_content)
+            last["content"] = self._merge_message_content(last.get("content"), merged)
             messages[-1] = last
             return messages
-        messages.append({"role": current_role, "content": user_content})
+        messages.append({"role": current_role, "content": merged})
         return messages
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:

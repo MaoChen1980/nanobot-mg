@@ -252,6 +252,35 @@ async def test_runner_returns_max_iterations_fallback():
     assert result.messages[-1]["role"] == "assistant"
     assert result.messages[-1]["content"] == result.final_content
 
+
+@pytest.mark.asyncio
+async def test_runner_times_out_hung_llm_request():
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+
+    async def chat_with_retry(**kwargs):
+        await asyncio.sleep(3600)
+
+    provider.chat_with_retry = chat_with_retry
+    tools = MagicMock()
+    tools.get_definitions.return_value = []
+
+    runner = AgentRunner(provider)
+    started = time.monotonic()
+    result = await runner.run(AgentRunSpec(
+        initial_messages=[{"role": "user", "content": "hello"}],
+        tools=tools,
+        model="test-model",
+        max_iterations=1,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        llm_timeout_s=0.05,
+    ))
+
+    assert (time.monotonic() - started) < 1.0
+    assert result.stop_reason == "error"
+    assert "timed out" in (result.final_content or "").lower()
+
 @pytest.mark.asyncio
 async def test_runner_returns_structured_tool_error():
     from nanobot.agent.runner import AgentRunSpec, AgentRunner
@@ -1031,15 +1060,12 @@ async def test_next_turn_after_llm_error_keeps_turn_boundary(tmp_path):
 
     request_messages = provider.chat_with_retry.await_args_list[1].kwargs["messages"]
     non_system = [message for message in request_messages if message.get("role") != "system"]
-    # Filter to role+content only (timestamp may be present)
-    stripped = [{k: v for k, v in m.items() if k in ("role", "content")} for m in non_system]
-    assert stripped[0] == {"role": "user", "content": "first question"}
-    assert stripped[1] == {
-        "role": "assistant",
-        "content": _PERSISTED_MODEL_ERROR_PLACEHOLDER,
-    }
-    assert stripped[2]["role"] == "user"
-    assert "second question" in stripped[2]["content"]
+    assert non_system[0]["role"] == "user"
+    assert "first question" in non_system[0]["content"]
+    assert non_system[1]["role"] == "assistant"
+    assert _PERSISTED_MODEL_ERROR_PLACEHOLDER in non_system[1]["content"]
+    assert non_system[2]["role"] == "user"
+    assert "second question" in non_system[2]["content"]
 
 
 @pytest.mark.asyncio
@@ -1872,7 +1898,11 @@ async def test_drain_injections_passes_limit_to_callback_when_supported():
     )
     result = await runner._drain_injections(spec)
     assert seen_limits == [_MAX_INJECTIONS_PER_TURN]
-    assert result == [{"role": "user", "content": f"msg{i}"} for i in range(_MAX_INJECTIONS_PER_TURN)]
+    assert result == [
+        {"role": "user", "content": "msg0"},
+        {"role": "user", "content": "msg1"},
+        {"role": "user", "content": "msg2"},
+    ]
 
 
 @pytest.mark.asyncio
@@ -1972,10 +2002,10 @@ async def test_checkpoint1_injects_after_tool_execution():
 
     assert result.had_injections is True
     assert result.final_content == "final answer"
-    # The second call should have the injected user message (merged with prior user message)
+    # The second call should have the injected user message
     assert call_count["n"] == 2
     last_messages = captured_messages[-1]
-    injected = [m for m in last_messages if m.get("role") == "user" and "follow-up question" in (m.get("content") or "")]
+    injected = [m for m in last_messages if m.get("role") == "user" and m.get("content") == "follow-up question"]
     assert len(injected) == 1
 
 
@@ -2078,11 +2108,11 @@ async def test_checkpoint2_preserves_final_response_in_history_before_followup()
 
     assert result.final_content == "second answer"
     assert call_count["n"] == 2
-    # Injected follow-up is merged with the prior user message
-    last = captured_messages[-1]
-    user_msgs = [m for m in last if m.get("role") == "user"]
-    assert len(user_msgs) == 1
-    assert user_msgs[0].get("content") == "hello\n\nfollow-up question"
+    assert captured_messages[-1] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "first answer"},
+        {"role": "user", "content": "follow-up question"},
+    ]
     assert [
         {"role": message["role"], "content": message["content"]}
         for message in result.messages
@@ -2201,9 +2231,8 @@ async def test_runner_merges_multiple_injected_user_messages_without_losing_medi
     assert call_count["n"] == 2
     second_call = captured_messages[-1]
     user_messages = [message for message in second_call if message.get("role") == "user"]
-    # Multiple consecutive user injections are merged into one user message
-    assert len(user_messages) == 1
-    injected = user_messages[0]
+    assert len(user_messages) == 2
+    injected = user_messages[-1]
     assert isinstance(injected["content"], list)
     assert any(
         block.get("type") == "image_url"
@@ -2508,10 +2537,10 @@ async def test_drain_injections_on_fatal_tool_error():
 
     assert result.had_injections is True
     assert result.final_content == "reply to follow-up"
-    # The injection is merged with the prior user message
+    # The injection should be in the messages history
     injected = [
         m for m in result.messages
-        if m.get("role") == "user" and "follow-up after error" in (m.get("content") or "")
+        if m.get("role") == "user" and m.get("content") == "follow-up after error"
     ]
     assert len(injected) == 1
 
@@ -2672,79 +2701,9 @@ async def test_drain_injections_on_max_iterations():
     # The injection message is appended to conversation history
     injected = [
         m for m in result.messages
-        if m.get("role") == "user" and "follow-up after max iters" in (m.get("content") or "")
+        if m.get("role") == "user" and m.get("content") == "follow-up after max iters"
     ]
     assert len(injected) == 1
-
-
-@pytest.mark.skip(reason="pending_queue feature not available in HKUDS runner.py")
-@pytest.mark.asyncio
-async def test_mid_task_pending_queue_injected_after_tool_batch():
-    """Messages in spec.pending_queue should be injected after each tool batch.
-
-    This tests the fix for the "word documents don't move" scenario: when a
-    long-running task fires multiple tool calls, user messages that arrive
-    mid-task are injected into the LLM context before the next tool batch,
-    so the LLM can act on them immediately rather than after all tools finish.
-    """
-    from nanobot.agent.runner import AgentRunSpec, AgentRunner
-    from nanobot.bus.events import InboundMessage
-
-    provider = MagicMock()
-    call_count = {"n": 0}
-    captured_messages: list[list[dict]] = []
-
-    async def chat_with_retry(*, messages, **kwargs):
-        call_count["n"] += 1
-        captured_messages.append([dict(m) for m in messages])
-        if call_count["n"] == 1:
-            # Return multiple tool calls in one batch
-            return LLMResponse(
-                content="moving files",
-                tool_calls=[
-                    ToolCallRequest(id="call_1", name="exec", arguments={"cmd": "mv a.txt folder/"}),
-                    ToolCallRequest(id="call_2", name="exec", arguments={"cmd": "mv b.txt folder/"}),
-                ],
-                usage={},
-            )
-        # Second call: check that the mid-task message was injected
-        user_contents = [
-            m["content"] for m in messages if m.get("role") == "user"
-        ]
-        has_mid_task_msg = any("don't move" in str(c) for c in user_contents)
-        if has_mid_task_msg:
-            return LLMResponse(content="stopped — user said don't move", tool_calls=[], usage={})
-        return LLMResponse(content="continuing", tool_calls=[], usage={})
-
-    provider.chat_with_retry = chat_with_retry
-    tools = MagicMock()
-    tools.get_definitions.return_value = []
-    tools.execute = AsyncMock(return_value="ok")
-
-    # Simulate a user message arriving while tools are in-flight
-    pending_queue = asyncio.Queue()
-    await pending_queue.put(InboundMessage(
-        channel="cli",
-        sender_id="u",
-        chat_id="c",
-        content="don't move word docs!",
-    ))
-
-    runner = AgentRunner(provider)
-    result = await runner.run(AgentRunSpec(
-        initial_messages=[{"role": "user", "content": "organize files"}],
-        tools=tools,
-        model="test-model",
-        max_iterations=5,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
-        pending_queue=pending_queue,
-    ))
-
-    # The second LLM call should have seen the mid-task message
-    assert call_count["n"] == 2, f"Expected 2 LLM calls, got {call_count['n']}"
-    assert result.final_content == "stopped — user said don't move"
-    assert pending_queue.empty(), "pending_queue should be fully drained"
-
 
 
 @pytest.mark.asyncio
@@ -2805,7 +2764,7 @@ async def test_drain_injections_set_flag_when_followup_arrives_after_last_iterat
     assert injection_queue.empty()
     injected = [
         m for m in result.messages
-        if m.get("role") == "user" and "late follow-up after max iters" in (m.get("content") or "")
+        if m.get("role") == "user" and m.get("content") == "late follow-up after max iters"
     ]
     assert len(injected) == 1
 

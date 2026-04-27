@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytest
 
-from nanobot.agent.memory import MemoryStore
+from nanobot.agent.memory import MemoryStore, _HISTORY_ENTRY_HARD_CAP
 
 
 @pytest.fixture
@@ -142,20 +142,47 @@ class TestHistoryWithCursor:
         assert entries[0]["cursor"] in {4, 5}
 
 
-class TestAppendHistoryTimestamp:
-    def test_append_history_uses_provided_timestamp(self, tmp_path):
-        store = MemoryStore(tmp_path)
-        ts = "2026-04-22T10:36:34.698+08:00"
-        cursor = store.append_history("test event", timestamp=ts)
-        entry = store.read_unprocessed_history(since_cursor=0)[0]
-        assert entry["timestamp"] == ts
+class TestAppendHistoryHardCap:
+    """append_history has a defensive cap that catches new callers who forgot
+    to set their own tighter cap. The default is intentionally larger than
+    any current caller's per-call cap, so normal operation never trips it."""
 
-    def test_append_history_defaults_to_iso_format(self, tmp_path):
-        store = MemoryStore(tmp_path)
-        cursor = store.append_history("no timestamp provided")
+    def test_oversized_entry_is_truncated(self, store):
+        """An entry above _HISTORY_ENTRY_HARD_CAP is truncated before being persisted."""
+        huge = "x" * (_HISTORY_ENTRY_HARD_CAP + 10_000)
+        store.append_history(huge)
         entry = store.read_unprocessed_history(since_cursor=0)[0]
-        # Should be ISO format with timezone
-        assert "T" in entry["timestamp"] or ":" in entry["timestamp"]
+        assert len(entry["content"]) <= _HISTORY_ENTRY_HARD_CAP + 50
+
+    def test_oversize_warning_is_emitted_once(self, store, caplog):
+        """Repeated oversized writes should warn only on the first occurrence."""
+        from loguru import logger as loguru_logger
+
+        records: list[str] = []
+        handler_id = loguru_logger.add(lambda m: records.append(m), level="WARNING")
+        try:
+            huge = "x" * (_HISTORY_ENTRY_HARD_CAP + 1)
+            store.append_history(huge)
+            store.append_history(huge)
+            store.append_history(huge)
+        finally:
+            loguru_logger.remove(handler_id)
+
+        oversize_warnings = [r for r in records if "exceeds" in r and "chars" in r]
+        assert len(oversize_warnings) == 1
+
+    def test_custom_max_chars_overrides_default(self, store):
+        """Callers that pass max_chars should get their tighter cap applied."""
+        store.append_history("a" * 500, max_chars=100)
+        entry = store.read_unprocessed_history(since_cursor=0)[0]
+        assert len(entry["content"]) <= 150  # 100 + "\n... (truncated)"
+
+    def test_normal_sized_entries_unaffected(self, store):
+        """The hard cap must not alter entries that fit within it."""
+        msg = "normal short entry"
+        store.append_history(msg)
+        entry = store.read_unprocessed_history(since_cursor=0)[0]
+        assert entry["content"] == msg
 
 
 class TestDreamCursor:

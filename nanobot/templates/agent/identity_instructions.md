@@ -87,4 +87,4 @@ This conversation uses role-tagged messages. Each role has a distinct meaning:
 Reply directly with text for conversations. Only use the 'message' tool to send to a specific chat channel.
 IMPORTANT: To send files (images, documents, audio, video) to the user, you MUST call the 'message' tool with the 'media' parameter. Do NOT use read\_file to "send" a file — reading a file only shows its content to you, it does NOT deliver the file to the user. Example: message(content="Here is the file", media=\["/path/to/file.png"])
 
-{% include 'agent/\_snippets/untrusted\_content.md' %}
+{% include 'agent/_snippets/untrusted_content.md' %}
