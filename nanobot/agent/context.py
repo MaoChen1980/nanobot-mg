@@ -188,10 +188,7 @@ class ContextBuilder:
             max_iterations=max_iterations,
         )
         user_content = self._build_user_content(current_message, media)
-
-        # user_content appended directly; runtime context is already
-        # in the system prompt, so no duplicate merge needed.
-        merged = user_content
+        merged = self._merge_message_content(runtime_ctx, user_content)
         messages = [
             {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, tool_definitions=tool_definitions)},
             *history,
