@@ -38,7 +38,7 @@ _DEFAULT_ERROR_MESSAGE = "Sorry, I encountered an error calling the AI model."
 _PERSISTED_MODEL_ERROR_PLACEHOLDER = "[Assistant reply unavailable due to model error.]"
 _MAX_EMPTY_RETRIES = 2
 _MAX_LENGTH_RECOVERIES = 3
-_MAX_INJECTIONS_PER_TURN = 3
+_MAX_INJECTIONS_PER_TURN = 50
 _MAX_INJECTION_CYCLES = 5
 _SNIP_SAFETY_BUFFER = 1024
 _MICROCOMPACT_KEEP_RECENT = 10
@@ -245,7 +245,7 @@ class AgentRunner:
         if not injections:
             return False, injection_cycles
         injection_cycles += 1
-        if assistant_message is not None:
+        if assistant_message is not None and phase != "after final response":
             messages.append(assistant_message)
             if iteration is not None:
                 await self._emit_checkpoint(
@@ -395,14 +395,72 @@ class AgentRunner:
 
                 await hook.before_execute_tools(context)
 
-                results, new_events, fatal_error = await self._execute_tools(
+                results, new_events, fatal_error, was_interrupted, injection_cycles, executed_count = await self._execute_tools(
                     spec,
                     tool_calls,
                     external_lookup_counts,
+                    messages,
+                    injection_cycles,
                 )
                 tool_events.extend(new_events)
                 context.tool_results = list(results)
                 context.tool_events = list(new_events)
+
+                if was_interrupted:
+                    # User sent messages during tool execution – fix up the
+                    # message list to reflect only the tools that actually ran.
+                    # 1. Pop injected user messages from the end of messages
+                    injected_messages: list[dict[str, Any]] = []
+                    while messages and messages[-1].get("role") == "user":
+                        injected_messages.append(messages.pop())
+                    injected_messages.reverse()
+                    # 2. Pop the original assistant_message (has ALL tool_calls)
+                    messages.pop()
+                    # 3. Build new assistant_message with only executed tool_calls
+                    executed_tool_calls = tool_calls[:executed_count]
+                    new_assistant = build_assistant_message(
+                        response.content or "",
+                        tool_calls=[tc.to_openai_tool_call() for tc in executed_tool_calls],
+                        reasoning_content=response.reasoning_content,
+                        thinking_blocks=response.thinking_blocks,
+                    )
+                    messages.append(new_assistant)
+                    # 4. Append tool results for executed tools
+                    completed_tool_results: list[dict[str, Any]] = []
+                    for tc, res in zip(executed_tool_calls, results):
+                        if isinstance(fatal_error, AskUserInterrupt) and tc.name == "ask_user":
+                            continue
+                        content = self._normalize_tool_result(spec, tc.id, tc.name, res)
+                        ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else ""
+                        content = self._fmt_tool_metadata(tc.name, content, ts)
+                        tool_message = {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tc.name,
+                            "content": content,
+                            "timestamp": ts,
+                        }
+                        messages.append(tool_message)
+                        completed_tool_results.append(tool_message)
+                    # 5. Re-append injected user messages
+                    messages.extend(injected_messages)
+                    await self._emit_checkpoint(
+                        spec,
+                        {
+                            "phase": "tools_interrupted",
+                            "iteration": iteration,
+                            "model": spec.model,
+                            "assistant_message": new_assistant,
+                            "completed_tool_results": completed_tool_results,
+                            "pending_tool_calls": [],
+                        },
+                    )
+                    empty_content_retries = 0
+                    length_recovery_count = 0
+                    had_injections = True
+                    await hook.after_iteration(context)
+                    continue
+
                 completed_tool_results: list[dict[str, Any]] = []
                 for tool_call, result in zip(tool_calls, results):
                     if isinstance(fatal_error, AskUserInterrupt) and tool_call.name == "ask_user":
@@ -759,9 +817,13 @@ class AgentRunner:
         spec: AgentRunSpec,
         tool_calls: list[ToolCallRequest],
         external_lookup_counts: dict[str, int],
-    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None]:
+        messages: list[dict[str, Any]],
+        injection_cycles: int,
+    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None, bool, int, int]:
+        """Execute tool calls in batches. Returns (results, events, fatal_error, was_interrupted, new_injection_cycles, executed_count)."""
         batches = self._partition_tool_batches(spec, tool_calls)
         tool_results: list[tuple[Any, dict[str, str], BaseException | None]] = []
+        interrupted = False
         for batch in batches:
             if spec.concurrent_tools and len(batch) > 1:
                 batch_results = await asyncio.gather(*(
@@ -780,6 +842,15 @@ class AgentRunner:
             if any(isinstance(error, AskUserInterrupt) for _, _, error in batch_results):
                 break
 
+            # Check for user injection between batches
+            drained, injection_cycles = await self._try_drain_injections(
+                spec, messages, None, injection_cycles,
+                phase="between tool batches",
+            )
+            if drained:
+                interrupted = True
+                break
+
         results: list[Any] = []
         events: list[dict[str, str]] = []
         fatal_error: BaseException | None = None
@@ -788,7 +859,7 @@ class AgentRunner:
             events.append(event)
             if error is not None and fatal_error is None:
                 fatal_error = error
-        return results, events, fatal_error
+        return results, events, fatal_error, interrupted, injection_cycles, len(tool_results)
 
     async def _run_tool(
         self,

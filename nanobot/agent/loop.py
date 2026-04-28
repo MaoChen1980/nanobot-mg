@@ -602,6 +602,25 @@ class AgentLoop:
                     except asyncio.QueueEmpty:
                         break
 
+            # Merge multiple drained messages into a single user message
+            # to keep the conversation focused on the user's latest intent
+            # rather than having the LLM reply to each injection individually.
+            if len(items) > 1:
+                parts: list[str] = []
+                for item in items:
+                    content = item["content"]
+                    if isinstance(content, str):
+                        parts.append(content)
+                    elif isinstance(content, list):
+                        texts: list[str] = []
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                texts.append(str(block.get("text", "")))
+                        if texts:
+                            parts.append(" ".join(texts))
+                combined = "\n\n---\n\n".join(parts)
+                items = [{"role": "user", "content": combined}]
+
             return items
 
         result = await self.runner.run(AgentRunSpec(
