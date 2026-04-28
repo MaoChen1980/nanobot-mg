@@ -259,7 +259,11 @@ class AgentRunner:
                         "pending_tool_calls": [],
                     },
                 )
-        self._append_injected_messages(messages, injections)
+        # Only append injected messages when we have an assistant_message —
+        # otherwise we have no tool_calls context and would incorrectly
+        # generate [PENDING] tool status messages.
+        if assistant_message is not None:
+            self._append_injected_messages(messages, injections)
         logger.info(
             "Injected {} follow-up message(s) {} ({}/{})",
             len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
