@@ -338,6 +338,10 @@ class ReadFileTool(_FsTool):
     tool_parameters_schema(
         path=StringSchema("The file path to write to"),
         content=StringSchema("The content to write"),
+        then_exec=StringSchema(
+            "If set to a shell command string, executes it automatically after writing "
+            "and returns the command output. Useful for script-then-run workflows."
+        ),
         required=["path", "content"],
     )
 )
@@ -356,7 +360,10 @@ class WriteFileTool(_FsTool):
             "For partial edits, prefer edit_file instead."
         )
 
-    async def execute(self, path: str | None = None, content: str | None = None, **kwargs: Any) -> str:
+    async def execute(
+        self, path: str | None = None, content: str | None = None,
+        then_exec: str | None = None, **kwargs: Any,
+    ) -> str:
         try:
             if not path:
                 raise ValueError("Unknown path")
@@ -366,7 +373,18 @@ class WriteFileTool(_FsTool):
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
             file_state.record_write(fp)
-            return f"Successfully wrote {len(content)} characters to {fp}"
+            write_result = f"Successfully wrote {len(content)} characters to {fp}"
+
+            if then_exec:
+                from nanobot.agent.tools.shell import ExecTool
+                exec_tool = ExecTool(
+                    working_dir=str(fp.parent),
+                    restrict_to_workspace=self.restrict_to_workspace,
+                )
+                exec_result = await exec_tool.execute(then_exec)
+                return f"{write_result}\n\nExec output:\n{exec_result}"
+
+            return write_result
         except PermissionError as e:
             return f"Error: {e}"
         except Exception as e:

@@ -219,10 +219,12 @@ def test_get_history_annotates_user_turns_but_not_assistant_turns():
         {
             "role": "user",
             "content": "[Message Time: 2026-04-26T22:00:00]\n10 点提醒是昨天发生的",
+            "timestamp": "2026-04-26T22:00:00",
         },
         {
             "role": "assistant",
             "content": "记下来了",
+            "timestamp": "2026-04-26T22:00:05",
         },
     ]
 
@@ -254,15 +256,17 @@ def test_get_history_annotates_proactive_assistant_deliveries_with_timestamps():
         {
             "role": "assistant",
             "content": "[Message Time: 2026-04-26T15:00:00]\n记得喝水",
+            "timestamp": "2026-04-26T15:00:00",
         },
         {
             "role": "user",
             "content": "[Message Time: 2026-04-26T18:00:00]\n好",
+            "timestamp": "2026-04-26T18:00:00",
         },
     ]
 
 
-def test_get_history_does_not_annotate_tool_results_with_timestamps():
+def test_get_history_annotates_tool_results_with_timestamps():
     session = Session(key="test:tool-timestamps")
     session.messages.append({"role": "user", "content": "run tool"})
     session.messages.extend(_tool_turn("ts", 0))
@@ -272,7 +276,8 @@ def test_get_history_does_not_annotate_tool_results_with_timestamps():
 
     tool_result = history[-1]
     assert tool_result["role"] == "tool"
-    assert tool_result["content"] == "ok"
+    assert tool_result["content"] == "[Message Time: 2026-04-26T22:00:10]\nok"
+    assert tool_result["timestamp"] == "2026-04-26T22:00:10"
 
 
 # --- Window cuts mid-group: assistant present but some tool results orphaned ---

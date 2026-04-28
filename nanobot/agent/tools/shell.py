@@ -31,6 +31,11 @@ _IS_WINDOWS = sys.platform == "win32"
             minimum=1,
             maximum=600,
         ),
+        capture_file=StringSchema(
+            "If set, write command output to this file path as it runs. "
+            "The LLM can read this file mid-execution to see partial progress. "
+            "Useful for long commands like npm install or compilation."
+        ),
         required=["command"],
     )
 )
@@ -98,7 +103,7 @@ class ExecTool(Tool):
 
     async def execute(
         self, command: str, working_dir: str | None = None,
-        timeout: int | None = None, **kwargs: Any,
+        timeout: int | None = None, capture_file: str | None = None, **kwargs: Any,
     ) -> str:
         cwd = working_dir or self.working_dir or os.getcwd()
 
@@ -142,27 +147,68 @@ class ExecTool(Tool):
                 command = f'export PATH="$PATH{os.pathsep}$NANOBOT_PATH_APPEND"; {command}'
 
         try:
+            capture_path = Path(capture_file) if capture_file else None
+            capture_fh = None
+            if capture_path:
+                capture_path.parent.mkdir(parents=True, exist_ok=True)
+                capture_fh = open(capture_path, "w", encoding="utf-8")
+
             process = await self._spawn(command, cwd, env)
+            stdout_chunks: list[bytes] = []
+            stderr_lines: list[str] = []
 
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=effective_timeout,
-                )
-            except asyncio.TimeoutError:
-                await self._kill_process(process)
-                return f"Error: Command timed out after {effective_timeout} seconds"
-            except asyncio.CancelledError:
-                await self._kill_process(process)
-                raise
-
-            output_parts = []
-
-            if stdout:
-                output_parts.append(stdout.decode("utf-8", errors="replace"))
-
-            if stderr:
-                stderr_text = stderr.decode("utf-8", errors="replace")
+            if capture_fh:
+                # Stream lines to file as they arrive
+                lines_accum = b""
+                try:
+                    while True:
+                        chunk = await process.stdout.read(512)
+                        if not chunk:
+                            break
+                        lines_accum += chunk
+                        while b"\n" in lines_accum:
+                            line, lines_accum = lines_accum.split(b"\n", 1)
+                            text = line.decode("utf-8", errors="replace")
+                            capture_fh.write(text + "\n")
+                            capture_fh.flush()
+                            stdout_chunks.append(text.encode("utf-8"))
+                    if lines_accum:
+                        text = lines_accum.decode("utf-8", errors="replace")
+                        capture_fh.write(text + "\n")
+                        capture_fh.flush()
+                        stdout_chunks.append(text.encode("utf-8"))
+                except asyncio.TimeoutError:
+                    await self._kill_process(process)
+                    return f"Error: Command timed out after {effective_timeout} seconds"
+                except asyncio.CancelledError:
+                    await self._kill_process(process)
+                    raise
+                # Normal completion: fall through to post-processing
+                await process.wait()
+                stderr_bytes = await process.stderr.read() if process.stderr else b""
+                stderr_text = stderr_bytes.decode("utf-8", errors="replace")
+                if stderr_text.strip():
+                    stderr_lines.append(stderr_text)
+                capture_fh.close()
+                stdout_text = b"".join(stdout_chunks).decode("utf-8", errors="replace") if stdout_chunks else ""
+                output_parts = [stdout_text] if stdout_text else []
+            else:
+                try:
+                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=effective_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    await self._kill_process(process)
+                    return f"Error: Command timed out after {effective_timeout} seconds"
+                except asyncio.CancelledError:
+                    await self._kill_process(process)
+                    raise
+                stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+                stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+                output_parts = []
+                if stdout_text:
+                    output_parts.append(stdout_text)
                 if stderr_text.strip():
                     output_parts.append(f"STDERR:\n{stderr_text}")
 

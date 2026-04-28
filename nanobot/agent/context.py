@@ -118,6 +118,8 @@ class ContextBuilder:
         if context_window_tokens is not None and context_used_tokens is not None:
             pct = int(100 * context_used_tokens / context_window_tokens) if context_window_tokens else 0
             lines.append(f"Context: {pct}% ({context_used_tokens:,}/{context_window_tokens:,} tokens)")
+            if pct >= 70:
+                lines.append(f"⚠ Context usage high ({pct}%) — consider summarization")
         if current_iteration is not None and max_iterations is not None:
             lines.append(f"Iteration: {current_iteration}/{max_iterations}")
         if session_summary:
@@ -147,6 +149,14 @@ class ContextBuilder:
             if file_path.exists():
                 content = file_path.read_text(encoding="utf-8")
                 parts.append(f"## {filename}\n\n{content}")
+
+        # Auto-inject SESSION.md summary if it exists (跨 session 进度延续)
+        session_file = self.workspace / "SESSION.md"
+        if session_file.exists():
+            lines = session_file.read_text(encoding="utf-8").strip().split("\n")
+            summary = "\n".join(line for line in lines[:3] if line.strip())
+            if summary:
+                parts.append(f"[Session note] {summary}")
 
         return "\n\n".join(parts) if parts else ""
 

@@ -244,6 +244,7 @@ class AgentLoop:
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
         self._extra_hooks: list[AgentHook] = hooks or []
+        self._extra_hooks.extend(self._discover_workspace_hooks())
 
         self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills)
         self.sessions = session_manager or SessionManager(workspace)
@@ -1237,6 +1238,36 @@ class AgentLoop:
     def _clear_runtime_checkpoint(self, session: Session) -> None:
         if self._RUNTIME_CHECKPOINT_KEY in session.metadata:
             session.metadata.pop(self._RUNTIME_CHECKPOINT_KEY, None)
+
+    def _discover_workspace_hooks(self) -> list[AgentHook]:
+        """Scan workspace/hooks/ for custom hook classes."""
+        from pathlib import Path
+        hooks_dir = self.workspace / "hooks"
+        if not hooks_dir.is_dir():
+            return []
+        discovered: list[AgentHook] = []
+        for path in hooks_dir.glob("*.py"):
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(path.stem, path)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    for attr_name in dir(module):
+                        attr = getattr(module, attr_name)
+                        if isinstance(attr, type) and issubclass(attr, AgentHook) and attr is not AgentHook:
+                            instance = attr()
+                            if hasattr(instance, "HOOK_CLASSES"):
+                                # File declared multiple hooks via HOOK_CLASSES list
+                                for cls in instance.HOOK_CLASSES:
+                                    if isinstance(cls, type) and issubclass(cls, AgentHook):
+                                        discovered.append(cls())
+                            else:
+                                discovered.append(instance)
+                            logger.info("Loaded workspace hook: {}", attr_name)
+            except Exception as e:
+                logger.warning("Failed to load workspace hook {}: {}", path.name, e)
+        return discovered
 
     @staticmethod
     def _checkpoint_message_key(message: dict[str, Any]) -> tuple[Any, ...]:
