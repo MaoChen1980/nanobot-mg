@@ -395,8 +395,10 @@ class MemoryStore:
         """Fallback: dump raw messages to history.jsonl without LLM summarization."""
         limit = max_chars if max_chars is not None else _RAW_ARCHIVE_MAX_CHARS
         formatted = truncate_text(self._format_messages(messages), limit)
+        first_ts = messages[0].get("timestamp", "unknown") if messages else "unknown"
+        last_ts = messages[-1].get("timestamp", "unknown") if messages else "unknown"
         self.append_history(
-            f"[RAW] {len(messages)} messages\n"
+            f"[{first_ts} → {last_ts}] [RAW] {len(messages)} messages\n"
             f"{formatted}"
         )
         logger.warning(
@@ -557,7 +559,10 @@ class Consolidator:
             if response.finish_reason == "error":
                 raise RuntimeError(f"LLM returned error: {response.content}")
             summary = response.content or "[no summary]"
-            self.store.append_history(summary, max_chars=_ARCHIVE_SUMMARY_MAX_CHARS)
+            first_ts = messages[0].get("timestamp", "unknown")
+            last_ts = messages[-1].get("timestamp", "unknown")
+            time_prefix = f"[{first_ts} → {last_ts}] "
+            self.store.append_history(time_prefix + summary, max_chars=_ARCHIVE_SUMMARY_MAX_CHARS)
             return summary
         except Exception:
             logger.warning("Consolidation LLM call failed, raw-dumping to history")
