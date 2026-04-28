@@ -184,14 +184,24 @@ class AgentRunner:
         cls,
         messages: list[dict[str, Any]],
         injections: list[dict[str, Any]],
+        assistant_message: dict[str, Any] | None = None,
     ) -> None:
         """Append injected user messages while preserving role alternation.
 
         Also injects standardized tool messages for pending/abandoned tool calls.
+        Tool status messages are only generated when we have an active
+        assistant_message (i.e. during an active tool-call round), not when
+        called outside that context (e.g. after errors or max_iterations).
         """
-        # Build tool status messages for pending/abandoned tool calls
+        # Only generate tool status messages when we have an active assistant
+        # with tool_calls — otherwise we would generate orphaned tool messages
+        # with no preceding assistant message, violating the protocol.
         has_new_injections = bool(injections)
-        tool_status_messages = cls._build_tool_call_status_messages_when_injecting(messages, has_new_injections)
+        tool_status_messages = None
+        if assistant_message is not None:
+            tool_status_messages = cls._build_tool_call_status_messages_when_injecting(
+                messages, has_new_injections,
+            )
 
         # Add tool status messages before user injections (if any)
         if tool_status_messages:
