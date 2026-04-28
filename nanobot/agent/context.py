@@ -124,7 +124,12 @@ class ContextBuilder:
             lines.append(f"Iteration: {current_iteration}/{max_iterations}")
         if session_summary:
             lines += ["", "[Resumed Session]", session_summary]
-        return ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" + "\n".join(lines) + "\n" + ContextBuilder._RUNTIME_CONTEXT_END
+        return (
+            ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" +
+            "\n".join(lines) + "\n" +
+            ContextBuilder._RUNTIME_CONTEXT_END +
+            "\n\n══════ Current Turn ══════"
+        )
 
     @staticmethod
     def _merge_message_content(left: Any, right: Any) -> str | list[dict[str, Any]]:
