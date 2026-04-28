@@ -259,11 +259,10 @@ class AgentRunner:
                         "pending_tool_calls": [],
                     },
                 )
-        # Only append injected messages when we have an assistant_message —
-        # otherwise we have no tool_calls context and would incorrectly
-        # generate [PENDING] tool status messages.
-        if assistant_message is not None:
-            self._append_injected_messages(messages, injections)
+        # Always append injected messages (if any) — the assistant_message
+        # guard above only controls whether to emit a checkpoint, not whether
+        # to append user injections.
+        self._append_injected_messages(messages, injections)
         logger.info(
             "Injected {} follow-up message(s) {} ({}/{})",
             len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
@@ -504,13 +503,8 @@ class AgentRunner:
                 )
                 empty_content_retries = 0
                 length_recovery_count = 0
-                # Checkpoint 1: drain injections after tools, before next LLM call
-                _drained, injection_cycles = await self._try_drain_injections(
-                    spec, messages, None, injection_cycles,
-                    phase="after tool execution",
-                )
-                if _drained:
-                    had_injections = True
+                # NOTE: no _try_drain_injections here — injections only happen
+                # at "after final response" phase to avoid breaking tool protocol.
                 await hook.after_iteration(context)
                 continue
 
