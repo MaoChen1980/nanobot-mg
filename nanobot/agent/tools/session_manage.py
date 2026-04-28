@@ -15,7 +15,7 @@ if TYPE_CHECKING:
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["list", "exclude", "compress", "archive"],
+                "enum": ["list", "exclude", "compress", "archive", "auto_clean"],
                 "description": "What action to perform",
             },
             "message_id": {
@@ -25,6 +25,10 @@ if TYPE_CHECKING:
             "compress_summary": {
                 "type": "string",
                 "description": "Summary to replace the message content with (for compress action)",
+            },
+            "size_threshold": {
+                "type": "integer",
+                "description": "Minimum size in chars to consider bloated (for auto_clean action, default 5000)",
             },
         },
         "required": ["action"],
@@ -38,6 +42,7 @@ class SessionManageTool(Tool):
     - exclude: mark a message as excluded (won't enter context)
     - compress: replace message content with your summary
     - archive: move to persistent history
+    - auto_clean: batch-exclude all non-user messages exceeding size_threshold
     """
 
     def __init__(self, loop: "AgentLoop") -> None:
@@ -62,6 +67,7 @@ Actions:
 - exclude: remove from context (won't affect history)
 - compress: replace with your summary of key points
 - archive: move to persistent storage
+- auto_clean: batch-exclude all non-user messages larger than size_threshold (default 5000). Use when context is bloated and you don't want to manually pick IDs.
 
 Without this tool, bloated tool results accumulate forever and starve your context budget."""
 
@@ -74,6 +80,7 @@ Without this tool, bloated tool results accumulate forever and starve your conte
         action: str,
         message_id: str | None = None,
         compress_summary: str | None = None,
+        size_threshold: int = 5000,
         **kwargs: Any,
     ) -> str:
         loop: "AgentLoop" = self._loop
@@ -96,6 +103,8 @@ Without this tool, bloated tool results accumulate forever and starve your conte
             if not message_id:
                 return "Error: message_id required for archive"
             return self._archive_message(session, message_id)
+        if action == "auto_clean":
+            return self._auto_clean(session, size_threshold)
         return f"Error: Unknown action: {action}"
 
     def _list_messages(self, session) -> str:
@@ -132,3 +141,23 @@ Without this tool, bloated tool results accumulate forever and starve your conte
                 m["status"] = "archived"
                 return f"Archived {message_id}."
         return f"Error: Message {message_id} not found."
+
+    def _auto_clean(self, session, threshold: int) -> str:
+        """Batch-exclude all non-user messages exceeding the size threshold."""
+        excluded: list[tuple[str, str, int]] = []  # (id, role, size)
+        for m in session.messages:
+            content = m.get("content", "")
+            size = len(content) if isinstance(content, str) else 0
+            role = m.get("role", "?")
+            status = m.get("status", "active")
+            # Only exclude active, non-user messages above threshold
+            if status == "active" and role != "user" and size > threshold:
+                m["status"] = "excluded"
+                excluded.append((m.get("id", "?"), role, size))
+        if not excluded:
+            return f"No messages found above {threshold} chars."
+        total = sum(s for _, _, s in excluded)
+        lines = [f"Auto-cleaned {len(excluded)} messages ({total:,} total chars):"]
+        for mid, role, size in excluded:
+            lines.append(f"  {mid} | {role} | {size:,} chars")
+        return "\n".join(lines)

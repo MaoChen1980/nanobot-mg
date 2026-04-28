@@ -41,28 +41,28 @@ class SpawnTool(Tool):
     @property
     def description(self) -> str:
         return """
-Spawn a subagent to handle independent research tasks in the background. The subagent will complete the task and report back when done.
+Spawn a subagent to handle independent tasks in the background. The subagent will complete the task and report back when done.
 
-## ✅ When to Use (READ-ONLY Tasks)
+## ✅ When to Use
 - Search and analyze multiple files in parallel
 - Fetch and summarize content from multiple URLs
+- Read, write, or edit files
 - Run read-only analysis (code analysis, data inspection)
+- Execute shell commands or scripts
 - Read multiple documents and compile findings
-- Quick research tasks that don't affect main context
+- Quick research or coding tasks that don't affect main context
 
 ## ❌ NEVER Use For
-- Writing, editing, or deleting any files
-- Executing commands, code, or shell operations
-- Creating resources, accounts, or services
 - Tasks requiring your intermediate decisions or feedback
-- Tasks whose results are needed by subsequent tasks
+- Tasks whose results are needed by subsequent steps in the main agent
+- Creating external resources, accounts, or services
 
 ## Constraints
 - Subagent has its own isolated session (no access to main conversation)
 - Subagent cannot spawn further subagents (no nesting)
 - Results will be announced as a system message
 - Max 30 tool-use iterations per subagent
-- Subagent has limited tools (read-only)
+- Subagent tools: read_file, list_dir, glob, grep, write_file, edit_file, web_search, web_fetch, exec (no spawn, no session_manage)
 """.strip()
 
     async def execute(self, task: str, label: str | None = None, **kwargs: Any) -> str:

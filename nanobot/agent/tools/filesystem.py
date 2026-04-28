@@ -666,7 +666,17 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
         old_text=StringSchema("The text to find and replace"),
         new_text=StringSchema("The text to replace with"),
         replace_all=BooleanSchema(description="Replace all occurrences (default false)"),
-        required=["path", "old_text", "new_text"],
+        first_line=IntegerSchema(
+            None,
+            description="Line number to start replacing from (1-indexed). When set with last_line, replaces that line range with new_text directly — no fuzzy matching needed.",
+            minimum=1,
+        ),
+        last_line=IntegerSchema(
+            None,
+            description="Line number to end replacing at (1-indexed, inclusive). Must be >= first_line.",
+            minimum=1,
+        ),
+        required=["path", "new_text"],
     )
 )
 class EditFileTool(_FsTool):
@@ -682,10 +692,13 @@ class EditFileTool(_FsTool):
     @property
     def description(self) -> str:
         return (
-            "Edit a file by replacing old_text with new_text. "
+            "Edit a file. Two modes:\n"
+            "1. Text-matching (default): replace old_text with new_text. "
             "Tolerates minor whitespace/indentation differences and curly/straight quote mismatches. "
-            "If old_text matches multiple times, you must provide more context "
-            "or set replace_all=true. Shows a diff of the closest match on failure."
+            "If old_text matches multiple times, provide more context or set replace_all=true.\n"
+            "2. Line-based: set first_line and last_line to replace lines N through M directly. "
+            "Fastest for simple edits — no text matching needed. "
+            "Shows a diff of the closest match on failure."
         )
 
     @staticmethod
@@ -696,15 +709,25 @@ class EditFileTool(_FsTool):
     async def execute(
         self, path: str | None = None, old_text: str | None = None,
         new_text: str | None = None,
-        replace_all: bool = False, **kwargs: Any,
+        replace_all: bool = False,
+        first_line: int | None = None,
+        last_line: int | None = None,
+        **kwargs: Any,
     ) -> str:
         try:
             if not path:
                 raise ValueError("Unknown path")
-            if old_text is None:
-                raise ValueError("Unknown old_text")
             if new_text is None:
                 raise ValueError("Unknown new_text")
+
+            # Line-based mode: replace lines first_line through last_line
+            if first_line is not None or last_line is not None:
+                if first_line is None or last_line is None:
+                    raise ValueError("Both first_line and last_line must be provided (or neither)")
+                return await self._edit_by_lines(path, new_text, first_line, last_line)
+
+            if old_text is None:
+                raise ValueError("Unknown old_text")
 
             # .ipynb detection
             if path.endswith(".ipynb"):
@@ -834,6 +857,51 @@ class EditFileTool(_FsTool):
                 "Copy the exact text from read_file and try again."
             )
         return f"Error: old_text not found in {path}. No similar text found. Verify the file content."
+
+    async def _edit_by_lines(
+        self, path: str, new_text: str, first_line: int, last_line: int,
+    ) -> str:
+        """Replace lines first_line through last_line (1-indexed) with new_text."""
+        fp = self._resolve(path)
+        if not fp.exists():
+            return self._file_not_found_msg(path, fp)
+        if path.endswith(".ipynb"):
+            return "Error: This is a Jupyter notebook. Use the notebook_edit tool instead of edit_file."
+
+        warning = file_state.check_read(fp)
+        raw = fp.read_bytes()
+        uses_crlf = b"\r\n" in raw
+        content = raw.decode("utf-8").replace("\r\n", "\n")
+        lines = content.split("\n")
+
+        # 1-indexed → 0-indexed
+        start_idx = first_line - 1
+        end_idx = last_line - 1
+
+        if start_idx < 0:
+            return f"Error: first_line must be >= 1, got {first_line}"
+        if end_idx < start_idx:
+            return f"Error: last_line ({last_line}) must be >= first_line ({first_line})"
+        if end_idx >= len(lines):
+            return f"Error: last_line ({last_line}) exceeds file length ({len(lines)} lines)"
+
+        norm_new = new_text.replace("\r\n", "\n")
+        # Strip trailing whitespace (skip markdown)
+        if fp.suffix.lower() not in self._MARKDOWN_EXTS:
+            norm_new = self._strip_trailing_ws(norm_new)
+
+        # Replace the line range
+        new_lines = lines[:start_idx] + [norm_new] + lines[end_idx + 1:]
+        new_content = "\n".join(new_lines)
+        if uses_crlf:
+            new_content = new_content.replace("\n", "\r\n")
+
+        fp.write_bytes(new_content.encode("utf-8"))
+        file_state.record_write(fp)
+        msg = f"Successfully edited {fp} (replaced lines {first_line}-{last_line})"
+        if warning:
+            msg = f"{warning}\n{msg}"
+        return msg
 
 
 # ---------------------------------------------------------------------------

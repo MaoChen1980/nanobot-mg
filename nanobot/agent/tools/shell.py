@@ -214,7 +214,8 @@ class ExecTool(Tool):
 
             output_parts.append(f"\nExit code: {process.returncode}")
 
-            result = "\n".join(output_parts) if output_parts else "(no output)"
+            shell_info = f"[cwd: {cwd}, shell: {'cmd' if _IS_WINDOWS else 'sh'}]"
+            result = shell_info + "\n" + ("\n".join(output_parts) if output_parts else "(no output)")
 
             max_len = self._MAX_OUTPUT
             if len(result) > max_len:
