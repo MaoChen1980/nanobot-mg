@@ -903,6 +903,12 @@ class AgentLoop:
                 chat_id=chat_id,
                 session_summary=pending,
                 current_role=current_role,
+                tool_definitions=self.tools.get_definitions(),
+                model=self.model,
+                context_window_tokens=self.context_window_tokens,
+                context_used_tokens=sum(self._last_usage.values()) if self._last_usage else None,
+                current_iteration=self._current_iteration,
+                max_iterations=self.max_iterations,
             )
             final_content, _, all_msgs, stop_reason, _ = await self._run_agent_loop(
                 messages, session=session, channel=channel, chat_id=chat_id,
@@ -996,6 +1002,12 @@ class AgentLoop:
                 media=msg.media if msg.media else None,
                 channel=msg.channel,
                 chat_id=self._runtime_chat_id(msg),
+                tool_definitions=self.tools.get_definitions(),
+                model=self.model,
+                context_window_tokens=self.context_window_tokens,
+                context_used_tokens=sum(self._last_usage.values()) if self._last_usage else None,
+                current_iteration=self._current_iteration,
+                max_iterations=self.max_iterations,
             )
 
         async def _bus_progress(

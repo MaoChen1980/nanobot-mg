@@ -32,6 +32,7 @@ class ContextBuilder:
         self,
         skill_names: list[str] | None = None,
         channel: str | None = None,
+        tool_definitions: list[dict[str, Any]] | None = None,
     ) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
         parts = [self._get_identity(channel=channel)]
@@ -54,6 +55,11 @@ class ContextBuilder:
         if skills_summary:
             parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
+        if tool_definitions:
+            section = self._build_tools_section(tool_definitions)
+            if section:
+                parts.append(section)
+
         entries = self.memory.read_unprocessed_history(since_cursor=self.memory.get_last_dream_cursor())
         if entries:
             capped = entries[-self._MAX_RECENT_HISTORY:]
@@ -64,6 +70,20 @@ class ContextBuilder:
             parts.append("# Recent History\n\n" + history_text)
 
         return "\n\n---\n\n".join(parts)
+
+    def _build_tools_section(self, tool_definitions: list[dict[str, Any]]) -> str:
+        """Build the available tools section for the system prompt."""
+        if not tool_definitions:
+            return ""
+        lines = ["# Available Tools\n"]
+        for schema in tool_definitions:
+            fn = schema.get("function", {})
+            name = fn.get("name", "unknown")
+            desc = fn.get("description", "")
+            if len(desc) > 200:
+                desc = desc[:197] + "..."
+            lines.append(f"- **{name}**: {desc}")
+        return "\n".join(lines)
 
     def _get_identity(self, channel: str | None = None) -> str:
         """Get the core identity section."""
@@ -83,11 +103,23 @@ class ContextBuilder:
     def _build_runtime_context(
         channel: str | None, chat_id: str | None, timezone: str | None = None,
         session_summary: str | None = None,
+        model: str | None = None,
+        context_window_tokens: int | None = None,
+        context_used_tokens: int | None = None,
+        current_iteration: int | None = None,
+        max_iterations: int | None = None,
     ) -> str:
         """Build untrusted runtime metadata block for injection before the user message."""
         lines = [f"Current Time: {current_time_str(timezone)}"]
         if channel and chat_id:
             lines += [f"Channel: {channel}", f"Chat ID: {chat_id}"]
+        if model:
+            lines.append(f"Model: {model}")
+        if context_window_tokens is not None and context_used_tokens is not None:
+            pct = int(100 * context_used_tokens / context_window_tokens) if context_window_tokens else 0
+            lines.append(f"Context: {pct}% ({context_used_tokens:,}/{context_window_tokens:,} tokens)")
+        if current_iteration is not None and max_iterations is not None:
+            lines.append(f"Iteration: {current_iteration}/{max_iterations}")
         if session_summary:
             lines += ["", "[Resumed Session]", session_summary]
         return ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" + "\n".join(lines) + "\n" + ContextBuilder._RUNTIME_CONTEXT_END
@@ -139,16 +171,29 @@ class ContextBuilder:
         chat_id: str | None = None,
         current_role: str = "user",
         session_summary: str | None = None,
+        tool_definitions: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        context_window_tokens: int | None = None,
+        context_used_tokens: int | None = None,
+        current_iteration: int | None = None,
+        max_iterations: int | None = None,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
-        runtime_ctx = self._build_runtime_context(channel, chat_id, self.timezone, session_summary=session_summary)
+        runtime_ctx = self._build_runtime_context(
+            channel, chat_id, self.timezone, session_summary=session_summary,
+            model=model,
+            context_window_tokens=context_window_tokens,
+            context_used_tokens=context_used_tokens,
+            current_iteration=current_iteration,
+            max_iterations=max_iterations,
+        )
         user_content = self._build_user_content(current_message, media)
 
         # user_content appended directly; runtime context is already
         # in the system prompt, so no duplicate merge needed.
         merged = user_content
         messages = [
-            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel)},
+            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, tool_definitions=tool_definitions)},
             *history,
         ]
         if messages[-1].get("role") == current_role:
