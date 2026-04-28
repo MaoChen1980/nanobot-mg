@@ -472,14 +472,21 @@ class Consolidator:
         session: Session,
         tokens_to_remove: int,
     ) -> tuple[int, int] | None:
-        """Pick a user-turn boundary that removes enough old prompt tokens."""
+        """Pick a user-turn boundary that removes enough old prompt tokens.
+
+        The last 10 messages are always protected — they must never be
+        selected as a boundary, regardless of token budget.
+        """
         start = session.last_consolidated
+        protected_start = len(session.messages) - 10
+        if protected_start <= start:
+            protected_start = start
         if start >= len(session.messages) or tokens_to_remove <= 0:
             return None
 
         removed_tokens = 0
         last_boundary: tuple[int, int] | None = None
-        for idx in range(start, len(session.messages)):
+        for idx in range(start, protected_start):
             message = session.messages[idx]
             if idx > start and message.get("role") == "user":
                 last_boundary = (idx, removed_tokens)
