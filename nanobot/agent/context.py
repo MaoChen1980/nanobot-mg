@@ -144,12 +144,9 @@ class ContextBuilder:
         runtime_ctx = self._build_runtime_context(channel, chat_id, self.timezone, session_summary=session_summary)
         user_content = self._build_user_content(current_message, media)
 
-        # Merge runtime context and user content into a single user message
-        # to avoid consecutive same-role messages that some providers reject.
-        if isinstance(user_content, str):
-            merged = f"{runtime_ctx}\n\n{user_content}"
-        else:
-            merged = [{"type": "text", "text": runtime_ctx}] + user_content
+        # user_content appended directly; runtime context is already
+        # in the system prompt, so no duplicate merge needed.
+        merged = user_content
         messages = [
             {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel)},
             *history,

@@ -417,6 +417,7 @@ class AgentRunner:
                             tool_call.name,
                             result,
                         ),
+                        "timestamp": result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else "",
                     }
                     messages.append(tool_message)
                     completed_tool_results.append(tool_message)

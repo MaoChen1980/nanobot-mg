@@ -568,9 +568,9 @@ class AgentLoop:
                     self.context.timezone,
                 )
                 if isinstance(user_content, str):
-                    merged: str | list[dict[str, Any]] = f"{runtime_ctx}\n\n{user_content}"
+                    merged: str | list[dict[str, Any]] = user_content
                 else:
-                    merged = [{"type": "text", "text": runtime_ctx}] + user_content
+                    merged = user_content
                 return {"role": "user", "content": merged}
 
             items: list[dict[str, Any]] = []
