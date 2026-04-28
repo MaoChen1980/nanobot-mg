@@ -37,36 +37,18 @@ class Session:
 
     @staticmethod
     def _annotate_message_time(message: dict[str, Any], content: Any) -> Any:
-        """Expose persisted turn timestamps to the model for relative-date reasoning.
-
-        Annotating *every* assistant turn trains the model (via in-context
-        demonstrations) to start its own replies with the same
-        ``[Message Time: ...]`` prefix, which leaks metadata back to the user.
-        We therefore only annotate:
-
-        * ``user`` turns — needed so the model can pin the conversation in time.
-        * proactive deliveries (``_channel_delivery=True``) — cron / heartbeat
-          assistant pushes that may sit hours away from the next user reply,
-          and are too infrequent to act as parroting demonstrations.
-        """
+        """Expose turn timestamps to the model for relative-date reasoning."""
         timestamp = message.get("timestamp")
         if not timestamp or not isinstance(content, str):
             return content
-        role = message.get("role")
-        if role == "user":
-            pass
-        elif role == "assistant" and message.get("_channel_delivery"):
-            pass
-        else:
-            return content
         return f"[Message Time: {timestamp}]\n{content}"
 
-    def add_message(self, role: str, content: str, **kwargs: Any) -> None:
-        """Add a message to the session."""
+    def add_message(self, role: str, content: str, timestamp: str | None = None, **kwargs: Any) -> None:
+        """Add a message to the session. *timestamp* should be an ISO-format str if provided."""
         msg = {
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": timestamp or datetime.now().isoformat(),
             **kwargs
         }
         self.messages.append(msg)

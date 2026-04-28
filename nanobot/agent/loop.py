@@ -1040,7 +1040,7 @@ class AgentLoop:
         if not pending_ask_id and (has_text or media_paths):
             extra: dict[str, Any] = {"media": list(media_paths)} if media_paths else {}
             text = msg.content if isinstance(msg.content, str) else ""
-            session.add_message("user", text, **extra)
+            session.add_message("user", text, timestamp=msg.timestamp.isoformat(), **extra)
             self._mark_pending_user_turn(session)
             self.sessions.save(session)
             user_persisted_early = True
@@ -1204,6 +1204,7 @@ class AgentLoop:
         session.add_message(
             "assistant",
             msg.content,
+            timestamp=msg.timestamp.isoformat(),
             sender_id=msg.sender_id,
             injected_event="subagent_result",
             subagent_task_id=task_id,
