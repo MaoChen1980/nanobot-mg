@@ -1335,3 +1335,32 @@ class AgentLoop:
             on_stream=on_stream,
             on_stream_end=on_stream_end,
         )
+
+    def inject_to_pending_queue(
+        self,
+        session_key: str,
+        content: str,
+        channel: str = "cli",
+        chat_id: str = "direct",
+    ) -> bool:
+        """Inject a message into the pending queue of an active session.
+
+        Returns True if the session is active (message queued), False if idle
+        (no active task — message will be picked up as a new inbound message
+        when the bus processes it).
+        """
+        if session_key not in self._pending_queues:
+            return False
+        msg = InboundMessage(
+            channel=channel, sender_id="heartbeat",
+            chat_id=chat_id, content=content, media=[],
+        )
+        pending_msg = dataclasses.replace(
+            msg, session_key_override=session_key,
+        )
+        try:
+            self._pending_queues[session_key].put_nowait(pending_msg)
+            return True
+        except asyncio.QueueFull:
+            logger.warning("Heartbeat: pending queue full for {}", session_key)
+            return False
