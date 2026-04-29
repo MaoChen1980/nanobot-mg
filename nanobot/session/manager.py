@@ -303,16 +303,17 @@ class SessionManager:
 
         These are transient state from was_interrupted that should not be
         persisted or replayed — they cause duplicate tool_call_id errors.
+        Handles both direct [ABANDONED] prefix and [Message Time: ...]\n[ABANDONED]
+        format (the prefix is added by session manager annotation).
         """
         original_count = len(messages)
-        filtered = [
-            msg for msg in messages
-            if not (
-                msg.get("role") == "tool"
-                and isinstance(msg.get("content"), str)
-                and msg.get("content", "").startswith("[ABANDONED]")
-            )
-        ]
+        filtered = []
+        for msg in messages:
+            if msg.get("role") == "tool":
+                content = msg.get("content", "")
+                if isinstance(content, str) and "[ABANDONED]" in content:
+                    continue
+            filtered.append(msg)
         dropped = original_count - len(filtered)
         if dropped:
             logger.info("Dropped {} [ABANDONED] tool messages from session", dropped)
@@ -471,11 +472,12 @@ class SessionManager:
                 }
                 f.write(json.dumps(metadata_line, ensure_ascii=False) + "\n")
                 for msg in session.messages:
-                    # Don't persist tool messages — they are transient state
-                    # that breaks protocol when session is reloaded (e.g. ABANDONED
-                    # messages from was_interrupted, partial results, etc.).
+                    # Only skip transient/abandoned tool messages — normal tool
+                    # results must be persisted so assistant tool_calls stay valid.
                     if msg.get("role") == "tool":
-                        continue
+                        content = msg.get("content", "")
+                        if isinstance(content, str) and ("[ABANDONED]" in content or "[PENDING]" in content):
+                            continue
                     f.write(json.dumps(msg, ensure_ascii=False) + "\n")
                 if fsync:
                     f.flush()
