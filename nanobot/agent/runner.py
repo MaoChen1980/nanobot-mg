@@ -418,6 +418,17 @@ class AgentRunner:
             context = AgentHookContext(iteration=iteration, messages=messages)
             await hook.before_iteration(context)
             response = await self._request_model(spec, messages_for_model, hook, context)
+            # DEBUG: log message sequence to stderr so it shows up immediately
+            import sys
+            print(f"[DEBUG] iteration={iteration} messages={len(messages)}", file=sys.stderr)
+            for i, msg in enumerate(messages):
+                tc_ids = [tc.get("id") for tc in msg.get("tool_calls") or []]
+                tcid = msg.get("tool_call_id")
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if isinstance(content, str) and len(content) > 80:
+                    content = content[:80] + "..."
+                print(f"  [{i}] {role} tcid={tcid} tc={tc_ids} cont={repr(content)[:70]}", file=sys.stderr)
             raw_usage = self._usage_dict(response.usage)
             context.response = response
             context.usage = dict(raw_usage)
