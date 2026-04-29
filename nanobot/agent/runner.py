@@ -272,11 +272,58 @@ class AgentRunner:
         # Always append injected messages (if any) — the assistant_message
         # guard above only controls whether to emit a checkpoint, not whether
         # to append user injections.
-        self._append_injected_messages(messages, injections)
+        if assistant_message is not None and phase != "after final response":
+            messages.append(assistant_message)
+            if iteration is not None:
+                await self._emit_checkpoint(
+                    spec,
+                    {
+                        "phase": "final_response",
+                        "iteration": iteration,
+                        "model": spec.model,
+                        "assistant_message": assistant_message,
+                        "completed_tool_results": [],
+                        "pending_tool_calls": [],
+                    },
+                )
+        self._append_injected_messages(messages, injections, assistant_message)
         logger.info(
             "Injected {} follow-up message(s) {} ({}/{})",
             len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
         )
+        # Debug: log recent messages to diagnose protocol errors
+        if injections:
+            recent = messages[-min(10, len(messages)):]
+            logger.warning(
+                "[INJECTION DEBUG] last {} messages in queue:",
+                len(recent),
+            )
+            for j, msg in enumerate(recent):
+                role = msg.get("role")
+                tc_ids = [tc.get("id") for tc in msg.get("tool_calls") or []]
+                tcid = msg.get("tool_call_id")
+                content = msg.get("content", "")
+                if isinstance(content, str) and len(content) > 120:
+                    content = content[:120] + "..."
+                logger.warning(
+                    "  [{}] role={} tool_call_id={} tool_calls_ids={} content={}",
+                    j, role, tcid, tc_ids,
+                    repr(content) if role == "tool" else content[:80],
+                )
+        if injections:
+            recent = messages[-min(8, len(messages)):]
+            for j, msg in enumerate(recent):
+                role = msg.get("role")
+                tc = msg.get("tool_calls")
+                tcid = msg.get("tool_call_id")
+                content = msg.get("content", "")
+                if isinstance(content, str) and len(content) > 80:
+                    content = content[:80] + "..."
+                logger.debug(
+                    "[msg {}] role={} tool_calls={} tool_call_id={} content={}",
+                    j, role, bool(tc), tcid,
+                    repr(content) if role == "tool" else content,
+                )
         return True, injection_cycles
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
