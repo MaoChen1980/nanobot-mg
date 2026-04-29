@@ -7,6 +7,9 @@ Information about the user to help personalize interactions.
 - **Name**: (your name)
 - **Timezone**: (your timezone, e.g., UTC+8)
 - **Language**: (preferred language)
+- **OS Username**: (your OS login name)
+- **Workspace Path**: (auto-detected on first run)
+- **Default Model**: (e.g., gpt-4o, claude-sonnet-4-20250514)
 
 ## Preferences
 

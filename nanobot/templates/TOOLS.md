@@ -1,85 +1,59 @@
 # Tool Usage Notes
 
-Tool Usage Notes for assistant using in function call or tool call
-Tool signatures are provided automatically via function calling.
-This file documents non-obvious constraints and usage patterns.
+Non-obvious constraints and usage patterns. Trigger rules belong in SOUL.md, not here.
 
-## General
+## exec
 
-- Answer all pending user questions in one response if possible. If tool results are available, use them.
-- If a task was cancelled or interrupted, inform the user explicitly.
-- Do not leave questions unanswered if you have the information to answer them.
+- Timeout 60s default, output truncated at 10K chars. Dangerous commands blocked.
+- Output header: `[cwd: ..., shell: cmd|sh]` → verify working directory and shell.
+- **Chinese in URLs on Windows**: CMD uses GBK → URL-encode or use `powershell -Command`. For weather prefer Open-Meteo with coordinates.
+- **node -e fails on Windows**: CMD mangles quotes. Always `write_file` → `exec node <file>` instead.
+- CMD: `&&` connect, `2>nul` suppress. PowerShell: `;` separate, `$null` redirect. No `cat`/`tail`/`sed`/`awk`.
 
-## exec — Safety Limits
+## Type-Check (Write→Check→Run)
 
-- Commands have a configurable timeout (default 60s)
-- Dangerous commands are blocked (rm -rf, format, dd, shutdown, etc.)
-- Output is truncated at 10,000 characters
-- `restrictToWorkspace` config can limit file access to the workspace
+```python
+# Fast: then_check="auto" detects .py → pyright, .ts/.js → tsc
+write_file(path="tools/temp.py", content="...", then_check="auto", then_exec="python tools/temp.py")
+```
+Manual: `npx --prefix tools pyright <file> --outputjson` (check stdout JSON `generalDiagnostics`). `tsc --noEmit --allowJs --checkJs` for .js.
 
-## exec — Chinese Characters & URLs
+## edit_file — Line Mode
 
-- On Windows, `cmd.exe` uses GBK encoding by default, which corrupts Chinese characters in URLs
-- For Chinese city names in URLs, use `powershell -Command` instead of bare `curl`, or URL-encode the city name
-- Example: `powershell -Command "curl -s 'https://wttr.in/%E8%A5%BF%E5%AE%89?format=3'"` (西安 URL-encoded)
-- Better alternative for weather: use `web_search` to find the weather, or use Open-Meteo with coordinates (no Chinese in URL)
+Use `first_line` + `last_line` when you know line numbers from a prior `read_file`. Faster than text matching, no read_file needed first.
+```python
+edit_file(path="AGENTS.md", first_line=42, last_line=48, new_text="new")
+```
+Line numbers 1-indexed, inclusive. When both line mode and old_text set, line mode wins.
 
-## glob — File Discovery
+## session_manage
 
-- Use `glob` to find files by pattern before falling back to shell commands
-- Simple patterns like `*.py` match recursively by filename
-- Use `entry_type="dirs"` when you need matching directories instead of files
-- Use `head_limit` and `offset` to page through large result sets
-- Prefer this over `exec` when you only need file paths
+Main action: `auto_clean` (batch-exclude >5KB tool results). Also `list`, `exclude`, `compress`. Trigger rules → SOUL.md §上下文管理.
 
-## grep — Content Search
+## grep / glob / recall
 
-- Use `grep` to search file contents inside the workspace
-- Default behavior returns only matching file paths (`output_mode="files_with_matches"`)
-- Supports optional `glob` filtering plus `context_before` / `context_after`
-- Supports `type="py"`, `type="ts"`, `type="md"` and similar shorthand filters
-- Use `fixed_strings=true` for literal keywords containing regex characters
-- Use `output_mode="files_with_matches"` to get only matching file paths
-- Use `output_mode="count"` to size a search before reading full matches
-- Use `head_limit` and `offset` to page across results
-- Prefer this over `exec` for code and history searches
-- Binary or oversized files may be skipped to keep results readable
+- **grep**: `output_mode="count"` to size before reading. `fixed_strings=true` for regex chars. Binary >2MB skipped.
+- **glob**: `entry_type="dirs"` for directories. `head_limit` + `offset` for pagination.
+- **recall**: Trigger rules → SOUL.md. Always call before answering about past decisions/preferences/history.
 
-## cron — Scheduled Reminders
+## Self-Installed Tools (workspace/tools/)
 
-- Please refer to cron skill for usage.
+> ⚠ This section is a template. When you install tools for the agent, document them here. The agent discovers them the same way you do — by reading this file.
 
-## session_manage — Context Pollution Control
+| Tool | Command | Notes |
+|------|---------|-------|
+| Python analysis | `python tools/analyze.py <cmd> [args]` | Example: imports, exports, callers, callees, tree, find |
+| TS analysis | `node tools/analyze.js <cmd> [args]` | Example: imports, exports, callers, callees, tree, find |
+| Fast find | `node tools/fast-find.js <symbol> [dir]` | Example: regex symbol search in .ts files |
 
-**The problem:** Your context accumulates bloated tool results you don't need. Once they enter context, they stay forever unless you remove them.
+⚠ All paths relative to CWD; absolute paths also accepted.
 
-**Call session_manage when:**
-- A tool result was large (>5KB) and you're done processing it
-- You read a persisted full output via read_file → compress it after processing
-- Context feels heavy or /status shows >70% full → audit and exclude aggressively
-- You called a tool and the result is obviously irrelevant to remaining tasks
-- You want to see what message IDs exist → call `session_manage(action="list")`
+## Known Failures — Don't Repeat
 
-**Actions:**
-- `list`: see all session messages with id, role, size, status
-- `exclude`: remove from next context (won't affect history)
-- `compress`: replace with your summary of key points
-- `archive`: move to persistent storage
+> ⚠ This section is a template. Every time you discover a dead-end approach, document it here to prevent the agent from retrying it across sessions.
 
-**Without this tool**, bloated tool results accumulate forever and starve your context budget for real work.
-
-## recall — Memory Search
-
-**IMPORTANT: Always use recall when answering questions about:**
-- What was discussed or decided previously
-- User's preferences, habits, or personal details
-- Past work, projects, or tasks
-- Dates, events, or facts from earlier conversations
-- Anything you might have forgotten or weren't present for
-
-**How to use:**
-1. **First check**: Use a broad keyword (or no keyword) to see if relevant memories exist
-2. **Then narrow**: If found, use start/end dates or more specific keywords to get context
-3. **Absorb and answer**: Do NOT dump raw output — synthesize results into your answer
-
-**Proactive recall is required, not optional.** If you're unsure, call recall.
+| Date | What | Why failed | Verdict |
+|------|------|-----------|---------|
+| (date) | `corepack enable` | EPERM — needs admin | ❌ |
+| (date) | `npm install -g <pkg>` | EPERM on system dir | ❌ Use `--prefix tools` |
+| (date) | `node -e "..."` on CMD | Quote mangling | ❌ Use `write_file`→`exec` |
