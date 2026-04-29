@@ -137,43 +137,43 @@ class AgentRunner:
         if not messages:
             return None
 
-        # Find all assistant messages with tool_calls
-        tool_calls_by_id: dict[str, dict[str, Any]] = {}
-        completed_ids: set[str] = set()
+        # Only consider the LAST assistant message with tool_calls — scanning
+        # historical assistants would generate ABANDONED messages that end up
+        # placed after an unrelated assistant, breaking protocol ordering:
+        #   assistant_A(tc=[old]) ... assistant_B(tc=[new]) tool([ABANDONED] old)
+        last_assistant = None
+        for msg in reversed(messages):
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                last_assistant = msg
+                break
 
-        for msg in messages:
-            if msg.get("role") == "assistant":
-                for tc in msg.get("tool_calls", []):
-                    tool_calls_by_id[tc.get("id")] = {
-                        "id": tc.get("id"),
-                        "name": tc.get("function", {}).get("name", "unknown"),
-                    }
-            elif msg.get("role") == "tool":
-                tool_id = msg.get("tool_call_id")
-                if tool_id:
-                    completed_ids.add(tool_id)
-
-        if not tool_calls_by_id:
+        if not last_assistant:
             return None
 
-        # Build tool messages for non-completed tool calls
+        completed_ids: set[str] = set()
+        for msg in messages:
+            if msg.get("role") == "tool":
+                tool_id = msg.get("tool_call_id")
+                if tool_id:
+                    completed_ids.add(str(tool_id))
+
+        # Build tool messages only for the LAST assistant's non-completed tool calls
         tool_messages = []
-        for tid, tc in tool_calls_by_id.items():
-            if tid in completed_ids:
-                # Already has tool result, skip
+        for tc in last_assistant.get("tool_calls", []):
+            tid = tc.get("id")
+            if not tid or str(tid) in completed_ids:
                 continue
+            name = tc.get("function", {}).get("name", "unknown")
 
             if has_new_injections:
-                # Abandoned due to new user message
-                content = f"[ABANDONED] Tool '{tc['name']}' (id: {tid}) was interrupted by new user instruction."
+                content = f"[ABANDONED] Tool '{name}' (id: {tid}) was interrupted by new user instruction."
             else:
-                # Still in progress
-                content = f"[PENDING] Tool '{tc['name']}' (id: {tid}) is still in progress, waiting for result."
+                content = f"[PENDING] Tool '{name}' (id: {tid}) is still in progress, waiting for result."
 
             tool_messages.append({
                 "role": "tool",
                 "tool_call_id": tid,
-                "name": tc["name"],
+                "name": name,
                 "content": content,
             })
 
@@ -269,61 +269,12 @@ class AgentRunner:
                         "pending_tool_calls": [],
                     },
                 )
-        # Always append injected messages (if any) — the assistant_message
-        # guard above only controls whether to emit a checkpoint, not whether
-        # to append user injections.
-        if assistant_message is not None and phase != "after final response":
-            messages.append(assistant_message)
-            if iteration is not None:
-                await self._emit_checkpoint(
-                    spec,
-                    {
-                        "phase": "final_response",
-                        "iteration": iteration,
-                        "model": spec.model,
-                        "assistant_message": assistant_message,
-                        "completed_tool_results": [],
-                        "pending_tool_calls": [],
-                    },
-                )
         self._append_injected_messages(messages, injections, assistant_message)
+
         logger.info(
             "Injected {} follow-up message(s) {} ({}/{})",
             len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
         )
-        # Debug: log recent messages to diagnose protocol errors
-        if injections:
-            recent = messages[-min(10, len(messages)):]
-            logger.warning(
-                "[INJECTION DEBUG] last {} messages in queue:",
-                len(recent),
-            )
-            for j, msg in enumerate(recent):
-                role = msg.get("role")
-                tc_ids = [tc.get("id") for tc in msg.get("tool_calls") or []]
-                tcid = msg.get("tool_call_id")
-                content = msg.get("content", "")
-                if isinstance(content, str) and len(content) > 120:
-                    content = content[:120] + "..."
-                logger.warning(
-                    "  [{}] role={} tool_call_id={} tool_calls_ids={} content={}",
-                    j, role, tcid, tc_ids,
-                    repr(content) if role == "tool" else content[:80],
-                )
-        if injections:
-            recent = messages[-min(8, len(messages)):]
-            for j, msg in enumerate(recent):
-                role = msg.get("role")
-                tc = msg.get("tool_calls")
-                tcid = msg.get("tool_call_id")
-                content = msg.get("content", "")
-                if isinstance(content, str) and len(content) > 80:
-                    content = content[:80] + "..."
-                logger.debug(
-                    "[msg {}] role={} tool_calls={} tool_call_id={} content={}",
-                    j, role, bool(tc), tcid,
-                    repr(content) if role == "tool" else content,
-                )
         return True, injection_cycles
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
@@ -418,17 +369,6 @@ class AgentRunner:
             context = AgentHookContext(iteration=iteration, messages=messages)
             await hook.before_iteration(context)
             response = await self._request_model(spec, messages_for_model, hook, context)
-            # DEBUG: log message sequence to stderr so it shows up immediately
-            import sys
-            print(f"[DEBUG] iteration={iteration} messages={len(messages)}", file=sys.stderr)
-            for i, msg in enumerate(messages):
-                tc_ids = [tc.get("id") for tc in msg.get("tool_calls") or []]
-                tcid = msg.get("tool_call_id")
-                role = msg.get("role")
-                content = msg.get("content", "")
-                if isinstance(content, str) and len(content) > 80:
-                    content = content[:80] + "..."
-                print(f"  [{i}] {role} tcid={tcid} tc={tc_ids} cont={repr(content)[:70]}", file=sys.stderr)
             raw_usage = self._usage_dict(response.usage)
             context.response = response
             context.usage = dict(raw_usage)
@@ -466,7 +406,10 @@ class AgentRunner:
 
                 await hook.before_execute_tools(context)
 
-                results, new_events, fatal_error, was_interrupted, injection_cycles, executed_count = await self._execute_tools(
+                (
+                    results, new_events, fatal_error, was_interrupted,
+                    injection_cycles, executed_count, saved_injections,
+                ) = await self._execute_tools(
                     spec,
                     tool_calls,
                     external_lookup_counts,
@@ -478,33 +421,40 @@ class AgentRunner:
                 context.tool_events = list(new_events)
 
                 if was_interrupted:
-                    # Pop the original assistant_message (has ALL tool_calls)
-                    messages.pop()
-                    # Rebuild with only executed tool_calls
-                    executed_tool_calls = [tc for tc, res in zip(tool_calls, results) if res[2] is None]
-                    new_assistant = build_assistant_message(
-                        response.content or "",
-                        tool_calls=[tc.to_openai_tool_call() for tc in executed_tool_calls],
-                        reasoning_content=response.reasoning_content,
-                        thinking_blocks=response.thinking_blocks,
-                    )
-                    messages.append(new_assistant)
-                    # Append tool results for executed tools
+                    # Build tool messages for ALL tool calls (protocol requires
+                    # one tool message per tool_call_id before any user message).
+                    # Executed tools get real results; unexecuted ones get
+                    # [ABANDONED] markers to signal permanent non-execution.
+                    # Use indexed enumeration (not zip) because results only
+                    # contains entries for actually-executed tools — zip would
+                    # silently drop the unexecuted ones, breaking the protocol.
                     completed_tool_results: list[dict[str, Any]] = []
-                    for tc, res in zip(tool_calls, results):
-                        if res[2] is None:
+                    for i, tc in enumerate(tool_calls):
+                        if i < executed_count:
+                            res = results[i]
                             content = self._normalize_tool_result(spec, tc.id, tc.name, res)
                             ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else ""
                             content = self._fmt_tool_metadata(tc.name, content, ts)
-                            tool_message = {
-                                "role": "tool",
-                                "tool_call_id": tc.id,
-                                "name": tc.name,
-                                "content": content,
-                                "timestamp": ts,
-                            }
-                            messages.append(tool_message)
-                            completed_tool_results.append(tool_message)
+                        else:
+                            content = f"[ABANDONED] tool call {tc.name} was not executed due to interruption"
+                            ts = ""
+                        tool_message = {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tc.name,
+                            "content": content,
+                            "timestamp": ts,
+                        }
+                        messages.append(tool_message)
+                        completed_tool_results.append(tool_message)
+                    # Append saved injections AFTER all tool results,
+                    # so the sequence is:
+                    #   assistant(tool_calls) → tool(result) × N → user(injection)
+                    self._append_injected_messages(messages, saved_injections, None)
+                    logger.info(
+                        "Injected {} saved follow-up message(s) after tool results ({}/{})",
+                        len(saved_injections), injection_cycles, _MAX_INJECTION_CYCLES,
+                    )
                     empty_content_retries = 0
                     length_recovery_count = 0
                     had_injections = True
@@ -864,11 +814,20 @@ class AgentRunner:
         external_lookup_counts: dict[str, int],
         messages: list[dict[str, Any]],
         injection_cycles: int,
-    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None, bool, int, int]:
-        """Execute tool calls in batches. Returns (results, events, fatal_error, was_interrupted, new_injection_cycles, executed_count)."""
+    ) -> tuple[list[Any], list[dict[str, str]], BaseException | None, bool, int, int, list[dict[str, Any]]]:
+        """Execute tool calls in batches.
+
+        Returns (results, events, fatal_error, was_interrupted,
+        new_injection_cycles, executed_count, saved_injections).
+        *saved_injections* is a list of injection messages drained between
+        batches that have NOT yet been appended to *messages* — the caller
+        must append them AFTER tool results to preserve protocol ordering:
+        assistant(tool_calls) → tool(result) → user(injection).
+        """
         batches = self._partition_tool_batches(spec, tool_calls)
         tool_results: list[tuple[Any, dict[str, str], BaseException | None]] = []
         interrupted = False
+        saved_injections: list[dict[str, Any]] = []
         for batch in batches:
             if spec.concurrent_tools and len(batch) > 1:
                 batch_results = await asyncio.gather(*(
@@ -887,16 +846,15 @@ class AgentRunner:
             if any(isinstance(error, AskUserInterrupt) for _, _, error in batch_results):
                 break
 
-            # Check for user injection between batches. If found, set
-            # interrupted=True and drain, but do NOT rebuild assistant message —
-            # just record the flag and break. We let the normal post-tool
-            # injection path handle it at "after tool execution" phase.
-            if tool_results:
-                drained, injection_cycles = await self._try_drain_injections(
-                    spec, messages, None, injection_cycles,
-                    phase="between tool batches",
-                )
-                if drained:
+            # Check for user injection between batches. Drain pending
+            # injections but do NOT append them to messages yet — save
+            # them so the caller appends them AFTER tool results,
+            # preserving tool-call protocol ordering.
+            if tool_results and injection_cycles < _MAX_INJECTION_CYCLES:
+                pending = await self._drain_injections(spec)
+                if pending:
+                    injection_cycles += 1
+                    saved_injections = pending
                     interrupted = True
                     break
 
@@ -908,7 +866,7 @@ class AgentRunner:
             events.append(event)
             if error is not None and fatal_error is None:
                 fatal_error = error
-        return results, events, fatal_error, interrupted, injection_cycles, len(tool_results)
+        return results, events, fatal_error, interrupted, injection_cycles, len(tool_results), saved_injections
 
     async def _run_tool(
         self,
