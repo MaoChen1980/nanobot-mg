@@ -887,11 +887,18 @@ class AgentRunner:
             if any(isinstance(error, AskUserInterrupt) for _, _, error in batch_results):
                 break
 
-            # NOTE: No user injection between batches — injection only happens
-            # at "after tool execution" / "after final response" / "after error"
-            # phases, never during in-flight tool execution. Injecting mid-batch
-            # would append user messages before tool results arrive, breaking the
-            # protocol: "tool messages must follow an assistant with tool_calls."
+            # Check for user injection between batches. If found, set
+            # interrupted=True and drain, but do NOT rebuild assistant message —
+            # just record the flag and break. We let the normal post-tool
+            # injection path handle it at "after tool execution" phase.
+            if tool_results:
+                drained, injection_cycles = await self._try_drain_injections(
+                    spec, messages, None, injection_cycles,
+                    phase="between tool batches",
+                )
+                if drained:
+                    interrupted = True
+                    break
 
         results: list[Any] = []
         events: list[dict[str, str]] = []
