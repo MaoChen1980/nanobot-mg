@@ -17,6 +17,20 @@ from nanobot.config.paths import get_media_dir
 
 _IS_WINDOWS = sys.platform == "win32"
 
+# Executables whose -c/-e/-Command/-File flags take a quoted script argument
+# that cmd.exe /c would mangle (list2cmdline → outer-quote wrappping → strip).
+# Spawning these directly avoids the problem.
+_EXES_WITH_SCRIPT_FLAGS: set[str] = {
+    # Executables known to use -c/-e/-Command/-File flags with a quoted
+    # script argument.  For these we extract the script text as a single
+    # argument (preserving spaces) instead of splitting on whitespace.
+    "powershell",
+    "powershell.exe",
+    "pwsh",
+    "python",
+    "python3",
+    "node",
+}
 
 @tool_parameters(
     tool_parameters_schema(
@@ -232,11 +246,102 @@ class ExecTool(Tool):
             return f"Error executing command: {str(e)}"
 
     @staticmethod
+    def _try_direct_args(command: str) -> list[str] | None:
+        """Parse *command* for direct subprocess spawn, bypassing ``cmd.exe /c``.
+
+        Returns ``[exe_path, arg, ...]``, or ``None`` if the command should
+        fall through to ``cmd.exe /c`` (shell builtins like ``dir``, ``del``).
+        """
+        parts = command.strip().split(maxsplit=1)
+        exe = parts[0]
+        rest = parts[1] if len(parts) > 1 else ""
+
+        # If the command contains explicit shell pipe operators (&&, ||),
+        # let cmd.exe /c handle the full pipeline — direct spawn would
+        # only handle the first invocation and pass shell text to the exe.
+        if ('&&' in command) or ('||' in command):
+            return None
+
+        # Never try to spawn cmd.exe directly — let _spawn() wrap it in
+        # cmd.exe /c as intended.
+        if exe.lower() in ("cmd", "cmd.exe"):
+            return None
+
+        exe_path = shutil.which(exe)
+        if not exe_path:
+            return None  # shell builtin — keep cmd.exe /c
+
+        # For known exes with script-taking flags, locate the flag and
+        # extract the script text as a single argument (preserving spaces).
+        if exe.lower() in _EXES_WITH_SCRIPT_FLAGS and rest:
+            # Flag words that take a script/path argument.
+            flag_pats = [
+                r'(?:^|\s)(-[cC]ommand)(?:\s|$)',
+                r'(?:^|\s)(-[fF]ile)(?:\s|$)',
+                r'(?:^|\s)(-[eE]ncoded[Cc]ommand)(?:\s|$)',
+                r'(?:^|\s)(-[cC])(?:\s|$)',
+                r'(?:^|\s)(-[eE])(?:\s|$)',
+                r'(?:^|\s)(-[pP])(?:\s|$)',   # node -p (print eval)
+            ]
+            for pat in flag_pats:
+                fm = re.search(pat, rest)
+                if not fm:
+                    continue
+                flag_name = fm.group(1)
+                flag_pos = fm.start(1)
+                flags_before = rest[:flag_pos].strip()
+                script_start = flag_pos + len(flag_name)
+                while script_start < len(rest) and rest[script_start].isspace():
+                    script_start += 1
+                script = rest[script_start:].strip()
+                # Detect whether the script is a single "..." or '...' token.
+                # If the closing quote is not at the very end, text after it is
+                # likely shell syntax (e.g. python -c "..." > output.txt).
+                for q in ('"', "'"):
+                    if script.startswith(q):
+                        close = script.rfind(q)
+                        if close == 0:
+                            break  # malformed — single quote char
+                        if close != len(script) - 1:
+                            return None  # trailing shell text
+                        script = script[1:-1]
+                        break
+                if not script:
+                    continue  # empty script, try next flag pattern
+                args = [exe_path]
+                if flags_before:
+                    args.extend(flags_before.split())
+                args.append(flag_name)
+                if script:
+                    args.append(script)
+                return args
+            # No recognised script flag — fall back to cmd.exe /c.
+            # Simple split would break on shell metacharacters (>&, etc.)
+            # or quoted arguments in the rest.
+            return None
+
+        # Generic: stay with cmd.exe /c for unknown exes.
+        # Shell semantics (&&, |, >, <, quoting, \" escaping) are
+        # fragile to replicate — fall through to avoid regressions.
+        return None
+
+    @staticmethod
     async def _spawn(
         command: str, cwd: str, env: dict[str, str],
     ) -> asyncio.subprocess.Process:
         """Launch *command* in a platform-appropriate shell."""
         if _IS_WINDOWS:
+            # Try direct spawn for executables that exist on PATH
+            # (avoids cmd.exe /c mangling embedded double-quotes in -c/-e/... args).
+            direct_args = ExecTool._try_direct_args(command)
+            if direct_args is not None:
+                return await asyncio.create_subprocess_exec(
+                    *direct_args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd,
+                    env=env,
+                )
             comspec = env.get("COMSPEC", os.environ.get("COMSPEC", "cmd.exe"))
             return await asyncio.create_subprocess_exec(
                 comspec, "/c", command,
