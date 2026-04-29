@@ -275,6 +275,28 @@ class SessionManager:
         self._cache[key] = session
         return session
 
+    @staticmethod
+    def _fix_tool_protocol_violations(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Remove tool_calls from assistant messages that lack corresponding tool results.
+
+        When an assistant message with tool_calls is loaded from session but has no
+        tool result immediately following it, the tool_calls must be cleared — otherwise
+        the API returns "insufficient tool messages" error.
+
+        Tool messages are no longer persisted (skip_tool_messages=True), so any
+        assistant with tool_calls loaded from a saved session will be orphaned.
+        """
+        fixed = 0
+        for i, msg in enumerate(messages):
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                next_msg = messages[i + 1] if i + 1 < len(messages) else None
+                if not (next_msg and next_msg.get("role") == "tool"):
+                    msg.pop("tool_calls", None)
+                    fixed += 1
+        if fixed:
+            logger.info("Fixed {} orphaned tool_calls in session load", fixed)
+        return messages
+
     def _load(self, key: str) -> Session | None:
         """Load a session from disk."""
         path = self._get_session_path(key)
@@ -312,6 +334,8 @@ class SessionManager:
                         last_consolidated = data.get("last_consolidated", 0)
                     else:
                         messages.append(data)
+
+            messages = self._fix_tool_protocol_violations(messages)
 
             return Session(
                 key=key,
@@ -369,6 +393,8 @@ class SessionManager:
                     else:
                         messages.append(data)
 
+            messages = self._fix_tool_protocol_violations(messages)
+
             if skipped:
                 logger.warning("Skipped {} corrupt lines in session {}", skipped, key)
 
@@ -422,6 +448,11 @@ class SessionManager:
                 }
                 f.write(json.dumps(metadata_line, ensure_ascii=False) + "\n")
                 for msg in session.messages:
+                    # Don't persist tool messages — they are transient state
+                    # that breaks protocol when session is reloaded (e.g. ABANDONED
+                    # messages from was_interrupted, partial results, etc.).
+                    if msg.get("role") == "tool":
+                        continue
                     f.write(json.dumps(msg, ensure_ascii=False) + "\n")
                 if fsync:
                     f.flush()
@@ -512,6 +543,7 @@ class SessionManager:
                         stored_key = data.get("key")
                     else:
                         messages.append(data)
+            messages = self._fix_tool_protocol_violations(messages)
             return {
                 "key": stored_key or key,
                 "created_at": created_at,
