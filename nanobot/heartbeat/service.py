@@ -78,10 +78,12 @@ class HeartbeatService:
         """Fire a heartbeat trigger into the main session via the bus."""
         if not self.enabled:
             return
+
         if not self.heartbeat_file.exists():
             logger.debug("Heartbeat: HEARTBEAT.md missing")
             return
 
+        raw = self.heartbeat_file.read_text(encoding="utf-8").strip()
         now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z")
         msg = replace(
             InboundMessage(
@@ -89,11 +91,14 @@ class HeartbeatService:
                 sender_id="heartbeat",
                 chat_id="direct",
                 content=(
-                    f"[Heartbeat] Current time: {now}\n\n"
-                    "Check if there is an interrupted task to resume (a task started but not finished). "
-                    "If so, continue where it left off.\n"
-                    "Then update HEARTBEAT.md: mark completed tasks, remove stale entries, "
-                    "add any new periodic tasks that should run automatically."
+                    f"[Heartbeat] {now}\n\n"
+                    f"=== HEARTBEAT.md ===\n{raw}\n=== END ===\n\n"
+                    "Above is your intermediate task state. "
+                    "Continue working on active tasks and update progress. "
+                    "If you discover new tasks not listed here, add them to HEARTBEAT.md "
+                    "so the next heartbeat will track them. "
+                    "Move completed tasks to ## Completed. "
+                    "Write the latest status back to HEARTBEAT.md when done."
                 ),
                 media=[],
             ),
