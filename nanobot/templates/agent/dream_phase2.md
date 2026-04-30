@@ -1,4 +1,4 @@
-Update memory files based on the the analysis below.
+Update memory files based on the analysis below.
 
 ## File scope — hard boundaries
 
