@@ -27,6 +27,26 @@ class ContextBuilder:
         self.timezone = timezone
         self.memory = MemoryStore(workspace)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
+        self._ensure_memory_files()
+
+    def _ensure_memory_files(self) -> None:
+        """Create default memory files if they don't exist (fresh install safety net)."""
+        memory_dir = self.workspace / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+
+        goals_file = memory_dir / "goals.md"
+        if not goals_file.exists():
+            goals_file.write_text(
+                "# Goals —— 当前任务状态\n\n> 最后更新: (待填写)\n> 目标: (待填写)\n\n## 活跃目标\n\n(none)\n\n## 已完成\n\n(none)\n",
+                encoding="utf-8",
+            )
+
+        cap_file = memory_dir / "capability.md"
+        if not cap_file.exists():
+            cap_file.write_text(
+                "# Capability\n\n## 工具\n- 文件读写、grep、glob\n- exec shell\n- web search/fetch\n- spawn subagent\n- recall, session_manage, cron\n\n## 知识边界\n- 训练数据截止: (待确认)\n",
+                encoding="utf-8",
+            )
 
     def build_system_prompt(
         self,
