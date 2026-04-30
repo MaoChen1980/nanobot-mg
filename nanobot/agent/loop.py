@@ -927,6 +927,7 @@ class AgentLoop:
                 model=self.model,
                 context_window_tokens=self.context_window_tokens,
                 context_used_tokens=self._last_usage.get("prompt_tokens", 0) if self._last_usage else None,
+                cached_tokens=self._last_usage.get("cached_tokens", 0) if self._last_usage else None,
                 current_iteration=self._current_iteration,
                 max_iterations=self.max_iterations,
             )
@@ -1026,6 +1027,7 @@ class AgentLoop:
                 model=self.model,
                 context_window_tokens=self.context_window_tokens,
                 context_used_tokens=self._last_usage.get("prompt_tokens", 0) if self._last_usage else None,
+                cached_tokens=self._last_usage.get("cached_tokens", 0) if self._last_usage else None,
                 current_iteration=self._current_iteration,
                 max_iterations=self.max_iterations,
             )

@@ -131,6 +131,19 @@ class ContextBuilder:
             if summary:
                 blocks.append("## Session\n\n" + summary)
 
+        # Process log — last 5 substantive entries for cross-turn continuity
+        plog_file = self.workspace / "memory" / "process-log.md"
+        if plog_file.exists():
+            plog_content = plog_file.read_text(encoding="utf-8")
+            entries = []
+            for line in plog_content.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("### [") and "跳过" not in stripped and "干净" not in stripped:
+                    entries.append(stripped)
+            recent = entries[-5:]
+            if recent:
+                blocks.append("## Recent Progress\n\n" + "\n".join(recent))
+
         return "\n\n".join(blocks) if blocks else ""
 
     def _read_heartbeat_tasks(self) -> str:
@@ -168,6 +181,7 @@ class ContextBuilder:
         model: str | None = None,
         context_window_tokens: int | None = None,
         context_used_tokens: int | None = None,
+        cached_tokens: int | None = None,
         current_iteration: int | None = None,
         max_iterations: int | None = None,
     ) -> str:
@@ -182,6 +196,8 @@ class ContextBuilder:
             lines.append(f"Context: {pct}% ({context_used_tokens:,}/{context_window_tokens:,} tokens)")
             if pct >= 70:
                 lines.append(f"⚠ Context usage high ({pct}%) — consider summarization")
+        if cached_tokens is not None and cached_tokens > 0:
+            lines.append(f"Cache: {cached_tokens:,} tokens reused")
         if current_iteration is not None and max_iterations is not None:
             lines.append(f"Iteration: {current_iteration}/{max_iterations}")
         if session_summary:
@@ -244,6 +260,7 @@ class ContextBuilder:
         model: str | None = None,
         context_window_tokens: int | None = None,
         context_used_tokens: int | None = None,
+        cached_tokens: int | None = None,
         current_iteration: int | None = None,
         max_iterations: int | None = None,
     ) -> list[dict[str, Any]]:
@@ -253,6 +270,7 @@ class ContextBuilder:
             model=model,
             context_window_tokens=context_window_tokens,
             context_used_tokens=context_used_tokens,
+            cached_tokens=cached_tokens,
             current_iteration=current_iteration,
             max_iterations=max_iterations,
         )
