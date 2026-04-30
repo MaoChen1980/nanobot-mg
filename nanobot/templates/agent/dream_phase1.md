@@ -1,40 +1,51 @@
 You have TWO equally important tasks:
 1. Extract new facts from conversation history
-2. Deduplicate existing memory files — find and flag redundant, overlapping, or stale content even if NOT mentioned in history
+2. Deduplicate existing memory files
 
-Output one line per finding:
-[FILE] atomic fact (not already in memory)
-[FILE-REMOVE] reason for removal
-[SKILL] kebab-case-name: one-line description of the reusable pattern
+## File scope — strict separation
 
-Files: USER (identity, preferences), SOUL (bot behavior, tone), MEMORY (knowledge, project context)
+| File | 存什么 | 不存什么 |
+|------|--------|---------|
+| **USER.md** | 用户身份、偏好、沟通风格、技术水平、特殊指令 | 框架机制、bug、工具说明 |
+| **SOUL.md** | WHEN→THEN 行为规则、沟通风格、安全约束 | 项目细节、bug 记录 |
+| **MEMORY.md** | 活跃项目名称/路径、工具/脚本用法和坑、框架约束（硬边界）、用户验证过的方法论 | bug 修复记录、文档演进历史、临时状态、已完成决策 |
+| **HEARTBEAT.md** | 跨 session 追踪的进行中/阻塞任务 | — |
+| **goals.md** | 当前目标 + 状态 | — |
+| **process-log.md** | 子步骤完成记录（叙事格式） | 框架 bug、文档结构变化 |
 
-Rules:
-- Atomic facts: "has a cat named Luna" not "discussed pet care"
-- Corrections: [USER] location is Tokyo, not Osaka
-- Capture confirmed approaches the user validated
+## Output format
 
-Deduplication — scan ALL memory files for these redundancy patterns:
-- Same fact stated in multiple places (e.g., "communicates in Chinese" in both USER.md and multiple MEMORY.md entries)
-- Overlapping or nested sections covering the same topic
-- Information in MEMORY.md that is already captured in USER.md or SOUL.md (MEMORY.md should not duplicate permanent-file content)
-- Verbose entries that can be condensed without losing information
-For each duplicate found, output [FILE-REMOVE] for the less authoritative copy (prefer keeping facts in their canonical location)
+One line per finding:
+[USER] atomic fact about the user
+[SOUL] behavioral rule or constraint
+[MEMORY] persistent knowledge or experience
+[MEMORY-REMOVE] line text  ← reason
+[SKILL] kebab-case-name: one-line description
 
-Staleness — MEMORY.md lines may have a ``← Nd`` suffix showing days since last modification:
-- SOUL.md and USER.md have no age annotations — they are permanent, only update with corrections
-- Age only indicates when content was last touched, not whether it should be removed
-- Use content judgment: user habits/preferences/personality traits are permanent regardless of age
-- Only prune content that is objectively outdated: passed events, resolved tracking, superseded approaches
-- Lines with ``← Nd`` (N>{{ stale_threshold_days }}) deserve closer review but are NOT automatically removable
-- When removing: prefer deleting individual items over entire sections
+## Deduplication rules
 
-Skill discovery — flag [SKILL] when ALL of these are true:
-- A specific, repeatable workflow appeared 2+ times in the conversation history
-- It involves clear steps (not vague preferences like "likes concise answers")
-- It is substantial enough to warrant its own instruction set (not trivial like "read a file")
-- Do not worry about duplicates — the next phase will check against existing skills
+- Same fact in multiple places → keep in canonical file, remove copies
+- Bug fixes, framework mechanisms → NOT MEMORY.md (bug fixes belong in code comments; framework mechanics are not "knowledge")
+- Documentation evolution ("SOUL.md 269→58 lines") → NOT MEMORY.md (this is meta, not knowledge)
+- Old decisions ("2026-04-28: X") → NOT MEMORY.md unless they affect current behavior
+- Verbose entries → condense or remove
+- For each duplicate: output [*-REMOVE] for the less authoritative copy
 
-Do not add: current weather, transient status, temporary errors, conversational filler.
+## Staleness
+
+- ``← Nd`` suffix on MEMORY.md lines = days since last modification
+- Only prune: passed events, resolved tracking, superseded approaches
+- Keep: user habits, persistent project knowledge, hard constraints
+- Prefer deleting individual items over entire sections
+
+## Skill discovery
+
+Flag [SKILL] when ALL true:
+- Repeatable workflow appeared 2+ times
+- Clear steps (not vague preferences)
+- Substantial enough for own SKILL.md
+- Do not worry about duplicates — Phase 2 dedupes
+
+Do NOT add: current weather, transient status, temporary errors, conversational filler, bug records, framework internal mechanics.
 
 [SKIP] if nothing needs updating.

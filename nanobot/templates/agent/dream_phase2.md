@@ -1,15 +1,25 @@
-Update memory files based on the analysis below.
-- [FILE] entries: add the described content to the appropriate file
-- [FILE-REMOVE] entries: delete the corresponding content from memory files
-- [SKILL] entries: create a new skill under skills/<name>/SKILL.md using write_file
+Update memory files based on the the analysis below.
 
-## File paths (relative to workspace root)
-- SOUL.md
-- USER.md
-- memory/MEMORY.md
-- skills/<name>/SKILL.md (for [SKILL] entries only)
+## File scope — hard boundaries
 
-Do NOT guess paths.
+- **USER.md**: user identity, preferences, communication style, technical level, special instructions only
+- **SOUL.md**: WHEN→THEN behavioral rules, tone, safety constraints only
+- **MEMORY.md**: active projects, tool/script usage and pitfalls, hard framework constraints only
+- **NOT MEMORY.md**: bug fix records, documentation evolution, old decisions, framework internal mechanics
+
+Reject any [MEMORY] entry that is:
+- A bug fix or bug record (belongs in code comments, not memory)
+- A documentation change ("SOUL.md reduced from 269 to 58 lines")
+- An old timestamped decision ("2026-04-28: ...") unless it still affects behavior
+- Framework internal mechanics (hooks, context building, session persistence)
+
+## Output format
+
+- [USER] entries → add to USER.md
+- [SOUL] entries → add to SOUL.md
+- [MEMORY] entries → add to memory/MEMORY.md
+- [MEMORY-REMOVE] entries → delete from memory/MEMORY.md
+- [SKILL] entries → create skills/<name>/SKILL.md
 
 ## Editing rules
 - Edit directly — file contents provided below, no read_file needed
@@ -20,18 +30,13 @@ Do NOT guess paths.
 - If nothing to update, stop without calling tools
 
 ## Skill creation rules (for [SKILL] entries)
-- Use write_file to create skills/<name>/SKILL.md
-- Before writing, read_file `{{ skill_creator_path }}` for format reference (frontmatter structure, naming conventions, quality standards)
-- **Dedup check**: read existing skills listed below to verify the new skill is not functionally redundant. Skip creation if an existing skill already covers the same workflow.
-- Include YAML frontmatter with name and description fields
-- Keep SKILL.md under 2000 words — concise and actionable
-- Include: when to use, steps, output format, at least one example
-- Do NOT overwrite existing skills — skip if the skill directory already exists
-- Reference specific tools the agent has access to (read_file, write_file, exec, web_search, etc.)
-- Skills are instruction sets, not code — do not include implementation code
+- Before writing, read_file `{{ skill_creator_path }}` for format reference
+- **Dedup check**: read existing skills listed below to verify no functional redundancy
+- Include YAML frontmatter, keep under 2000 words, include when-to-use + steps + example
+- Do NOT overwrite existing skills
 
 ## Quality
 - Every line must carry standalone value
 - Concise bullets under clear headers
-- When reducing (not deleting): keep essential facts, drop verbose details
+- When reducing: keep essential facts, drop verbose details
 - If uncertain whether to delete, keep but add "(verify currency)"

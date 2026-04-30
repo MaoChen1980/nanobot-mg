@@ -107,7 +107,11 @@ class ContextBuilder:
         )
 
     def _build_state_section(self) -> str:
-        """Build a merged Current State block from Goals + HEARTBEAT + SESSION.md."""
+        """Build a merged Current State block from Goals + SESSION.md + process-log.
+
+        Note: HEARTBEAT active tasks are NOT injected here — they are embedded
+        directly in heartbeat messages by the heartbeat service (service.py).
+        """
         blocks = []
 
         goals = self.memory.read_file(self.workspace / "memory" / "goals.md")
@@ -119,10 +123,6 @@ class ContextBuilder:
                 if not (l.strip().startswith(">") and ("\u6700\u540e\u66f4\u65b0" in l or "Last updated" in l))
             ]
             blocks.append("## Goals\n\n" + "\n".join(goal_lines).strip())
-
-        hb_tasks = self._read_heartbeat_tasks()
-        if hb_tasks:
-            blocks.append("## Active Tasks\n\n" + hb_tasks)
 
         session_file = self.workspace / "SESSION.md"
         if session_file.exists():
@@ -145,34 +145,6 @@ class ContextBuilder:
                 blocks.append("## Recent Progress\n\n" + "\n".join(recent))
 
         return "\n\n".join(blocks) if blocks else ""
-
-    def _read_heartbeat_tasks(self) -> str:
-        """Extract active tasks from HEARTBEAT.md."""
-        hb_file = self.workspace / "HEARTBEAT.md"
-        if not hb_file.exists():
-            return ""
-        try:
-            hb_content = hb_file.read_text(encoding="utf-8")
-        except Exception:
-            return ""
-        lines = hb_content.split("\n")
-        start = None
-        for i, line in enumerate(lines):
-            if line.strip().startswith("## Active"):
-                start = i + 1
-                break
-        if start is None:
-            return ""
-        tasks = []
-        for line in lines[start:]:
-            if line.strip().startswith("##"):
-                break
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if stripped.startswith("###") or stripped.startswith("-") or stripped.startswith("*"):
-                tasks.append(stripped)
-        return "\n".join(tasks) if tasks else ""
 
     @staticmethod
     def _build_runtime_context(
