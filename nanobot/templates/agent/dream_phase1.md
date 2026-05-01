@@ -9,9 +9,8 @@ You have TWO equally important tasks:
 | **USER.md** | 用户身份、偏好、沟通风格、技术水平、特殊指令 | 框架机制、bug、工具说明 |
 | **SOUL.md** | WHEN→THEN 行为规则、沟通风格、安全约束 | 项目细节、bug 记录 |
 | **MEMORY.md** | 活跃项目名称/路径、工具/脚本用法和坑、框架约束（硬边界）、用户验证过的方法论 | bug 修复记录、文档演进历史、临时状态、已完成决策 |
-| **HEARTBEAT.md** | 跨 session 追踪的进行中/阻塞任务（标注阻塞原因和当前进度） | — |
 
-Note: goals.md and process-log.md are NOT updated by Dream — they are agent-maintained during sessions.
+Note: HEARTBEAT.md, goals.md and process-log.md are NOT updated by Dream — agent maintains them during sessions.
 
 ## Output format
 
@@ -20,7 +19,6 @@ One line per finding:
 [SOUL] WHEN→THEN behavior rule, tone, safety constraint
 [MEMORY] active project, tool usage, pitfall, hard framework constraint, validated methodology
 [MEMORY-REMOVE] line text ← reason — prune stale facts
-[HEARTBEAT] task: status — cross-session in-progress or blocked task with progress
 [SKILL] kebab-case-name: one-line description — repeatable workflow, 2+ occurrences, clear steps, substantial
 
 ## Deduplication rules — LATEST wins
