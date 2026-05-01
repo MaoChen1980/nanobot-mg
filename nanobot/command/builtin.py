@@ -329,7 +329,7 @@ def build_help_text() -> str:
     """Build canonical help text shared across channels."""
     lines = [
         "🐈 nanobot commands:",
-        "/new — Stop current task and start a new conversation",
+        "/new /clear /reset — Stop current task and start a new conversation",
         "/stop — Stop the current task",
         "/restart — Restart the bot",
         "/status — Show bot status",
@@ -347,6 +347,8 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.priority("/restart", cmd_restart)
     router.priority("/status", cmd_status)
     router.exact("/new", cmd_new)
+    router.exact("/clear", cmd_new)
+    router.exact("/reset", cmd_new)
     router.exact("/status", cmd_status)
     router.exact("/dream", cmd_dream)
     router.exact("/dream-log", cmd_dream_log)
