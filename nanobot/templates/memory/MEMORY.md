@@ -29,10 +29,10 @@ Keep it lean — put details in history.jsonl and use `recall` to retrieve them.
 
 ## Framework Mechanisms
 
-- SESSION.md: auto-written by hook after each turn, first 3 lines injected on restart
-- HEARTBEAT.md: cross-session task tracking, agent auto-advances on restart
+- Goals: `write_goal` / `list_goals` tools → SQLite
+- Events: `write_event` / `list_events` tools → SQLite (replaces process-log.md)
 - Context health: context_monitor hook writes .context_health.md signals
-- memory/ structure: MEMORY.md (main), goals.md, capability.md, process-log.md, history.jsonl
+- memory/ structure: MEMORY.md (main), capability.md, history.jsonl
 
 ## Framework Constraints (hard limits)
 
