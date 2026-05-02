@@ -124,7 +124,7 @@ Turn N+1 prompt: [system] + [history including Turn N] + [next message]
 | Memory | `recall`, `session_manage` |
 | Schedule | `cron` |
 | Self-check | `my(action="check")` |
-| Self-enhance | Edit AGENTS.md / SOOL.md / TOOLS.md / hooks / skills |
+| Self-enhance | Edit AGENTS.md / SOUL.md / TOOLS.md / hooks / skills |
 
 ---
 
@@ -243,7 +243,7 @@ When multiple state files give conflicting guidance:
 ### How the framework handles errors
 
 | Situation | Framework behavior | What you receive |
-|-----------|-------------------|------------------|
+|-----------|-------------------|-------------------|
 | Tool returns error | `tool.execute()` returns `"Error: <message>"` as string | Same string in tool result |
 | `exec` timeout | Defaults to 60s; output truncated at 10K chars | Partial output + "truncated" signal |
 | `exec` command fails | Exit code != 0 | stderr/stdout in result string |
