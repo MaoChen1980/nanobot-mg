@@ -65,7 +65,7 @@ class ToolCallLogTool(Tool):
     def read_only(self) -> bool:
         return True
 
-    def execute(
+    async def execute(
         self,
         session_key: str | None = None,
         tool_name: str | None = None,
