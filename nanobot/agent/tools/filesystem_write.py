@@ -1,0 +1,258 @@
+import os
+from pathlib import Path
+from typing import Any
+
+from nanobot.agent.tools.base import Tool, tool_parameters
+from nanobot.agent.tools.schema import StringSchema, tool_parameters_schema
+from nanobot.agent.tools.filesystem_base import _FsTool
+from nanobot.agent.tools import file_state
+from nanobot.agent.tools.shell import ExecTool
+
+@tool_parameters(
+    tool_parameters_schema(
+        path=StringSchema("The file path to write to"),
+        content=StringSchema("The content to write"),
+        then_exec=StringSchema(
+            "If set to a shell command string, executes it automatically after writing "
+            "and returns the command output. Useful for script-then-run workflows."
+        ),
+        then_check=StringSchema(
+            "If set, type-checks the file after writing before executing then_exec. "
+            "Values: 'auto' (detect language from extension), 'pyright' (Python), "
+            "'tsc' (TypeScript/JavaScript). Returns pass/fail + errors. "
+            "Works with then_exec: write → check → exec."
+        ),
+        required=["path", "content"],
+    )
+)
+class WriteFileTool(_FsTool):
+    """Write content to a file. Overwrites if it exists; creates parent dirs as needed."""
+
+    @property
+    def name(self) -> str:
+        return "write_file"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Write content to a file. Overwrites if the file already exists; "
+            "creates parent directories as needed. "
+            "For partial edits, prefer edit_file instead.\n\n"
+            "Use then_check='auto' to automatically type-check Python/TypeScript files "
+            "after writing — saves a separate exec(pyright/tsc) call."
+        )
+
+    async def execute(
+        self, path: str | None = None, content: str | None = None,
+        then_exec: str | None = None,
+        then_check: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        try:
+            if not path:
+                raise ValueError("Unknown path")
+            if content is None:
+                raise ValueError("Unknown content")
+            fp = self._resolve(path)
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(content, encoding="utf-8")
+            file_state.record_write(fp)
+            write_result = f"Successfully wrote {len(content)} characters to {fp}"
+
+            # Type-check before exec (if requested)
+            check_result = ""
+            if then_check:
+                check_result = await self._run_type_check(fp, then_check)
+
+            # Execute if requested
+            exec_result = ""
+            if then_exec:
+                from nanobot.agent.tools.shell import ExecTool
+                exec_tool = ExecTool(
+                    working_dir=str(fp.parent),
+                    restrict_to_workspace=False,
+                )
+                exec_result = f"\n\nExec output:\n{await exec_tool.execute(then_exec)}"
+
+            parts = [write_result]
+            if check_result:
+                parts.append(check_result)
+            if exec_result:
+                parts.append(exec_result)
+            return "\n".join(parts)
+        except PermissionError as e:
+            return f"Error: {e}"
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+    async def _run_type_check(self, fp: Path, checker: str) -> str:
+        """Run a type checker on the written file. Returns pass/fail summary."""
+        if checker == "auto":
+            ext = fp.suffix.lower()
+            if ext == ".py":
+                checker = "pyright"
+            elif ext in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts"):
+                checker = "tsc"
+            else:
+                return f"\nCheck: skipped (no checker for '{ext}')"
+
+        from nanobot.agent.tools.shell import ExecTool
+
+        wd = self._workspace or fp.parent
+        exec_tool = ExecTool(working_dir=str(wd), restrict_to_workspace=False)
+
+        if checker == "pyright":
+            cmd = f"npx --prefix tools pyright {fp} --outputjson"
+            raw = await exec_tool.execute(cmd)
+            return self._format_pyright_result(raw)
+        elif checker == "tsc":
+            cmd = f"npx --prefix tools tsc --noEmit --allowJs --checkJs {fp}"
+            raw = await exec_tool.execute(cmd)
+            return self._format_tsc_result(raw)
+        else:
+            return f"\nCheck: unknown checker '{checker}' (use 'auto', 'pyright', or 'tsc')"
+
+    @staticmethod
+    def _format_pyright_result(raw: str) -> str:
+        """Parse pyright --outputjson and return a readable summary."""
+        try:
+            import json
+            # Strip exec header ([cwd:...] line) and footer (Exit code: ...)
+            lines = raw.split("\n")
+            json_lines = []
+            in_json = False
+            for line in lines:
+                if not in_json and line.strip().startswith("{"):
+                    in_json = True
+                if in_json:
+                    json_lines.append(line)
+                    if line.strip() == "}":
+                        break
+            if not json_lines:
+                return f"\nCheck: pyright output (raw):\n{raw[:500]}"
+            data = json.loads("\n".join(json_lines))
+            summary = data.get("summary", {})
+            errors = summary.get("errorCount", 0)
+            warnings = summary.get("warningCount", 0)
+            diags = data.get("generalDiagnostics", [])
+            if errors == 0 and warnings == 0:
+                return "\nCheck: PASSED (pyright)"
+            lines_out = [f"\nCheck: FAILED — {errors} errors, {warnings} warnings (pyright)"]
+            for d in diags[:5]:
+                lines_out.append(f"  line {d['range']['start']['line']}: {d['message']}")
+            if len(diags) > 5:
+                lines_out.append(f"  ... and {len(diags) - 5} more")
+            return "\n".join(lines_out)
+        except Exception:
+            return f"\nCheck: pyright output (raw):\n{raw[:500]}"
+
+    @staticmethod
+    def _format_tsc_result(raw: str) -> str:
+        """Parse tsc output and return a readable summary."""
+        lines = raw.strip().split("\n")
+        error_lines = [l for l in lines if l and "error TS" in l]
+        if not error_lines:
+            return "\nCheck: PASSED (tsc)"
+        summary = f"\nCheck: FAILED — {len(error_lines)} type errors (tsc)"
+        body = "\n".join(f"  {l}" for l in error_lines[:5])
+        tail = f"\n  ... and {len(error_lines) - 5} more" if len(error_lines) > 5 else ""
+        return f"{summary}\n{body}{tail}"
+
+
+# ---------------------------------------------------------------------------
+# edit_file
+# ---------------------------------------------------------------------------
+
+_QUOTE_TABLE = str.maketrans({
+    "\u2018": "'", "\u2019": "'",  # curly single → straight
+    "\u201c": '"', "\u201d": '"',  # curly double → straight
+    "'": "'", '"': '"',            # identity (kept for completeness)
+})
+
+
+def _normalize_quotes(s: str) -> str:
+    return s.translate(_QUOTE_TABLE)
+
+
+def _curly_double_quotes(text: str) -> str:
+    parts: list[str] = []
+    opening = True
+    for ch in text:
+        if ch == '"':
+            parts.append("\u201c" if opening else "\u201d")
+            opening = not opening
+        else:
+            parts.append(ch)
+    return "".join(parts)
+
+
+def _curly_single_quotes(text: str) -> str:
+    parts: list[str] = []
+    opening = True
+    for i, ch in enumerate(text):
+        if ch != "'":
+            parts.append(ch)
+            continue
+        prev_ch = text[i - 1] if i > 0 else ""
+        next_ch = text[i + 1] if i + 1 < len(text) else ""
+        if prev_ch.isalnum() and next_ch.isalnum():
+            parts.append("\u2019")
+            continue
+        parts.append("\u2018" if opening else "\u2019")
+        opening = not opening
+    return "".join(parts)
+
+
+def _preserve_quote_style(old_text: str, actual_text: str, new_text: str) -> str:
+    """Preserve curly quote style when a quote-normalized fallback matched."""
+    if _normalize_quotes(old_text.strip()) != _normalize_quotes(actual_text.strip()) or old_text == actual_text:
+        return new_text
+
+    styled = new_text
+    if any(ch in actual_text for ch in ("\u201c", "\u201d")) and '"' in styled:
+        styled = _curly_double_quotes(styled)
+    if any(ch in actual_text for ch in ("\u2018", "\u2019")) and "'" in styled:
+        styled = _curly_single_quotes(styled)
+    return styled
+
+
+def _leading_ws(line: str) -> str:
+    return line[: len(line) - len(line.lstrip(" \t"))]
+
+
+def _reindent_like_match(old_text: str, actual_text: str, new_text: str) -> str:
+    """Preserve the outer indentation from the actual matched block."""
+    old_lines = old_text.split("\n")
+    actual_lines = actual_text.split("\n")
+    if len(old_lines) != len(actual_lines):
+        return new_text
+
+    comparable = [
+        (old_line, actual_line)
+        for old_line, actual_line in zip(old_lines, actual_lines)
+        if old_line.strip() and actual_line.strip()
+    ]
+    if not comparable or any(
+        _normalize_quotes(old_line.strip()) != _normalize_quotes(actual_line.strip())
+        for old_line, actual_line in comparable
+    ):
+        return new_text
+
+    old_ws = _leading_ws(comparable[0][0])
+    actual_ws = _leading_ws(comparable[0][1])
+    if actual_ws == old_ws:
+        return new_text
+
+    if old_ws:
+        if not actual_ws.startswith(old_ws):
+            return new_text
+        delta = actual_ws[len(old_ws):]
+    else:
+        delta = actual_ws
+
+    if not delta:
+        return new_text
+
+    return "\n".join((delta + line) if line else line for line in new_text.split("\n"))
+
+
