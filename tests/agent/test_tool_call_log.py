@@ -78,12 +78,14 @@ class TestToolCallDB:
 
 
 class TestToolCallLogTool:
-    def test_no_records(self, db):
+    @pytest.mark.asyncio
+    async def test_no_records(self, db):
         tool = ToolCallLogTool(db=db)
-        result = tool.execute(limit=5)
+        result = await tool.execute(limit=5)
         assert "No tool call records found" in result
 
-    def test_format_success(self, db):
+    @pytest.mark.asyncio
+    async def test_format_success(self, db):
         db.insert_tool_call(
             "s1", iteration=3, turn=5,
             tool_name="read_file",
@@ -93,13 +95,14 @@ class TestToolCallLogTool:
             duration_ms=17,
         )
         tool = ToolCallLogTool(db=db)
-        result = tool.execute(session_key="s1", limit=5)
+        result = await tool.execute(session_key="s1", limit=5)
         assert "✅" in result
         assert "[iter 3/turn 5] read_file" in result
         assert "17ms" in result
         assert "foo.txt" in result
 
-    def test_format_failure(self, db):
+    @pytest.mark.asyncio
+    async def test_format_failure(self, db):
         db.insert_tool_call(
             "s2", iteration=1, turn=2,
             tool_name="exec",
@@ -109,6 +112,6 @@ class TestToolCallLogTool:
             error="Permission denied",
         )
         tool = ToolCallLogTool(db=db)
-        result = tool.execute(session_key="s2", limit=5)
+        result = await tool.execute(session_key="s2", limit=5)
         assert "❌" in result
         assert "[ERROR: Permission denied]" in result

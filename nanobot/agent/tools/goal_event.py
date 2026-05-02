@@ -71,7 +71,7 @@ class WriteGoal(Tool):
         super().__init__()
         self._memory = memory
 
-    def execute(
+    async def execute(
         self,
         id: str,
         title: str,
@@ -139,7 +139,7 @@ class ListGoals(Tool):
         super().__init__()
         self._memory = memory
 
-    def execute(
+    async def execute(
         self,
         status: str | None = None,
         project: str | None = None,
@@ -195,7 +195,7 @@ class WriteEvent(Tool):
         super().__init__()
         self._memory = memory
 
-    def execute(
+    async def execute(
         self,
         content: str,
         action: str,
@@ -253,7 +253,7 @@ class ListEvents(Tool):
         super().__init__()
         self._memory = memory
 
-    def execute(
+    async def execute(
         self,
         goal_id: str | None = None,
         event_type: str | None = None,
