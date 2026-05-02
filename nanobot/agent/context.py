@@ -34,9 +34,13 @@ class ContextBuilder:
         skill_names: list[str] | None = None,
         channel: str | None = None,
         tool_definitions: list[dict[str, Any]] | None = None,
+        runtime_context: str = "",
     ) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
         parts = [self._get_identity(channel=channel)]
+
+        if runtime_context:
+            parts.append(runtime_context)
 
         # Current State — Goals + recent events from DB
         state_block = self._build_state_section()
@@ -103,7 +107,8 @@ class ContextBuilder:
             "agent/identity.md",
             workspace_path=workspace_path,
             runtime=runtime,
-)
+            channel=channel,
+        )
 
     def _build_state_section(self) -> str:
         """Build a merged Current State block from Goals + recent events.
@@ -260,17 +265,16 @@ class ContextBuilder:
             max_iterations=max_iterations,
         )
         user_content = self._build_user_content(current_message, media)
-        merged = self._merge_message_content(runtime_ctx, user_content)
         messages = [
-            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, tool_definitions=tool_definitions)},
+            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, tool_definitions=tool_definitions, runtime_context=runtime_ctx)},
             *history,
         ]
         if messages[-1].get("role") == current_role:
             last = dict(messages[-1])
-            last["content"] = self._merge_message_content(last.get("content"), merged)
+            last["content"] = self._merge_message_content(last.get("content"), user_content)
             messages[-1] = last
             return messages
-        messages.append({"role": current_role, "content": merged})
+        messages.append({"role": current_role, "content": user_content})
         return messages
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:

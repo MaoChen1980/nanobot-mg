@@ -124,9 +124,20 @@ class AgentRunner:
         """Drain pending injections. Returns normalized user messages."""
         return await drain_injections(spec)
 
-    async def _execute_tools(self, *args, **kwargs):
+    async def _execute_tools(
+        self,
+        spec: AgentRunSpec,
+        tool_calls: list,
+        external_lookup_counts: dict[str, int],
+        messages: list[dict[str, Any]] | None = None,
+        injection_cycles: int = 0,
+        iteration: int = 0,
+    ):
         """Backward compat wrapper — delegate to module function."""
-        return await execute_tools(self, *args, **kwargs)
+        return await execute_tools(
+            self, spec, tool_calls, external_lookup_counts,
+            messages or [], injection_cycles, iteration,
+        )
 
     async def _try_drain_injections(
         self,

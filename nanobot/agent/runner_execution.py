@@ -168,7 +168,7 @@ async def _run_tool(
         if isinstance(exc, AskUserInterrupt):
             return "", event, exc
         if spec.fail_on_tool_error:
-            return result_str, event, RuntimeError(result_str)
+            return result_str, event, RuntimeError(str(exc))
         return result_str, event, None
 
     if isinstance(result, str) and result.startswith("Error"):

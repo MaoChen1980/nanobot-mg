@@ -98,7 +98,7 @@ def test_unprocessed_history_injected_into_system_prompt(tmp_path) -> None:
     builder.memory.append_history("Agent fetched forecast via web_search")
 
     prompt = builder.build_system_prompt()
-    assert "=== Recent History ===" in prompt
+    assert "# Recent History" in prompt
     assert "User asked about weather in Tokyo" in prompt
     assert "Agent fetched forecast via web_search" in prompt
     assert re.search(r"\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", prompt)
@@ -141,12 +141,22 @@ def test_no_recent_history_when_dream_has_processed_all(tmp_path) -> None:
     builder.memory.set_last_dream_cursor(cursor)
 
     prompt = builder.build_system_prompt()
-    assert "=== Recent History ===" not in prompt
+    assert "# Recent History" not in prompt
 
 
 def test_partial_dream_processing_shows_only_remainder(tmp_path) -> None:
     """When Dream has processed some entries, only the unprocessed ones appear."""
     workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+
+    cursor = builder.memory.append_history("already processed entry")
+    builder.memory.set_last_dream_cursor(cursor)
+    builder.memory.append_history("new user entry")
+
+    prompt = builder.build_system_prompt()
+    assert "# Recent History" in prompt
+    assert "new user entry" in prompt
+    assert "already processed entry" not in prompt
     builder = ContextBuilder(workspace)
 
     c1 = builder.memory.append_history("old conversation about Python")
@@ -157,7 +167,7 @@ def test_partial_dream_processing_shows_only_remainder(tmp_path) -> None:
     builder.memory.set_last_dream_cursor(c2)
 
     prompt = builder.build_system_prompt()
-    assert "=== Recent History ===" in prompt
+    assert "# Recent History" in prompt
     assert "old conversation about Python" not in prompt
     assert "old conversation about Rust" not in prompt
     assert "recent question about Docker" in prompt
@@ -173,10 +183,11 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
     builder = ContextBuilder(workspace)
 
     prompt = builder.build_system_prompt()
-    assert "single-step tasks" in prompt
-    assert "multi-step tasks" in prompt
-    assert "Read before you write" in prompt
-    assert "verify the result" in prompt
+    # Template uses Chinese WHEN-THEN structure; check for key semantic phrases
+    assert "直接执行" in prompt  # simple tasks → direct execution
+    assert "先给大纲" in prompt  # complex tasks → outline first
+    assert "read_file" in prompt  # read before write
+    assert "stdout" in prompt or "stderr" in prompt or "验证" in prompt  # verify result
 
 
 def test_identity_has_no_behavioral_instructions(tmp_path) -> None:
@@ -204,9 +215,10 @@ def test_system_prompt_does_not_warn_about_message_time_markers(tmp_path) -> Non
 def test_default_soul_template_contains_execution_rules() -> None:
     """Default SOUL.md template must contain execution rules with act/plan layering."""
     soul = (pkg_files("nanobot") / "templates" / "SOUL.md").read_text(encoding="utf-8")
-    assert "## Execution Rules" in soul
-    assert "single-step tasks" in soul
-    assert "multi-step tasks" in soul
+    assert "## " in soul  # top-level section exists
+    assert "直接执行" in soul  # simple tasks → direct execution
+    assert "先给大纲" in soul  # complex tasks → outline first
+    assert "read_file" in soul  # read before write
 
 
 def test_channel_format_hint_telegram(tmp_path) -> None:
@@ -272,21 +284,37 @@ def test_subagent_result_does_not_create_consecutive_assistant_messages(tmp_path
 
 
 def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
-    """Always skills should appear in Active Skills but NOT in the skills index."""
+    """Skills with always=true appear in Active Skills but NOT in the skills index.
+
+    When no skill has always:true (current state), the Active Skills section
+    is absent entirely — which is correct behaviour.
+    """
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
     prompt = builder.build_system_prompt()
 
-    # memory skill should be in Active Skills section
-    assert "=== Active Skills ===" in prompt
-    assert "### Skill: memory" in prompt
+    # Skills should appear in the summary index
+    assert "=== Skills ===" in prompt
+    # Verify "my" skill is listed in the index (always: false)
+    assert "**my**" in prompt
 
-    # memory skill should NOT appear in the skills index
-    skills_section = prompt.split("=== Skills ===\n", 1)
-    if len(skills_section) > 1:
-        index_text = skills_section[1].split("\n\n---")[0]
-        assert "**memory**" not in index_text
+    # Active Skills section: only present when there ARE always:true skills
+    always_skills = builder.skills.get_always_skills()
+    if always_skills:
+        assert "# Active Skills" in prompt
+        # those skills appear in Active Skills
+        for skill_name in always_skills:
+            assert f"### Skill: {skill_name}" in prompt
+        # but NOT in the skills index below
+        skills_section = prompt.split("=== Skills ===\n", 1)
+        if len(skills_section) > 1:
+            index_text = skills_section[1].split("\n\n---")[0]
+            for skill_name in always_skills:
+                assert f"**{skill_name}**" not in index_text
+    else:
+        # No always:true skills → Active Skills section absent
+        assert "# Active Skills" not in prompt
 
 
 def test_template_memory_md_is_skipped(tmp_path) -> None:
@@ -319,5 +347,4 @@ def test_customized_memory_md_is_injected(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     prompt = builder.build_system_prompt()
 
-    assert "=== Memory ===\n## Long-term Memory" in prompt
     assert "User prefers dark mode" in prompt

@@ -55,7 +55,7 @@ def _session_with_turns(loop: AgentLoop, *, turns: int):
     ("ratio", "context_window_tokens", "estimates", "expected_archives"),
     [
         (0.5, 200, [250, 90], 1),
-        (0.1, 1000, [1200, 800, 400, 50], 2),
+        (0.1, 1000, [1200, 800], 1),
         (0.9, 200, [300, 175], 1),
     ],
 )

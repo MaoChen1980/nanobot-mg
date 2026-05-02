@@ -272,7 +272,7 @@ class TestSubagentCancellation:
 
         from nanobot.agent.subagent import SubagentStatus
         status = SubagentStatus(task_id="sub-1", label="label", task_description="do task", started_at=time.monotonic())
-        await mgr._run_subagent("sub-1", "do task", "label", {"channel": "test", "chat_id": "c1"}, status)
+        await mgr._run_subagent("sub-1", "do task", "label", {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}, status)
 
         assistant_messages = [
             msg for msg in captured_second_call
@@ -313,7 +313,7 @@ class TestSubagentCancellation:
 
         from nanobot.agent.subagent import SubagentStatus
         status = SubagentStatus(task_id="sub-1", label="label", task_description="do task", started_at=time.monotonic())
-        await mgr._run_subagent("sub-1", "do task", "label", {"channel": "test", "chat_id": "c1"}, status)
+        await mgr._run_subagent("sub-1", "do task", "label", {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}, status)
 
         mgr.runner.run.assert_awaited_once()
         mgr._announce_result.assert_awaited_once()
@@ -351,7 +351,7 @@ class TestSubagentCancellation:
 
         from nanobot.agent.subagent import SubagentStatus
         status = SubagentStatus(task_id="sub-1", label="label", task_description="do task", started_at=time.monotonic())
-        await mgr._run_subagent("sub-1", "do task", "label", {"channel": "test", "chat_id": "c1"}, status)
+        await mgr._run_subagent("sub-1", "do task", "label", {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}, status)
 
         mgr._announce_result.assert_awaited_once()
         args = mgr._announce_result.await_args.args
@@ -397,7 +397,7 @@ class TestSubagentCancellation:
 
         task = asyncio.create_task(
             mgr._run_subagent(
-                "sub-1", "do task", "label", {"channel": "test", "chat_id": "c1"},
+                "sub-1", "do task", "label", {"channel": "test", "chat_id": "c1", "session_key": "test:c1"},
                 SubagentStatus(task_id="sub-1", label="label", task_description="do task", started_at=time.monotonic()),
             )
         )
