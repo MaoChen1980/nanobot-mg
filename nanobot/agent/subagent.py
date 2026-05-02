@@ -172,8 +172,8 @@ class SubagentManager:
             for cls in (WriteFileTool, EditFileTool):
                 tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
             if self.web_config.enable:
-                tools.register(WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy))
-                tools.register(WebFetchTool(proxy=self.web_config.proxy))
+                tools.register(WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
+                tools.register(WebFetchTool(config=self.web_config.fetch, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
             if self.exec_config.enable:
                 tools.register(
                     ExecTool(
