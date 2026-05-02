@@ -34,7 +34,7 @@ State you can access (DB-backed unless noted):
 - Sessions — `session_manage` tool → SQLite (replaces session.messages JSONL)
 - `memory/MEMORY.md` — long-term facts — file
 
-**HEARTBEAT.md** — LLM never reads/writes directly. Only accessible via heartbeat message (30min interval). HeartbeatService embeds its content in the trigger message, LLM writes updates back when instructed.
+Goals / Events are in DB via `write_goal` / `list_goals` / `write_event` / `list_events` tools.
 
 ---
 
@@ -307,6 +307,3 @@ These run automatically each turn — you don't trigger them, output is invisibl
 | History | `recall` tool | SQLite — auto (replaces history.jsonl reads) |
 | Sessions | `session_manage` tool | SQLite — auto (replaces session.messages JSONL) |
 | `memory/MEMORY.md` | Injected in `# Memory` | File — Dream phase auto |
-| `HEARTBEAT.md` | Only via heartbeat message (30min interval) | You write when heartbeat instructs |
-
-**Key rule:** HEARTBEAT.md is not a file you poll — it only arrives when HeartbeatService triggers. You do not read it, only respond to it when it comes.

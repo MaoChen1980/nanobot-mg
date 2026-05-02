@@ -28,12 +28,10 @@ You (LLM) receive a fresh prompt every turn. You have:
 
 State files you can read/write:
 - `SESSION.md` — current session snapshot (first 3 lines injected in prompt)
-- `memory/goals.md` — active goals + status
-- `memory/process-log.md` — execution log
 - `memory/MEMORY.md` — long-term facts and experience
 - `session.messages` — full conversation (append-only JSONL)
 
-**HEARTBEAT.md** — LLM never reads/writes directly. Only accessible via heartbeat message (30min interval). HeartbeatService embeds its content in the trigger message, LLM writes updates back when instructed.
+**Goals and Events are stored in DB** — use `list_goals` / `write_goal` and `list_events` / `write_event` tools. State files `goals.md` / `process-log.md` are no longer used.
 
 ---
 
@@ -248,11 +246,11 @@ When multiple state files give conflicting guidance:
 | Priority | Source | Rule |
 |----------|--------|------|
 | **1** | User's current message | Always obey unless unsafe |
-| **2** | `goals.md` | Current active goal takes precedence over queued tasks |
-| **3** | `HEARTBEAT.md` | Only reviewed when heartbeat message arrives; do not poll |
+| **2** | `list_goals` (DB) | Current active goal takes precedence over queued tasks |
+| **3** | Heartbeat message | Only reviewed when heartbeat arrives; do not poll |
 | **4** | `MEMORY.md` | Long-term facts — low urgency, high persistence |
 
-**Rule:** If user message contradicts `goals.md`, follow user. If `HEARTBEAT.md` contradicts both, re-read — heartbeat may have delivered new context.
+**Rule:** If user message contradicts active goals, follow user. If heartbeat delivers new context, re-read and reconcile.
 
 ---
 
@@ -320,10 +318,7 @@ These run automatically each turn — you don't trigger them, output is invisibl
 | File | How you access it | Who writes it |
 |------|------------------|---------------|
 | `SESSION.md` | Injected in prompt (first 3 lines) | SessionPersistHook (auto) |
-| `goals.md` | Injected in `# Current State` | You (via edit_file/write_file) |
-| `process-log.md` | Injected in `Recent Progress` | You (via write_file) |
 | `memory/MEMORY.md` | Injected in `# Memory` | Dream phase (auto) |
-| `HEARTBEAT.md` | Only via heartbeat message (30min interval) | You (when heartbeat instructs) |
+| `goals` (DB) | Via `list_goals` / `write_goal` | You (via `write_goal`) |
+| `events` (DB) | Via `list_events` / `write_event` | You (via `write_event`) |
 | `session.messages` | Append-only, never read directly | Agent (auto) |
-
-**Key rule:** HEARTBEAT.md is not a file you poll — it only arrives when HeartbeatService triggers. You do not read it, only respond to it when it comes.

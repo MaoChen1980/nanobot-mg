@@ -15,19 +15,16 @@ These commands work inside chat channels and interactive agent sessions:
 | `/dream-restore <sha>` | Restore memory to the state before a specific change |
 | `/help` | Show available in-chat commands |
 
-## Periodic Tasks
+## Periodic Tasks (Heartbeat)
 
-The gateway wakes up every 30 minutes and checks `HEARTBEAT.md` in your workspace (`~/.nanobot/workspace/HEARTBEAT.md`). If the file has tasks, the agent executes them and delivers results to your most recently active chat channel.
+The gateway wakes up every 30 minutes and queries active goals from the DB. If there are in-progress goals, the agent receives them via heartbeat message and can advance them, deliver results to your most recently active chat channel.
 
-**Setup:** edit `~/.nanobot/workspace/HEARTBEAT.md` (created automatically by `nanobot onboard`):
+**Setup:** use `write_goal` tool to create goals — the heartbeat will pick them up automatically:
 
-```markdown
-## Periodic Tasks
-
-- [ ] Check weather forecast and send a summary
-- [ ] Scan inbox for urgent emails
+```
+write_goal(action="upsert", id="g1", title="Check weather forecast", status="in_progress")
 ```
 
-The agent can also manage this file itself — ask it to "add a periodic task" and it will update `HEARTBEAT.md` for you.
+The agent can also manage goals itself — ask it to "add a periodic task" and it will create a goal via `write_goal`.
 
 > **Note:** The gateway must be running (`nanobot gateway`) and you must have chatted with the bot at least once so it knows which channel to deliver to.

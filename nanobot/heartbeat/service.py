@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 from dataclasses import replace
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -18,15 +17,15 @@ if TYPE_CHECKING:
 
 class HeartbeatService:
     """
-    Periodic alarm clock that injects HEARTBEAT.md content into the main
+    Periodic alarm clock that injects active goals (from DB) into the main
     session via the message bus.
 
-    The main session agent reads the embedded content, decides what to do
-    (advance tasks, mark completed, prune stale entries >7 days), and writes
-    the updated state back to HEARTBEAT.md.
+    The main session agent reads the embedded goals, decides what to do
+    (advance tasks, mark completed), and writes the updated state back to the DB
+    via write_goal / write_event tools.
 
     This service is intentionally dumb: no LLM pre-judgment, no independent
-    task logic.  Just a timer + bus publish with embedded file content.
+    task logic.  Just a timer + bus publish with embedded goal data.
     """
 
     def __init__(
@@ -40,10 +39,6 @@ class HeartbeatService:
         self.enabled = enabled
         self._running = False
         self._task: asyncio.Task | None = None
-
-    @property
-    def heartbeat_file(self) -> Path:
-        return self.agent_loop.workspace / "HEARTBEAT.md"
 
     async def start(self) -> None:
         """Start the heartbeat service."""
@@ -84,25 +79,23 @@ class HeartbeatService:
 
         now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z")
 
-        raw = ""
-        if self.heartbeat_file.exists():
-            raw = self.heartbeat_file.read_text(encoding="utf-8").strip()
+        # Read active goals from DB
+        goals = self.agent_loop._db.list_goals(status="in_progress")
 
-        if not raw:
-            # 空文件，按模板创建
-            template = (
-                "# Heartbeat Task Tracker\n\n"
-                "> Auto-processed by HEARTBEAT (30min interval, enabled=true)\n"
-                f"> Last update: {now_ts}\n\n"
-                "## Active Tasks\n\n"
-                "*(none)*\n\n"
-                "## Completed\n\n"
-                "*(none)*\n\n"
-                "> **Cleanup rule**: Completed tasks older than 7 days will be removed by LLM on heartbeat trigger"
-            )
-            self.heartbeat_file.write_text(template, encoding="utf-8")
-            raw = template
-            logger.info("Heartbeat: created HEARTBEAT.md template")
+        # Build message with goal list
+        if goals:
+            lines = ["## Active Tasks\n"]
+            for g in goals:
+                subtasks_str = ""
+                if g.get("subtasks"):
+                    todo = [s for s in g["subtasks"] if s.get("status") == "todo"]
+                    done = [s for s in g["subtasks"] if s.get("status") == "done"]
+                    if todo:
+                        subtasks_str = f" [{len(done)}/{len(todo) + len(done)} done]"
+                lines.append(f"- **{g['title']}**{subtasks_str} [{g.get('status', 'in_progress')}] [{g.get('id', '')}]")
+            goal_block = "\n".join(lines)
+        else:
+            goal_block = "*(none — no active goals)*"
 
         msg = replace(
             InboundMessage(
@@ -111,18 +104,17 @@ class HeartbeatService:
                 chat_id="direct",
                 content=(
                     f"[Heartbeat] {now_ts}\n\n"
-                    f"=== HEARTBEAT.md ===\n{raw}\n"
-                    f"=== END HEARTBEAT ===\n\n"
-                    "Above is your last task state (with timestamps).\n"
-                    "- Active tasks → continue, update progress\n"
-                    "- Done → move to ## Completed, fill in created/completed times\n"
-                    "- No longer needed → delete\n"
-                    "- Completed tasks >7 days old → remove\n\n"
-                    "Write the updated state back to HEARTBEAT.md when done."
+                    f"{goal_block}\n\n"
+                    "Above are your active goals from DB.\n"
+                    "- Active tasks → continue, update progress via write_goal\n"
+                    "- Done → write_goal status='completed'\n"
+                    "- Blocked → write_goal with blockers note\n"
+                    "- No longer needed → write_goal status='archived'\n\n"
+                    "Use write_goal to update status, write_event to log progress."
                 ),
                 media=[],
             ),
             session_key_override="cli:direct",
         )
         await self.agent_loop.bus.publish_inbound(msg)
-        logger.info("Heartbeat: trigger published to main session via bus")
+        logger.info("Heartbeat: trigger published to main session via bus ({} goals)", len(goals))
