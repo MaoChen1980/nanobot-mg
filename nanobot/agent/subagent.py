@@ -1,44 +1,26 @@
 """Subagent manager for background task execution."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import time
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
-from nanobot.utils.prompt_templates import render_template
 from nanobot.agent.runner import AgentRunSpec, AgentRunner
-from nanobot.agent.skills import BUILTIN_SKILLS_DIR
-from nanobot.agent.tools.filesystem import ListDirTool, ReadFileTool, WriteFileTool, EditFileTool
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.tools.search import GlobTool, GrepTool
-from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
-from nanobot.agent.tools.shell import ExecTool
 from nanobot.bus.events import InboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.config.schema import ExecToolConfig, WebToolsConfig
 from nanobot.providers.base import LLMProvider
 
-
-@dataclass(slots=True)
-class SubagentStatus:
-    """Real-time status of a running subagent."""
-
-    task_id: str
-    label: str
-    task_description: str
-    started_at: float          # time.monotonic()
-    phase: str = "initializing"  # initializing | awaiting_tools | tools_completed | final_response | done | error
-    iteration: int = 0
-    tool_events: list = field(default_factory=list)   # [{name, status, detail}, ...]
-    usage: dict = field(default_factory=dict)          # token usage
-    stop_reason: str | None = None
-    error: str | None = None
+from .subagent_status import SubagentStatus, format_partial_progress
+from .subagent_tools import build_subagent_tools
+from .subagent_prompt import build_subagent_prompt
 
 
 class _SubagentHook(AgentHook):
@@ -161,31 +143,8 @@ class SubagentManager:
             status.iteration = payload.get("iteration", status.iteration)
 
         try:
-            # Build subagent tools (read + write, no spawn)
-            tools = ToolRegistry()
-            allowed_dir = self.workspace if self.restrict_to_workspace else None
-            extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
-            tools.register(ReadFileTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read))
-            tools.register(ListDirTool(workspace=self.workspace, allowed_dir=allowed_dir))
-            tools.register(GlobTool(workspace=self.workspace, allowed_dir=allowed_dir))
-            tools.register(GrepTool(workspace=self.workspace, allowed_dir=allowed_dir))
-            for cls in (WriteFileTool, EditFileTool):
-                tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
-            if self.web_config.enable:
-                tools.register(WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
-                tools.register(WebFetchTool(config=self.web_config.fetch, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
-            if self.exec_config.enable:
-                tools.register(
-                    ExecTool(
-                        working_dir=str(self.workspace),
-                        timeout=self.exec_config.timeout,
-                        restrict_to_workspace=self.restrict_to_workspace,
-                        sandbox=self.exec_config.sandbox,
-                        path_append=self.exec_config.path_append,
-                        allowed_env_keys=self.exec_config.allowed_env_keys,
-                    )
-                )
-            system_prompt = self._build_subagent_prompt(context)
+            tools = build_subagent_tools(self.workspace, self.web_config, self.exec_config, self.restrict_to_workspace)
+            system_prompt = build_subagent_prompt(self.workspace, self.disabled_skills)
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": task},
@@ -212,7 +171,7 @@ class SubagentManager:
                 status.tool_events = list(result.tool_events)
                 await self._announce_result(
                     task_id, label, task,
-                    self._format_partial_progress(result),
+                    format_partial_progress(result),
                     origin, "error",
                 )
             elif result.stop_reason == "error":
@@ -242,6 +201,8 @@ class SubagentManager:
         status: str,
     ) -> None:
         """Announce the subagent result to the main agent via the message bus."""
+        from nanobot.utils.prompt_templates import render_template
+
         status_text = "completed successfully" if status == "ok" else "failed"
 
         announce_content = render_template(
@@ -272,45 +233,6 @@ class SubagentManager:
 
         await self.bus.publish_inbound(msg)
         logger.debug("Subagent [{}] announced result to {}:{}", task_id, origin['channel'], origin['chat_id'])
-
-    @staticmethod
-    def _format_partial_progress(result) -> str:
-        completed = [e for e in result.tool_events if e["status"] == "ok"]
-        failure = next((e for e in reversed(result.tool_events) if e["status"] == "error"), None)
-        lines: list[str] = []
-        if completed:
-            lines.append("Completed steps:")
-            for event in completed[-3:]:
-                lines.append(f"- {event['name']}: {event['detail']}")
-        if failure:
-            if lines:
-                lines.append("")
-            lines.append("Failure:")
-            lines.append(f"- {failure['name']}: {failure['detail']}")
-        if result.error and not failure:
-            if lines:
-                lines.append("")
-            lines.append("Failure:")
-            lines.append(f"- {result.error}")
-        return "\n".join(lines) or (result.error or "Error: subagent execution failed.")
-
-    def _build_subagent_prompt(self, context: str = "") -> str:
-        """Build a focused system prompt for the subagent."""
-        from nanobot.agent.context import ContextBuilder
-        from nanobot.agent.skills import SkillsLoader
-
-        time_ctx = ContextBuilder._build_runtime_context(None, None)
-        skills_summary = SkillsLoader(
-            self.workspace,
-            disabled_skills=self.disabled_skills,
-        ).build_skills_summary()
-        return render_template(
-            "agent/subagent_system.md",
-            time_ctx=time_ctx,
-            workspace=str(self.workspace),
-            skills_summary=skills_summary or "",
-            context=context,
-        )
 
     async def cancel_by_session(self, session_key: str) -> int:
         """Cancel all subagents for the given session. Returns count cancelled."""
