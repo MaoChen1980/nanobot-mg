@@ -50,6 +50,17 @@ _ALNUM = string.ascii_letters + string.digits
 
 _STANDARD_TC_KEYS = frozenset({"id", "type", "index", "function"})
 _STANDARD_FN_KEYS = frozenset({"name", "arguments"})
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively deep-merge override into base. Does not mutate inputs."""
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 _DEFAULT_OPENROUTER_HEADERS = {
     "HTTP-Referer": "https://github.com/HKUDS/nanobot",
     "X-OpenRouter-Title": "nanobot",
@@ -245,11 +256,13 @@ class OpenAICompatProvider(LLMProvider):
         api_base: str | None = None,
         default_model: str = "gpt-4o",
         extra_headers: dict[str, str] | None = None,
+        extra_body: dict[str, Any] | None = None,
         spec: ProviderSpec | None = None,
     ):
         super().__init__(api_key, api_base)
         self.default_model = default_model
         self.extra_headers = extra_headers or {}
+        self._extra_body = extra_body or {}
         self._spec = spec
 
         if api_key and spec and spec.env_key:
@@ -567,6 +580,11 @@ class OpenAICompatProvider(LLMProvider):
             for msg in kwargs["messages"]:
                 if msg.get("role") == "assistant" and "reasoning_content" not in msg:
                     msg["reasoning_content"] = ""
+
+        # Merge user-configured extra_body last so it can override or extend internal defaults
+        if self._extra_body:
+            existing = kwargs.get("extra_body", {})
+            kwargs["extra_body"] = _deep_merge(existing, self._extra_body)
 
         return kwargs
 
