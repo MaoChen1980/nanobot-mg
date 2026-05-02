@@ -26,12 +26,14 @@ You (LLM) receive a fresh prompt every turn. You have:
 
 **The agent persists state in files. Your tool calls change those files. Your future instances inherit the changes.**
 
-State files you can read/write:
-- `SESSION.md` — current session snapshot (first 3 lines injected in prompt)
-- `memory/MEMORY.md` — long-term facts and experience
-- `session.messages` — full conversation (append-only JSONL)
+State you can access (DB-backed):
+- Goals — `write_goal` / `list_goals` tools → SQLite
+- Events — `write_event` / `list_events` tools → SQLite (replaces process-log.md)
+- History — `recall` tool → SQLite (replaces history.jsonl direct reads)
+- Sessions — `session_manage` tool → SQLite (replaces session.messages JSONL)
+- `memory/MEMORY.md` — long-term facts — file
 
-**Goals and Events are stored in DB** — use `list_goals` / `write_goal` and `list_events` / `write_event` tools. State files `goals.md` / `process-log.md` are no longer used.
+Goals / Events are in DB via `write_goal` / `list_goals` / `write_event` / `list_events` tools.
 
 ---
 
@@ -62,7 +64,7 @@ Hooks fire (after_iteration, finalize_content)
         ↓
 Response sent to user (channel)
         ↓
-SessionPersistHook writes SESSION.md + session.messages
+session.messages appended (JSONL)
 ```
 
 ### Tool Call Lifecycle
@@ -72,7 +74,6 @@ SessionPersistHook writes SESSION.md + session.messages
 3. `ToolRegistry.prepare_call()` validates tool exists and params are valid
 4. `tool.execute(**params)` runs the actual logic
 5. Result string appended to messages → sent back to you for next response
-6. `SessionPersistHook` persists SESSION.md after the turn
 
 **Key: One tool_call = one turn of the loop. The loop continues until you output no tool_calls.**
 
@@ -92,7 +93,6 @@ Turn N+1 prompt: [system] + [history including Turn N] + [next message]
 
 **What persists from Turn N → N+1:**
 - `session.messages` — your tool calls and results become history
-- `SESSION.md` — SessionPersistHook overwrites with current snapshot
 - `memory/*.md` — any file you edited
 - Hook effects — any side effects hooks produce
 
@@ -135,12 +135,12 @@ Turn N+1 prompt: [system] + [history including Turn N] + [next message]
 
 | Limitation | Impact |
 |------------|--------|
-| **Stateless LLM** | Read state files explicitly; history is the only cross-turn memory |
+| **Stateless LLM** | Read state via tools; history is the only cross-turn memory |
 | **Sync tool execution** | No parallel unless `concurrent_tools` configured; tools writing same file must be serial |
 | **Tool result is string only** | Never assume structured return or exception propagation |
 | **No mid-turn abort** | User injection queues remaining tool calls finish first |
 | **Workspace path hardcoded** | `C:\Users\savyc\.nanobot\workspace` — do not assume portable |
-| **Hook output invisible** | SessionPersistHook writes SESSION.md automatically; do NOT write manually |
+| **Hook output invisible** | Do NOT write `.context_health.md` yourself |
 | **Heartbeat is trigger, not agent** | Receives message → you (the LLM) do the actual work |
 | **Subagent isolation** | Cannot spawn further; workspace-shared but session-isolated |
 
@@ -170,9 +170,9 @@ The prompt is assembled fresh each turn by `ContextBuilder.build_messages()`:
 
 1. **Tool calls change state.** Reading a file doesn't modify it; writing/editing does.
 2. **Every tool result is from a previous turn.** The tool just ran; output is now in your history.
-3. **State files are the bridge.** SESSION.md carries context across restarts. goals.md tracks objectives. HEARTBEAT.md is only accessible via heartbeat trigger, never directly.
+3. **State files are the bridge.** Goals and events are in DB via tools. HEARTBEAT.md is only accessible via heartbeat trigger, never directly.
 4. **HEARTBEAT is trigger-only.** HeartbeatService sends a message every 30min with HEARTBEAT.md embedded. You write updates back only when heartbeat instructs. Do not read/write HEARTBEAT.md otherwise.
-5. **Hooks run silently.** SessionPersistHook writes SESSION.md automatically — do NOT write manually.
+5. **Hooks run silently.** ContextMonitorHook writes `.context_health.md` when context heavy — do NOT write manually.
 6. **Subagent is isolated.** Cannot spawn further; result comes back as a message.
 7. **Max iterations is a hard stop.** When `iteration` hits max, loop stops regardless of task state.
 8. **User injection queues mid-turn.** If user sends message while you're running tools, remaining tools complete first, then injection is processed.
@@ -214,7 +214,6 @@ AgentRunner.start() begins
 │         ↓                                    │
 │ If tool_calls remain → next turn            │
 │ If text only → response sent to user         │
-│ SessionPersistHook writes SESSION.md         │
 └─────────────────────────────────────────────┘
         ↓
 Response delivered to user (channel)
@@ -228,8 +227,8 @@ session.messages appended (JSONL)
 - Next turn starts with injected message
 
 **Session lifecycle:**
-- New session → fresh `SESSION.md`, empty history
-- Existing session → load SESSION.md → resume from last state
+- New session → fresh history, empty
+- Existing session → resume from last state via session_manage
 - `/new` → abandon current, start fresh
 
 **End conditions:**
@@ -286,7 +285,7 @@ When multiple state files give conflicting guidance:
 | `web_search` empty | Try different query. Max 3 attempts per question |
 | Tool result >5KB, processed | `session_manage(action="exclude")` to free context |
 | Subagent failed | Check its result message. Re-spawn if needed — main agent inherits no subagent state |
-| Output cut off mid-turn | Context was full. Next turn starts fresh. Write progress to `process-log.md` before continuing |
+| Output cut off mid-turn | Context was full. Next turn starts fresh. Continue from last state |
 | Hook behavior unclear | Check log files in `.nanobot/` directory, or `my(action="check")` for config |
 
 ### What the framework does NOT handle
@@ -304,12 +303,12 @@ These run automatically each turn — you don't trigger them, output is invisibl
 
 | Hook | What it does | Effect visible to LLM? |
 |------|-------------|------------------------|
-| `SessionPersistHook` | Writes SESSION.md + session.messages | ✅ Injected in next prompt |
+| `ContextMonitorHook` | Writes `.context_health.md` when context heavy | ⚠️ Read when `context%` >60% |
 | `ContextMonitorHook` | Writes `.context_health.md` when context heavy | ⚠️ Read when `context%` >60% |
 | `HeartbeatService` | Sends heartbeat message with HEARTBEAT tasks | ✅ Via inbound message |
 | `SubagentManager` | Manages background task lifecycle | ✅ Via subagent result message |
 
-**Do NOT:** Write SESSION.md manually, write `.context_health.md` yourself, or assume hooks failed silently without evidence.
+**Do NOT:** Write `.context_health.md` yourself, or assume hooks failed silently without evidence.
 
 ---
 
@@ -317,7 +316,6 @@ These run automatically each turn — you don't trigger them, output is invisibl
 
 | File | How you access it | Who writes it |
 |------|------------------|---------------|
-| `SESSION.md` | Injected in prompt (first 3 lines) | SessionPersistHook (auto) |
 | `memory/MEMORY.md` | Injected in `# Memory` | Dream phase (auto) |
 | `goals` (DB) | Via `list_goals` / `write_goal` | You (via `write_goal`) |
 | `events` (DB) | Via `list_events` / `write_event` | You (via `write_event`) |

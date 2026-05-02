@@ -27,26 +27,7 @@ class ContextBuilder:
         self.timezone = timezone
         self.memory = MemoryStore(workspace, db=db)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
-        self._ensure_memory_files()
 
-    def _ensure_memory_files(self) -> None:
-        """Create default memory files if they don't exist (fresh install safety net)."""
-        memory_dir = self.workspace / "memory"
-        memory_dir.mkdir(parents=True, exist_ok=True)
-
-        goals_file = memory_dir / "goals.md"
-        if not goals_file.exists():
-            goals_file.write_text(
-                "# Goals —— 当前任务状态\n\n> 最后更新: (待填写)\n> 目标: (待填写)\n\n## 活跃目标\n\n(none)\n\n## 已完成\n\n(none)\n",
-                encoding="utf-8",
-            )
-
-        cap_file = memory_dir / "capability.md"
-        if not cap_file.exists():
-            cap_file.write_text(
-                "# Capability\n\n## 工具\n- 文件读写、grep、glob\n- exec shell\n- web search/fetch\n- spawn subagent\n- recall, session_manage, cron\n\n## 知识边界\n- 训练数据截止: (待确认)\n",
-                encoding="utf-8",
-            )
 
     def build_system_prompt(
         self,
@@ -57,7 +38,7 @@ class ContextBuilder:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
         parts = [self._get_identity(channel=channel)]
 
-        # Current State — merged block: Goals + HEARTBEAT tasks + SESSION.md
+        # Current State — Goals + recent events from DB
         state_block = self._build_state_section()
         if state_block:
             parts.append(f"# Current State\n\n{state_block}")
@@ -125,7 +106,7 @@ class ContextBuilder:
 )
 
     def _build_state_section(self) -> str:
-        """Build a merged Current State block from Goals + SESSION.md + events.
+        """Build a merged Current State block from Goals + recent events.
 
         Note: HEARTBEAT active tasks are NOT injected here — they are embedded
         directly in heartbeat messages by the heartbeat service (service.py).
@@ -137,13 +118,6 @@ class ContextBuilder:
         if goals:
             blocks.append(f"## Goals\n\n{goals}")
 
-        # Session summary
-        session_file = self.workspace / "SESSION.md"
-        if session_file.exists():
-            lines = session_file.read_text(encoding="utf-8").strip().split("\n")
-            summary = "\n".join(line for line in lines[:3] if line.strip())
-            if summary:
-                blocks.append("## Session\n\n" + summary)
 
         # Process log — from events table instead of file
         events = self._query_recent_events()
@@ -155,7 +129,7 @@ class ContextBuilder:
     def _query_goals_for_context(self) -> str:
         """Query active goals from DB and format as text."""
         if self.memory._db is None:
-            return self._query_goals_from_file()
+            return ""
         goals = self.memory._db.list_goals(status="in_progress")
         if not goals:
             return ""
@@ -171,23 +145,10 @@ class ContextBuilder:
                     lines.append(f"  {status_icon} {st.get('title', st.get('id', '?'))}")
         return "\n".join(lines)
 
-    def _query_goals_from_file(self) -> str:
-        """Fallback: read goals.md file (for environments without DB)."""
-        goals = self.memory.read_file(self.workspace / "memory" / "goals.md")
-        if goals and not self._is_template_content(goals, "memory/goals.md"):
-            goals = goals.removeprefix("# Goals\n").removeprefix("# Goals\r\n")
-            lines = goals.split("\n")
-            goal_lines = [
-                l for l in lines
-                if not (l.strip().startswith(">") and ("最后更新" in l or "Last updated" in l))
-            ]
-            return "\n".join(goal_lines).strip()
-        return ""
-
     def _query_recent_events(self) -> str:
         """Query recent events from DB and format as text."""
         if self.memory._db is None:
-            return self._query_recent_events_from_file()
+            return ""
         events = self.memory._db.list_events(limit=5)
         if not events:
             return ""
@@ -197,19 +158,6 @@ class ContextBuilder:
             lines.append(f"### [{ts}] {e['content']}")
         return "\n".join(lines)
 
-    def _query_recent_events_from_file(self) -> str:
-        """Fallback: read process-log.md file (for environments without DB)."""
-        plog_file = self.workspace / "memory" / "process-log.md"
-        if not plog_file.exists():
-            return ""
-        plog_content = plog_file.read_text(encoding="utf-8")
-        entries = []
-        for line in plog_content.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("### [") and "跳过" not in stripped and "干净" not in stripped:
-                entries.append(stripped)
-        recent = entries[-5:]
-        return "\n".join(recent) if recent else ""
 
     @staticmethod
     def _build_runtime_context(

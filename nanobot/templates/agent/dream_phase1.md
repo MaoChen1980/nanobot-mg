@@ -10,7 +10,7 @@ You have TWO equally important tasks:
 | **SOUL.md** | WHEN→THEN 行为规则、沟通风格、安全约束 | 项目细节、bug 记录 |
 | **MEMORY.md** | 活跃项目名称/路径、工具/脚本用法和坑、框架约束（硬边界）、用户验证过的方法论 | bug 修复记录、文档演进历史、临时状态、已完成决策 |
 
-Note: HEARTBEAT.md, goals.md and process-log.md are NOT updated by Dream — agent maintains them during sessions.
+Note: HEARTBEAT.md is NOT updated by Dream — agent maintains it during sessions. Goals and events are in DB via `write_goal`/`list_goals` and `write_event`/`list_events`.
 
 ## Output format
 

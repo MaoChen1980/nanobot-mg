@@ -53,10 +53,9 @@ class WriteGoalSchema(Schema):
 
 
 class WriteGoal(Tool):
-    """Create or update a goal in structured DB (not Markdown file).
+    """Create or update a goal in structured DB.
 
-    Use this instead of editing goals.md. Goals are stored in SQLite and
-    queried by context.py during prompt assembly.
+    Goals are stored in SQLite and queried by context.py during prompt assembly.
     """
 
     name = "write_goal"
@@ -178,7 +177,7 @@ class WriteEventSchema(Schema):
 
 
 class WriteEvent(Tool):
-    """Log a progress event to structured DB (not process-log.md).
+    """Log a progress event to structured DB.
 
     Use this to record milestones, decisions, blockers, and progress updates.
     """
