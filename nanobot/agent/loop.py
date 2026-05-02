@@ -57,14 +57,36 @@ from nanobot.utils.progress_events import (
 )
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 
+# Import from split modules
+from .loop_constants import (
+    UNIFIED_SESSION_KEY,
+    _RUNTIME_CHECKPOINT_KEY,
+    _PENDING_USER_TURN_KEY,
+)
+from .loop_utils import (
+    strip_think,
+    runtime_chat_id,
+    tool_hint,
+    effective_session_key,
+    replay_token_budget,
+    cancel_active_tasks,
+)
+from .loop_mcp import connect_mcp as _connect_mcp, close_mcp as _close_mcp
+from nanobot.agent.loop_hook import _LoopHook
+from .loop_checkpoint import (
+    checkpoint_message_key,
+    set_runtime_checkpoint,
+    clear_runtime_checkpoint,
+    mark_pending_user_turn,
+    clear_pending_user_turn,
+    restore_runtime_checkpoint,
+    restore_pending_user_turn,
+)
+
 if TYPE_CHECKING:
     from nanobot.config.schema import ChannelsConfig, ExecToolConfig, ToolsConfig, WebToolsConfig
     from nanobot.cron.service import CronService
 
-
-UNIFIED_SESSION_KEY = "unified:default"
-
-from nanobot.agent.loop_hook import _LoopHook
 
 class AgentLoop:
     """
@@ -78,8 +100,9 @@ class AgentLoop:
     5. Sends responses back
     """
 
-    _RUNTIME_CHECKPOINT_KEY = "runtime_checkpoint"
-    _PENDING_USER_TURN_KEY = "pending_user_turn"
+    # Expose checkpoint keys as class attrs for backward compat with tests
+    _RUNTIME_CHECKPOINT_KEY = _RUNTIME_CHECKPOINT_KEY
+    _PENDING_USER_TURN_KEY = _PENDING_USER_TURN_KEY
 
     def __init__(
         self,
@@ -289,25 +312,7 @@ class AgentLoop:
 
     async def _connect_mcp(self) -> None:
         """Connect to configured MCP servers (one-time, lazy)."""
-        if self._mcp_connected or self._mcp_connecting or not self._mcp_servers:
-            return
-        self._mcp_connecting = True
-        from nanobot.agent.tools.mcp import connect_mcp_servers
-
-        try:
-            self._mcp_stacks = await connect_mcp_servers(self._mcp_servers, self.tools)
-            if self._mcp_stacks:
-                self._mcp_connected = True
-            else:
-                logger.warning("No MCP servers connected successfully (will retry next message)")
-        except asyncio.CancelledError:
-            logger.warning("MCP connection cancelled (will retry next message)")
-            self._mcp_stacks.clear()
-        except BaseException as e:
-            logger.error("Failed to connect MCP servers (will retry next message): {}", e)
-            self._mcp_stacks.clear()
-        finally:
-            self._mcp_connecting = False
+        await _connect_mcp(self)
 
     def _set_tool_context(
         self, channel: str, chat_id: str,
@@ -750,15 +755,7 @@ class AgentLoop:
 
     async def close_mcp(self) -> None:
         """Drain pending background archives, then close MCP connections."""
-        if self._background_tasks:
-            await asyncio.gather(*self._background_tasks, return_exceptions=True)
-            self._background_tasks.clear()
-        for name, stack in self._mcp_stacks.items():
-            try:
-                await stack.aclose()
-            except (RuntimeError, BaseExceptionGroup):
-                logger.debug("MCP server '{}' cleanup error (can be ignored)", name)
-        self._mcp_stacks.clear()
+        await _close_mcp(self)
 
     def _schedule_background(self, coro) -> None:
         """Schedule a coroutine as a tracked background task (drained on shutdown)."""
@@ -1154,19 +1151,17 @@ class AgentLoop:
         return True
 
     def _set_runtime_checkpoint(self, session: Session, payload: dict[str, Any]) -> None:
-        """Persist the latest in-flight turn state into session metadata."""
-        session.metadata[self._RUNTIME_CHECKPOINT_KEY] = payload
+        set_runtime_checkpoint(session, payload)
         self.sessions.save(session)
 
     def _mark_pending_user_turn(self, session: Session) -> None:
-        session.metadata[self._PENDING_USER_TURN_KEY] = True
+        mark_pending_user_turn(session)
 
     def _clear_pending_user_turn(self, session: Session) -> None:
-        session.metadata.pop(self._PENDING_USER_TURN_KEY, None)
+        clear_pending_user_turn(session)
 
     def _clear_runtime_checkpoint(self, session: Session) -> None:
-        if self._RUNTIME_CHECKPOINT_KEY in session.metadata:
-            session.metadata.pop(self._RUNTIME_CHECKPOINT_KEY, None)
+        clear_runtime_checkpoint(session)
 
     def _discover_workspace_hooks(self) -> list[AgentHook]:
         """Scan framework hooks then workspace/hooks/ for custom hook classes."""
