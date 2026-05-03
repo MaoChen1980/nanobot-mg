@@ -11,7 +11,10 @@ from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import BooleanSchema, IntegerSchema, StringSchema, tool_parameters_schema
 from nanobot.agent.tools import file_state
 from nanobot.utils.helpers import build_image_content_blocks, detect_image_mime
-from nanobot.config.paths import get_media_dir
+from nanobot.config.paths import get_media_dir as _get_media_dir
+
+# Allow test-time override (set by test via filesystem module)
+_get_media_dir_override: "Callable[[], Path] | None" = None
 
 
 def _resolve_path(
@@ -26,7 +29,9 @@ def _resolve_path(
         p = workspace / p
     resolved = p.resolve()
     if allowed_dir:
-        media_path = get_media_dir().resolve()
+        from nanobot.agent.tools import filesystem as _fs_mod
+        gmd = _fs_mod.get_media_dir if _get_media_dir_override is None else _get_media_dir_override
+        media_path = gmd().resolve()
         all_dirs = [allowed_dir.resolve()] + [media_path] + [d.resolve() for d in (extra_allowed_dirs or [])]
         if not any(_is_under(resolved, d) for d in all_dirs):
             raise PermissionError(f"Path {path} is outside allowed directory {allowed_dir}")
