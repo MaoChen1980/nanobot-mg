@@ -466,6 +466,7 @@ class SessionManager:
             self._cache[session.key] = session
             return
         self._save_to_file(session, fsync=fsync)
+        self._cache[session.key] = session
 
     def _save_to_file(self, session: Session, *, fsync: bool = False) -> None:
         path = self._get_session_path(session.key)

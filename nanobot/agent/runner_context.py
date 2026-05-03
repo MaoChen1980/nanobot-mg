@@ -139,6 +139,60 @@ def apply_tool_result_budget(
     return updated
 
 
+def apply_microcompact_and_budget(
+    spec: Any,
+    messages: list[dict[str, Any]],
+    normalize_fn,
+) -> list[dict[str, Any]]:
+    """Fused microcompact + apply_tool_result_budget in a single O(n) pass.
+
+    This avoids allocating two separate intermediate lists when both
+    transformations apply — we build at most one new list.
+    """
+    # Phase 1: collect stale compactable indices (same logic as microcompact)
+    compactable_indices: list[int] = []
+    for idx, msg in enumerate(messages):
+        if msg.get("role") == "tool" and msg.get("name") in _COMPACTABLE_TOOLS:
+            compactable_indices.append(idx)
+
+    has_stale = len(compactable_indices) > _MICROCOMPACT_KEEP_RECENT
+    stale_indices: set[int] = set()
+    if has_stale:
+        stale_indices = set(compactable_indices[: len(compactable_indices) - _MICROCOMPACT_KEEP_RECENT])
+
+    # Phase 2: single pass applying microcompact summaries + budget truncation
+    updated: list[dict[str, Any]] | None = None
+    for idx, msg in enumerate(messages):
+        if msg.get("role") != "tool":
+            continue
+
+        msg_content = msg.get("content")
+
+        # Microcompact: summarize stale entries with enough content
+        if idx in stale_indices and isinstance(msg_content, str) and len(msg_content) >= _MICROCOMPACT_MIN_CHARS:
+            name = msg.get("name", "tool")
+            summary = f"[{name} result omitted from context]"
+            content_to_use = summary
+        else:
+            content_to_use = msg_content
+
+        # Budget: truncate content if needed
+        normalized = normalize_fn(
+            spec,
+            str(msg.get("tool_call_id") or f"tool_{idx}"),
+            str(msg.get("name") or "tool"),
+            content_to_use,
+        )
+
+        # Only allocate if something changed
+        if normalized != msg_content:
+            if updated is None:
+                updated = [dict(m) for m in messages]
+            updated[idx]["content"] = normalized
+
+    return updated if updated is not None else messages
+
+
 def snip_history(
     provider: Any,
     spec: Any,

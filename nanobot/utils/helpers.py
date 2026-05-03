@@ -13,6 +13,9 @@ from typing import Any
 import tiktoken
 from loguru import logger
 
+# Cached tiktoken encoder — creation is expensive (~50-100ms)
+_cached_encoder = tiktoken.get_encoding("cl100k_base")
+
 
 def strip_think(text: str) -> str:
     """Remove thinking blocks, unclosed trailing tags, and tokenizer-level
@@ -334,7 +337,6 @@ def estimate_prompt_tokens(
     reasoning_content, tool_call_id, name, plus per-message framing overhead.
     """
     try:
-        enc = tiktoken.get_encoding("cl100k_base")
         parts: list[str] = []
         for msg in messages:
             content = msg.get("content")
@@ -364,7 +366,7 @@ def estimate_prompt_tokens(
             parts.append(json.dumps(tools, ensure_ascii=False))
 
         per_message_overhead = len(messages) * 4
-        return len(enc.encode("\n".join(parts))) + per_message_overhead
+        return len(_cached_encoder.encode("\n".join(parts))) + per_message_overhead
     except Exception:
         return 0
 
@@ -401,7 +403,7 @@ def estimate_message_tokens(message: dict[str, Any]) -> int:
     if not payload:
         return 4
     try:
-        enc = tiktoken.get_encoding("cl100k_base")
+        enc = _cached_encoder
         return max(4, len(enc.encode(payload)) + 4)
     except Exception:
         return max(4, len(payload) // 4 + 4)

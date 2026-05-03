@@ -57,6 +57,7 @@ from .runner_context import (
     backfill_missing_tool_results,
     microcompact,
     apply_tool_result_budget,
+    apply_microcompact_and_budget,
     snip_history,
 )
 from .runner_injection import drain_injections, append_injected_messages
@@ -215,8 +216,7 @@ class AgentRunner:
             try:
                 messages_for_model = drop_orphan_tool_results(messages)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
-                messages_for_model = microcompact(messages_for_model)
-                messages_for_model = apply_tool_result_budget(spec, messages_for_model, _normalize)
+                messages_for_model = apply_microcompact_and_budget(spec, messages_for_model, _normalize)
                 messages_for_model = snip_history(self.provider, spec, messages_for_model)
                 messages_for_model = drop_orphan_tool_results(messages_for_model)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)

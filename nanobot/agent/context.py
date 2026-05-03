@@ -12,6 +12,9 @@ from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.helpers import build_assistant_message, current_time_str, detect_image_mime, truncate_text
 from nanobot.utils.prompt_templates import render_template
 
+# Module-level cache for template file contents (path -> (mtime, content))
+_template_content_cache: dict[str, tuple[float, str]] = {}
+
 
 class ContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
@@ -27,6 +30,7 @@ class ContextBuilder:
         self.timezone = timezone
         self.memory = MemoryStore(workspace, db=db)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
+        self._bootstrap_cache: dict[str, tuple[float, str]] = {}
 
 
     def build_system_prompt(
@@ -214,14 +218,26 @@ class ContextBuilder:
         return _to_blocks(left) + _to_blocks(right)
 
     def _load_bootstrap_files(self) -> str:
-        """Load all bootstrap files from workspace."""
+        """Load all bootstrap files from workspace (cached by file mtime)."""
         parts = []
 
         for filename in self.BOOTSTRAP_FILES:
             file_path = self.workspace / filename
-            if file_path.exists():
+            if not file_path.exists():
+                continue
+
+            try:
+                mtime = file_path.stat().st_mtime
+            except OSError:
+                continue
+
+            cached = self._bootstrap_cache.get(filename)
+            if cached is None or cached[0] != mtime:
                 content = file_path.read_text(encoding="utf-8")
-                parts.append(f"## {filename}\n\n{content}")
+                self._bootstrap_cache[filename] = (mtime, content)
+                cached = (mtime, content)
+
+            parts.append(f"## {filename}\n\n{cached[1]}")
 
         return "\n\n".join(parts) if parts else ""
 
@@ -230,11 +246,16 @@ class ContextBuilder:
         """Check if *content* is identical to the bundled template (user hasn't customized it)."""
         try:
             tpl = pkg_files("nanobot") / "templates" / template_path
-            if tpl.is_file():
-                return content.strip() == tpl.read_text(encoding="utf-8").strip()
+            if not tpl.is_file():
+                return False
+            mtime = tpl.stat().st_mtime
+            cached = _template_content_cache.get(template_path)
+            if cached is None or cached[0] != mtime:
+                _template_content_cache[template_path] = (mtime, tpl.read_text(encoding="utf-8"))
+                cached = _template_content_cache[template_path]
+            return content.strip() == cached[1].strip()
         except Exception:
-            pass
-        return False
+            return False
 
     def build_messages(
         self,

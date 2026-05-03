@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import re
 from datetime import datetime
@@ -55,12 +56,14 @@ class MemoryStore:
         self.user_file = workspace / "USER.md"
         self._cursor_file = self.memory_dir / ".cursor"
         self._dream_cursor_file = self.memory_dir / ".dream_cursor"
+        self._cached_cursor: int | None = None
         self._corruption_logged = False
         self._oversize_logged = False
         self._git = GitStore(workspace, tracked_files=[
             "SOUL.md", "USER.md", "memory/MEMORY.md",
         ])
         self._maybe_migrate_legacy_history()
+        atexit.register(self.flush_cursor)
 
     @property
     def git(self) -> GitStore:
@@ -241,7 +244,6 @@ class MemoryStore:
         record = {"cursor": cursor, "timestamp": ts, "content": content}
         with open(self.history_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        self._cursor_file.write_text(str(cursor), encoding="utf-8")
         return cursor
 
     @staticmethod
@@ -272,16 +274,24 @@ class MemoryStore:
     def _next_cursor(self) -> int:
         if self._db is not None:
             return self._db.get_cursor() + 1
+        if self._cached_cursor is not None:
+            self._cached_cursor += 1
+            return self._cached_cursor
         if self._cursor_file.exists():
             try:
-                return int(self._cursor_file.read_text(encoding="utf-8").strip()) + 1
+                self._cached_cursor = int(self._cursor_file.read_text(encoding="utf-8").strip())
+                self._cached_cursor += 1
+                return self._cached_cursor
             except (ValueError, OSError):
                 pass
         last = self._read_last_entry() or {}
         cursor = self._valid_cursor(last.get("cursor"))
         if cursor is not None:
-            return cursor + 1
-        return max((c for _, c in self._iter_valid_entries()), default=0) + 1
+            self._cached_cursor = cursor + 1
+            return self._cached_cursor
+        entries = list(self._iter_valid_entries())
+        self._cached_cursor = max((c for _, c in entries), default=0) + 1
+        return self._cached_cursor
 
     def read_unprocessed_history(self, since_cursor: int) -> list[dict[str, Any]]:
         if self._db is not None:
@@ -299,6 +309,13 @@ class MemoryStore:
             return
         kept = entries[-self.max_history_entries:]
         self._write_entries(kept)
+        self.flush_cursor()
+
+    def flush_cursor(self) -> None:
+        """Write cached cursor to disk; safe to call multiple times."""
+        if self._db is not None or self._cached_cursor is None:
+            return
+        self._cursor_file.write_text(str(self._cached_cursor), encoding="utf-8")
 
     def _read_entries(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []

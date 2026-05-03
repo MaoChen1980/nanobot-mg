@@ -32,6 +32,7 @@ class SkillsLoader:
         self.workspace_skills = workspace / "skills"
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
         self.disabled_skills = disabled_skills or set()
+        self._skill_cache: dict[str, tuple[float, str, str]] = {}
 
     def _skill_entries_from_dir(self, base: Path, source: str, *, skip_names: set[str] | None = None) -> list[dict[str, str]]:
         if not base.exists():
@@ -75,7 +76,7 @@ class SkillsLoader:
 
     def load_skill(self, name: str) -> str | None:
         """
-        Load a skill by name.
+        Load a skill by name (cached by file mtime).
 
         Args:
             name: Skill name (directory name).
@@ -83,14 +84,28 @@ class SkillsLoader:
         Returns:
             Skill content or None if not found.
         """
+        cached = self._skill_cache.get(name)
+        if cached is not None:
+            try:
+                path = Path(cached[1])  # stored as str for pickling compatibility
+                if path.exists() and path.stat().st_mtime == cached[0]:
+                    return cached[2]
+            except OSError:
+                pass
+
         roots = [self.workspace_skills]
         if self.builtin_skills:
             roots.append(self.builtin_skills)
         for root in roots:
             path = root / name / "SKILL.md"
             if path.exists():
-                #logger.info(f"[SKILL] Loaded: {name} from {path}")
-                return path.read_text(encoding="utf-8")
+                try:
+                    mtime = path.stat().st_mtime
+                    content = path.read_text(encoding="utf-8")
+                    self._skill_cache[name] = (mtime, str(path), content)
+                    return content
+                except OSError:
+                    pass
         logger.warning(f"[SKILL] Not found: {name}")
         return None
 
