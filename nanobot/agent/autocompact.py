@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Coroutine
 
 from loguru import logger
@@ -30,11 +30,23 @@ class AutoCompact:
             return False
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
-        return ((now or datetime.now()) - ts).total_seconds() >= self._ttl * 60
+        if ts.tzinfo is None:
+            ts = ts.astimezone(timezone.utc)
+        if now is None:
+            now = datetime.now(timezone.utc)
+        elif now.tzinfo is None:
+            now = now.astimezone(timezone.utc)
+        return (now - ts).total_seconds() >= self._ttl * 60
 
     @staticmethod
     def _format_summary(text: str, last_active: datetime) -> str:
-        idle_min = int((datetime.now() - last_active).total_seconds() / 60)
+        if last_active.tzinfo is None:
+            last_active = last_active.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc).tzinfo is None:
+            now = datetime.now(timezone.utc).replace(tzinfo=timezone.utc)
+        else:
+            now = datetime.now(timezone.utc)
+        idle_min = int((now - last_active).total_seconds() / 60)
         return f"Inactive for {idle_min} minutes.\nPrevious conversation summary: {text}"
 
     def _split_unconsolidated(
@@ -61,7 +73,7 @@ class AutoCompact:
     def check_expired(self, schedule_background: Callable[[Coroutine], None],
                       active_session_keys: Collection[str] = ()) -> None:
         """Schedule archival for idle sessions, skipping those with in-flight agent tasks."""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         for info in self.sessions.list_sessions():
             key = info.get("key", "")
             if not key or key in self._archiving:
@@ -78,7 +90,7 @@ class AutoCompact:
             session = self.sessions.get_or_create(key)
             archive_msgs, kept_msgs = self._split_unconsolidated(session)
             if not archive_msgs and not kept_msgs:
-                session.updated_at = datetime.now()
+                session.updated_at = datetime.now(timezone.utc)
                 self.sessions.save(session)
                 return
 
@@ -91,7 +103,7 @@ class AutoCompact:
                 session.metadata["_last_summary"] = {"text": summary, "last_active": last_active.isoformat()}
             session.messages = kept_msgs
             session.last_consolidated = 0
-            session.updated_at = datetime.now()
+            session.updated_at = datetime.now(timezone.utc)
             self.sessions.save(session)
             if archive_msgs:
                 logger.info(

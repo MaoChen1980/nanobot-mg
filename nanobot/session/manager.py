@@ -63,7 +63,7 @@ class Session:
             **kwargs
         }
         self.messages.append(msg)
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now(timezone.utc)
 
     def get_history(
         self,
@@ -154,7 +154,7 @@ class Session:
         """Clear all messages and reset session to initial state."""
         self.messages = []
         self.last_consolidated = 0
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now(timezone.utc)
 
     def retain_recent_legal_suffix(self, max_messages: int) -> None:
         """Keep a legal recent suffix constrained by a hard message cap."""
@@ -196,7 +196,7 @@ class Session:
         dropped = len(self.messages) - len(retained)
         self.messages = retained
         self.last_consolidated = max(0, self.last_consolidated - dropped)
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now(timezone.utc)
 
     def enforce_file_cap(
         self,
@@ -370,8 +370,8 @@ class SessionManager:
             return Session(
                 key=key,
                 messages=messages,
-                created_at=created_at or datetime.now(),
-                updated_at=updated_at or datetime.now(),
+                created_at=created_at or datetime.now(timezone.utc),
+                updated_at=updated_at or datetime.now(timezone.utc),
                 metadata=metadata,
                 last_consolidated=last_consolidated
             )
@@ -435,8 +435,8 @@ class SessionManager:
             return Session(
                 key=key,
                 messages=messages,
-                created_at=created_at or datetime.now(),
-                updated_at=updated_at or datetime.now(),
+                created_at=created_at or datetime.now(timezone.utc),
+                updated_at=updated_at or datetime.now(timezone.utc),
                 metadata=metadata,
                 last_consolidated=last_consolidated
             )
