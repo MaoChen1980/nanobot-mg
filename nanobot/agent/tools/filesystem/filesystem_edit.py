@@ -5,8 +5,7 @@ from typing import Any
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import BooleanSchema, IntegerSchema, StringSchema, tool_parameters_schema
-from nanobot.agent.tools.filesystem_base import _FsTool
-from nanobot.agent.tools.filesystem_write import _normalize_quotes, _preserve_quote_style, _reindent_like_match
+from .filesystem_base import _FsTool, _normalize_quotes, _preserve_quote_style, _reindent_like_match
 from nanobot.agent.tools import file_state
 
 @dataclass(slots=True)

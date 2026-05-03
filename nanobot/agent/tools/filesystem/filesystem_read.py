@@ -5,7 +5,7 @@ from typing import Any
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import IntegerSchema, StringSchema, tool_parameters_schema
-from nanobot.agent.tools.filesystem_base import _FsTool, _is_blocked_device, _parse_page_range
+from .filesystem_base import _FsTool, _is_blocked_device, _parse_page_range
 from nanobot.agent.tools import file_state
 from nanobot.utils.helpers import build_image_content_blocks, detect_image_mime
 

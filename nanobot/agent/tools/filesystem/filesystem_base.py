@@ -106,3 +106,93 @@ def _parse_page_range(pages: str, total: int) -> tuple[int, int]:
     return max(0, start - 1), min(end - 1, total - 1)
 
 
+# ---------------------------------------------------------------------------
+# Edit helpers (shared between filesystem_write.py and filesystem_edit.py)
+# ---------------------------------------------------------------------------
+
+_QUOTE_TABLE = str.maketrans({
+    "'": "'", "’": "'",  # curly single → straight
+    '"': '"', '"': '"',  # curly double → straight
+})
+
+
+def _normalize_quotes(s: str) -> str:
+    return s.translate(_QUOTE_TABLE)
+
+
+def _curly_double_quotes(text: str) -> str:
+    parts: list[str] = []
+    opening = True
+    for ch in text:
+        if ch == '"':
+            parts.append("'" if opening else '"')
+            opening = not opening
+        else:
+            parts.append(ch)
+    return "".join(parts)
+
+
+def _curly_single_quotes(text: str) -> str:
+    parts: list[str] = []
+    opening = True
+    for i, ch in enumerate(text):
+        if ch != "'":
+            parts.append(ch)
+            continue
+        prev_ch = text[i - 1] if i > 0 else ""
+        next_ch = text[i + 1] if i + 1 < len(text) else ""
+        if prev_ch.isalnum() and next_ch.isalnum():
+            parts.append("'")
+            continue
+        parts.append("'" if opening else "'")
+        opening = not opening
+    return "".join(parts)
+
+
+def _preserve_quote_style(old_text: str, actual_text: str, new_text: str) -> str:
+    """Preserve curly quote style when a quote-normalized fallback matched."""
+    if _normalize_quotes(old_text.strip()) != _normalize_quotes(actual_text.strip()) or old_text == actual_text:
+        return new_text
+    styled = new_text
+    if any(ch in actual_text for ch in ("'", '"')) and '"' in styled:
+        styled = _curly_double_quotes(styled)
+    if any(ch in actual_text for ch in ("'", "'")) and "'" in styled:
+        styled = _curly_single_quotes(styled)
+    return styled
+
+
+def _leading_ws(line: str) -> str:
+    return line[: len(line) - len(line.lstrip(" \t"))]
+
+
+def _reindent_like_match(old_text: str, actual_text: str, new_text: str) -> str:
+    """Preserve the outer indentation from the actual matched block."""
+    old_lines = old_text.split("\n")
+    actual_lines = actual_text.split("\n")
+    if len(old_lines) != len(actual_lines):
+        return new_text
+    comparable = [
+        (old_line, actual_line)
+        for old_line, actual_line in zip(old_lines, actual_lines)
+        if old_line.strip() and actual_line.strip()
+    ]
+    if not comparable or any(
+        _normalize_quotes(old_line.strip()) != _normalize_quotes(actual_line.strip())
+        for old_line, actual_line in comparable
+    ):
+        return new_text
+    old_ws = _leading_ws(comparable[0][0])
+    actual_ws = _leading_ws(comparable[0][1])
+    if actual_ws == old_ws:
+        return new_text
+    if old_ws:
+        if not actual_ws.startswith(old_ws):
+            return new_text
+        delta = actual_ws[len(old_ws):]
+    else:
+        delta = actual_ws
+    if not delta:
+        return new_text
+    return "\n".join((delta + line) if line else line for line in new_text.split("\n"))
+
+

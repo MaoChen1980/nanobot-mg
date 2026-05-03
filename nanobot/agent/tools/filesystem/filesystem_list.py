@@ -3,7 +3,7 @@ from typing import Any
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import BooleanSchema, IntegerSchema, StringSchema, tool_parameters_schema
-from nanobot.agent.tools.filesystem_base import _FsTool
+from .filesystem_base import _FsTool
 
 @tool_parameters(
     tool_parameters_schema(
