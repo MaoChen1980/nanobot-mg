@@ -200,11 +200,25 @@ class ProxyManager:
 
     def _restart_proxy(self, proxy: ProxyInfo) -> None:
         """Restart a dead proxy."""
-        try:
-            proxy.process.terminate()
-            proxy.process.wait(timeout=3)
-        except Exception:
-            pass
+        import platform
+        old_process = proxy.process
+        pid = old_process.pid
+
+        # Force-kill on Windows since terminate/wait is unreliable
+        if platform.system() == "Windows":
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                )
+            except Exception:
+                pass
+        else:
+            try:
+                old_process.terminate()
+                old_process.wait(timeout=3)
+            except Exception:
+                pass
 
         cmd = [
             sys.executable, "-m", f"nanobot.proxy.channels.{proxy.channel}",

@@ -105,6 +105,7 @@ async def _handle_heartbeat(request: web.Request) -> web.Response:
         return web.json_response({"error": "invalid json"}, status=400)
 
     manager.heartbeat(body)
+    logger.debug("Heartbeat received for {}:{}", body.get("channel"), body.get("bot"))
     return web.json_response({"success": True})
 
 

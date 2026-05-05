@@ -54,8 +54,8 @@ def _send_heartbeat(hub_url: str, channel: str, bot: str) -> None:
             json={"channel": channel, "bot": bot},
             timeout=5,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Heartbeat to Hub failed: {}", e)
 
 
 def _send_message(hub_url: str, msg: dict[str, Any]) -> dict[str, Any]:
@@ -279,9 +279,13 @@ def main() -> None:
     # Start heartbeat thread - first heartbeat fires immediately after registration
     def heartbeat_loop():
         _send_heartbeat(hub_url, channel, bot)  # immediate first heartbeat
+        hb_count = 0
         while True:
             time.sleep(20)
+            hb_count += 1
             _send_heartbeat(hub_url, channel, bot)
+            if hb_count % 10 == 0:
+                logger.info("Heartbeat #{} sent for {}:{}", hb_count, channel, bot)
 
     hb_thread = threading.Thread(target=heartbeat_loop, daemon=True)
     hb_thread.start()
