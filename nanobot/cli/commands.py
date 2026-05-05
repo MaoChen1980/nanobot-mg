@@ -559,7 +559,7 @@ def serve(
         )
     console.print()
 
-    api_app = create_app(agent_loop, model_name=model_name, request_timeout=timeout)
+    api_app = create_app(agent_loop, model_name=model_name, request_timeout=timeout, api_port=port)
 
     async def on_startup(_app):
         await agent_loop._connect_mcp()
@@ -571,6 +571,44 @@ def serve(
     api_app.on_cleanup.append(on_cleanup)
 
     web.run_app(api_app, host=host, port=port, print=lambda msg: logger.info(msg))
+
+
+def _spawn_proxy_processes(config: Config, proxy_manager: Any, port: int) -> None:
+    """
+    Spawn proxy processes for channels that support out-of-process mode.
+    Currently only feishu with multi-bot config uses proxy mode.
+    """
+    feishu_section = getattr(config.channels, "feishu", None)
+    if feishu_section is None:
+        return
+
+    # Check if feishu section is dict-like or Pydantic model
+    bots = []
+    extra = {}
+    if isinstance(feishu_section, dict):
+        bots = feishu_section.get("bots", [])
+    else:
+        extra = getattr(feishu_section, "__pydantic_extra__", None) or {}
+        bots = extra.get("bots", [])
+
+    if not bots:
+        return
+
+    for bot_item in bots:
+        if isinstance(bot_item, dict):
+            bot_name = bot_item.get("name")
+            # Merge base config + extra fields + bot-specific fields
+            base = dict(feishu_section) if not isinstance(feishu_section, dict) else {}
+            base.update(extra)
+            bot_config = {**base, **bot_item}
+        else:
+            bot_name = str(bot_item)
+            bot_config = dict(feishu_section) if isinstance(feishu_section, dict) else {}
+
+        if bot_name:
+            proxy_manager.spawn("feishu", bot_name, bot_config)
+
+    console.print(f"[green]✓[/green] Spawned {len(bots)} feishu proxy(s)")
 
 
 # ============================================================================
@@ -786,6 +824,12 @@ def _run_gateway(
     # can serve the embedded webui's REST surface).
     channels = ChannelManager(config, bus, session_manager=session_manager)
 
+    # Spawn proxy processes for channels configured to run out-of-process
+    from nanobot.proxy.manager import ProxyManager
+    proxy_manager = ProxyManager(f"http://127.0.0.1:{port}")
+    _spawn_proxy_processes(config, proxy_manager, port)
+    api_runner = None  # set by _run_api_server
+
     hb_cfg = config.gateway.heartbeat
     heartbeat = HeartbeatService(
         agent_loop=agent,
@@ -804,48 +848,19 @@ def _run_gateway(
 
     console.print(f"[green]✓[/green] Heartbeat: every {hb_cfg.interval_s}s")
 
-    async def _health_server(host: str, health_port: int):
-        """Lightweight HTTP health endpoint on the gateway port."""
-        import json as _json
+    async def _run_api_server(host: str, api_port: int):
+        """Run the aiohttp API server (with proxy routes) on the gateway port."""
+        nonlocal api_runner
+        from aiohttp import web
+        from nanobot.api.server import create_app as make_api_app
 
-        async def handle(reader, writer):
-            try:
-                data = await asyncio.wait_for(reader.read(4096), timeout=5)
-            except (asyncio.TimeoutError, ConnectionError):
-                writer.close()
-                return
+        api_app = make_api_app(agent, model_name=provider_snapshot.model, request_timeout=120.0, api_port=api_port)
 
-            request_line = data.split(b"\r\n", 1)[0].decode("utf-8", errors="replace")
-            method, path = "", ""
-            parts = request_line.split(" ")
-            if len(parts) >= 2:
-                method, path = parts[0], parts[1]
-
-            if method == "GET" and path == "/health":
-                body = _json.dumps({"status": "ok"})
-                resp = (
-                    f"HTTP/1.0 200 OK\r\n"
-                    f"Content-Type: application/json\r\n"
-                    f"Content-Length: {len(body)}\r\n"
-                    f"\r\n{body}"
-                )
-            else:
-                body = "Not Found"
-                resp = (
-                    f"HTTP/1.0 404 Not Found\r\n"
-                    f"Content-Type: text/plain\r\n"
-                    f"Content-Length: {len(body)}\r\n"
-                    f"\r\n{body}"
-                )
-
-            writer.write(resp.encode())
-            await writer.drain()
-            writer.close()
-
-        server = await asyncio.start_server(handle, host, health_port)
-        console.print(f"[green]✓[/green] Health endpoint: http://{host}:{health_port}/health")
-        async with server:
-            await server.serve_forever()
+        api_runner = web.AppRunner(api_app, shutdown_timeout=0)
+        await api_runner.setup()
+        site = web.TCPSite(api_runner, host, api_port)
+        await site.start()
+        console.print(f"[green]✓[/green] API+Proxy server: http://{host}:{api_port}")
     # Register Dream system job (always-on, idempotent on restart)
     dream_cfg = config.agents.defaults.dream
     if dream_cfg.model_override:
@@ -894,7 +909,8 @@ def _run_gateway(
             tasks = [
                 agent.run(),
                 channels.start_all(),
-                _health_server(config.gateway.host, port),
+                proxy_manager.start_monitoring(),  # type: ignore[operator]
+                _run_api_server(config.gateway.host, port),
             ]
             if open_browser_url:
                 tasks.append(_open_browser_when_ready())
@@ -911,6 +927,9 @@ def _run_gateway(
             heartbeat.stop()
             cron.stop()
             agent.stop()
+            await proxy_manager.stop()
+            if api_runner is not None:
+                await api_runner.cleanup()
             await channels.stop_all()
             # Flush all cached sessions to durable storage before exit.
             # This prevents data loss on filesystems with write-back

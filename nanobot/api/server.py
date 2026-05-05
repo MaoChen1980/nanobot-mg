@@ -359,7 +359,7 @@ async def handle_health(request: web.Request) -> web.Response:
 
 
 def create_app(
-    agent_loop, model_name: str = "nanobot", request_timeout: float = 120.0
+    agent_loop, model_name: str = "nanobot", request_timeout: float = 120.0, api_port: int = 8900
 ) -> web.Application:
     """Create the aiohttp application.
 
@@ -367,14 +367,23 @@ def create_app(
         agent_loop: An initialized AgentLoop instance.
         model_name: Model name reported in responses.
         request_timeout: Per-request timeout in seconds.
+        api_port: Port for proxy manager to connect back to hub.
     """
     app = web.Application(client_max_size=20 * 1024 * 1024)  # 20MB for base64 images
     app["agent_loop"] = agent_loop
     app["model_name"] = model_name
     app["request_timeout"] = request_timeout
     app["session_locks"] = {}  # per-user locks, keyed by session_key
+    app["api_port"] = api_port
 
     app.router.add_post("/v1/chat/completions", handle_chat_completions)
     app.router.add_get("/v1/models", handle_models)
     app.router.add_get("/health", handle_health)
+
+    # Proxy API routes (hub <-> proxy communication)
+    from nanobot.proxy.hub import setup_proxy_routes
+    from nanobot.proxy.manager import ProxyManager
+    proxy_manager = ProxyManager(f"http://127.0.0.1:{api_port}")
+    setup_proxy_routes(app, agent_loop, proxy_manager)
+
     return app

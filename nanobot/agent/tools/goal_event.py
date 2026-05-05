@@ -31,6 +31,7 @@ class WriteGoalSchema(Schema):
                 enum=["in_progress", "completed", "paused", "archived"],
             ),
             "project": StringSchema(description="Project name this goal belongs to"),
+            "bot": StringSchema(description="Bot name this goal belongs to"),
             "description": StringSchema(description="Goal description"),
             "subtasks": ArraySchema(
                 items=ObjectSchema(
@@ -81,6 +82,7 @@ class WriteGoal(Tool):
         action: str,
         status: str | None = None,
         project: str | None = None,
+        bot: str | None = None,
         description: str = "",
         subtasks: list[dict[str, str]] | None = None,
         scopes: list[str] | None = None,
@@ -114,6 +116,7 @@ class WriteGoal(Tool):
                 title=title,
                 status=status or "in_progress",
                 project=project,
+                bot=bot,
                 description=description,
                 data=data,
                 updated_at=ts,
@@ -139,6 +142,7 @@ class ListGoalsSchema(Schema):
             ),
             "project": StringSchema(description="Filter by project"),
             "scope": StringSchema(description="Filter by scope (e.g. 'memory', 'agent/loop')"),
+            "bot": StringSchema(description="Filter by bot name"),
             "limit": NumberSchema(description="Max results (integer)", minimum=1, maximum=100),
         },
     )
@@ -167,11 +171,12 @@ class ListGoals(Tool):
         status: str | None = None,
         project: str | None = None,
         scope: str | None = None,
+        bot: str | None = None,
         limit: int = 20,
     ) -> str:
         if self._memory._db is None:
             return "DB not available"
-        goals = self._memory._db.list_goals(status=status, project=project, scope=scope)
+        goals = self._memory._db.list_goals(status=status, project=project, scope=scope, bot=bot)
         if not goals:
             return "No goals found."
         lines = []

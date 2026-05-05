@@ -76,26 +76,83 @@ class ChannelManager:
             )
             if not enabled:
                 continue
-            try:
-                kwargs: dict[str, Any] = {}
-                # Only the WebSocket channel currently hosts the embedded webui
-                # surface; other channels stay oblivious to these knobs.
-                if cls.name == "websocket" and self._session_manager is not None:
-                    kwargs["session_manager"] = self._session_manager
-                    static_path = _default_webui_dist()
-                    if static_path is not None:
-                        kwargs["static_dist_path"] = static_path
-                channel = cls(section, self.bus, **kwargs)
-                channel.transcription_provider = transcription_provider
-                channel.transcription_api_key = transcription_key
-                channel.transcription_api_base = transcription_base
-                channel.transcription_language = transcription_language
-                self.channels[name] = channel
-                logger.info("{} channel enabled", cls.display_name)
-            except Exception as e:
-                logger.warning("{} channel not available: {}", name, e)
+
+            # Support both single bot (legacy) and multi-bot (bots list) configs
+            bots = []
+            extra = {}
+            if isinstance(section, dict):
+                bots = section.get("bots", [])
+                logger.debug("Channel {}: section is dict, bots={}", name, bots)
+            else:
+                # Pydantic model - check __pydantic_extra__ for extra fields like 'bots'
+                extra = getattr(section, "__pydantic_extra__", None) or {}
+                if "bots" in extra:
+                    bots = extra["bots"]
+                logger.debug("Channel {}: section is model, bots={}", name, bots)
+            if bots:
+                # Multi-bot mode: proxy processes handle these, skip in-process.
+                logger.debug("Channel {}: multi-bot config detected ({} bots), skipping in-process", name, len(bots))
+                continue
+                # Multi-bot mode: create one instance per bot
+                for bot_item in bots:
+                    if isinstance(bot_item, dict):
+                        bot_name = bot_item.get("name")
+                        # Merge model fields + extra fields + bot_item
+                        section_dict = section.model_dump() if hasattr(section, 'model_dump') else dict(section)
+                        section_dict.update(extra)
+                        bot_section = {**section_dict, **bot_item}
+                    else:
+                        bot_name = str(bot_item)
+                        bot_section = section
+                    self._create_channel(
+                        cls, bot_section, name, bot_name,
+                        transcription_provider, transcription_key, transcription_base, transcription_language,
+                    )
+            else:
+                # Legacy single-bot mode
+                self._create_channel(
+                    cls, section, name, None,
+                    transcription_provider, transcription_key, transcription_base, transcription_language,
+                )
 
         self._validate_allow_from()
+        logger.info("ChannelManager initialized with channels: {}", list(self.channels.keys()))
+
+    def _create_channel(
+        self,
+        cls: type,
+        section: Any,
+        name: str,
+        bot_name: str | None,
+        transcription_provider: str,
+        transcription_key: str,
+        transcription_base: str,
+        transcription_language: str | None,
+    ) -> None:
+        """Create and register a single channel instance."""
+        try:
+            kwargs: dict[str, Any] = {}
+            if bot_name:
+                kwargs["bot_name"] = bot_name
+            if cls.name == "websocket" and self._session_manager is not None:
+                kwargs["session_manager"] = self._session_manager
+                static_path = _default_webui_dist()
+                if static_path is not None:
+                    kwargs["static_dist_path"] = static_path
+            channel = cls(section, self.bus, **kwargs)
+            channel.transcription_provider = transcription_provider
+            channel.transcription_api_key = transcription_key
+            channel.transcription_api_base = transcription_base
+            channel.transcription_language = transcription_language
+
+            # Use bot-qualified name if multi-bot, otherwise just channel name
+            channel_key = f"{name}:{bot_name}" if bot_name else name
+            self.channels[channel_key] = channel
+
+            bot_label = f" ({bot_name})" if bot_name else ""
+            logger.info("{} channel enabled{} (key={})", cls.display_name, bot_label, channel_key)
+        except Exception as e:
+            logger.warning("{} channel not available: {} - {}", name, type(e).__name__, e)
 
     def _resolve_transcription_key(self, provider: str) -> str:
         """Pick the API key for the configured transcription provider."""

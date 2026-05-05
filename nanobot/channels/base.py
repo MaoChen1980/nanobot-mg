@@ -27,17 +27,21 @@ class BaseChannel(ABC):
     transcription_api_base: str = ""
     transcription_language: str | None = None
 
-    def __init__(self, config: Any, bus: MessageBus):
+    def __init__(self, config: Any, bus: MessageBus, *, bot_name: str | None = None):
         """
         Initialize the channel.
 
         Args:
             config: Channel-specific configuration.
             bus: The message bus for communication.
+            bot_name: Optional bot name for multi-bot channels. If provided,
+                     the channel name becomes "channel_type:bot_name" for routing.
         """
         self.config = config
         self.bus = bus
         self._running = False
+        if bot_name:
+            self.name = f"{self.__class__.name}:{bot_name}"
 
     async def transcribe_audio(self, file_path: str | Path) -> str:
         """Transcribe an audio file via Whisper (OpenAI or Groq). Returns empty string on failure."""

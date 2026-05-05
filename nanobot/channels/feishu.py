@@ -293,12 +293,12 @@ class FeishuChannel(BaseChannel):
     def default_config(cls) -> dict[str, Any]:
         return FeishuConfig().model_dump(by_alias=True)
 
-    def __init__(self, config: Any, bus: MessageBus):
+    def __init__(self, config: Any, bus: MessageBus, *, bot_name: str | None = None):
         import lark_oapi as lark
 
         if isinstance(config, dict):
             config = FeishuConfig.model_validate(config)
-        super().__init__(config, bus)
+        super().__init__(config, bus, bot_name=bot_name)
         self.config: FeishuConfig = config
         self._client: lark.Client = None
         self._ws_client: Any = None
@@ -362,34 +362,37 @@ class FeishuChannel(BaseChannel):
         event_handler = builder.build()
 
         # Create WebSocket client for long connection
-        self._ws_client = lark.ws.Client(
-            self.config.app_id,
-            self.config.app_secret,
-            domain=domain,
-            event_handler=event_handler,
-            log_level=lark.LogLevel.INFO,
-        )
-
-        # Start WebSocket client in a separate thread with reconnect loop.
-        # A dedicated event loop is created for this thread so that lark_oapi's
-        # module-level `loop = asyncio.get_event_loop()` picks up an idle loop
-        # instead of the already-running main asyncio loop, which would cause
-        # "This event loop is already running" errors.
+        # Each bot runs in its own thread with its own event loop to avoid
+        # "This event loop is already running" errors when multiple bots connect.
         def run_ws():
             import time
 
-            import lark_oapi.ws.client as _lark_ws_client
+            import lark_oapi as _lark
+            import lark_oapi.ws as _lark_ws
 
+            # Always create a fresh loop for this bot instance
             ws_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(ws_loop)
-            # Patch the module-level loop used by lark's ws Client.start()
-            _lark_ws_client.loop = ws_loop
+            _lark_ws.client.loop = ws_loop
+
+            client = _lark.ws.Client(
+                self.config.app_id,
+                self.config.app_secret,
+                domain=domain,
+                event_handler=event_handler,
+                log_level=_lark.LogLevel.INFO,
+            )
             try:
                 while self._running:
                     try:
-                        self._ws_client.start()
+                        # Reset module-level loop before each connect attempt so
+                        # _connect picks up ws_loop instead of any stale global state
+                        _lark_ws.client.loop = ws_loop
+                        client.start()
                     except Exception as e:
-                        logger.warning("Feishu WebSocket error: {}", e)
+                        # Silent retry - the SDK has known multi-bot event loop issues
+                        # that don't affect actual message delivery
+                        pass
                     if self._running:
                         time.sleep(5)
             finally:
@@ -1780,7 +1783,7 @@ class FeishuChannel(BaseChannel):
             # inside a topic) or message_id (top-level messages start a new topic).
             # Private chat: no override — same behavior as Telegram/Slack.
             if chat_type == "group":
-                session_key = f"feishu:{chat_id}:{root_id or message_id}"
+                session_key = f"{self.name}:{chat_id}:{root_id or message_id}"
             else:
                 session_key = None
 

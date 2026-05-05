@@ -50,6 +50,7 @@ class NanobotDB:
                 title TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'in_progress',
                 project TEXT,
+                bot TEXT,
                 owner TEXT DEFAULT 'llm',
                 description TEXT DEFAULT '',
                 data TEXT NOT NULL DEFAULT '{}',
@@ -160,8 +161,10 @@ class NanobotDB:
             self._migrate_sessions()
         if "utc_timestamps" not in done:
             self._migrate_timestamps_to_utc()
+        if "bot_column" not in done:
+            self._migrate_add_bot_column()
 
-        new_done = done | {"history", "sessions", "utc_timestamps"}
+        new_done = done | {"history", "sessions", "utc_timestamps", "bot_column"}
         if new_done - done:
             self.set_metadata("migrated", ",".join(sorted(new_done)))
 
@@ -289,6 +292,15 @@ class NanobotDB:
                 except Exception:
                     pass
         self._conn.commit()
+
+    def _migrate_add_bot_column(self) -> None:
+        """Add bot TEXT column to goals table if it doesn't exist."""
+        try:
+            self._conn.execute("ALTER TABLE goals ADD COLUMN bot TEXT")
+            self._conn.commit()
+            logger.info("Migrated goals table: added bot column")
+        except Exception:
+            pass  # Column may already exist
 
     # --------------------------------------------------------------------------
     # Metadata
@@ -482,6 +494,7 @@ class NanobotDB:
         *,
         status: str = "in_progress",
         project: str | None = None,
+        bot: str | None = None,
         owner: str = "llm",
         description: str = "",
         data: dict[str, Any] | None = None,
@@ -491,27 +504,27 @@ class NanobotDB:
         ts = updated_at or _utc_now_iso()
         created = created_at or ts
         self._conn.execute(
-            """INSERT OR REPLACE INTO goals (id, title, status, project, owner, description, data, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (id, title, status, project, owner, description, json.dumps(data or {}), created, ts),
+            """INSERT OR REPLACE INTO goals (id, title, status, project, bot, owner, description, data, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (id, title, status, project, bot, owner, description, json.dumps(data or {}), created, ts),
         )
         self._conn.commit()
 
     def get_goal(self, id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
-            "SELECT id, title, status, project, owner, description, data, created_at, updated_at FROM goals WHERE id = ?",
+            "SELECT id, title, status, project, bot, owner, description, data, created_at, updated_at FROM goals WHERE id = ?",
             (id,),
         ).fetchone()
         if not row:
             return None
         return {
             "id": row[0], "title": row[1], "status": row[2], "project": row[3],
-            "owner": row[4], "description": row[5], "data": json.loads(row[6]),
-            "created_at": row[7], "updated_at": row[8],
+            "bot": row[4], "owner": row[5], "description": row[6], "data": json.loads(row[7]),
+            "created_at": row[8], "updated_at": row[9],
         }
 
-    def list_goals(self, status: str | None = None, project: str | None = None, scope: str | None = None) -> list[dict[str, Any]]:
-        query = "SELECT id, title, status, project, owner, description, data, created_at, updated_at FROM goals WHERE 1=1"
+    def list_goals(self, status: str | None = None, project: str | None = None, scope: str | None = None, bot: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT id, title, status, project, bot, owner, description, data, created_at, updated_at FROM goals WHERE 1=1"
         params: list[Any] = []
         if status:
             query += " AND status = ?"
@@ -519,13 +532,16 @@ class NanobotDB:
         if project:
             query += " AND project = ?"
             params.append(project)
+        if bot:
+            query += " AND bot = ?"
+            params.append(bot)
         query += " ORDER BY updated_at DESC"
         rows = self._conn.execute(query, params).fetchall()
         goals = [
             {
                 "id": r[0], "title": r[1], "status": r[2], "project": r[3],
-                "owner": r[4], "description": r[5], "data": json.loads(r[6]),
-                "created_at": r[7], "updated_at": r[8],
+                "bot": r[4], "owner": r[5], "description": r[6], "data": json.loads(r[7]),
+                "created_at": r[8], "updated_at": r[9],
             }
             for r in rows
         ]
