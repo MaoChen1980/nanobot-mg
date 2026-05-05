@@ -404,11 +404,188 @@ def _format_subagent_status(statuses: dict[str, "SubagentStatus"], running: dict
     return "\n".join(lines)
 
 
+async def cmd_goal(ctx: CommandContext) -> OutboundMessage:
+    """Execute a goal by ID: /goal <goal_id>"""
+    loop = ctx.loop
+    msg = ctx.msg
+    args = ctx.args.strip()
+
+    if not args:
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content="Usage: /goal <goal_id>\nUse /list_goals to see available goals.",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    goal_id = args.split()[0]
+
+    # Check if TaskExecutor is available
+    if not hasattr(loop, "_task_executor"):
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content="TaskExecutor not initialized. Goal execution unavailable.",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    # Get goal from DB
+    db = loop._db
+    if db is None:
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content="Database not available.",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    goal = db.get_goal(goal_id)
+    if not goal:
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content=f"Goal '{goal_id}' not found. Use /list_goals to see available goals.",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    # Execute goal via TaskExecutor
+    result = await loop._task_executor.execute_goal(
+        goal_id=goal_id,
+        goal=goal,
+        session_key=ctx.key,
+        context_window_tokens=loop.context_window_tokens,
+        context_block_limit=loop.context_block_limit,
+        provider_retry_mode=loop.provider_retry_mode,
+    )
+
+    # Format response
+    content = f"Goal '{goal_id}' execution result: {result.status}"
+    if result.message:
+        content += f"\n{result.message}"
+
+    return OutboundMessage(
+        channel=msg.channel, chat_id=msg.chat_id,
+        content=content,
+        metadata={**dict(msg.metadata or {}), "goal_id": goal_id, "goal_status": result.status},
+    )
+
+
+async def cmd_resume_goal(ctx: CommandContext) -> OutboundMessage:
+    """Resume a blocked or paused goal: /resume_goal <goal_id>"""
+    loop = ctx.loop
+    msg = ctx.msg
+    args = ctx.args.strip()
+
+    if not args:
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content="Usage: /resume_goal <goal_id>",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    goal_id = args.split()[0]
+
+    # Check if TaskExecutor is available
+    if not hasattr(loop, "_task_executor"):
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content="TaskExecutor not initialized. Goal execution unavailable.",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    # Resume goal via TaskExecutor
+    result = await loop._task_executor.resume_goal(
+        goal_id=goal_id,
+        session_key=ctx.key,
+        context_window_tokens=loop.context_window_tokens,
+        context_block_limit=loop.context_block_limit,
+        provider_retry_mode=loop.provider_retry_mode,
+    )
+
+    # Format response
+    content = f"Goal '{goal_id}' resume result: {result.status}"
+    if result.message:
+        content += f"\n{result.message}"
+
+    return OutboundMessage(
+        channel=msg.channel, chat_id=msg.chat_id,
+        content=content,
+        metadata={**dict(msg.metadata or {}), "goal_id": goal_id, "goal_status": result.status},
+    )
+
+
+async def cmd_list_goals(ctx: CommandContext) -> OutboundMessage:
+    """List goals with optional filters: /list_goals [--project=<project>] [--scope=<scope>] [--status=<status>]"""
+    loop = ctx.loop
+    msg = ctx.msg
+
+    # Parse arguments
+    args = ctx.args.strip()
+    project = None
+    scope = None
+    status = None
+
+    for part in args.split():
+        if part.startswith("--project="):
+            project = part.split("=", 1)[1]
+        elif part.startswith("--scope="):
+            scope = part.split("=", 1)[1]
+        elif part.startswith("--status="):
+            status = part.split("=", 1)[1]
+
+    # Get DB
+    db = loop._db
+    if db is None:
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content="Database not available.",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    # Query goals
+    goals = db.list_goals(status=status, project=project, scope=scope)
+
+    if not goals:
+        filters = []
+        if project:
+            filters.append(f"project={project}")
+        if scope:
+            filters.append(f"scope={scope}")
+        if status:
+            filters.append(f"status={status}")
+        filter_str = f" ({', '.join(filters)})" if filters else ""
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content=f"No goals found{filter_str}.",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    # Format output
+    lines = [f"**Goals** ({len(goals)} found)"]
+    for g in goals[:20]:  # Limit to 20
+        status_emoji = {"in_progress": "🔄", "completed": "✅", "paused": "⏸️", "blocked": "🚫", "archived": "📦"}.get(g.get("status", ""), "❓")
+        title = g.get("title", "Untitled")[:40]
+        goal_id = g.get("id", "?")
+        project_name = g.get("project", "-")
+        scopes = g.get("data", {}).get("scopes", [])
+        scopes_str = f" [{', '.join(scopes)}]" if scopes else ""
+        lines.append(f"{status_emoji} [{goal_id}] {title}")
+        lines.append(f"   project={project_name}{scopes_str}")
+
+    if len(goals) > 20:
+        lines.append(f"... and {len(goals) - 20} more")
+
+    return OutboundMessage(
+        channel=msg.channel, chat_id=msg.chat_id,
+        content="\n".join(lines),
+        metadata={**dict(msg.metadata or {}), "render_as": "text"},
+    )
+
+
 def register_builtin_commands(router: CommandRouter) -> None:
     """Register the default set of slash commands."""
     router.priority("/stop", cmd_stop)
     router.priority("/restart", cmd_restart)
     router.priority("/status", cmd_status)
+    router.exact("/goal", cmd_goal)
+    router.exact("/resume_goal", cmd_resume_goal)
+    router.exact("/list_goals", cmd_list_goals)
     router.exact("/new", cmd_new)
     router.exact("/clear", cmd_new)
     router.exact("/reset", cmd_new)

@@ -124,6 +124,26 @@ async def _run_tool(
             return lookup_error, event, RuntimeError(lookup_error)
         return lookup_error, event, None
 
+    # === StructuralConstraintVerifier: pre-execution check ===
+    # Check if goal_scope is attached to spec and verify constraints
+    goal_scope = getattr(spec, "goal_scope", None)
+    if goal_scope:
+        from nanobot.agent.verify_functions import verify_action
+        verify_result = verify_action(
+            goal_id=getattr(spec, "goal_id", "unknown"),
+            tool_name=tool_call.name,
+            arguments=tool_call.arguments,
+            goal_scope=goal_scope,
+        )
+        if not verify_result.approved:
+            event = {
+                "name": tool_call.name,
+                "status": "blocked",
+                "detail": verify_result.reason,
+            }
+            blocked_msg = f"{verify_result.reason}"
+            return blocked_msg, event, None
+
     prepare_call = getattr(spec.tools, "prepare_call", None)
     tool, params, prep_error = None, tool_call.arguments, None
     if callable(prepare_call):

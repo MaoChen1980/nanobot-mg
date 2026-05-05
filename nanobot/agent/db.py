@@ -510,7 +510,7 @@ class NanobotDB:
             "created_at": row[7], "updated_at": row[8],
         }
 
-    def list_goals(self, status: str | None = None, project: str | None = None) -> list[dict[str, Any]]:
+    def list_goals(self, status: str | None = None, project: str | None = None, scope: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT id, title, status, project, owner, description, data, created_at, updated_at FROM goals WHERE 1=1"
         params: list[Any] = []
         if status:
@@ -521,7 +521,7 @@ class NanobotDB:
             params.append(project)
         query += " ORDER BY updated_at DESC"
         rows = self._conn.execute(query, params).fetchall()
-        return [
+        goals = [
             {
                 "id": r[0], "title": r[1], "status": r[2], "project": r[3],
                 "owner": r[4], "description": r[5], "data": json.loads(r[6]),
@@ -529,6 +529,10 @@ class NanobotDB:
             }
             for r in rows
         ]
+        # Filter by scope if specified (from data.scopes array)
+        if scope:
+            goals = [g for g in goals if scope in g.get("data", {}).get("scopes", [])]
+        return goals
 
     def delete_goal(self, id: str) -> None:
         self._conn.execute("DELETE FROM goals WHERE id = ?", (id,))

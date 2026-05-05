@@ -176,6 +176,17 @@ class AgentLoop:
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
+        # TaskExecutor for goal-based execution (from task-execution-system.md)
+        from nanobot.agent.task_executor import TaskExecutor
+        self._task_executor = TaskExecutor(
+            provider=provider,
+            db=db,
+            tools=self.tools,
+            model=self.model or "sonnet",
+            max_iterations=max_iterations or 50,
+            max_tool_result_chars=max_tool_result_chars or 8000,
+            workspace=workspace,
+        )
         self._recovery = RecoveryManager(self)
         self._dispatch_manager = DispatchManager(self)
         self._system_handler = SystemMessageHandler(self)

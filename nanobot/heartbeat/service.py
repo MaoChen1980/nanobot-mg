@@ -20,12 +20,8 @@ class HeartbeatService:
     Periodic alarm clock that injects active goals (from DB) into the main
     session via the message bus.
 
-    The main session agent reads the embedded goals, decides what to do
-    (advance tasks, mark completed), and writes the updated state back to the DB
-    via write_goal / write_event tools.
-
-    This service is intentionally dumb: no LLM pre-judgment, no independent
-    task logic.  Just a timer + bus publish with embedded goal data.
+    Uses the owner's sender_id so the LLM treats these as user commands,
+    not system notifications.
     """
 
     def __init__(
@@ -33,12 +29,14 @@ class HeartbeatService:
         agent_loop: "AgentLoop",
         interval_s: int = 30 * 60,
         enabled: bool = True,
+        owner_id: str = "boss",
     ):
         self.agent_loop = agent_loop
         self.interval_s = interval_s
         self.enabled = enabled
         self._running = False
         self._task: asyncio.Task | None = None
+        self._owner_id = owner_id  # User's sender_id to impersonate (default: boss)
 
     async def start(self) -> None:
         """Start the heartbeat service."""
@@ -100,17 +98,14 @@ class HeartbeatService:
         msg = replace(
             InboundMessage(
                 channel="cli",
-                sender_id="heartbeat",
+                sender_id=self._owner_id,
                 chat_id="direct",
                 content=(
-                    f"[Heartbeat] {now_ts}\n\n"
+                    f"定时检查 {now_ts}\n\n"
                     f"{goal_block}\n\n"
-                    "Above are your active goals from DB.\n"
-                    "- Active tasks → continue, update progress via write_goal\n"
-                    "- Done → write_goal status='completed'\n"
-                    "- Blocked → write_goal with blockers note\n"
-                    "- No longer needed → write_goal status='archived'\n\n"
-                    "Use write_goal to update status, write_event to log progress."
+                    "有进展就更新一下状态，别忘了记录里程碑。\n"
+                    "有问题就说，阻塞太久不好。\n"
+                    "完成的就标记 completed。\n"
                 ),
                 media=[],
             ),
