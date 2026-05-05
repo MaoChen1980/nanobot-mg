@@ -144,7 +144,9 @@ class ContextBuilder:
             return ""
         lines = []
         for g in goals:
-            lines.append(f"- **{g['title']}**")
+            project = g.get("project", "")
+            project_str = f" [{project}]" if project else ""
+            lines.append(f"- **{g['title']}**{project_str}")
             if g.get("description"):
                 lines.append(f"  - {g['description']}")
             data = g.get("data") or {}

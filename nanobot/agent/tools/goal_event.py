@@ -99,6 +99,15 @@ class WriteGoal(Tool):
             "notes": notes or [],
             "blockers": blockers or [],
         }
+
+        # Auto-inherit project from parent goal if not specified
+        if project is None and self._memory._db is not None:
+            parent_id = self._get_parent_goal_id(id)
+            if parent_id:
+                parent = self._memory._db.get_goal(parent_id)
+                if parent and parent.get("project"):
+                    project = parent["project"]
+
         if self._memory._db is not None:
             self._memory._db.upsert_goal(
                 id=id,
@@ -109,8 +118,16 @@ class WriteGoal(Tool):
                 data=data,
                 updated_at=ts,
             )
-            return f"Goal '{id}' upserted: {title}"
+            inherited_msg = f" (inherited project={project})" if project else ""
+            return f"Goal '{id}' upserted: {title}{inherited_msg}"
         return f"DB not available, cannot upsert goal '{id}'"
+
+    def _get_parent_goal_id(self, goal_id: str) -> str | None:
+        """Get parent goal ID by stripping last segment after '.'."""
+        if '.' in goal_id:
+            parts = goal_id.rsplit('.', 1)
+            return parts[0]
+        return None
 
 
 class ListGoalsSchema(Schema):
