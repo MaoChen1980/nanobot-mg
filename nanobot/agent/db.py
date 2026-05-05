@@ -26,7 +26,7 @@ class NanobotDB:
     def __init__(self, db_path: Path | str, *, workspace: Path | str | None = None):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.db_path), timeout=30)
+        self._conn = sqlite3.connect(str(self.db_path), timeout=30, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._workspace = Path(workspace) if workspace else Path.home() / ".nanobot" / "workspace"
