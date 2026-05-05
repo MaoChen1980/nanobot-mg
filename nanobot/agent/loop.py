@@ -895,19 +895,28 @@ class AgentLoop:
         on_stream: Callable[[str], None] | None = None,
         on_stream_end: Callable[..., None] | None = None,
     ) -> OutboundMessage | None:
-        """Synchronous wrapper for process_direct, for use in thread pool."""
-        return asyncio.get_event_loop().run_until_complete(
-            self.process_direct(
-                content=content,
-                session_key=session_key,
-                channel=channel,
-                chat_id=chat_id,
-                media=media,
-                on_progress=on_progress,
-                on_stream=on_stream,
-                on_stream_end=on_stream_end,
+        """Synchronous wrapper for process_direct, for use in thread pool.
+
+        Creates a fresh event loop in the call thread to avoid conflicts
+        with the caller's event loop.
+        """
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(
+                self.process_direct(
+                    content=content,
+                    session_key=session_key,
+                    channel=channel,
+                    chat_id=chat_id,
+                    media=media,
+                    on_progress=on_progress,
+                    on_stream=on_stream,
+                    on_stream_end=on_stream_end,
+                )
             )
-        )
+        finally:
+            loop.close()
 
     async def process_direct(
         self,
