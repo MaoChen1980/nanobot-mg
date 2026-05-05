@@ -7,6 +7,8 @@ endpoints to an existing aiohttp application.
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import Any
 
 from aiohttp import web
@@ -16,11 +18,17 @@ from nanobot.agent.loop import AgentLoop
 from nanobot.proxy.manager import ProxyManager
 from nanobot.proxy.protocol import HubResponse, ProxyMessage
 
+# Thread pool for offloading proxy message processing from aiohttp event loop
+_proxy_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="proxy_msg_")
+
 
 async def _handle_message(request: web.Request) -> web.Response:
     """
     POST /api/proxy/message
     Proxy sends incoming message to hub for processing.
+
+    Processed in thread pool to avoid blocking aiohttp event loop,
+    ensuring heartbeat requests are not delayed by long LLM calls.
     """
     agent_loop: AgentLoop = request.app["agent_loop"]
     try:
@@ -41,12 +49,17 @@ async def _handle_message(request: web.Request) -> web.Response:
     )
 
     try:
-        response = await agent_loop.process_direct(
-            content=msg.content,
-            session_key=session_key,
-            channel=f"proxy:{msg.channel}:{msg.bot}",
-            chat_id=msg.chat_id,
-            media=msg.media if msg.media else None,
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            _proxy_executor,
+            partial(
+                agent_loop.process_direct_sync,
+                content=msg.content,
+                session_key=session_key,
+                channel=f"proxy:{msg.channel}:{msg.bot}",
+                chat_id=msg.chat_id,
+                media=msg.media if msg.media else None,
+            ),
         )
 
         if response is None:

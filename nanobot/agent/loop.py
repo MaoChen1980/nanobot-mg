@@ -884,6 +884,31 @@ class AgentLoop:
     def _checkpoint_message_key(self, message: dict[str, Any]) -> tuple[Any, ...]:
         return checkpoint_message_key(message)
 
+    def process_direct_sync(
+        self,
+        content: str,
+        session_key: str = "cli:direct",
+        channel: str = "cli",
+        chat_id: str = "direct",
+        media: list[str] | None = None,
+        on_progress: Callable[..., None] | None = None,
+        on_stream: Callable[[str], None] | None = None,
+        on_stream_end: Callable[..., None] | None = None,
+    ) -> OutboundMessage | None:
+        """Synchronous wrapper for process_direct, for use in thread pool."""
+        return asyncio.get_event_loop().run_until_complete(
+            self.process_direct(
+                content=content,
+                session_key=session_key,
+                channel=channel,
+                chat_id=chat_id,
+                media=media,
+                on_progress=on_progress,
+                on_stream=on_stream,
+                on_stream_end=on_stream_end,
+            )
+        )
+
     async def process_direct(
         self,
         content: str,
