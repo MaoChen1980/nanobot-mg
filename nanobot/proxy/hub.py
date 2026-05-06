@@ -56,7 +56,7 @@ async def _handle_proxy_tcp(
             msg_type = data.get("type", "")
 
             if msg_type == "ping":
-                await writer.write((json.dumps({"type": "pong"}) + "\n").encode())
+                writer.write((json.dumps({"type": "pong"}) + "\n").encode())
                 await writer.drain()
 
             elif msg_type == "register":
