@@ -426,8 +426,13 @@ class ProxyManager:
         """
         while True:
             await asyncio.sleep(15)
+
+            # Read config file once per cycle to pick up disk changes
+            disk_enabled = self._load_disk_enabled()
+
             for key, proxy in list(self._proxies.items()):
-                enabled = proxy.config.get("enabled", True)
+                ch, _ = key.split(":", 1)
+                enabled = disk_enabled.get(ch, proxy.config.get("enabled", True))
                 # Check if process exited
                 if proxy.process.poll() is not None:
                     if proxy.running:
@@ -515,6 +520,24 @@ class ProxyManager:
         proxy.running = True
         proxy.last_heartbeat = time.time()
         logger.info("Restarted proxy {} (pid={})", proxy.key, new_process.pid)
+
+    def _load_disk_enabled(self) -> dict[str, bool]:
+        """Read config file and return {channel_name: enabled} for all channels.
+
+        Lets the monitor react to config.json changes made directly on disk
+        (e.g. user toggles enabled: false while gateway is running).
+        Falls back to empty dict if config file is unreadable.
+        """
+        if not self._config_path:
+            return {}
+        import json
+        try:
+            with open(self._config_path, encoding="utf-8") as f:
+                data = json.load(f)
+            channels = data.get("channels", {})
+            return {name: ch.get("enabled", False) for name, ch in channels.items()}
+        except Exception:
+            return {}
 
     @property
     def proxy_count(self) -> int:
