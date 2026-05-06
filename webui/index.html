@@ -227,7 +227,7 @@ async function onModelChange() {
 async function loadModelsForProvider(provider, currentModel) {
   const loadingRow = document.getElementById('model-loading-row');
   const errorRow = document.getElementById('model-error-row');
-  const select = document.getElementById('model');
+  const select = document.getElementById('agents_defaults_model');
   loadingRow.style.display = '';
   errorRow.style.display = 'none';
   select.disabled = true;
