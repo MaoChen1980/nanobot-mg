@@ -158,11 +158,15 @@ function renderAgent() {
       ${field('model', 'Model', a.model, 'text', 'agents.defaults.model')}
       ${field('provider', 'Provider', a.provider, 'select', 'agents.defaults.provider', [
         {v:'openai',l:'OpenAI'},{v:'anthropic',l:'Anthropic'},{v:'deepseek',l:'DeepSeek'},
-        {v:'minimaxAnthropicCn',l:'Minimax Anthropic CN'},{v:'minimax',l:'Minimax'},
+        {v:'minimax',l:'minimax'},{v:'minimax_anthropic',l:'minimax_anthropic'},
+        {v:'minimax_cn',l:'minimax_cn'},{v:'minimax_anthropic_cn',l:'minimax_anthropic_cn'},
         {v:'moonshot',l:'Moonshot'},{v:'gemini',l:'Gemini'},{v:'ollama',l:'Ollama'},
-        {v:'azureOpenai',l:'Azure OpenAI'},{v:'openrouter',l:'OpenRouter'},
+        {v:'azure_openai',l:'Azure OpenAI'},{v:'openrouter',l:'OpenRouter'},
         {v:'dashscope',l:'DashScope'},{v:'zhipu',l:'Zhipu'},{v:'groq',l:'Groq'},
         {v:'mistral',l:'Mistral'},{v:'stepfun',l:'Stepfun'},{v:'qianfan',l:'Qianfan'},
+        {v:'custom',l:'Custom'},{v:'vllm',l:'vLLM'},{v:'lm_studio',l:'LM Studio'},
+        {v:'ovms',l:'OVMS'},{v:'siliconflow',l:'SiliconFlow'},{v:'volcengine',l:'Volcengine'},
+        {v:'byteplus',l:'BytePlus'},{v:'xiaomi_mimo',l:'Xiaomi MiMo'},{v:'aihubmix',l:'AIHubMix'},
       ])}
       ${field('max_tokens', 'Max Tokens', a.max_tokens, 'number', 'agents.defaults.max_tokens')}
       ${field('temperature', 'Temperature', a.temperature, 'number', 'agents.defaults.temperature')}
@@ -194,7 +198,8 @@ function renderChannels() {
     const ch = config.channels[name];
     if (!ch) continue;
     const enabled = ch.enabled;
-    const bots = ch.bots;
+    const bots = ch.bots || [];
+    const hasBots = bots.length > 0;
     html += `
     <div class="card channel-card">
       <div class="channel-header" onclick="toggleChannel('${name}')">
@@ -203,16 +208,11 @@ function renderChannels() {
       </div>
       <div class="channel-body" id="ch-${name}">
         ${field('enabled', 'Enabled', enabled, 'checkbox', `channels.${name}.enabled`)}
-        ${bots ? `
-          <div class="group-title">Bots</div>
-          ${bots.map((bot, i) => `
-            <div class="sub-row">
-              ${field('name', 'Name', bot.name || '', 'text', `channels.${name}.bots.${i}.name`)}
-              ${field('appId', 'App ID', bot.appId || '', 'text', `channels.${name}.bots.${i}.appId`)}
-              ${field('appSecret', 'App Secret', bot.appSecret || '', 'password', `channels.${name}.bots.${i}.appSecret`)}
-              ${field('domain', 'Domain', bot.domain || '', 'text', `channels.${name}.bots.${i}.domain`)}
-            </div>
-          `).join('')}
+        ${hasBots ? `
+          <div class="group-title">Bots <button type="button" onclick="addBot('${name}')" style="font-size:0.7rem;padding:0.1rem 0.4rem;margin-left:0.5rem">+ Add</button></div>
+          <div id="bots-${name}">
+          ${bots.map((bot, i) => botRow(name, bot, i)).join('')}
+          </div>
         ` : `
           ${field('token', 'Token', ch.token || '', 'password', `channels.${name}.token`)}
           ${field('clientId', 'Client ID', ch.clientId || '', 'text', `channels.${name}.clientId`)}
@@ -222,6 +222,29 @@ function renderChannels() {
     </div>`;
   }
   tab.innerHTML = html || '<div class="error">No channels found</div>';
+}
+
+function botRow(name, bot, i) {
+  return `
+    <div class="sub-row" style="position:relative">
+      <button type="button" onclick="removeBot('${name}',${i})" style="position:absolute;right:0;top:0;font-size:0.7rem;padding:0.1rem 0.3rem;color:#dc2626;border-color:#dc2626">✕</button>
+      ${field('name', 'Name', bot.name || '', 'text', `channels.${name}.bots.${i}.name`)}
+      ${field('appId', 'App ID', bot.appId || '', 'text', `channels.${name}.bots.${i}.appId`)}
+      ${field('appSecret', 'App Secret', bot.appSecret || '', 'password', `channels.${name}.bots.${i}.appSecret`)}
+      ${field('domain', 'Domain', bot.domain || '', 'text', `channels.${name}.bots.${i}.domain`)}
+    </div>`;
+}
+
+function addBot(name) {
+  if (!config.channels[name].bots) config.channels[name].bots = [];
+  config.channels[name].bots.push({name:'', appId:'', appSecret:'', domain:'feishu'});
+  renderChannels();
+  document.getElementById('ch-' + name).classList.add('open');
+}
+
+function removeBot(name, i) {
+  config.channels[name].bots.splice(i, 1);
+  renderChannels();
 }
 
 function toggleChannel(name) {
