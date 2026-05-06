@@ -216,7 +216,8 @@ function renderAgent() {
 }
 
 async function onProviderChange() {
-  const provider = document.getElementById('provider').value;
+  const provider = document.getElementById('agents_defaults_provider').value;
+  console.log('onProviderChange', provider);
   await loadModelsForProvider(provider, '');
 }
 
@@ -228,13 +229,19 @@ async function loadModelsForProvider(provider, currentModel) {
   const loadingRow = document.getElementById('model-loading-row');
   const errorRow = document.getElementById('model-error-row');
   const select = document.getElementById('agents_defaults_model');
-  loadingRow.style.display = '';
-  errorRow.style.display = 'none';
-  select.disabled = true;
+  console.log('loadModelsForProvider called', {provider, currentModel, selectExists: !!select, loadingRowExists: !!loadingRow});
+  if (loadingRow) loadingRow.style.display = '';
+  if (errorRow) errorRow.style.display = 'none';
+  if (select) select.disabled = true;
   try {
-    const res = await fetch('/api/provider-models?provider=' + encodeURIComponent(provider));
+    const url = '/api/provider-models?provider=' + encodeURIComponent(provider);
+    console.log('Fetching:', url);
+    const res = await fetch(url);
+    console.log('Fetch done', res.status, res.ok);
     const data = await res.json();
+    console.log('Data:', data);
     const models = data.models || [];
+    if (!select) return;
     select.innerHTML = '';
     if (models.length === 0) {
       select.innerHTML = '<option value="">No models (enter manually)</option>';
@@ -243,13 +250,13 @@ async function loadModelsForProvider(provider, currentModel) {
       models.forEach(m => select.appendChild(makeOption(m, m)));
       select.value = currentModel;
     }
-  } catch {
-    select.innerHTML = '<option value="">Failed to load</option>';
-    select.appendChild(makeOption(currentModel, currentModel));
-    errorRow.style.display = '';
+  } catch(e) {
+    console.error('loadModels failed', e);
+    if (select) select.innerHTML = '<option value="">Failed to load</option>';
+    if (errorRow) errorRow.style.display = '';
   } finally {
-    loadingRow.style.display = 'none';
-    select.disabled = false;
+    if (loadingRow) loadingRow.style.display = 'none';
+    if (select) select.disabled = false;
   }
 }
 
