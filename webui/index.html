@@ -149,14 +149,19 @@ function renderAll() {
 }
 
 // ── Agent ──────────────────────────────────────────────────────────────────────
+const TIMEZONES = [
+  'UTC','Asia/Shanghai','Asia/Hong_Kong','Asia/Tokyo','Asia/Seoul',
+  'America/New_York','America/Los_Angeles','America/Chicago',
+  'Europe/London','Europe/Paris','Europe/Berlin','Australia/Sydney',
+];
+
 function renderAgent() {
   const a = config.agents.defaults;
   const tab = document.getElementById('tabAgent');
   tab.innerHTML = `
     <div class="card">
       <div class="card-header">AI Model</div>
-      ${field('model', 'Model', a.model, 'text', 'agents.defaults.model')}
-      ${field('provider', 'Provider', a.provider, 'select', 'agents.defaults.provider', [
+      ${selectField('provider', 'Provider', a.provider, 'agents.defaults.provider', [
         {v:'openai',l:'OpenAI'},{v:'anthropic',l:'Anthropic'},{v:'deepseek',l:'DeepSeek'},
         {v:'minimax',l:'minimax'},{v:'minimax_anthropic',l:'minimax_anthropic'},
         {v:'minimax_cn',l:'minimax_cn'},{v:'minimax_anthropic_cn',l:'minimax_anthropic_cn'},
@@ -167,7 +172,10 @@ function renderAgent() {
         {v:'custom',l:'Custom'},{v:'vllm',l:'vLLM'},{v:'lm_studio',l:'LM Studio'},
         {v:'ovms',l:'OVMS'},{v:'siliconflow',l:'SiliconFlow'},{v:'volcengine',l:'Volcengine'},
         {v:'byteplus',l:'BytePlus'},{v:'xiaomi_mimo',l:'Xiaomi MiMo'},{v:'aihubmix',l:'AIHubMix'},
-      ])}
+      ], 'onProviderChange()')}
+      ${selectField('model', 'Model', a.model, 'agents.defaults.model', [], 'onModelChange()')}
+      <div class="row" id="model-loading-row" style="display:none"><label></label><span class="hint">Loading models...</span></div>
+      <div class="row" id="model-error-row" style="display:none"><label"></label><span class="hint" style="color:#dc2626">Failed to load models</span></div>
       ${field('max_tokens', 'Max Tokens', a.max_tokens, 'number', 'agents.defaults.max_tokens')}
       ${field('temperature', 'Temperature', a.temperature, 'number', 'agents.defaults.temperature')}
       ${field('max_tool_iterations', 'Max Tool Iterations', a.max_tool_iterations, 'number', 'agents.defaults.max_tool_iterations')}
@@ -175,10 +183,10 @@ function renderAgent() {
     </div>
     <div class="card">
       <div class="card-header">Session</div>
-      ${field('timezone', 'Timezone', a.timezone, 'text', 'agents.defaults.timezone')}
+      ${selectField('timezone', 'Timezone', a.timezone, 'agents.defaults.timezone', TIMEZONES.map(t => ({v:t,l:t})))}
       ${field('unified_session', 'Unified Session', a.unified_session, 'checkbox', 'agents.defaults.unified_session')}
       ${field('disabled_skills', 'Disabled Skills', Array.isArray(a.disabled_skills) ? a.disabled_skills.join(', ') : '', 'text', 'agents.defaults.disabled_skills')}
-      <div class="row"><label>Hint</label><span class="hint">Comma-separated skill names</span></div>
+      <div class="row"><label></label><span class="hint">Comma-separated skill names</span></div>
     </div>
     <div class="card">
       <div class="card-header">Dream</div>
@@ -187,57 +195,265 @@ function renderAgent() {
       ${field('max_batch_size', 'Max Batch Size', a.dream.max_batch_size, 'number', 'agents.defaults.dream.max_batch_size')}
     </div>
   `;
+  loadModelsForProvider(a.provider, a.model);
+}
+
+async function onProviderChange() {
+  const provider = document.getElementById('provider').value;
+  await loadModelsForProvider(provider, '');
+}
+
+async function onModelChange() {
+  // model selected — nothing extra needed
+}
+
+async function loadModelsForProvider(provider, currentModel) {
+  const loadingRow = document.getElementById('model-loading-row');
+  const errorRow = document.getElementById('model-error-row');
+  const select = document.getElementById('model');
+  loadingRow.style.display = '';
+  errorRow.style.display = 'none';
+  select.disabled = true;
+  try {
+    const res = await fetch('/api/provider-models?provider=' + encodeURIComponent(provider));
+    const data = await res.json();
+    const models = data.models || [];
+    select.innerHTML = '';
+    if (models.length === 0) {
+      select.innerHTML = '<option value="">No models (enter manually)</option>';
+      select.appendChild(makeOption(currentModel, currentModel));
+    } else {
+      models.forEach(m => select.appendChild(makeOption(m, m)));
+      select.value = currentModel;
+    }
+  } catch {
+    select.innerHTML = '<option value="">Failed to load</option>';
+    select.appendChild(makeOption(currentModel, currentModel));
+    errorRow.style.display = '';
+  } finally {
+    loadingRow.style.display = 'none';
+    select.disabled = false;
+  }
+}
+
+function makeOption(value, label) {
+  const opt = document.createElement('option');
+  opt.value = value;
+  opt.textContent = label;
+  return opt;
+}
+
+function selectField(id, label, value, path, opts, onchange) {
+  const pathId = path.replace(/\./g, '_').replace(/\[/g, '_').replace(/\]/g, '_');
+  const onch = onchange ? ` onchange="${onchange}"` : '';
+  const options = (opts || []).map(o => `<option value="${o.v}" ${value == o.v ? 'selected' : ''}>${o.l}</option>`).join('');
+  return `<div class="row"><label>${label}</label><div class="field"><select id="${pathId}" data-path="${path}"${onch}>${options}</select></div></div>`;
 }
 
 // ── Channels ───────────────────────────────────────────────────────────────────
+// Schema: channel name → list of field definitions {key, label, type, secret}
+// type: 'text' | 'password' | 'number' | 'bool' | 'select'
+const CHANNEL_SCHEMAS = {
+  feishu: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'bots',l:'Bots',t:'bots'},
+    {k:'domain',l:'Domain',t:'text'},
+  ],
+  dingtalk: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'clientId',l:'Client ID',t:'text'},
+    {k:'clientSecret',l:'Client Secret',t:'password'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+  ],
+  discord: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'token',l:'Token',t:'password'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'allowChannels',l:'Allow Channels',t:'text'},
+    {k:'intents',l:'Intents',t:'number'},
+    {k:'groupPolicy',l:'Group Policy',t:'select',opts:['open','mention']},
+    {k:'readReceiptEmoji',l:'Read Receipt Emoji',t:'text'},
+    {k:'workingEmoji',l:'Working Emoji',t:'text'},
+    {k:'streaming',l:'Streaming',t:'bool'},
+    {k:'proxy',l:'Proxy',t:'text'},
+    {k:'proxyUsername',l:'Proxy Username',t:'text'},
+    {k:'proxyPassword',l:'Proxy Password',t:'password'},
+  ],
+  email: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'consentGranted',l:'Consent Granted',t:'bool'},
+    {k:'imapHost',l:'IMAP Host',t:'text'},
+    {k:'imapPort',l:'IMAP Port',t:'number'},
+    {k:'imapUsername',l:'IMAP Username',t:'text'},
+    {k:'imapPassword',l:'IMAP Password',t:'password'},
+    {k:'imapMailbox',l:'IMAP Mailbox',t:'text'},
+    {k:'imapUseSsl',l:'IMAP SSL',t:'bool'},
+    {k:'smtpHost',l:'SMTP Host',t:'text'},
+    {k:'smtpPort',l:'SMTP Port',t:'number'},
+    {k:'smtpUsername',l:'SMTP Username',t:'text'},
+    {k:'smtpPassword',l:'SMTP Password',t:'password'},
+    {k:'smtpUseTls',l:'SMTP TLS',t:'bool'},
+    {k:'smtpUseSsl',l:'SMTP SSL',t:'bool'},
+    {k:'fromAddress',l:'From Address',t:'text'},
+    {k:'autoReplyEnabled',l:'Auto Reply',t:'bool'},
+    {k:'pollIntervalSeconds',l:'Poll Interval (s)',t:'number'},
+    {k:'markSeen',l:'Mark Seen',t:'bool'},
+    {k:'maxBodyChars',l:'Max Body Chars',t:'number'},
+    {k:'subjectPrefix',l:'Subject Prefix',t:'text'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+  ],
+  telegram: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'token',l:'Token',t:'password'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'proxy',l:'Proxy',t:'text'},
+    {k:'replyToMessage',l:'Reply to Message',t:'bool'},
+    {k:'reactEmoji',l:'React Emoji',t:'text'},
+    {k:'groupPolicy',l:'Group Policy',t:'select',opts:['mention','open']},
+    {k:'connectionPoolSize',l:'Connection Pool Size',t:'number'},
+    {k:'poolTimeout',l:'Pool Timeout',t:'number'},
+    {k:'streaming',l:'Streaming',t:'bool'},
+    {k:'streamEditInterval',l:'Stream Edit Interval',t:'number'},
+  ],
+  slack: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'mode',l:'Mode',t:'select',opts:['socket','webhook']},
+    {k:'webhookPath',l:'Webhook Path',t:'text'},
+    {k:'botToken',l:'Bot Token',t:'password'},
+    {k:'appToken',l:'App Token',t:'password'},
+    {k:'replyInThread',l:'Reply in Thread',t:'bool'},
+    {k:'reactEmoji',l:'React Emoji',t:'text'},
+    {k:'doneEmoji',l:'Done Emoji',t:'text'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'groupPolicy',l:'Group Policy',t:'select',opts:['mention','open']},
+  ],
+  msteams: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'appId',l:'App ID',t:'text'},
+    {k:'appPassword',l:'App Password',t:'password'},
+    {k:'tenantId',l:'Tenant ID',t:'text'},
+    {k:'host',l:'Host',t:'text'},
+    {k:'port',l:'Port',t:'number'},
+    {k:'path',l:'Path',t:'text'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'replyInThread',l:'Reply in Thread',t:'bool'},
+    {k:'mentionOnlyResponse',l:'Mention Only Response',t:'text'},
+    {k:'validateInboundAuth',l:'Validate Inbound Auth',t:'bool'},
+  ],
+  qq: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'appId',l:'App ID',t:'text'},
+    {k:'secret',l:'Secret',t:'password'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'msgFormat',l:'Msg Format',t:'select',opts:['plain','json']},
+    {k:'ackMessage',l:'Ack Message',t:'text'},
+    {k:'mediaDir',l:'Media Dir',t:'text'},
+    {k:'downloadChunkSize',l:'Download Chunk Size',t:'number'},
+    {k:'downloadMaxBytes',l:'Download Max Bytes',t:'number'},
+  ],
+  wecom: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'botId',l:'Bot ID',t:'text'},
+    {k:'secret',l:'Secret',t:'password'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'welcomeMessage',l:'Welcome Message',t:'text'},
+  ],
+  weixin: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'baseUrl',l:'Base URL',t:'text'},
+    {k:'cdnBaseUrl',l:'CDN Base URL',t:'text'},
+    {k:'routeTag',l:'Route Tag',t:'text'},
+    {k:'token',l:'Token',t:'password'},
+    {k:'stateDir',l:'State Dir',t:'text'},
+    {k:'pollTimeout',l:'Poll Timeout',t:'number'},
+  ],
+  whatsapp: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'bridgeUrl',l:'Bridge URL',t:'text'},
+    {k:'bridgeToken',l:'Bridge Token',t:'password'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'groupPolicy',l:'Group Policy',t:'select',opts:['open','mention']},
+  ],
+  websocket: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'host',l:'Host',t:'text'},
+    {k:'port',l:'Port',t:'number'},
+    {k:'path',l:'Path',t:'text'},
+    {k:'token',l:'Token',t:'password'},
+    {k:'tokenTtlS',l:'Token TTL (s)',t:'number'},
+    {k:'websocketRequiresToken',l:'Requires Token',t:'bool'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'streaming',l:'Streaming',t:'bool'},
+    {k:'maxMessageBytes',l:'Max Message Bytes',t:'number'},
+    {k:'pingIntervalS',l:'Ping Interval (s)',t:'number'},
+    {k:'pingTimeoutS',l:'Ping Timeout (s)',t:'number'},
+    {k:'sslCertfile',l:'SSL Cert File',t:'text'},
+    {k:'sslKeyfile',l:'SSL Key File',t:'text'},
+  ],
+  mochat: [
+    {k:'enabled',l:'Enabled',t:'bool'},
+    {k:'baseUrl',l:'Base URL',t:'text'},
+    {k:'socketUrl',l:'Socket URL',t:'text'},
+    {k:'socketPath',l:'Socket Path',t:'text'},
+    {k:'refreshIntervalMs',l:'Refresh Interval (ms)',t:'number'},
+    {k:'watchTimeoutMs',l:'Watch Timeout (ms)',t:'number'},
+    {k:'watchLimit',l:'Watch Limit',t:'number'},
+    {k:'clawToken',l:'Claw Token',t:'password'},
+    {k:'agentUserId',l:'Agent User ID',t:'text'},
+    {k:'allowFrom',l:'Allow From',t:'text'},
+    {k:'replyDelayMode',l:'Reply Delay Mode',t:'select',opts:['non-mention','always']},
+    {k:'replyDelayMs',l:'Reply Delay (ms)',t:'number'},
+  ],
+};
+
 function renderChannels() {
   const tab = document.getElementById('tabChannels');
-  const known = ['feishu','dingtalk','discord','email','telegram','slack','msteams','qq','wecom','weixin','whatsapp','websocket','mochat'];
   let html = '';
-  for (const name of known) {
-    const ch = config.channels[name];
-    if (!ch) continue;
-    const enabled = ch.enabled;
+  for (const [name, schema] of Object.entries(CHANNEL_SCHEMAS)) {
+    const ch = config.channels[name] || {};
+    const enabled = ch.enabled || false;
     const bots = ch.bots || [];
-    const hasBots = bots.length > 0;
-    html += `
-    <div class="card channel-card">
+    const hasBots = name === 'feishu' && Array.isArray(bots);
+    html += `<div class="card channel-card">
       <div class="channel-header" onclick="toggleChannel('${name}')">
         <span>${name}</span>
         <span class="badge ${enabled ? 'enabled' : ''}">${enabled ? 'ON' : 'OFF'}</span>
       </div>
       <div class="channel-body" id="ch-${name}">
-        ${field('enabled', 'Enabled', enabled, 'checkbox', `channels.${name}.enabled`)}
+        ${schema.filter(f => f.t !== 'bots').map(f => {
+          let val = ch[f.k];
+          if (val === undefined || val === null) val = '';
+          if (f.t === 'bool') return field(f.k+'_'+name, f.l, val, 'checkbox', `channels.${name}.${f.k}`);
+          if (f.t === 'select') return selectField(f.k+'_'+name, f.l, val, `channels.${name}.${f.k}`, (f.opts||[]).map(o=>({v:o,l:o})));
+          return field(f.k+'_'+name, f.l, val, f.t === 'password' ? 'password' : 'text', `channels.${name}.${f.k}`);
+        }).join('')}
         ${hasBots ? `
           <div class="group-title">Bots <button type="button" onclick="addBot('${name}')" style="font-size:0.7rem;padding:0.1rem 0.4rem;margin-left:0.5rem">+ Add</button></div>
           <div id="bots-${name}">
           ${bots.map((bot, i) => botRow(name, bot, i)).join('')}
           </div>
-        ` : `
-          ${field('token', 'Token', ch.token || '', 'password', `channels.${name}.token`)}
-          ${field('clientId', 'Client ID', ch.clientId || '', 'text', `channels.${name}.clientId`)}
-          ${field('clientSecret', 'Client Secret', ch.clientSecret || '', 'password', `channels.${name}.clientSecret`)}
-        `}
+        ` : ''}
       </div>
     </div>`;
   }
-  tab.innerHTML = html || '<div class="error">No channels found</div>';
+  tab.innerHTML = html;
 }
 
 function botRow(name, bot, i) {
-  return `
-    <div class="sub-row" style="position:relative">
-      <button type="button" onclick="removeBot('${name}',${i})" style="position:absolute;right:0;top:0;font-size:0.7rem;padding:0.1rem 0.3rem;color:#dc2626;border-color:#dc2626">✕</button>
-      ${field('name', 'Name', bot.name || '', 'text', `channels.${name}.bots.${i}.name`)}
-      ${field('appId', 'App ID', bot.appId || '', 'text', `channels.${name}.bots.${i}.appId`)}
-      ${field('appSecret', 'App Secret', bot.appSecret || '', 'password', `channels.${name}.bots.${i}.appSecret`)}
-      ${field('domain', 'Domain', bot.domain || '', 'text', `channels.${name}.bots.${i}.domain`)}
-    </div>`;
+  const keys = ['name','appId','appSecret','encryptKey','verificationToken','domain','allowFrom','reactEmoji','done_emoji','groupPolicy','replyToMessage','streaming'];
+  return `<div class="sub-row" style="position:relative;padding-top:0.5rem;border-top:1px dashed #e5e7eb;margin-top:0.5rem">
+    <button type="button" onclick="removeBot('${name}',${i})" style="position:absolute;right:0;top:0;font-size:0.7rem;padding:0.1rem 0.3rem;color:#dc2626;border-color:#dc2626">✕</button>
+    ${keys.filter(k => bot[k] !== undefined).map(k =>
+      field(`bot_${i}_${k}`, k, bot[k] || '', 'text', `channels.${name}.bots.${i}.${k}`)
+    ).join('')}
+  </div>`;
 }
 
 function addBot(name) {
-  if (!config.channels[name].bots) config.channels[name].bots = [];
-  config.channels[name].bots.push({name:'', appId:'', appSecret:'', domain:'feishu'});
+  if (!config.channels[name]) config.channels[name] = {};
+  if (!Array.isArray(config.channels[name].bots)) config.channels[name].bots = [];
+  config.channels[name].bots.push({name:'',appId:'',appSecret:'',domain:'feishu'});
   renderChannels();
   document.getElementById('ch-' + name).classList.add('open');
 }
