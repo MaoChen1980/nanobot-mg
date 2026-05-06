@@ -194,6 +194,7 @@ class BaseProxyChannel:
 
         On Unix: getppid() returns 1 (init) when parent dies.
         On Windows: getppid() never changes, so use Win32 API.
+        Returns False on error to ensure proxy exits when in doubt.
         """
         if os.name == "nt":
             import ctypes
@@ -211,7 +212,7 @@ class BaseProxyChannel:
                         kernel32.CloseHandle(handle)
                 return False
             except Exception:
-                return True  # fail safe
+                return False  # assume dead on error
         return os.getppid() == self._parent_pid
 
     def _check_config_enabled(self) -> None:
@@ -239,7 +240,8 @@ class BaseProxyChannel:
 
         Checks every 5s:
         1. Parent process (nanobot gateway) is still alive via PPID
-        2. Hub responds to ping via TCP
+        2. Hub responds to ping via TCP (with 5s timeout — half-open TCP on
+           Windows can hang forever otherwise when gateway is killed)
         3. Channel is still enabled in config file on disk
         """
         config_check_interval = 0  # counter-based throttle: check every 6th tick (30s)
@@ -251,10 +253,13 @@ class BaseProxyChannel:
                 logger.error("Gateway (parent) process died, exiting")
                 os._exit(1)
 
-            # Check 2: hub responds via TCP
+            # Check 2: hub responds via TCP (with timeout)
             async with self._async_send_lock:
                 try:
-                    resp = await self._send_raw({"type": "ping"})
+                    resp = await asyncio.wait_for(
+                        self._send_raw({"type": "ping"}),
+                        timeout=5,
+                    )
                     if resp.get("type") != "pong":
                         logger.error("Heartbeat: unexpected response from hub, exiting")
                         os._exit(1)
