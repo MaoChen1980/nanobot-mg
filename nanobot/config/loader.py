@@ -145,8 +145,6 @@ def _migrate_config(data: dict) -> dict:
         tools["restrictToWorkspace"] = exec_cfg.pop("restrictToWorkspace")
 
     # Move tools.myEnabled / tools.mySet → tools.my.{enable, allowSet}.
-    # The old flat keys shipped in the initial MyTool landing; wrapping them in a
-    # sub-config keeps `web` / `exec` / `my` symmetric and gives room to grow.
     if "myEnabled" in tools or "mySet" in tools:
         my_cfg = tools.setdefault("my", {})
         if "myEnabled" in tools and "enable" not in my_cfg:
@@ -158,4 +156,39 @@ def _migrate_config(data: dict) -> dict:
         else:
             tools.pop("mySet", None)
 
+    # Migrate flat channel configs → bots[] format
+    from nanobot.config.schema import ChannelsConfig
+    _migrate_channels(data, ChannelsConfig)
+
     return data
+
+
+def _migrate_channels(data: dict, channels_model: type) -> None:
+    """Convert old flat channel configs (fields at section level) to bots[] format.
+
+    Old format (pre multi-bot):
+      "feishu": { "enabled": true, "appId": "...", "appSecret": "..." }
+
+    New format:
+      "feishu": { "enabled": true, "bots": [{ "name": "bot1", "appId": "...", ... }] }
+    """
+    known_fields = set(channels_model.model_fields) if hasattr(channels_model, "model_fields") else set()
+    channels = data.get("channels", {})
+    for name, section in list(channels.items()):
+        if not isinstance(section, dict):
+            continue
+        # Skip known top-level ChannelsConfig fields (send_progress, etc.)
+        if name in known_fields:
+            continue
+        # Already has bots[] or no bot-level fields → nothing to do
+        if "bots" in section:
+            continue
+        bot_fields = {k: v for k, v in section.items() if k not in ("enabled", "bots")}
+        if not bot_fields:
+            continue
+        # Migrate: wrap flat fields into bots[0]
+        bot_fields["name"] = bot_fields.pop("name", "bot1")
+        channels[name] = {
+            "enabled": section.get("enabled", False),
+            "bots": [bot_fields],
+        }

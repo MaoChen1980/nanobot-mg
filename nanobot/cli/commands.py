@@ -398,14 +398,23 @@ def _onboard_plugins(config_path: Path) -> None:
         data = json.load(f)
 
     channels = data.setdefault("channels", {})
-    for name, info in all_channels.items():
-        default_cfg = info.get("default_config")
-        if not default_cfg:
-            continue
+    for name in all_channels:
         if name not in channels:
-            channels[name] = default_cfg()
+            # Every channel gets bots[] format by default: disabled with empty bot list
+            channels[name] = {"enabled": False, "bots": []}
         else:
-            channels[name] = _merge_missing_defaults(channels[name], default_cfg())
+            section = channels[name]
+            if isinstance(section, dict) and "bots" not in section:
+                bot_fields = {k: v for k, v in section.items() if k not in ("enabled", "bots")}
+                if bot_fields:
+                    enabled = section.get("enabled", False)
+                    bot_fields.setdefault("name", "bot1")
+                    section.clear()
+                    section["enabled"] = enabled
+                    section["bots"] = [bot_fields]
+                else:
+                    section.setdefault("enabled", False)
+                    section["bots"] = []
 
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

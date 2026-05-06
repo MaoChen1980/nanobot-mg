@@ -870,6 +870,17 @@ def _configure_channel(config: Config, channel_name: str) -> None:
     )
     if updated_channel is not None:
         new_dict = updated_channel.model_dump(by_alias=True, exclude_none=True)
+        # Wrap in bots[] format: move all fields (except enabled) into bots[0]
+        enabled = new_dict.pop("enabled", False)
+        bot_fields = {k: v for k, v in new_dict.items() if k not in ("bots",)}
+        if bot_fields:
+            bot_fields.setdefault("name", "bot1")
+            new_dict.clear()
+            new_dict["enabled"] = enabled
+            new_dict["bots"] = [bot_fields]
+        else:
+            new_dict.setdefault("enabled", enabled)
+            new_dict.setdefault("bots", [])
         setattr(config.channels, channel_name, new_dict)
 
 
