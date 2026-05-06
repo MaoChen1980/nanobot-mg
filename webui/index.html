@@ -447,13 +447,22 @@ const SECRET_FIELDS = new Set([
 ]);
 
 // Channels that support multi-bot
-const BOT_CHANNELS = new Set(['feishu', 'dingtalk', 'qq']);
+const BOT_CHANNELS = new Set(['feishu', 'dingtalk', 'qq', 'discord', 'email', 'mochat', 'msteams', 'slack', 'telegram', 'wecom', 'weixin', 'whatsapp']);
 
 // Bot field templates per channel
 const BOT_TEMPLATES = {
   feishu: {name:'', appId:'', appSecret:'', encryptKey:'', verificationToken:'', allowFrom:'*', reactEmoji:'THUMBSUP', done_emoji:'OK', toolHintPrefix:'🔧', groupPolicy:'open', replyToMessage:0, streaming:1, domain:'feishu'},
   dingtalk: {name:'', clientId:'', clientSecret:'', allowFrom:'*'},
   qq: {name:'', appId:'', secret:'', allowFrom:'*', msgFormat:'plain', ackMessage:'⏳ Processing...', mediaDir:'', downloadChunkSize:262144, downloadMaxBytes:209715200},
+  discord: {name:'', token:'', intents:37377},
+  email: {name:'', imap_host:'', imap_port:993, imap_username:'', imap_password:'', smtp_host:'', smtp_port:587, smtp_username:'', smtp_password:'', from_address:'', imap_use_ssl:true, smtp_use_tls:true, smtp_use_ssl:false, imap_mailbox:'INBOX', poll_interval_seconds:30, mark_seen:true, max_body_chars:12000},
+  mochat: {name:'', claw_token:'', base_url:'https://mochat.io', socket_url:'', socket_path:'/socket.io', socket_disable_msgpack:false},
+  msteams: {name:'', app_id:'', app_password:'', host:'0.0.0.0', port:3978, path:'/api/messages', access_token:''},
+  slack: {name:'', bot_token:'', app_token:'', mode:'socket', group_policy:'mention'},
+  telegram: {name:'', token:'', group_policy:'mention'},
+  wecom: {name:'', bot_id:'', secret:''},
+  weixin: {name:'', api_url:'https://ilinkai.weixin.qq.com', token:''},
+  whatsapp: {name:'', bridge_url:'ws://localhost:3001', bridge_token:''},
 };
 
 function renderChannels() {
@@ -507,17 +516,23 @@ function renderChannelField(chName, key, value) {
 function botRow(name, bot, i) {
   if (!bot || typeof bot !== 'object') return '';
   const keys = Object.keys(bot);
+  const selects = SELECT_FIELDS[name] || {};
   return `<div class="bot-card">
     <div class="bot-header">
       <span>${esc(bot.name || 'bot ' + (i + 1))}</span>
       <button type="button" onclick="removeBot('${name}',${i})" class="bot-remove" title="Remove this bot">✕</button>
     </div>
     <div class="bot-body">
-      ${keys.filter(k => bot[k] !== undefined).map(k =>
-        typeof bot[k] === 'boolean'
-          ? `<div class="row"><label>${k}</label><div class="field"><input type="checkbox" id="bot_${i}_${k}" data-path="channels.${name}.bots.${i}.${k}" class="toggle-input" ${bot[k] ? 'checked' : ''}><label class="toggle-label" for="bot_${i}_${k}"><span class="thumb"></span></label></div></div>`
-          : `<div class="row"><label>${k}</label><div class="field"><input type="${SECRET_FIELDS.has(k) ? 'password' : 'text'}" id="bot_${i}_${k}" data-path="channels.${name}.bots.${i}.${k}" value="${esc(String(bot[k] ?? ''))}"></div></div>`
-      ).join('')}
+      ${keys.filter(k => bot[k] !== undefined).map(k => {
+        if (typeof bot[k] === 'boolean') {
+          return `<div class="row"><label>${k}</label><div class="field"><input type="checkbox" id="bot_${i}_${k}" data-path="channels.${name}.bots.${i}.${k}" class="toggle-input" ${bot[k] ? 'checked' : ''}><label class="toggle-label" for="bot_${i}_${k}"><span class="thumb"></span></label></div></div>`;
+        }
+        if (selects[k]) {
+          const opts = selects[k].map(o => `<option value="${o}" ${bot[k] == o ? 'selected' : ''}>${o}</option>`).join('');
+          return `<div class="row"><label>${k}</label><div class="field"><select id="bot_${i}_${k}" data-path="channels.${name}.bots.${i}.${k}">${opts}</select></div></div>`;
+        }
+        return `<div class="row"><label>${k}</label><div class="field"><input type="${SECRET_FIELDS.has(k) ? 'password' : 'text'}" id="bot_${i}_${k}" data-path="channels.${name}.bots.${i}.${k}" value="${esc(String(bot[k] ?? ''))}"></div></div>`;
+      }).join('')}
     </div>
   </div>`;
 }
