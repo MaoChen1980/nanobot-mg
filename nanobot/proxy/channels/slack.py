@@ -22,7 +22,6 @@ class SlackProxyChannel(BaseProxyChannel):
         self._web_client: Any = None
         self._socket_client: Any = None
         self._bot_user_id: str | None = None
-        self._processed: dict[str, float] = {}
 
     async def _on_socket_request(self, client: Any, req: Any) -> None:
         from slack_sdk.socket_mode.response import SocketModeResponse
@@ -74,13 +73,11 @@ class SlackProxyChannel(BaseProxyChannel):
         await self._handle_text_message(sender_id, chat_id, text, req)
 
     async def _handle_text_message(self, sender_id: str, chat_id: str, text: str, req: Any) -> None:
-        now = time.time()
-        key = f"{chat_id}:{text[:50]}"
-        if key in self._processed and now - self._processed[key] < 2:
+        # Use envelope_id for dedup (2 second window for Slack's at-least-once delivery)
+        if self.check_duplicate(req.envelope_id or f"{chat_id}:{time.time()}", ttl=2):
             return
-        self._processed[key] = now
 
-        msg_data = self.build_message(sender_id, chat_id, text, req.envelope_id or f"{chat_id}:{now}")
+        msg_data = self.build_message(sender_id, chat_id, text, req.envelope_id or f"{chat_id}:{time.time()}")
         response = await self.async_send_to_hub(msg_data)
 
         if response and response.success and response.content:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import time
@@ -16,11 +17,10 @@ class DingTalkProxyChannel(BaseProxyChannel):
     """Handles DingTalk message events and forwards to Hub via TCP."""
 
     CHANNEL_NAME = "DingTalk"
-    REQUIRED_CONFIG_FIELDS = ["client_id", "client_secret"]
+    REQUIRED_CONFIG_FIELDS = ["clientId", "clientSecret"]
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed: dict[str, float] = {}
 
     def on_message(self, data: Any) -> None:
         """Sync callback from DingTalk SDK - forward message to Hub."""
@@ -43,11 +43,8 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 return
 
             msg_id = chatbot_msg.message_id or ""
-            now = time.time()
-            if msg_id in self._processed:
+            if self.check_duplicate(msg_id):
                 return
-            self._processed[msg_id] = now
-            self._processed = {k: v for k, v in self._processed.items() if now - v < 300}
 
             sender_id = chatbot_msg.sender_staff_id or chatbot_msg.sender_id or "unknown"
             conversation_type = data.get("conversationType")
@@ -75,7 +72,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
             if is_group:
                 url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
                 payload = {
-                    "robotCode": self.config.get("client_id", ""),
+                    "robotCode": self.config.get("clientId", ""),
                     "openConversationId": chat_id,
                     "msgKey": "sampleMarkdown",
                     "msgParam": json.dumps({"text": content, "title": "Nanobot Reply"}, ensure_ascii=False),
@@ -83,7 +80,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
             else:
                 url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
                 payload = {
-                    "robotCode": self.config.get("client_id", ""),
+                    "robotCode": self.config.get("clientId", ""),
                     "userIds": [sender_id],
                     "msgKey": "sampleMarkdown",
                     "msgParam": json.dumps({"text": content, "title": "Nanobot Reply"}, ensure_ascii=False),
@@ -103,8 +100,8 @@ class DingTalkProxyChannel(BaseProxyChannel):
             import httpx
             url = "https://api.dingtalk.com/v1.0/oauth2/accessToken"
             data = {
-                "appKey": self.config.get("client_id", ""),
-                "appSecret": self.config.get("client_secret", ""),
+                "appKey": self.config.get("clientId", ""),
+                "appSecret": self.config.get("clientSecret", ""),
             }
             with httpx.Client(timeout=30) as client:
                 resp = client.post(url, json=data)
@@ -115,26 +112,38 @@ class DingTalkProxyChannel(BaseProxyChannel):
         return None
 
     def start(self) -> None:
-        """Run the DingTalk Stream connection."""
+        """Run the DingTalk Stream connection in its own event loop."""
+        import threading
         from dingtalk_stream import CallbackHandler, DingTalkStreamClient, Credential
         from dingtalk_stream.chatbot import ChatbotMessage
 
-        credential = Credential(self.config.get("client_id", ""), self.config.get("client_secret", ""))
+        credential = Credential(self.config.get("clientId", ""), self.config.get("clientSecret", ""))
         stream_client = DingTalkStreamClient(credential)
+
+        _channel = self  # closure reference for Handler
 
         class Handler(CallbackHandler):
             async def process(self, message):
-                self.on_message(message.data)
+                _channel.on_message(message.data)
                 return 0, "OK"
 
         stream_client.register_callback_handler(ChatbotMessage.TOPIC, Handler())
 
+        def run_stream() -> None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            while True:
+                try:
+                    loop.run_until_complete(stream_client.start())
+                except Exception as e:
+                    logger.error("DingTalk stream error: {}", e)
+                    time.sleep(5)
+
+        thread = threading.Thread(target=run_stream, daemon=True)
+        thread.start()
+
         while True:
-            try:
-                stream_client.start()
-            except Exception as e:
-                logger.error("DingTalk stream error: {}", e)
-                time.sleep(5)
+            time.sleep(5)
 
 
 def main() -> None:

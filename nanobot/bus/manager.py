@@ -16,13 +16,9 @@ _SEND_RETRY_DELAYS = (1, 2, 4)
 
 
 class ChannelManager:
-    """
-    Manages chat channels — all channels run as proxy subprocesses.
+    """Tracks enabled channels and handles restart notifications.
 
-    Responsibilities:
-    - Count enabled channels (for startup logging)
-    - Validate allow_from config
-    - Provide start_all / stop_all lifecycle hooks
+    All channels run as proxy subprocesses managed by ProxyManager.
     """
 
     def __init__(self, config: Config, bus: MessageBus):
@@ -31,6 +27,7 @@ class ChannelManager:
         self._dispatch_task: asyncio.Task | None = None
 
         self._init_channels()
+        self._notify_restart_done_if_needed()
 
     def _init_channels(self) -> None:
         """Log which channels are enabled (all run as proxy processes)."""
@@ -109,34 +106,6 @@ class ChannelManager:
     async def _publish_restart_delivery(self, msg: Any) -> None:
         """Publish a message to the outbound bus."""
         await self.bus.publish_outbound(msg)
-
-    def _count_enabled_channels(self) -> int:
-        """Count all enabled channels in config."""
-        from nanobot.proxy.registry import discover_all
-
-        count = 0
-        for name in discover_all():
-            section = getattr(self.config.channels, name, None)
-            if section is None:
-                continue
-            enabled = section.get("enabled", False) if isinstance(section, dict) else getattr(section, "enabled", False)
-            if enabled:
-                count += 1
-        return count
-
-    async def start_all(self) -> None:
-        """Start all channels (no-op — all channels run via proxy processes)."""
-        total_enabled = self._count_enabled_channels()
-        if total_enabled == 0:
-            logger.warning("No channels enabled")
-        else:
-            logger.info("All {} enabled channel(s) running via proxy process(es)", total_enabled)
-
-        self._notify_restart_done_if_needed()
-
-    async def stop_all(self) -> None:
-        """Stop all channels (no-op — proxies are stopped by ProxyManager)."""
-        logger.info("All channel proxy processes handled by ProxyManager")
 
     @property
     def enabled_channels(self) -> list[str]:

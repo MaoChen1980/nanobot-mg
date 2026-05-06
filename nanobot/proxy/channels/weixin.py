@@ -19,7 +19,6 @@ class WeixinProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed: dict[str, float] = {}
         self._send_reply_fn: Any = None
 
     def start(self) -> None:
@@ -62,11 +61,8 @@ class WeixinProxyChannel(BaseProxyChannel):
                 if data:
                     for item in data.get("list", []):
                         msg_id = item.get("id", "")
-                        now = time.time()
-                        if msg_id in self._processed:
+                        if self.check_duplicate(msg_id):
                             continue
-                        self._processed[msg_id] = now
-                        self._processed = {k: v for k, v in self._processed.items() if now - v < 300}
 
                         content = item.get("content", {}).get("text", "") or item.get("text", "")
                         sender_id = item.get("fromusername", "")

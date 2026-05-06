@@ -32,6 +32,20 @@ class ProxyMessage:
             "metadata": self.metadata,
         }
 
+    def to_inbound_message(self) -> "InboundMessage":
+        """Convert to bus InboundMessage for the agent loop."""
+        from nanobot.bus.events import InboundMessage
+        from datetime import datetime
+        return InboundMessage(
+            channel=f"proxy:{self.channel}:{self.bot}",
+            sender_id=self.sender_id,
+            chat_id=self.chat_id,
+            content=self.content,
+            timestamp=datetime.fromisoformat(self.timestamp) if self.timestamp else datetime.now(),
+            media=self.media,
+            metadata=self.metadata,
+        )
+
     @classmethod
     def from_dict(cls, d: dict) -> "ProxyMessage":
         return cls(

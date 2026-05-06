@@ -26,7 +26,6 @@ class DiscordProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed_ids: set[str] = set()
         self._bot_user_id: str | None = None
         self._client: Any = None
 
@@ -36,11 +35,8 @@ class DiscordProxyChannel(BaseProxyChannel):
                 return
 
             msg_id = str(message.id)
-            if msg_id in self._processed_ids:
+            if self.check_duplicate(msg_id):
                 return
-            self._processed_ids.add(msg_id)
-            if len(self._processed_ids) > 1000:
-                self._processed_ids = set(list(self._processed_ids)[-500:])
 
             sender_id = str(message.author.id)
             channel_id = str(message.channel.id)

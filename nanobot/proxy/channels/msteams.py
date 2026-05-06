@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -21,7 +20,6 @@ class MSTeamsProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed: set[str] = set()
         self._conversation_refs: dict[str, dict] = {}
 
     def _on_activity(self, activity: dict[str, Any]) -> None:
@@ -50,11 +48,8 @@ class MSTeamsProxyChannel(BaseProxyChannel):
                 return
 
             msg_id = f"{conversation_id}:{activity_id}"
-            if msg_id in self._processed:
+            if self.check_duplicate(msg_id):
                 return
-            self._processed.add(msg_id)
-            if len(self._processed) > 1000:
-                self._processed = set(list(self._processed)[-500:])
 
             # Store conversation ref for replies
             self._conversation_refs[conversation_id] = {

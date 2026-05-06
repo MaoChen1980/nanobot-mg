@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-import time
 from typing import Any
 
 from loguru import logger
@@ -21,7 +20,6 @@ class WhatsAppProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed: dict[str, float] = {}
         self._ws: Any = None
 
     def _on_bridge_message(self, data: dict[str, Any]) -> None:
@@ -31,11 +29,8 @@ class WhatsAppProxyChannel(BaseProxyChannel):
                 return
 
             msg_id = data.get("message_id", "")
-            now = time.time()
-            if msg_id in self._processed:
+            if self.check_duplicate(msg_id):
                 return
-            self._processed[msg_id] = now
-            self._processed = {k: v for k, v in self._processed.items() if now - v < 300}
 
             content = data.get("content", "").strip()
             if not content:

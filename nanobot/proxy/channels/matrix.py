@@ -18,7 +18,6 @@ class MatrixProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed: set[str] = set()
         self._client: Any = None
 
     async def _on_message(self, room: Any, event: Any) -> None:
@@ -27,11 +26,8 @@ class MatrixProxyChannel(BaseProxyChannel):
                 return
 
             msg_id = getattr(event, "event_id", "") or str(event)
-            if msg_id in self._processed:
+            if self.check_duplicate(msg_id):
                 return
-            self._processed.add(msg_id)
-            if len(self._processed) > 1000:
-                self._processed = set(list(self._processed)[-500:])
 
             sender_id = getattr(event, "sender", "unknown")
             chat_id = getattr(room, "room_id", "unknown")

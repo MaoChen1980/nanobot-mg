@@ -31,7 +31,6 @@ class EmailProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed: set[str] = set()
         self._last_subject_by_chat: dict[str, str] = {}
         self._last_message_id_by_chat: dict[str, str] = {}
         self._self_addresses: set[str] = self._collect_self_addresses()
@@ -189,7 +188,7 @@ class EmailProxyChannel(BaseProxyChannel):
                                 break
 
                     message_id = parsed.get("Message-ID", "").strip()
-                    if uid and uid in self._processed:
+                    if uid and self.check_duplicate(uid):
                         continue
 
                     subject = self._decode_header_value(parsed.get("Subject", ""))
@@ -212,10 +211,6 @@ class EmailProxyChannel(BaseProxyChannel):
                         ),
                     })
 
-                    if uid:
-                        self._processed.add(uid)
-                        if len(self._processed) > 10000:
-                            self._processed = set(list(self._processed)[-5000:])
 
                     if mark_seen:
                         client.store(imap_id, "+FLAGS", "\\Seen")

@@ -131,15 +131,16 @@ class ProxyManager:
         try:
             if platform.system() == "Windows":
                 result = subprocess.run(
-                    ["wmic", "process", "where",
-                     'CommandLine like "%nanobot.proxy.channels%"',
-                     "get", "ProcessId"],
+                    ["tasklist", "/FO", "CSV", "/NH", "/V"],
                     capture_output=True, text=True, timeout=10,
                 )
-                for line in result.stdout.strip().splitlines()[1:]:
-                    pid = line.strip()
-                    if pid and pid.isdigit():
-                        pids.append(int(pid))
+                for line in result.stdout.strip().splitlines():
+                    if "nanobot.proxy.channels" in line:
+                        parts = line.split(",")
+                        if len(parts) >= 2:
+                            pid = parts[1].strip().strip('"')
+                            if pid.isdigit():
+                                pids.append(int(pid))
             else:
                 result = subprocess.run(
                     ["ps", "aux"],
@@ -194,6 +195,51 @@ class ProxyManager:
         if pids:
             logger.info("Cleaned up {} orphan proxy process(es)", len(pids))
 
+    @staticmethod
+    def _create_proxy_process(
+        channel: str,
+        bot: str,
+        config: dict[str, Any] | None,
+        hub_api_base: str,
+        proxy_tcp_port: int,
+    ) -> tuple[subprocess.Popen, io.BytesIO]:
+        """Create a proxy subprocess with stdout capture.
+
+        Shared by spawn() and _restart_proxy() so both paths
+        produce identical processes.
+        """
+        import json
+        import io
+        import threading
+
+        cmd = [
+            sys.executable, "-m", f"nanobot.proxy.channels.{channel}",
+            "--hub-url", hub_api_base,
+            "--hub-tcp-port", str(proxy_tcp_port),
+            "--channel", channel,
+            "--bot", bot,
+        ]
+        env = dict(os.environ)
+        if config:
+            env["NANOBOT_PROXY_CONFIG"] = json.dumps(config)
+
+        process = subprocess.Popen(
+            cmd, env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        proxy_output = io.BytesIO()
+
+        def capture_output():
+            try:
+                for line in process.stdout:
+                    proxy_output.write(line)
+                    logger.debug("[proxy {}] {}".format(channel, line.decode().rstrip()))
+            except Exception:
+                pass
+
+        threading.Thread(target=capture_output, daemon=True).start()
+        return process, proxy_output
+
     def key_for(self, channel: str, bot: str) -> str:
         return f"{channel}:{bot}"
 
@@ -203,50 +249,11 @@ class ProxyManager:
         bot: str,
         config: dict[str, Any],
     ) -> subprocess.Popen:
-        """
-        Spawn a proxy process for a specific channel+bot.
-
-        Args:
-            channel: channel name (e.g. "feishu")
-            bot: bot name (e.g. "nanobot")
-            config: channel config dict from config.json
-
-        Returns:
-            Popen handle to the spawned process
-        """
-        proxy_module = f"nanobot.proxy.channels.{channel}"
-
-        cmd = [
-            sys.executable, "-m", proxy_module,
-            "--hub-url", self._hub_api_base,
-            "--hub-tcp-port", str(self._proxy_tcp_port or 18791),
-            "--channel", channel,
-            "--bot", bot,
-        ]
-
-        import json
-        env = dict(os.environ)
-        env["NANOBOT_PROXY_CONFIG"] = json.dumps(config)
-
-        process = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+        """Spawn a proxy process for a specific channel+bot."""
+        process, proxy_output = self._create_proxy_process(
+            channel, bot, config,
+            self._hub_api_base, self._proxy_tcp_port or 18791,
         )
-
-        import io
-        proxy_output = io.BytesIO()
-        def capture_output():
-            try:
-                for line in process.stdout:
-                    proxy_output.write(line)
-                    logger.debug("[proxy {}] {}".format(channel, line.decode().rstrip()))
-            except Exception:
-                pass
-        import threading
-        threading.Thread(target=capture_output, daemon=True).start()
-
         proxy_info = ProxyInfo(
             channel=channel,
             bot=bot,
@@ -369,31 +376,44 @@ class ProxyManager:
             except asyncio.CancelledError:
                 pass
 
+        proxies = list(self._proxies.items())
+        if not proxies:
+            return
+
         # Step 1: close all proxy TCP writers — this causes any proxy
         # currently inside _do_send() to get a connection error and
         # self-terminate via os._exit(1) in send_to_hub / async_send_to_hub.
-        for key, proxy in list(self._proxies.items()):
+        for _, proxy in proxies:
             if proxy.writer and not proxy.writer.is_closing():
                 try:
                     proxy.writer.close()
                 except Exception:
                     pass
 
-        # Step 2: brief window for proxies to notice the disconnection
-        # and exit on their own
-        await asyncio.sleep(3)
-
-        # Step 3: force-kill any remaining (idle) proxy processes
-        for key, proxy in list(self._proxies.items()):
-            logger.info("Stopping proxy {} (pid={})", key, proxy.process.pid)
+        # Step 2: brief concurrent window for proxies to self-exit,
+        # then force-kill any that remain.
+        async def _wait_or_force(key: str, proxy: ProxyInfo) -> None:
+            # Give the proxy 3s to notice TCP close and exit on its own
+            try:
+                await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(None, proxy.process.wait),
+                    timeout=3.0,
+                )
+                logger.info("Proxy {} exited gracefully after TCP close", key)
+                return
+            except asyncio.TimeoutError:
+                pass
+            # Process still alive — force-kill
+            logger.info("Force-stopping proxy {} (pid={})", key, proxy.process.pid)
             try:
                 proxy.process.terminate()
                 proxy.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proxy.process.kill()
-            except Exception as e:
-                logger.warning("Error stopping proxy {}: {}", key, e)
+            except Exception:
+                pass  # process may have exited between checks
 
+        await asyncio.gather(*[_wait_or_force(k, p) for k, p in proxies])
         self._proxies.clear()
 
     async def _monitor_loop(self, heartbeat_timeout: float = 0.0) -> None:
@@ -473,39 +493,10 @@ class ProxyManager:
             except Exception:
                 pass
 
-        cmd = [
-            sys.executable, "-m", f"nanobot.proxy.channels.{proxy.channel}",
-            "--hub-url", self._hub_api_base,
-            "--hub-tcp-port", str(self._proxy_tcp_port or 18791),
-            "--channel", proxy.channel,
-            "--bot", proxy.bot,
-        ]
-        env = dict(os.environ)
-        if proxy.config:
-            import json
-            env["NANOBOT_PROXY_CONFIG"] = json.dumps(proxy.config)
-            logger.debug("Restart {} with config: appId={}", proxy.key, proxy.config.get("appId"))
-        else:
-            logger.warning("Restart {} with EMPTY config!", proxy.key)
-
-        import io
-        new_process = subprocess.Popen(
-            cmd, env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+        new_process, proxy_output = self._create_proxy_process(
+            proxy.channel, proxy.bot, proxy.config,
+            self._hub_api_base, self._proxy_tcp_port or 18791,
         )
-        proxy_output = io.BytesIO()
-
-        def capture_output():
-            try:
-                for line in new_process.stdout:
-                    proxy_output.write(line)
-                    logger.debug("[proxy {}] {}".format(proxy.channel, line.decode().rstrip()))
-            except Exception:
-                pass
-
-        import threading
-        threading.Thread(target=capture_output, daemon=True).start()
 
         proxy.process = new_process
         proxy._proxy_output = proxy_output

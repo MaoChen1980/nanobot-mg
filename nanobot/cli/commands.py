@@ -926,7 +926,7 @@ def _run_gateway(
         except Exception as e:
             console.print(f"[yellow]Could not open browser ({e}); visit {open_browser_url}[/yellow]")
 
-    from nanobot.proxy.hub import start_tcp_server, stop_tcp_server
+    from nanobot.proxy.hub import HubTCPServer
 
     async def run():
         try:
@@ -934,13 +934,13 @@ def _run_gateway(
             await heartbeat.start()
             # Start TCP server for proxy connections
             concurrency_gate: asyncio.Semaphore | None = getattr(agent, '_concurrency_gate', None)
-            tcp_server = await start_tcp_server(
+            hub_server = HubTCPServer(
                 config.gateway.host, proxy_tcp_port, agent, proxy_manager,
                 concurrency_gate=concurrency_gate,
             )
+            await hub_server.start()
             tasks = [
                 agent.run(),
-                channels.start_all(),
                 proxy_manager.start_monitoring(),
                 _run_api_server(config.gateway.host, port),
             ]
@@ -961,11 +961,10 @@ def _run_gateway(
             agent.stop()
             # Stop TCP server (no new proxy connections), then close
             # existing proxy connections and kill lingering processes.
-            await stop_tcp_server(tcp_server)
+            await hub_server.stop()
             await proxy_manager.stop()
             if api_runner is not None:
                 await api_runner.cleanup()
-            await channels.stop_all()
             # Flush all cached sessions to durable storage before exit.
             # This prevents data loss on filesystems with write-back
             # caching (rclone VFS, NFS, FUSE mounts, etc.).

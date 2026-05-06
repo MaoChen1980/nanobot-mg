@@ -31,7 +31,6 @@ class MochatProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed: set[str] = set()
         self._socket: Any = None
 
     def _on_socket_event(self, event_type: str, payload: dict[str, Any]) -> None:
@@ -52,11 +51,8 @@ class MochatProxyChannel(BaseProxyChannel):
 
                 event_payload = event.get("payload", {})
                 message_id = event_payload.get("messageId", "")
-                if not message_id or message_id in self._processed:
+                if not message_id or self.check_duplicate(message_id):
                     continue
-                self._processed.add(message_id)
-                if len(self._processed) > 1000:
-                    self._processed = set(list(self._processed)[-500:])
 
                 content = normalize_mochat_content(event_payload.get("content")) or "[empty message]"
                 author = event_payload.get("author", "")

@@ -19,7 +19,6 @@ class TelegramProxyChannel(BaseProxyChannel):
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed_ids: set[str] = set()
         self._app: Any = None
 
     async def _handle_update(self, update: Any, context: Any) -> None:
@@ -29,11 +28,8 @@ class TelegramProxyChannel(BaseProxyChannel):
                 return
 
             msg_id = str(msg.message_id)
-            if msg_id in self._processed_ids:
+            if self.check_duplicate(msg_id):
                 return
-            self._processed_ids.add(msg_id)
-            if len(self._processed_ids) > 1000:
-                self._processed_ids = set(list(self._processed_ids)[-500:])
 
             sender_id = str(msg.from_user.id)
             chat_id = str(msg.chat.id)

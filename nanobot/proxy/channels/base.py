@@ -189,6 +189,31 @@ class BaseProxyChannel:
 
         return False
 
+    def _parent_alive(self) -> bool:
+        """Check if parent (gateway) process is still alive.
+
+        On Unix: getppid() returns 1 (init) when parent dies.
+        On Windows: getppid() never changes, so use Win32 API.
+        """
+        if os.name == "nt":
+            import ctypes
+            try:
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.OpenProcess(0x0400, False, self._parent_pid)
+                if handle:
+                    try:
+                        exit_code = ctypes.c_ulong()
+                        kernel32.GetExitCodeProcess(
+                            handle, ctypes.byref(exit_code),
+                        )
+                        return exit_code.value == 259  # STILL_ACTIVE
+                    finally:
+                        kernel32.CloseHandle(handle)
+                return False
+            except Exception:
+                return True  # fail safe
+        return os.getppid() == self._parent_pid
+
     async def _heartbeat_loop(self) -> None:
         """Periodic health check: parent alive + hub connected.
 
@@ -200,7 +225,7 @@ class BaseProxyChannel:
             await asyncio.sleep(5)
 
             # Check 1: parent (nanobot gateway) still alive
-            if os.getppid() != self._parent_pid:
+            if not self._parent_alive():
                 logger.error("Gateway (parent) process died, exiting")
                 os._exit(1)
 
@@ -285,9 +310,9 @@ class BaseProxyChannel:
         if msg_id in self._dedup and now - self._dedup[msg_id] < ttl:
             return True
         self._dedup[msg_id] = now
-        # Prune once in a while
+        # Prune expired entries when collection grows large
         if len(self._dedup) > 1000:
-            cutoff = now - ttl
+            cutoff = now - max(ttl, 300)
             self._dedup = {k: v for k, v in self._dedup.items() if v > cutoff}
         return False
 

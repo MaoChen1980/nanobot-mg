@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from typing import Any
 
 from loguru import logger
@@ -21,22 +20,18 @@ class QQProxyChannel(BaseProxyChannel):
     """Handles QQ message events and forwards to Hub via TCP."""
 
     CHANNEL_NAME = "QQ"
-    REQUIRED_CONFIG_FIELDS = ["app_id", "secret"]
+    REQUIRED_CONFIG_FIELDS = ["appId", "secret"]
 
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._processed_ids: set[str] = set()
         self._chat_type_cache: dict[str, str] = {}
         self._client: Any = None
         self._msg_seq: int = 1
 
     async def _on_message(self, data: Any, is_group: bool = False) -> None:
         try:
-            if data.id in self._processed_ids:
+            if self.check_duplicate(str(data.id)):
                 return
-            self._processed_ids.add(data.id)
-            if len(self._processed_ids) > 1000:
-                self._processed_ids = set(list(self._processed_ids)[-500:])
 
             if is_group:
                 chat_id = data.group_openid
@@ -65,7 +60,7 @@ class QQProxyChannel(BaseProxyChannel):
             return
         try:
             self._msg_seq += 1
-            payload = {"msg_type": 2 if self.config.get("msg_format") == "markdown" else 0, "content": content}
+            payload = {"msg_type": 2 if self.config.get("msgFormat") == "markdown" else 0, "content": content}
             if is_group:
                 await self._client.api.post_group_message(group_openid=chat_id, **payload)
             else:
@@ -94,7 +89,7 @@ class QQProxyChannel(BaseProxyChannel):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(
-            self._client.start(appid=self.config.get("app_id", ""), secret=self.config.get("secret", ""))
+            self._client.start(appid=str(self.config.get("appId", "")), secret=self.config.get("secret", ""))
         )
 
 
