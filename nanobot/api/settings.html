@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nanobot settings</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f9fafb; color: #111; min-height: 100vh; }
+  .container { max-width: 640px; margin: 0 auto; padding: 2rem 1rem; }
+  header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
+  header img { width: 32px; height: 32px; }
+  header h1 { font-size: 1.125rem; font-weight: 600; }
+  .card { background: white; border: 1px solid #e5e7eb; border-radius: 0.75rem; overflow: hidden; margin-bottom: 1.5rem; }
+  .card-header { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 0.875rem 1rem; border-bottom: 1px solid #f3f4f6; }
+  .row:last-child { border-bottom: none; }
+  .row label { font-size: 0.875rem; font-weight: 500; }
+  select, input { font-size: 0.875rem; padding: 0.375rem 0.625rem; border: 1px solid #d1d5db; border-radius: 0.375rem; background: white; min-width: 200px; }
+  select:focus, input:focus { outline: 2px solid #3b82f6; outline-offset: 1px; border-color: #3b82f6; }
+  .footer { display: flex; align-items: center; justify-content: space-between; padding: 0.875rem 1rem; }
+  .msg { font-size: 0.875rem; color: #6b7280; }
+  .msg.ok { color: #16a34a; }
+  .msg.err { color: #dc2626; }
+  button { font-size: 0.875rem; padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 0.375rem; background: white; cursor: pointer; }
+  button:hover { background: #f9fafb; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .loading { display: flex; align-items: center; justify-content: center; min-height: 200px; color: #6b7280; font-size: 0.875rem; }
+  .error { padding: 1rem; color: #dc2626; font-size: 0.875rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <img src="/brand/nanobot_icon.png" alt="nanobot">
+    <h1>nanobot</h1>
+  </header>
+  <div id="app">
+    <div class="loading">Loading...</div>
+  </div>
+</div>
+<script>
+const app = document.getElementById('app');
+
+async function load() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const s = await res.json();
+    render(s);
+  } catch(e) {
+    app.innerHTML = '<div class="error">Failed to load settings: ' + e.message + '</div>';
+  }
+}
+
+function render(s) {
+  const providers = s.providers || [];
+  app.innerHTML = '
+    <div class="card">
+      <div class="card-header">AI</div>
+      <div class="row">
+        <label>Provider</label>
+        <select id="provider">' +
+          providers.map(p => '<option value="' + p.name + '">' + p.label + '</option>').join('') +
+        '</select>
+      </div>
+      <div class="row">
+        <label>Model</label>
+        <input id="model" type="text" value="' + esc(s.agent.model) + '">
+      </div>
+      <div class="footer">
+        <span id="msg" class="msg"></span>
+        <button id="saveBtn" onclick="save()">Save</button>
+      </div>
+    </div>
+  ';
+  document.getElementById('provider').value = s.agent.provider || 'auto';
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function save() {
+  const model = document.getElementById('model').value.trim();
+  const provider = document.getElementById('provider').value;
+  const msg = document.getElementById('msg');
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  msg.textContent = '';
+  try {
+    const res = await fetch('/api/settings/update?model=' + encodeURIComponent(model) + '&provider=' + encodeURIComponent(provider), { method: 'PUT' });
+    const s = await res.json();
+    if (!res.ok) throw new Error(s.error || 'HTTP ' + res.status);
+    msg.className = 'msg ok';
+    msg.textContent = s.requires_restart ? 'Saved. Restart nanobot to apply.' : 'Saved.';
+  } catch(e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
