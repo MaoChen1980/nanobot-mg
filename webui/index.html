@@ -463,11 +463,12 @@ function renderChannels() {
   for (const [name, ch] of Object.entries(channels)) {
     if (!ch || typeof ch !== 'object') continue;
     const enabled = !!ch.enabled;
-    const fieldKeys = Object.keys(ch).filter(k => k !== 'bots');
+    const fieldKeys = Object.keys(ch).filter(k => k !== 'bots' && k !== 'enabled');
     html += `<div class="card channel-card">
       <div class="channel-header" onclick="toggleChannel('${name}')">
         <span style="font-weight:600;font-size:0.875rem;text-transform:capitalize">${name}</span>
-        <span class="badge ${enabled ? 'on' : ''}">${enabled ? 'ON' : 'OFF'}</span>
+        <input type="checkbox" id="ch_enabled_${name}" data-path="channels.${name}.enabled" class="toggle-input" ${enabled ? 'checked' : ''}>
+        <label class="toggle-label" for="ch_enabled_${name}" onclick="event.stopPropagation()"><span class="thumb"></span></label>
       </div>
       <div class="channel-body" id="ch-${name}">
         ${fieldKeys.map(k => renderChannelField(name, k, ch[k])).join('')}
