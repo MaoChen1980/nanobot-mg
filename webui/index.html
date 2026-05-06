@@ -500,7 +500,7 @@ function renderProviders() {
     html += `
     <div class="card">
       <div class="card-header">${name} ${hasKey ? '<span class="badge enabled">KEY</span>' : ''}</div>
-      ${field('api_key_'+name, 'API Key', hasKey ? '••••••••' : '', 'password', `providers.${name}.api_key`)}
+      ${field('api_key_'+name, 'API Key', p.api_key || '', 'text', `providers.${name}.api_key`)}
       ${field('api_base_'+name, 'API Base', p.api_base || '', 'text', `providers.${name}.api_base`)}
     </div>`;
   }
@@ -619,8 +619,6 @@ async function save() {
   const edited = JSON.parse(JSON.stringify(config));
   document.querySelectorAll('input[data-path], select[data-path]').forEach(el => {
     let val = el.type === 'checkbox' ? el.checked : el.value;
-    // Don't overwrite real keys with masked placeholder
-    if (el.type === 'password' && el.value === '••••••••') return;
     applyEdit(edited, el.dataset.path, val);
   });
 

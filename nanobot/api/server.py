@@ -90,7 +90,7 @@ async def handle_provider_models(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
     config = load_config()
-    provider_cfg = config.providers.get(provider)
+    provider_cfg = getattr(config.providers, provider, None)
     if not provider_cfg or not provider_cfg.api_key:
         return web.json_response({"models": []})
     api_key = provider_cfg.api_key
@@ -109,11 +109,10 @@ async def handle_provider_models(request: web.Request) -> web.Response:
     }
     url = f"{api_base}/v1/models" if api_base else defaults.get(provider, f"https://api.{provider}.com/v1/models")
     try:
-        import urllib.request
-        import json as _json
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read())
+        import aiohttp
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:
+                data = await resp.json()
         models = []
         if isinstance(data, dict) and "data" in data:
             models = [m["id"] for m in data["data"]]
