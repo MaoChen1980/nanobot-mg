@@ -395,84 +395,6 @@ def _migrate_cron_store(config: "Config") -> None:
 # ============================================================================
 
 
-@app.command()
-def serve(
-    port: int | None = typer.Option(None, "--port", "-p", help="API server port"),
-    host: str | None = typer.Option(None, "--host", "-H", help="Bind address"),
-    timeout: float | None = typer.Option(None, "--timeout", "-t", help="Per-request timeout (seconds)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show nanobot runtime logs"),
-    workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
-    config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
-):
-    """Start the OpenAI-compatible API server (/v1/chat/completions)."""
-    try:
-        from aiohttp import web  # noqa: F401
-    except ImportError:
-        console.print("[red]aiohttp is required. Install with: pip install 'nanobot-ai[api]'[/red]")
-        raise typer.Exit(1)
-
-    from loguru import logger
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.api.server import create_app
-    from nanobot.bus.queue import MessageBus
-    from nanobot.session.manager import SessionManager
-
-    if verbose:
-        logger.enable("nanobot")
-    else:
-        logger.disable("nanobot")
-
-    runtime_config = _load_runtime_config(config, workspace)
-    api_cfg = runtime_config.api
-    host = host if host is not None else api_cfg.host
-    port = port if port is not None else api_cfg.port
-    timeout = timeout if timeout is not None else api_cfg.timeout
-    sync_workspace_templates(runtime_config.workspace_path)
-    bus = MessageBus()
-    provider = _make_provider(runtime_config)
-    session_manager = SessionManager(runtime_config.workspace_path)
-    agent_loop = AgentLoop(
-        bus=bus,
-        provider=provider,
-        workspace=runtime_config.workspace_path,
-        model=runtime_config.agents.defaults.model,
-        max_iterations=runtime_config.agents.defaults.max_tool_iterations,
-        context_window_tokens=runtime_config.agents.defaults.context_window_tokens,
-        context_block_limit=runtime_config.agents.defaults.context_block_limit,
-        max_tool_result_chars=runtime_config.agents.defaults.max_tool_result_chars,
-        provider_retry_mode=runtime_config.agents.defaults.provider_retry_mode,
-        web_config=runtime_config.tools.web,
-        exec_config=runtime_config.tools.exec,
-        restrict_to_workspace=runtime_config.tools.restrict_to_workspace,
-        session_manager=session_manager,
-        mcp_servers=runtime_config.tools.mcp_servers,
-        channels_config=runtime_config.channels,
-        timezone=runtime_config.agents.defaults.timezone,
-        unified_session=runtime_config.agents.defaults.unified_session,
-        disabled_skills=runtime_config.agents.defaults.disabled_skills,
-        session_ttl_minutes=runtime_config.agents.defaults.session_ttl_minutes,
-        consolidation_ratio=runtime_config.agents.defaults.consolidation_ratio,
-        tools_config=runtime_config.tools,
-    )
-
-    # Resolve webui/index.html path relative to project root
-    # __file__ = nanobot/cli/commands.py → parent.parent = nanobot/ → parent.parent.parent = project root
-    from pathlib import Path as P
-    webui_index = (P(__file__).parent.parent.parent / "webui" / "index.html").resolve()
-
-    model_name = runtime_config.agents.defaults.model
-    console.print(f"{__logo__} Starting settings server")
-    console.print(f"  [cyan]URL[/cyan]      : http://{host}:{port}/")
-    console.print(f"  [cyan]Local only[/cyan]: http://127.0.0.1:{port}/ for browser access")
-    if host in {"0.0.0.0", "::"}:
-        console.print(
-            "[yellow]Warning:[/yellow] Server is bound to all interfaces. "
-            "Only do this behind a trusted network boundary."
-        )
-    console.print()
-
-    api_app = create_app(webui_index)
-    web.run_app(api_app, host=host, port=port, print=lambda msg: logger.info(msg))
 
 
 def _get_bots_list(section: Any) -> list:
@@ -821,8 +743,9 @@ def _run_gateway(
         # Channels start asynchronously; a short poll lets us avoid racing the bind.
         for _ in range(40):  # ~4s max
             try:
+                connect_host = "127.0.0.1" if config.gateway.host in {"0.0.0.0", "::"} else config.gateway.host
                 reader, writer = await asyncio.open_connection(
-                    config.gateway.host or "127.0.0.1", port
+                    connect_host, port
                 )
                 writer.close()
                 try:

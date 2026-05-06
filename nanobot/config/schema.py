@@ -159,18 +159,10 @@ class HeartbeatConfig(Base):
     keep_recent_messages: int = 8
 
 
-class ApiConfig(Base):
-    """OpenAI-compatible API server configuration."""
-
-    host: str = "127.0.0.1"  # Safer default: local-only bind.
-    port: int = 8900
-    timeout: float = 120.0  # Per-request timeout in seconds.
-
-
 class GatewayConfig(Base):
     """Gateway/server configuration."""
 
-    host: str = "127.0.0.1"  # Safer default: local-only bind.
+    host: str = "0.0.0.0"  # All interfaces so LAN hosts can reach WebUI.
     port: int = 18790
     heartbeat: HeartbeatConfig = Field(default_factory=HeartbeatConfig)
 
@@ -257,7 +249,6 @@ class Config(BaseSettings):
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
-    api: ApiConfig = Field(default_factory=ApiConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     logging: LogConfig = Field(default_factory=LogConfig)

@@ -635,7 +635,6 @@ function renderTools() {
 // ── Gateway ───────────────────────────────────────────────────────────────────
 function renderGateway() {
   const g = config.gateway;
-  const a = config.api || {};
   const tab = document.getElementById('tabGateway');
   tab.innerHTML = `
     <div class="card">
@@ -648,12 +647,6 @@ function renderGateway() {
       ${field('hb_enabled', 'Enabled', g.heartbeat?.enabled, 'checkbox', 'gateway.heartbeat.enabled')}
       ${field('hb_interval_s', 'Interval (s)', g.heartbeat?.interval_s || 1800, 'number', 'gateway.heartbeat.interval_s')}
       ${field('hb_keep_messages', 'Keep Recent Messages', g.heartbeat?.keep_recent_messages ?? 8, 'number', 'gateway.heartbeat.keep_recent_messages')}
-    </div>
-    <div class="card">
-      <div class="card-header">OpenAI API</div>
-      ${field('api_host', 'Host', a.host || '127.0.0.1', 'text', 'api.host')}
-      ${field('api_port', 'Port', a.port || 8900, 'number', 'api.port')}
-      ${field('api_timeout', 'Timeout (s)', a.timeout || 120, 'number', 'api.timeout')}
     </div>
     <div class="card">
       <div class="card-header">Logging</div>

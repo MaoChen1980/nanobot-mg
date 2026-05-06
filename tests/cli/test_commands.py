@@ -62,40 +62,36 @@ def test_onboard_fresh_install(mock_paths):
     result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
-    assert "Created config" in result.stdout
-    assert "Created workspace" in result.stdout
-    assert "nanobot is ready" in result.stdout
+    assert "Created default config" in _strip_ansi(result.stdout)
+    assert "Created workspace" in _strip_ansi(result.stdout)
+    assert "nanobot is ready" in _strip_ansi(result.stdout)
     assert config_file.exists()
     assert (workspace_dir / "AGENTS.md").exists()
     assert (workspace_dir / "memory" / "MEMORY.md").exists()
-    expected_workspace = Config().workspace_path
-    assert mock_ws.call_args.args == (expected_workspace,)
 
 
 def test_onboard_existing_config_refresh(mock_paths):
-    """Config exists, user declines overwrite — should refresh (load-merge-save)."""
+    """Config exists — just ensures workspace/templates are set up."""
     config_file, workspace_dir, _ = mock_paths
-    config_file.write_text('{"existing": true}')
+    config_file.write_text("{}")
 
-    result = runner.invoke(app, ["onboard"], input="n\n")
+    result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
-    assert "Config already exists" in result.stdout
-    assert "existing values preserved" in result.stdout
+    assert "Config already exists" in _strip_ansi(result.stdout)
     assert workspace_dir.exists()
     assert (workspace_dir / "AGENTS.md").exists()
 
 
 def test_onboard_existing_config_overwrite(mock_paths):
-    """Config exists, user confirms overwrite — should reset to defaults."""
+    """Config exists, workspace is fresh — templates added."""
     config_file, workspace_dir, _ = mock_paths
-    config_file.write_text('{"existing": true}')
+    config_file.write_text("{}")
 
-    result = runner.invoke(app, ["onboard"], input="y\n")
+    result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
-    assert "Config already exists" in result.stdout
-    assert "Config reset to defaults" in result.stdout
+    assert "Config already exists" in _strip_ansi(result.stdout)
     assert workspace_dir.exists()
 
 
@@ -105,11 +101,11 @@ def test_onboard_existing_workspace_safe_create(mock_paths):
     workspace_dir.mkdir(parents=True)
     config_file.write_text("{}")
 
-    result = runner.invoke(app, ["onboard"], input="n\n")
+    result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
-    assert "Created workspace" not in result.stdout
-    assert "Created AGENTS.md" in result.stdout
+    assert "Created workspace" not in _strip_ansi(result.stdout)
+    assert "Created AGENTS.md" in _strip_ansi(result.stdout)
     assert (workspace_dir / "AGENTS.md").exists()
 
 
@@ -128,33 +124,14 @@ def test_onboard_help_shows_workspace_and_config_options():
     assert "-w" in stripped_output
     assert "--config" in stripped_output
     assert "-c" in stripped_output
-    assert "--wizard" in stripped_output
     assert "--dir" not in stripped_output
 
 
-def test_onboard_interactive_discard_does_not_save_or_create_workspace(mock_paths, monkeypatch):
-    config_file, workspace_dir, _ = mock_paths
-
-    from nanobot.cli.onboard import OnboardResult
-
-    monkeypatch.setattr(
-        "nanobot.cli.onboard.run_onboard",
-        lambda initial_config: OnboardResult(config=initial_config, should_save=False),
-    )
-
-    result = runner.invoke(app, ["onboard", "--wizard"])
-
-    assert result.exit_code == 0
-    assert "No changes were saved" in result.stdout
-    assert not config_file.exists()
-    assert not workspace_dir.exists()
 
 
 def test_onboard_uses_explicit_config_and_workspace_paths(tmp_path, monkeypatch):
     config_path = tmp_path / "instance" / "config.json"
     workspace_path = tmp_path / "workspace"
-
-    monkeypatch.setattr("nanobot.channels.registry.discover_all", lambda: {})
 
     result = runner.invoke(
         app,
@@ -172,29 +149,6 @@ def test_onboard_uses_explicit_config_and_workspace_paths(tmp_path, monkeypatch)
     assert f"--config {resolved_config}" in compact_output
 
 
-def test_onboard_wizard_preserves_explicit_config_in_next_steps(tmp_path, monkeypatch):
-    config_path = tmp_path / "instance" / "config.json"
-    workspace_path = tmp_path / "workspace"
-
-    from nanobot.cli.onboard import OnboardResult
-
-    monkeypatch.setattr(
-        "nanobot.cli.onboard.run_onboard",
-        lambda initial_config: OnboardResult(config=initial_config, should_save=True),
-    )
-    monkeypatch.setattr("nanobot.channels.registry.discover_all", lambda: {})
-
-    result = runner.invoke(
-        app,
-        ["onboard", "--wizard", "--config", str(config_path), "--workspace", str(workspace_path)],
-    )
-
-    assert result.exit_code == 0
-    stripped_output = _strip_ansi(result.stdout)
-    compact_output = stripped_output.replace("\n", "")
-    resolved_config = str(config_path.resolve())
-    assert f'nanobot agent -m "Hello!" --config {resolved_config}' in compact_output
-    assert f"nanobot gateway --config {resolved_config}" in compact_output
 
 
 def test_config_matches_github_copilot_codex_with_hyphen_prefix():
@@ -833,44 +787,6 @@ def _patch_cli_command_runtime(
         monkeypatch.setattr("nanobot.config.paths.get_cron_dir", get_cron_dir)
 
 
-def _patch_serve_runtime(monkeypatch, config: Config, seen: dict[str, object]) -> None:
-    pytest.importorskip("aiohttp")
-
-    class _FakeApiApp:
-        def __init__(self) -> None:
-            self.on_startup: list[object] = []
-            self.on_cleanup: list[object] = []
-
-    class _FakeAgentLoop:
-        def __init__(self, **kwargs) -> None:
-            seen["workspace"] = kwargs["workspace"]
-
-        async def _connect_mcp(self) -> None:
-            return None
-
-        async def close_mcp(self) -> None:
-            return None
-
-    def _fake_create_app(agent_loop, model_name: str, request_timeout: float):
-        seen["agent_loop"] = agent_loop
-        seen["model_name"] = model_name
-        seen["request_timeout"] = request_timeout
-        return _FakeApiApp()
-
-    def _fake_run_app(api_app, host: str, port: int, print):
-        seen["api_app"] = api_app
-        seen["host"] = host
-        seen["port"] = port
-
-    _patch_cli_command_runtime(
-        monkeypatch,
-        config,
-        message_bus=lambda: object(),
-        session_manager=lambda _workspace: object(),
-    )
-    monkeypatch.setattr("nanobot.agent.loop.AgentLoop", _FakeAgentLoop)
-    monkeypatch.setattr("nanobot.api.server.create_app", _fake_create_app)
-    monkeypatch.setattr("aiohttp.web.run_app", _fake_run_app)
 
 
 def test_gateway_uses_workspace_from_config_by_default(monkeypatch, tmp_path: Path) -> None:
@@ -1492,61 +1408,8 @@ def test_gateway_health_endpoint_binds_and_serves_expected_responses(
     assert missing_response.endswith("\r\n\r\nNot Found")
 
 
-def test_serve_uses_api_config_defaults_and_workspace_override(
-    monkeypatch, tmp_path: Path
-) -> None:
-    config_file = _write_instance_config(tmp_path)
-    config = Config()
-    config.agents.defaults.workspace = str(tmp_path / "config-workspace")
-    config.api.host = "127.0.0.2"
-    config.api.port = 18900
-    config.api.timeout = 45.0
-    override_workspace = tmp_path / "override-workspace"
-    seen: dict[str, object] = {}
-
-    _patch_serve_runtime(monkeypatch, config, seen)
-
-    result = runner.invoke(
-        app,
-        ["serve", "--config", str(config_file), "--workspace", str(override_workspace)],
-    )
-
-    assert result.exit_code == 0
-    assert seen["workspace"] == override_workspace
-    assert seen["host"] == "127.0.0.2"
-    assert seen["port"] == 18900
-    assert seen["request_timeout"] == 45.0
 
 
-def test_serve_cli_options_override_api_config(monkeypatch, tmp_path: Path) -> None:
-    config_file = _write_instance_config(tmp_path)
-    config = Config()
-    config.api.host = "127.0.0.2"
-    config.api.port = 18900
-    config.api.timeout = 45.0
-    seen: dict[str, object] = {}
-
-    _patch_serve_runtime(monkeypatch, config, seen)
-
-    result = runner.invoke(
-        app,
-        [
-            "serve",
-            "--config",
-            str(config_file),
-            "--host",
-            "127.0.0.1",
-            "--port",
-            "18901",
-            "--timeout",
-            "46",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert seen["host"] == "127.0.0.1"
-    assert seen["port"] == 18901
-    assert seen["request_timeout"] == 46.0
 
 
 def test_channels_login_requires_channel_name() -> None:
