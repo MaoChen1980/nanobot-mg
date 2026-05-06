@@ -105,8 +105,13 @@ def create_app(index_html_path: str | Path = "") -> web.Application:
     """Create aiohttp app with only settings API."""
     app = web.Application()
     app["index_html_path"] = str(index_html_path)
+    # Derive webui public dir from index_html_path (webui/index.html → webui/public)
+    public_dir = Path(index_html_path).parent / "public"
     app.router.add_get("/", lambda r: web.FileResponse(r.app["index_html_path"]))
     app.router.add_get("/health", handle_health)
     app.router.add_get("/api/settings", handle_settings_get)
     app.router.add_put("/api/settings/update", handle_settings_update)
+    # Serve /brand/* from webui/public/brand/
+    if public_dir.is_dir():
+        app.router.add_static("/brand", public_dir / "brand", follow_symlinks=True)
     return app
