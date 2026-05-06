@@ -364,7 +364,7 @@ function applyEdit(obj, path, value) {
   if (last === 'disabled_skills' && typeof value === 'string' && value.includes(',')) {
     value = value.split(',').map(s => s.trim()).filter(Boolean);
   }
-  if (value === '') cur[last] = null;
+  if (value === '') cur[last] = '';
   else if (value === 'true') cur[last] = true;
   else if (value === 'false') cur[last] = false;
   else if (!isNaN(value) && value !== '') cur[last] = Number(value);
