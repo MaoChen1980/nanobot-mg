@@ -276,10 +276,9 @@ def main(
 def onboard(
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
     config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
-    wizard: bool = typer.Option(False, "--wizard", help="Use interactive wizard"),
 ):
-    """Initialize nanobot configuration and workspace."""
-    from nanobot.config.loader import get_config_path, load_config, save_config, set_config_path
+    """Generate default config.json and workspace."""
+    from nanobot.config.loader import get_config_path, save_config, set_config_path
     from nanobot.config.schema import Config
 
     if config:
@@ -289,135 +288,33 @@ def onboard(
     else:
         config_path = get_config_path()
 
-    def _apply_workspace_override(loaded: Config) -> Config:
-        if workspace:
-            loaded.agents.defaults.workspace = workspace
-        return loaded
-
-    # Create or update config
     if config_path.exists():
-        if wizard:
-            config = _apply_workspace_override(load_config(config_path))
-        else:
-            console.print(f"[yellow]Config already exists at {config_path}[/yellow]")
-            console.print(
-                "  [bold]y[/bold] = overwrite with defaults (existing values will be lost)"
-            )
-            console.print(
-                "  [bold]N[/bold] = refresh config, keeping existing values and adding new fields"
-            )
-            if typer.confirm("Overwrite?"):
-                config = _apply_workspace_override(Config())
-                save_config(config, config_path)
-                console.print(f"[green]✓[/green] Config reset to defaults at {config_path}")
-            else:
-                config = _apply_workspace_override(load_config(config_path))
-                save_config(config, config_path)
-                console.print(
-                    f"[green]✓[/green] Config refreshed at {config_path} (existing values preserved)"
-                )
+        console.print(f"[green]✓[/green] Config already exists at {config_path}")
+        from nanobot.config.loader import load_config
+        cfg = load_config(config_path)
     else:
-        config = _apply_workspace_override(Config())
-        # In wizard mode, don't save yet - the wizard will handle saving if should_save=True
-        if not wizard:
-            save_config(config, config_path)
-            console.print(f"[green]✓[/green] Created config at {config_path}")
+        cfg = Config()
+        if workspace:
+            cfg.agents.defaults.workspace = workspace
+        save_config(cfg, config_path)
+        console.print(f"[green]✓[/green] Created default config at {config_path}")
 
-    # Run interactive wizard if enabled
-    if wizard:
-        from nanobot.cli.onboard import run_onboard
+    # Create workspace
+    workspace_path = workspace or cfg.agents.defaults.workspace
+    ws_path = get_workspace_path(workspace_path)
+    if ws_path and not ws_path.exists():
+        ws_path.mkdir(parents=True, exist_ok=True)
+        console.print(f"[green]✓[/green] Created workspace at {ws_path}")
 
-        try:
-            result = run_onboard(initial_config=config)
-            if not result.should_save:
-                console.print("[yellow]Configuration discarded. No changes were saved.[/yellow]")
-                return
-
-            config = result.config
-            save_config(config, config_path)
-            console.print(f"[green]✓[/green] Config saved at {config_path}")
-        except Exception as e:
-            console.print(f"[red]✗[/red] Error during configuration: {e}")
-            console.print("[yellow]Please run 'nanobot onboard' again to complete setup.[/yellow]")
-            raise typer.Exit(1)
-    _onboard_plugins(config_path)
-
-    # Create workspace, preferring the configured workspace path.
-    workspace_path = get_workspace_path(config.workspace_path)
-    if not workspace_path.exists():
-        workspace_path.mkdir(parents=True, exist_ok=True)
-        console.print(f"[green]✓[/green] Created workspace at {workspace_path}")
-
-    sync_workspace_templates(workspace_path)
-
-    agent_cmd = 'nanobot agent -m "Hello!"'
-    gateway_cmd = "nanobot gateway"
-    if config:
-        agent_cmd += f" --config {config_path}"
-        gateway_cmd += f" --config {config_path}"
+    sync_workspace_templates(ws_path)
 
     console.print(f"\n{__logo__} nanobot is ready!")
     console.print("\nNext steps:")
-    if wizard:
-        console.print(f"  1. Chat: [cyan]{agent_cmd}[/cyan]")
-        console.print(f"  2. Start gateway: [cyan]{gateway_cmd}[/cyan]")
-    else:
-        console.print(f"  1. Add your API key to [cyan]{config_path}[/cyan]")
-        console.print("     Get one at: https://openrouter.ai/keys")
-        console.print(f"  2. Chat: [cyan]{agent_cmd}[/cyan]")
+    console.print(f"  1. Start gateway: [cyan]nanobot gateway --config {config_path}[/cyan]")
+    console.print(f"  2. Open WebUI and configure from your browser")
     console.print(
-        "\n[dim]Want Telegram/WhatsApp? See: https://github.com/HKUDS/nanobot#-chat-apps[/dim]"
+        "\n[dim]See: https://github.com/HKUDS/nanobot#-chat-apps[/dim]"
     )
-
-
-def _merge_missing_defaults(existing: Any, defaults: Any) -> Any:
-    """Recursively fill in missing values from defaults without overwriting user config."""
-    if not isinstance(existing, dict) or not isinstance(defaults, dict):
-        return existing
-
-    merged = dict(existing)
-    for key, value in defaults.items():
-        if key not in merged:
-            merged[key] = value
-        else:
-            merged[key] = _merge_missing_defaults(merged[key], value)
-    return merged
-
-
-def _onboard_plugins(config_path: Path) -> None:
-    """Inject default config for all discovered channels (built-in + plugins)."""
-    import json
-
-    from nanobot.proxy.registry import discover_all
-
-    all_channels = discover_all()
-    if not all_channels:
-        return
-
-    with open(config_path, encoding="utf-8") as f:
-        data = json.load(f)
-
-    channels = data.setdefault("channels", {})
-    for name in all_channels:
-        if name not in channels:
-            # Every channel gets bots[] format by default: disabled with empty bot list
-            channels[name] = {"enabled": False, "bots": []}
-        else:
-            section = channels[name]
-            if isinstance(section, dict) and "bots" not in section:
-                bot_fields = {k: v for k, v in section.items() if k not in ("enabled", "bots")}
-                if bot_fields:
-                    enabled = section.get("enabled", False)
-                    bot_fields.setdefault("name", "bot1")
-                    section.clear()
-                    section["enabled"] = enabled
-                    section["bots"] = [bot_fields]
-                else:
-                    section.setdefault("enabled", False)
-                    section["bots"] = []
-
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def _make_provider(config: Config):
