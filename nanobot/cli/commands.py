@@ -875,7 +875,7 @@ def _run_gateway(
         from pathlib import Path as P
 
         webui_index = (P(__file__).parent.parent.parent / "webui" / "index.html").resolve()
-        api_app = make_api_app(webui_index)
+        api_app = make_api_app(webui_index, proxy_manager=proxy_manager)
 
         api_runner = web.AppRunner(api_app, shutdown_timeout=0)
         await api_runner.setup()

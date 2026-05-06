@@ -145,17 +145,66 @@ class ProxyManager:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
         registration: dict[str, Any],
-    ) -> None:
-        """Record a proxy's TCP connection."""
-        if key in self._proxies:
-            self._proxies[key].reader = reader
-            self._proxies[key].writer = writer
-            self._proxies[key].registration = registration
-            self._proxies[key].last_heartbeat = time.time()
-            self._proxies[key].running = True
-            writer_id = id(writer)
-            self._writers[writer_id] = key
-            logger.debug("Proxy {} registered via TCP", key)
+    ) -> bool:
+        """Record a proxy's TCP connection.
+
+        Returns True if accepted, False if rejected (stale proxy with wrong PID).
+
+        If there's an existing connection for the same key with a DIFFERENT PID,
+        the incoming connection is closed (stale proxy from a previous session).
+        This prevents orphan proxies from hijacking connections from legitimate ones.
+
+        If there's an existing connection with the SAME PID, the old connection
+        is closed and replaced (same process reconnecting after a glitch).
+        """
+        existing = self._proxies.get(key)
+
+        # Reject unknown proxies (not spawned by us — orphan from a previous session)
+        if existing is None:
+            logger.warning("Rejecting unsolicited proxy registration for {}", key)
+            try:
+                writer.close()
+            except Exception:
+                pass
+            return False
+
+        # PID check: if we have a spawned process, only accept registration from it
+        if existing.process is not None and existing.writer is not None and not existing.writer.is_closing():
+            expected_pid = existing.process.pid
+            actual_pid = registration.get("pid", 0)
+            if actual_pid and actual_pid != expected_pid:
+                logger.warning(
+                    "Rejecting stale proxy {}: pid {} != expected pid {}",
+                    key, actual_pid, expected_pid,
+                )
+                try:
+                    writer.close()
+                except Exception:
+                    pass
+                return False
+
+        # Close old connection if any
+        if existing.writer is not None:
+            old_writer = existing.writer
+            old_id = id(old_writer)
+            if old_id in self._writers:
+                del self._writers[old_id]
+            try:
+                if not old_writer.is_closing():
+                    old_writer.close()
+            except Exception:
+                pass
+            logger.debug("Proxy {}: closed old TCP connection", key)
+
+        self._proxies[key].reader = reader
+        self._proxies[key].writer = writer
+        self._proxies[key].registration = registration
+        self._proxies[key].last_heartbeat = time.time()
+        self._proxies[key].running = True
+        writer_id = id(writer)
+        self._writers[writer_id] = key
+        logger.debug("Proxy {} registered via TCP", key)
+        return True
 
     def unregister_by_writer(self, writer: asyncio.StreamWriter) -> None:
         """Remove proxy registration by writer instance."""
@@ -244,6 +293,21 @@ class ProxyManager:
     def _restart_proxy(self, proxy: ProxyInfo) -> None:
         """Restart a dead proxy."""
         import platform
+
+        # Clear stale TCP connection state for clean re-registration
+        if proxy.writer is not None:
+            writer_id = id(proxy.writer)
+            if writer_id in self._writers:
+                del self._writers[writer_id]
+            try:
+                if not proxy.writer.is_closing():
+                    proxy.writer.close()
+            except Exception:
+                pass
+            proxy.writer = None
+            proxy.reader = None
+        proxy.running = False
+
         old_process = proxy.process
         pid = old_process.pid
 
@@ -278,8 +342,27 @@ class ProxyManager:
         else:
             logger.warning("Restart {} with EMPTY config!", proxy.key)
 
-        new_process = subprocess.Popen(cmd, env=env)
+        import io
+        new_process = subprocess.Popen(
+            cmd, env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        proxy_output = io.BytesIO()
+
+        def capture_output():
+            try:
+                for line in new_process.stdout:
+                    proxy_output.write(line)
+                    logger.debug("[proxy {}] {}".format(proxy.channel, line.decode().rstrip()))
+            except Exception:
+                pass
+
+        import threading
+        threading.Thread(target=capture_output, daemon=True).start()
+
         proxy.process = new_process
+        proxy._proxy_output = proxy_output
         proxy.running = True
         proxy.last_heartbeat = time.time()
         logger.info("Restarted proxy {} (pid={})", proxy.key, new_process.pid)

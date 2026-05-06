@@ -48,7 +48,7 @@ class ChannelManager:
         transcription_base = self._resolve_transcription_base(transcription_provider)
         transcription_language = self.config.channels.transcription_language
 
-        for name, cls in discover_all().items():
+        for name, info in discover_all().items():
             section = getattr(self.config.channels, name, None)
             if section is None:
                 continue
@@ -77,11 +77,9 @@ class ChannelManager:
                 logger.debug("Channel {}: multi-bot config detected ({} bots), skipping in-process", name, len(bots))
                 continue
             else:
-                # Legacy single-bot mode
-                self._create_channel(
-                    cls, section, name, None,
-                    transcription_provider, transcription_key, transcription_base, transcription_language,
-                )
+                # No bot array — proxy-only channels must use bots array.
+                logger.info("Channel {}: enabled but no bot config. Add a 'bots' list in the channel config.", name)
+                continue
 
         self._validate_allow_from()
         logger.info("ChannelManager initialized with channels: {}", list(self.channels.keys()))
@@ -158,11 +156,28 @@ class ChannelManager:
         except Exception as e:
             logger.error("Failed to start channel {}: {}", name, e)
 
+    def _count_enabled_channels(self) -> int:
+        """Count all enabled channels in config (both in-process and proxy-based)."""
+        from nanobot.proxy.registry import discover_all
+
+        count = 0
+        for name in discover_all():
+            section = getattr(self.config.channels, name, None)
+            if section is None:
+                continue
+            enabled = section.get("enabled", False) if isinstance(section, dict) else getattr(section, "enabled", False)
+            if enabled:
+                count += 1
+        return count
+
     async def start_all(self) -> None:
         """Start all channels and the outbound dispatcher."""
-        if not self.channels:
+        total_enabled = self._count_enabled_channels()
+        if total_enabled == 0:
             logger.warning("No channels enabled")
             return
+        if not self.channels:
+            logger.info("All {} enabled channel(s) running via proxy process(es)", total_enabled)
 
         # Start outbound dispatcher
         self._dispatch_task = asyncio.create_task(self._dispatch_outbound())

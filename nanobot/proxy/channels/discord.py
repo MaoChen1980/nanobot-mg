@@ -81,6 +81,59 @@ class DiscordProxyChannel:
         resp_line = await self._reader.readline()
         return HubResponse.from_dict(json.loads(resp_line.decode()))
 
+    async def _reconnect_to_hub(self, max_retries: int = 3) -> bool:
+        """Reconnect to Hub via TCP with exponential backoff. Runs on conn_loop."""
+        for attempt in range(1, max_retries + 1):
+            try:
+                if self._writer and not self._writer.is_closing():
+                    self._writer.close()
+                    try:
+                        await self._writer.wait_closed()
+                    except Exception:
+                        pass
+
+                self._reader, self._writer = await asyncio.open_connection(
+                    self.hub_tcp_host, self.hub_tcp_port
+                )
+                logger.info("Reconnected to Hub via TCP (attempt {})", attempt)
+
+                register_msg = {
+                    "type": "register",
+                    "channel": self.channel,
+                    "bot": self.bot,
+                    "pid": os.getpid(),
+                }
+                self._writer.write((json.dumps(register_msg) + "\n").encode())
+                await self._writer.drain()
+
+                resp_line = await self._reader.readline()
+                resp = json.loads(resp_line.decode())
+                if resp.get("success"):
+                    logger.info("Re-registered with Hub via TCP (attempt {})", attempt)
+                    return True
+            except Exception as e:
+                logger.warning("Reconnect attempt {}/{} failed: {}", attempt, max_retries, e)
+
+            if attempt < max_retries:
+                await asyncio.sleep(2 ** (attempt - 1))
+
+        return False
+
+    async def _send_with_reconnect(self, msg: dict[str, Any]) -> HubResponse:
+        """Send message to Hub via TCP, with automatic reconnect on failure."""
+        last_error = None
+        for attempt in range(3):
+            try:
+                return await self._do_send(msg)
+            except Exception as e:
+                last_error = e
+                logger.warning("Send attempt {}/3 failed: {}", attempt + 1, e)
+                if attempt < 2:
+                    if not await self._reconnect_to_hub():
+                        break
+        raise RuntimeError(f"Send failed after 3 attempts: {last_error}")
+
+
     def on_message(self, message: Any) -> None:
         try:
             if self._bot_user_id and str(message.author.id) == self._bot_user_id:
@@ -104,7 +157,7 @@ class DiscordProxyChannel:
                 try:
                     with self._send_lock:
                         future = asyncio.run_coroutine_threadsafe(
-                            self._do_send({
+                            self._send_with_reconnect({
                                 "channel": self.channel,
                                 "bot": self.bot,
                                 "sender_id": sender_id,
@@ -115,7 +168,7 @@ class DiscordProxyChannel:
                             }),
                             self._conn_loop,
                         )
-                        response = future.result(timeout=120)
+                        response = future.result(timeout=300)
 
                     if response and response.success and response.content:
                         asyncio.run_coroutine_threadsafe(
@@ -123,7 +176,8 @@ class DiscordProxyChannel:
                             self._conn_loop,
                         )
                 except Exception as e:
-                    logger.warning("Failed to forward Discord message via TCP: {}", e)
+                    logger.error("Failed to forward message after retries: {}, exiting process", e)
+                    os._exit(1)
 
             t = threading.Thread(target=forward, daemon=True)
             t.start()

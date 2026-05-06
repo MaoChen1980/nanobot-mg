@@ -176,10 +176,53 @@ async def handle_settings_update(request: web.Request) -> web.Response:
     })
 
 
-def create_app(index_html_path: str | Path = "") -> web.Application:
+async def handle_shutdown(request: web.Request) -> web.Response:
+    """POST /api/shutdown — stop proxies then restart the gateway process."""
+    import sys
+    import os
+    import subprocess
+    import tempfile
+    import threading
+
+    # Stop proxy children first so they don't orphan WS connections.
+    proxy_manager = request.app.get("proxy_manager")
+    if proxy_manager:
+        try:
+            await proxy_manager.stop()
+        except Exception:
+            pass
+
+    def deferred_restart():
+        import time
+        time.sleep(0.3)
+        log_path = os.path.join(tempfile.gettempdir(), "_nanobot_restart.log")
+        bat_path = os.path.join(tempfile.gettempdir(), "_nanobot_restart.bat")
+        with open(bat_path, "w") as f:
+            f.write("@echo off\n")
+            f.write(f'echo [%time%] restart batch started >> "{log_path}"\n')
+            f.write(f'timeout /t 3 /nobreak >nul\n')
+            f.write(f'echo [%time%] launching gateway >> "{log_path}"\n')
+            f.write(f'"{sys.executable}" -m nanobot gateway >> "{log_path}" 2>&1\n')
+            f.write(f'echo [%time%] exit code %%ERRORLEVEL%% >> "{log_path}"\n')
+        subprocess.Popen(
+            ["cmd", "/c", bat_path],
+            cwd=os.getcwd(),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        time.sleep(0.3)
+        os._exit(0)
+
+    threading.Thread(target=deferred_restart, daemon=True).start()
+    return web.json_response({"ok": True, "message": "Gateway restarting"})
+
+
+def create_app(index_html_path: str | Path = "", proxy_manager=None) -> web.Application:
     """Create aiohttp app with only settings API."""
     app = web.Application()
     app["index_html_path"] = str(index_html_path)
+    app["proxy_manager"] = proxy_manager
     # Derive webui public dir from index_html_path (webui/index.html → webui/public)
     public_dir = Path(index_html_path).parent / "public"
     app.router.add_get("/", lambda r: web.FileResponse(r.app["index_html_path"]))
@@ -189,6 +232,7 @@ def create_app(index_html_path: str | Path = "") -> web.Application:
     app.router.add_put("/api/config", handle_config_update)
     app.router.add_get("/api/settings", handle_settings_get)
     app.router.add_put("/api/settings/update", handle_settings_update)
+    app.router.add_post("/api/shutdown", handle_shutdown)
     # Serve /brand/* from webui/public/brand/
     if public_dir.is_dir():
         app.router.add_static("/brand", public_dir / "brand", follow_symlinks=True)

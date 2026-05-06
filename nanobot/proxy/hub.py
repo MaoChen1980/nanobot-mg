@@ -59,11 +59,16 @@ async def _handle_proxy_tcp(
                 channel = data.get("channel", "")
                 bot = data.get("bot", "")
                 pid = data.get("pid", 0)
-                logger.info("Proxy TCP registered: {}:{} (pid={})", channel, bot, pid)
-
                 key = f"{channel}:{bot}"
-                proxy_manager.register_via_tcp(key, reader, writer, {"channel": channel, "bot": bot, "pid": pid})
 
+                accepted = proxy_manager.register_via_tcp(
+                    key, reader, writer, {"channel": channel, "bot": bot, "pid": pid},
+                )
+                if not accepted:
+                    logger.warning("Proxy registration rejected: {}:{} (pid={})", channel, bot, pid)
+                    break  # Connection will be closed in finally block
+
+                logger.info("Proxy registered: {}:{} (pid={})", channel, bot, pid)
                 resp = HubResponse(success=True)
                 writer.write((json.dumps(resp.to_dict()) + "\n").encode())
                 await writer.drain()
@@ -110,7 +115,7 @@ async def _handle_proxy_tcp(
     except asyncio.CancelledError:
         pass
     except Exception as e:
-        logger.warning("Proxy TCP connection error from {}: {}", peername, e)
+        logger.debug("Proxy TCP connection error from {}: {}", peername, e)
     finally:
         logger.info("Proxy TCP disconnected: {}", peername)
         proxy_manager.unregister_by_writer(writer)
