@@ -90,7 +90,7 @@ async def handle_provider_models(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
     config = load_config()
-    provider_cfg = config.get_provider(provider)
+    provider_cfg = config.providers.get(provider)
     if not provider_cfg or not provider_cfg.api_key:
         return web.json_response({"models": []})
     api_key = provider_cfg.api_key
