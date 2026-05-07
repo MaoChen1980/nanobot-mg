@@ -291,6 +291,13 @@ def estimate_message_tokens(message: dict[str, Any]) -> int:
     if isinstance(rc, str) and rc:
         parts.append(rc)
 
+    tb = message.get("thinking_blocks")
+    if isinstance(tb, list):
+        for block in tb:
+            text = block.get("thinking") if isinstance(block, dict) else None
+            if text:
+                parts.append(text)
+
     payload = "\n".join(parts)
     if not payload:
         return 4
