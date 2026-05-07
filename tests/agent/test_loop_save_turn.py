@@ -25,12 +25,12 @@ def _make_full_loop(tmp_path: Path) -> AgentLoop:
     return AgentLoop(bus=MessageBus(), provider=provider, workspace=tmp_path, model="test-model")
 
 
-def test_save_turn_skips_multimodal_user_when_only_runtime_context() -> None:
+def test_record_turn_skips_multimodal_user_when_only_runtime_context() -> None:
     loop = _mk_loop()
     session = Session(key="test:runtime-only")
     runtime = ContextBuilder._RUNTIME_CONTEXT_TAG + "\nCurrent Time: now (UTC)"
 
-    loop._save_turn(
+    loop._record_turn(
         session,
         [{"role": "user", "content": [{"type": "text", "text": runtime}]}],
         skip=0,
@@ -38,12 +38,12 @@ def test_save_turn_skips_multimodal_user_when_only_runtime_context() -> None:
     assert session.messages == []
 
 
-def test_save_turn_keeps_image_placeholder_with_path_after_runtime_strip() -> None:
+def test_record_turn_keeps_image_placeholder_with_path_after_runtime_strip() -> None:
     loop = _mk_loop()
     session = Session(key="test:image")
     runtime = ContextBuilder._RUNTIME_CONTEXT_TAG + "\nCurrent Time: now (UTC)"
 
-    loop._save_turn(
+    loop._record_turn(
         session,
         [{
             "role": "user",
@@ -57,12 +57,12 @@ def test_save_turn_keeps_image_placeholder_with_path_after_runtime_strip() -> No
     assert session.messages[0]["content"] == [{"type": "text", "text": "[image: /media/feishu/photo.jpg]"}]
 
 
-def test_save_turn_keeps_image_placeholder_without_meta() -> None:
+def test_record_turn_keeps_image_placeholder_without_meta() -> None:
     loop = _mk_loop()
     session = Session(key="test:image-no-meta")
     runtime = ContextBuilder._RUNTIME_CONTEXT_TAG + "\nCurrent Time: now (UTC)"
 
-    loop._save_turn(
+    loop._record_turn(
         session,
         [{
             "role": "user",
@@ -76,12 +76,12 @@ def test_save_turn_keeps_image_placeholder_without_meta() -> None:
     assert session.messages[0]["content"] == [{"type": "text", "text": "[image]"}]
 
 
-def test_save_turn_keeps_tool_results_under_16k() -> None:
+def test_record_turn_keeps_tool_results_under_16k() -> None:
     loop = _mk_loop()
     session = Session(key="test:tool-result")
     content = "x" * 12_000
 
-    loop._save_turn(
+    loop._record_turn(
         session,
         [{"role": "tool", "tool_call_id": "call_1", "name": "read_file", "content": content}],
         skip=0,

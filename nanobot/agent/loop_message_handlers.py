@@ -59,7 +59,7 @@ class SystemMessageHandler:
             context_state=cs,
         )
         final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, session=session, channel=channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
-        self._loop._save_turn(session, all_msgs, 1 + len(history))
+        self._loop._record_turn(session, all_msgs, 1 + len(history))
         session.enforce_file_cap(on_archive=self._loop.context.memory.raw_archive)
         self._loop._recovery.clear_runtime_checkpoint(session)
         self._loop.sessions.save(session)
@@ -223,7 +223,7 @@ class UserMessageHandler:
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE
         save_skip = 1 + len(history) + (1 if user_persisted_early else 0)
-        self._loop._save_turn(session, all_msgs, save_skip)
+        self._loop._record_turn(session, all_msgs, save_skip)
         session.enforce_file_cap(on_archive=self._loop.context.memory.raw_archive)
         self._loop._recovery.clear_pending_user_turn(session)
         self._loop._recovery.clear_runtime_checkpoint(session)

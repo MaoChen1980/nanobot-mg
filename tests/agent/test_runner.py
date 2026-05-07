@@ -1465,7 +1465,7 @@ async def test_runner_drops_orphan_tool_results_before_model_request():
 
 
 @pytest.mark.asyncio
-async def test_backfill_repairs_model_context_without_shifting_save_turn_boundary(tmp_path):
+async def test_backfill_repairs_model_context_without_shifting_record_turn_boundary(tmp_path):
     """Historical backfill should not duplicate old tail messages on persist."""
     from nanobot.agent.loop import AgentLoop
     from nanobot.agent.runner import _BACKFILL_CONTENT

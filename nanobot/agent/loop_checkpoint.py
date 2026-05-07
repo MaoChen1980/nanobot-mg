@@ -1,8 +1,4 @@
-"""Session checkpoint management for AgentLoop.
-
-Re-exported from loop_recovery.py for backward compatibility.
-Functions below delegate to RecoveryManager when a loop instance is available.
-"""
+"""Session checkpoint and crash-recovery management for AgentLoop."""
 
 from __future__ import annotations
 
@@ -119,3 +115,38 @@ def restore_pending_user_turn(session: Any) -> bool:
 
     clear_pending_user_turn(session)
     return True
+
+
+class RecoveryManager:
+    """Manages session checkpoint/restore and pending-turn recovery.
+
+    Operates on session metadata only — never calls ``sessions.save()``.
+    Callers are responsible for persisting after recovery operations if needed.
+    """
+
+    def __init__(self, loop: AgentLoop) -> None:
+        self._loop = loop
+
+    def set_runtime_checkpoint(self, session: Session, payload: dict[str, Any]) -> None:
+        """Store the latest in-flight turn state into session metadata."""
+        set_runtime_checkpoint(session, payload)
+
+    def clear_runtime_checkpoint(self, session: Session) -> None:
+        """Remove the runtime checkpoint from session metadata."""
+        clear_runtime_checkpoint(session)
+
+    def mark_pending_user_turn(self, session: Session) -> None:
+        """Mark that a user message has been persisted mid-turn."""
+        mark_pending_user_turn(session)
+
+    def clear_pending_user_turn(self, session: Session) -> None:
+        """Clear the pending-user-turn flag from session metadata."""
+        clear_pending_user_turn(session)
+
+    def restore_runtime_checkpoint(self, session: Session) -> bool:
+        """Materialize an unfinished turn into session history before a new request."""
+        return restore_runtime_checkpoint(self._loop, session)
+
+    def restore_pending_user_turn(self, session: Session) -> bool:
+        """Close a turn that only persisted the user message before crashing."""
+        return restore_pending_user_turn(session)

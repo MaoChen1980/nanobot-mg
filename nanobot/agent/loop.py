@@ -82,7 +82,7 @@ from .loop_checkpoint import (
     restore_runtime_checkpoint,
     restore_pending_user_turn,
 )
-from .loop_recovery import RecoveryManager
+from .loop_checkpoint import RecoveryManager
 from .loop_dispatch import DispatchManager
 from .loop_message_handlers import SystemMessageHandler, UserMessageHandler
 
@@ -473,6 +473,7 @@ class AgentLoop:
             if session is None:
                 return
             self._recovery.set_runtime_checkpoint(session, payload)
+            self.sessions.save(session)
 
         async def _drain_pending(*, limit: int = _MAX_INJECTIONS_PER_TURN) -> list[dict[str, Any]]:
             """Drain follow-up messages from the pending queue.
@@ -749,8 +750,13 @@ class AgentLoop:
 
         return filtered
 
-    def _save_turn(self, session: Session, messages: list[dict], skip: int) -> None:
-        """Save new-turn messages into session, truncating large tool results."""
+    def _record_turn(self, session: Session, messages: list[dict], skip: int) -> None:
+        """Record turn messages into session history, truncating large tool results.
+
+        Appends ``messages[skip:]`` into ``session.messages``, stripping
+        runtime-only blocks and oversized tool results. Does **not** persist
+        to storage — call ``sessions.save()`` separately if needed.
+        """
         from datetime import datetime, timezone
 
         for m in messages[skip:]:
