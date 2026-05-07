@@ -42,7 +42,7 @@ class GatewayApplication:
         self.channels = None
         self.proxy_manager = None
         self.heartbeat = None
-        self.api_runner = None
+        self.api_server = None
         self.hub_server = None
 
     # ------------------------------------------------------------------
@@ -401,8 +401,8 @@ class GatewayApplication:
         await asyncio.gather(*tasks)
 
     async def _run_api_server(self, host: str, api_port: int) -> None:
-        """Run the aiohttp settings server on the gateway port."""
-        from aiohttp import web
+        """Run the settings server via uvicorn on the gateway port."""
+        import uvicorn
         from nanobot.api.server import create_app as make_api_app
 
         webui_index = (
@@ -412,10 +412,16 @@ class GatewayApplication:
             webui_index, proxy_manager=self.proxy_manager
         )
 
-        self.api_runner = web.AppRunner(api_app, shutdown_timeout=0)
-        await self.api_runner.setup()
-        site = web.TCPSite(self.api_runner, host, api_port)
-        await site.start()
+        config = uvicorn.Config(
+            api_app,
+            host=host,
+            port=api_port,
+            log_level="info",
+        )
+        self.api_server = uvicorn.Server(config)
+        # Prevent uvicorn from installing signal handlers — gateway owns lifecycle.
+        self.api_server.install_signal_handlers = lambda: None
+        asyncio.create_task(self.api_server.serve())
         console.print(
             f"[green]✓[/green] Settings server: http://{host}:{api_port}/"
         )
@@ -469,8 +475,12 @@ class GatewayApplication:
             await self.hub_server.stop()
         if self.proxy_manager is not None:
             await self.proxy_manager.stop()
-        if self.api_runner is not None:
-            await self.api_runner.cleanup()
+        if self.api_server is not None:
+            self.api_server.should_exit = True
+            try:
+                await self.api_server.shutdown()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Helpers (shared with CLI but kept here for self-containment)

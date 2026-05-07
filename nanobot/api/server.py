@@ -4,22 +4,31 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aiohttp import web
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 __all__ = ["create_app"]
 
+# Legacy re-exports — moved to nanobot.utils.media_decode
+from nanobot.utils.media_decode import FileSizeExceeded as _FileSizeExceeded  # noqa: F401
+from nanobot.utils.media_decode import MAX_FILE_SIZE  # noqa: F401
+from nanobot.utils.media_decode import save_base64_data_url as _save_base64_data_url  # noqa: F401
 
-async def handle_health(request: web.Request) -> web.Response:
+
+async def handle_health(request: Request) -> Response:
     """GET /health"""
-    return web.json_response({"status": "ok"})
+    return JSONResponse({"status": "ok"})
 
 
-async def handle_settings_get(request: web.Request) -> web.Response:
+async def handle_settings_get(request: Request) -> Response:
     """GET /api/settings"""
     try:
         from nanobot.config.loader import load_config
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
     config = load_config()
     defaults = config.agents.defaults
@@ -32,7 +41,7 @@ async def handle_settings_get(request: web.Request) -> web.Response:
     from nanobot.providers.registry import PROVIDERS
     providers = [{"name": p.name, "label": p.label} for p in PROVIDERS]
 
-    return web.json_response({
+    return JSONResponse({
         "agent": {
             "model": defaults.model or "",
             "provider": defaults.provider or "auto",
@@ -45,37 +54,37 @@ async def handle_settings_get(request: web.Request) -> web.Response:
     })
 
 
-async def handle_config_get(request: web.Request) -> web.Response:
+async def handle_config_get(request: Request) -> Response:
     """GET /api/config — return full config as JSON"""
     try:
         from nanobot.config.loader import load_config
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
     try:
         config = load_config()
-        return web.json_response(config.model_dump())
+        return JSONResponse(config.model_dump())
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-async def handle_config_update(request: web.Request) -> web.Response:
+async def handle_config_update(request: Request) -> Response:
     """PUT /api/config — save full config from JSON"""
     try:
         from nanobot.config.loader import load_config, save_config
         from nanobot.config.schema import Config
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
     try:
         data = await request.json()
     except Exception:
-        return web.json_response({"error": "Invalid JSON"}, status=400)
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
     try:
         validated = Config.model_validate(data)
         save_config(validated)
 
         # Reconcile running proxies: stop any whose channel is now disabled
         channels_data = data.get("channels", {})
-        proxy_manager = request.app.get("proxy_manager")
+        proxy_manager = getattr(request.app.state, "proxy_manager", None)
         if proxy_manager:
             for key in list(proxy_manager.get_proxy_keys()):
                 ch, _ = key.split(":", 1)
@@ -83,24 +92,24 @@ async def handle_config_update(request: web.Request) -> web.Response:
                 if not ch_cfg.get("enabled", False):
                     proxy_manager.stop_proxy(key)
 
-        return web.json_response({"ok": True})
+        return JSONResponse({"ok": True})
     except Exception as e:
-        return web.json_response({"error": f"Validation failed: {e}"}, status=400)
+        return JSONResponse({"error": f"Validation failed: {e}"}, status_code=400)
 
 
-async def handle_provider_models(request: web.Request) -> web.Response:
+async def handle_provider_models(request: Request) -> Response:
     """GET /api/provider-models?provider=X — fetch model list from provider API"""
-    provider = request.query.get("provider", "")
+    provider = request.query_params.get("provider", "")
     if not provider:
-        return web.json_response({"error": "provider required"}, status=400)
+        return JSONResponse({"error": "provider required"}, status_code=400)
     try:
         from nanobot.config.loader import load_config
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
     config = load_config()
     provider_cfg = getattr(config.providers, provider, None)
     if not provider_cfg or not provider_cfg.api_key:
-        return web.json_response({"models": []})
+        return JSONResponse({"models": []})
     api_key = provider_cfg.api_key
     api_base = (provider_cfg.api_base or "").rstrip("/")
     defaults = {
@@ -123,31 +132,31 @@ async def handle_provider_models(request: web.Request) -> web.Response:
     else:
         url = defaults.get(provider, f"https://api.{provider}.com/v1/models")
     try:
-        import aiohttp
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:
-                data = await resp.json()
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+            data = resp.json()
         models = []
         if isinstance(data, dict) and "data" in data:
             models = [m["id"] for m in data["data"]]
         elif isinstance(data, dict) and "models" in data:
             models = [m["name"] for m in data["models"]]
-        return web.json_response({"models": models})
+        return JSONResponse({"models": models})
     except Exception as e:
-        return web.json_response({"models": [], "error": str(e)})
+        return JSONResponse({"models": [], "error": str(e)})
 
 
-async def handle_settings_update(request: web.Request) -> web.Response:
+async def handle_settings_update(request: Request) -> Response:
     """PUT /api/settings/update"""
     try:
         from nanobot.config.loader import load_config, save_config
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
     try:
         data = await request.json()
     except Exception:
-        return web.json_response({"error": "Invalid JSON"}, status=400)
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
     config = load_config()
     updated = False
@@ -163,7 +172,7 @@ async def handle_settings_update(request: web.Request) -> web.Response:
         try:
             save_config(config)
         except Exception as e:
-            return web.json_response({"error": f"Failed to save config: {e}"}, status=500)
+            return JSONResponse({"error": f"Failed to save config: {e}"}, status_code=500)
 
     defaults = config.agents.defaults
     provider_name = config.get_provider_name(defaults.model) or defaults.provider
@@ -174,7 +183,7 @@ async def handle_settings_update(request: web.Request) -> web.Response:
     from nanobot.providers.registry import PROVIDERS
     providers = [{"name": p.name, "label": p.label} for p in PROVIDERS]
 
-    return web.json_response({
+    return JSONResponse({
         "agent": {
             "model": defaults.model or "",
             "provider": defaults.provider or "auto",
@@ -187,7 +196,7 @@ async def handle_settings_update(request: web.Request) -> web.Response:
     })
 
 
-async def handle_shutdown(request: web.Request) -> web.Response:
+async def handle_shutdown(request: Request) -> Response:
     """POST /api/shutdown — stop proxies then restart the gateway process."""
     import os
     import subprocess
@@ -195,7 +204,7 @@ async def handle_shutdown(request: web.Request) -> web.Response:
     import threading
 
     # Stop proxy children first so they don't orphan WS connections.
-    proxy_manager = request.app.get("proxy_manager")
+    proxy_manager = getattr(request.app.state, "proxy_manager", None)
     if proxy_manager:
         try:
             await proxy_manager.stop()
@@ -230,25 +239,54 @@ async def handle_shutdown(request: web.Request) -> web.Response:
         os._exit(0)
 
     threading.Thread(target=deferred_restart, daemon=True).start()
-    return web.json_response({"ok": True, "message": "Gateway restarting"})
+    return JSONResponse({"ok": True, "message": "Gateway restarting"})
 
 
-def create_app(index_html_path: str | Path = "", proxy_manager=None) -> web.Application:
-    """Create aiohttp app with only settings API."""
-    app = web.Application()
-    app["index_html_path"] = str(index_html_path)
-    app["proxy_manager"] = proxy_manager
-    # Derive webui public dir from index_html_path (webui/index.html → webui/public)
+async def handle_stop(request: Request) -> Response:
+    """POST /api/stop — stop proxies then exit the gateway process."""
+    import os
+    import sys
+    import threading
+
+    proxy_manager = getattr(request.app.state, "proxy_manager", None)
+    if proxy_manager:
+        try:
+            await proxy_manager.stop()
+        except Exception:
+            pass
+
+    def deferred_exit():
+        import time
+        time.sleep(0.3)
+        os._exit(0)
+
+    threading.Thread(target=deferred_exit, daemon=True).start()
+    return JSONResponse({"ok": True, "message": "Gateway shutting down"})
+
+
+def create_app(index_html_path: str | Path = "", proxy_manager=None) -> Starlette:
+    """Create Starlette app with only settings API."""
     public_dir = Path(index_html_path).parent / "public"
-    app.router.add_get("/", lambda r: web.FileResponse(r.app["index_html_path"]))
-    app.router.add_get("/health", handle_health)
-    app.router.add_get("/api/provider-models", handle_provider_models)
-    app.router.add_get("/api/config", handle_config_get)
-    app.router.add_put("/api/config", handle_config_update)
-    app.router.add_get("/api/settings", handle_settings_get)
-    app.router.add_put("/api/settings/update", handle_settings_update)
-    app.router.add_post("/api/shutdown", handle_shutdown)
-    # Serve /brand/* from webui/public/brand/
+
+    async def homepage(request: Request) -> Response:
+        return FileResponse(str(index_html_path))
+
+    routes = [
+        Route("/", endpoint=homepage),
+        Route("/health", endpoint=handle_health),
+        Route("/api/provider-models", endpoint=handle_provider_models),
+        Route("/api/config", endpoint=handle_config_get),
+        Route("/api/config", endpoint=handle_config_update, methods=["PUT"]),
+        Route("/api/settings", endpoint=handle_settings_get),
+        Route("/api/settings/update", endpoint=handle_settings_update, methods=["PUT"]),
+        Route("/api/shutdown", endpoint=handle_shutdown, methods=["POST"]),
+        Route("/api/stop", endpoint=handle_stop, methods=["POST"]),
+    ]
     if public_dir.is_dir():
-        app.router.add_static("/brand", public_dir / "brand", follow_symlinks=True)
+        routes.append(
+            Mount("/brand", app=StaticFiles(directory=str(public_dir / "brand")), name="brand")
+        )
+
+    app = Starlette(routes=routes)
+    app.state.proxy_manager = proxy_manager
     return app

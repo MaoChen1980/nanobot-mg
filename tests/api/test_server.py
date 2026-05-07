@@ -24,7 +24,7 @@ async def test_handle_shutdown_stops_proxy_and_restarts() -> None:
     """handle_shutdown stops proxies and spawns a delayed Python subprocess."""
     mock_proxy = AsyncMock()
     request = MagicMock()
-    request.app = {"proxy_manager": mock_proxy}
+    request.app.state.proxy_manager = mock_proxy
 
     with patch("time.sleep"):  # Make thread execute instantly
         with patch("subprocess.Popen") as mock_popen:
@@ -32,7 +32,7 @@ async def test_handle_shutdown_stops_proxy_and_restarts() -> None:
                 resp = await handle_shutdown(request)
 
     # Response
-    assert resp.status == 200
+    assert resp.status_code == 200
     data = _json_body(resp)
     assert data["ok"] is True
     assert "restart" in data["message"].lower()
@@ -57,13 +57,13 @@ async def test_handle_shutdown_stops_proxy_and_restarts() -> None:
 async def test_handle_shutdown_safe_without_proxy_manager() -> None:
     """handle_shutdown does not crash when no proxy_manager is configured."""
     request = MagicMock()
-    request.app = {}
+    request.app.state.proxy_manager = None
 
     with patch("time.sleep"):
         with patch("subprocess.Popen"):
             with patch("os._exit"):
                 resp = await handle_shutdown(request)
 
-    assert resp.status == 200
+    assert resp.status_code == 200
     data = _json_body(resp)
     assert data["ok"] is True

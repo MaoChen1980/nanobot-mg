@@ -33,6 +33,8 @@ dependencies = [
     "websockets>=16.0,<17.0; python_version >= '3.10'",
     "websockets>=14.0,<16.0; python_version < '3.10'",
     "httpx>=0.28.0,<1.0.0",
+    "starlette>=0.37.2,<0.50.0",
+    "uvicorn>=0.29.0,<0.40.0",
     "ddgs>=9.10.0,<10.0.0; python_version >= '3.10'",
     "ddgs>=9.5.5,<9.10.0; python_version < '3.10'",
     "oauth-cli-kit>=0.1.3,<1.0.0; python_version >= '3.11'",
@@ -65,7 +67,6 @@ dependencies = [
 
 [project.optional-dependencies]
 api = [
-    "aiohttp>=3.9.0,<4.0.0",
 ]
 wecom = [
     "wecom-aibot-sdk-python>=0.1.5",
@@ -96,7 +97,6 @@ pdf = [
 dev = [
     "pytest>=9.0.0,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
-    "aiohttp>=3.9.0,<4.0.0",
     "pytest-cov>=6.0.0,<7.0.0",
     "ruff>=0.1.0",
     "pymupdf>=1.25.0",

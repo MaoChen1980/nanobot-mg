@@ -215,9 +215,22 @@
   </div>
 </div>
 
+<div id="shutdownModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-icon">&#x23f8;</div>
+    <h3>Shutdown</h3>
+    <p>Stop the gateway process? All active connections will be closed.</p>
+    <div class="modal-actions">
+      <button type="button" onclick="closeShutdownModal()">Cancel</button>
+      <button type="button" class="primary danger" onclick="stopGateway()">Shutdown</button>
+    </div>
+  </div>
+</div>
+
 <div class="footer">
   <span id="msg" class="msg"></span>
   <div class="footer-actions">
+    <button type="button" onclick="showShutdownModal()" style="color:var(--danger)">Shutdown</button>
     <button type="button" onclick="showRestartModal()">Restart</button>
     <button type="button" class="primary" onclick="save()">Save</button>
   </div>
@@ -837,6 +850,29 @@ async function restartGateway() {
   msg.className = 'msg err';
   restartBtn.disabled = false;
   if (saveBtn) saveBtn.disabled = false;
+}
+
+function showShutdownModal() {
+  document.getElementById('shutdownModal').classList.remove('hidden');
+}
+
+function closeShutdownModal() {
+  document.getElementById('shutdownModal').classList.add('hidden');
+}
+
+async function stopGateway() {
+  closeShutdownModal();
+  const btns = document.querySelectorAll('.footer button');
+  btns.forEach(b => b.disabled = true);
+  msg.textContent = 'Shutting down...';
+  msg.className = 'msg';
+  try {
+    await fetch('/api/stop', { method: 'POST' });
+  } catch(e) {
+    // gateway dies immediately — expected
+  }
+  msg.textContent = 'Gateway stopped.';
+  msg.className = 'msg ok';
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
