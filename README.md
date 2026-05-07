@@ -6,115 +6,127 @@
   <p>
     <img src="https://img.shields.io/badge/python-≥3.11-blue" alt="Python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-    <a href="https://github.com/HKUDS/nanobot/graphs/commit-activity"><img src="https://img.shields.io/github/commit-activity/m/HKUDS/nanobot" alt="Commits"></a>
     <a href="https://nanobot.wiki/docs/latest/getting-started/nanobot-overview"><img src="https://img.shields.io/badge/Docs-nanobot.wiki-blue" alt="Docs"></a>
   </p>
   <p>
-    <a href="./COMMUNICATION.md"><img src="https://img.shields.io/badge/WeChat-Group-C5EAB4" alt="WeChat"></a>
-    <a href="https://discord.gg/MnCvHqpUGB"><img src="https://img.shields.io/badge/Discord-Community-5865F2" alt="Discord"></a>
+    🌏 <a href="./README_en.md">English README</a>
   </p>
 </div>
 
-<p align="center"><strong>🐈 nanobot</strong> — 轻量 · 可读 · 可扩展的 AI 代理框架 / Lightweight, readable, extensible AI agent framework.</p>
-<p align="center">本项目源自 <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a>，向原项目及维护者 <a href="https://github.com/re-bin">Xubin Ren</a> 致敬。<br>Forked from <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a> — credit to the original project and maintainer <a href="https://github.com/re-bin">Xubin Ren</a>.</p>
+<p align="center"><strong>🐈 nanobot</strong> — 轻量 · 可读 · 可扩展的 AI 代理框架</p>
+<p align="center">Forked from <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a> — 向原项目及维护者 <a href="https://github.com/re-bin">Xubin Ren</a> 致敬。</p>
 
 ---
 
-## 功能 / Features
-
-| 模块 / Module | 能力 / Capability |
-|------|------|
-| **Agent Loop** | LLM reasoning → tool execution → state persistence, with checkpoint recovery and heartbeat |
-| **LLM Providers** | OpenAI, Anthropic, OpenRouter, DeepSeek, Kimi, Qwen, Ollama, MiniMax, vLLM, Azure, Gemini, StepFun, and more |
-| **File I/O** | Read/write/edit, docx/xlsx/pptx/pdf support, grep/glob search, code linting |
-| **Shell** | Command execution with timeout, output capture, sandbox mode |
-| **Web Search** | DuckDuckGo, Kagi, custom web search with page content extraction |
-| **Memory** | SQLite-backed goals/events/history, Dream auto long-term memory extraction |
-| **MCP** | Full Model Context Protocol support — plug into the community tool ecosystem |
-| **Scheduling** | Cron syntax, natural language task description |
-| **Sub‑agent** | `spawn` independent sub‑agents for parallel work |
-| **Chat Platforms** | CLI, Telegram, Discord, Slack, Feishu, WeChat, QQ, DingTalk, WhatsApp, Email, Matrix |
-| **OpenAI‑Compatible API** | Expose as an API service, integrate with other systems |
-| **WebSocket** | Real-time communication, paired with WebUI |
-| **WebUI** | Browser interface with i18n multi-language support |
-| **Hooks** | Custom lifecycle hooks for deep behavioral customization |
-
----
-
-## 快速安装 / Quick Install
+## 安装
 
 ```bash
-git clone https://github.com/HKUDS/nanobot.git
+git clone <your-repo-url>
 cd nanobot
 pip install -e .
 ```
 
-## 快速开始 / Quick Start
+## 快速开始
 
-**1. 初始化配置 / Initialize config**
+**1. 生成配置和工作区**
 
 ```bash
 nanobot onboard
 ```
 
-**2. 启动网关，打开 WebUI 配置 / Start gateway, configure via WebUI**
+创建 `~/.nanobot/config.json` 和默认工作区。
+
+**2. 配置 API Key 和模型**
+
+编辑配置文件或启动 WebUI：
 
 ```bash
 nanobot gateway
+# 浏览器打开 http://localhost:18790/
 ```
 
-Open `http://localhost:8765` in your browser — fill in API key and model on the settings page.
+支持 20+ 模型提供商：OpenAI、Anthropic、DeepSeek、OpenRouter、Google Gemini、Azure、Kimi、Qwen、Ollama、vLLM、MiniMax、StepFun、GitHub Copilot 等。配置格式为 `提供商/模型名`。
 
-**3. 开始对话 / Start chatting**
-
-Open a new terminal:
+**3. 开始对话**
 
 ```bash
 nanobot agent
 ```
 
-Or send messages directly in the WebUI.
+单轮模式：
+
+```bash
+nanobot agent -m "你的问题"
+```
 
 ---
 
-## 核心亮点 / Core Highlights
+## CLI 命令
 
-### 小且可读 / Small & Readable
-
-核心代理循环不到 2000 行 Python。没有繁重的编排层，没有过度抽象——你可以完整通读代码并理解它的工作方式。/ The core agent loop is under 2000 lines of Python. No heavy orchestration layer, no over-abstraction — you can read through the entire codebase and understand how it works.
-
-### 先本地，后服务 / Local First, Server Optional
-
-nanobot 首先是一个 CLI 工具。不需要部署、不需要服务器、不需要 Kubernetes。`pip install` 之后在终端就能跑；之后可逐步接入 Telegram、Discord 等渠道，无需重构。/ nanobot is a CLI tool first. No deployment, no server, no Kubernetes required. Run it in your terminal after `pip install`, then gradually add channels like Telegram or Discord without rewriting anything.
-
-### LLM 视角的设计 / Designed for the LLM
-
-框架公开了一个**无状态 LLM + 有状态框架**的契约——每一轮推理都是从头构建的，历史记录是唯一的跨轮内存。内部行为（自动修剪、微压缩、检查点、中间注入）被透明记录，以便 LLM 可据此调整工具调用策略。/ The framework exposes a **stateless LLM + stateful framework** contract — each inference turn is built from scratch, with conversation history as the only cross-turn memory. Internal behaviors (auto-snipping, microcompact, checkpoints, mid-turn injection) are transparently documented so the LLM can adapt its tool-calling strategy accordingly.
-
-### 渠道一体化 / Unified Channels
-
-16 个聊天后端共享一个代理实例。消息以统一格式进入，工具结果以统一格式输出。添加新渠道就是一个 Python 类。/ 16 chat backends share a single agent instance. Messages come in a unified format, tool results go out the same way. Adding a new channel is one Python class.
-
-### 零膨胀 / Zero Bloat
-
-不依赖 LangChain、LangGraph 或任何编排库。直接使用 OpenAI、Anthropic 及其他提供商的原生 SDK。/ No dependency on LangChain, LangGraph, or any orchestration library. Uses native OpenAI, Anthropic, and provider SDKs directly.
+| 命令 | 作用 |
+|------|------|
+| `nanobot onboard` | 初始化配置和工作区 |
+| `nanobot gateway` | 启动 WebUI + 渠道网关 + 定时任务 |
+| `nanobot agent` | 启动交互式 CLI 对话 |
+| `nanobot status` | 查看配置和状态 |
+| `nanobot channels` | 配置聊天渠道 |
+| `nanobot plugins` | 管理插件 |
+| `nanobot provider` | OAuth 提供商登录 |
 
 ---
 
-## 文档与部署 / Docs & Deployment
+## 配置要点
 
-- [Configuration](./docs/configuration.md) — providers, search, MCP, security
-- [Chat Apps](./docs/chat-apps.md) — channel setup guides
-- [OpenAI‑Compatible API](./docs/openai-api.md) — run as an API service
-- [Python SDK](./docs/python-sdk.md) — embed nanobot in other applications
-- [Docker Deployment](./docs/deployment.md) — containerized runtime
-- [CLI Reference](./docs/cli-reference.md) — all command-line options
-- [WebUI Development](./webui/README.md) — browser interface usage & development
+配置文件位于 `~/.nanobot/config.json`，核心字段：
+
+- **model** — 模型标识，如 `anthropic/claude-opus-4-5`（默认）
+- **provider** — 自动识别或手动指定（`auto`/`anthropic`/`openai`/`openrouter` 等）
+- **workspace** — 工作区路径，默认 `~/.nanobot/workspace`
+- **tools** — 工具开关（`exec` 命令执行、`web` 搜索抓取、`my` 临时存储等）
+- **channels** — 渠道配置（Telegram / Discord / Slack / 飞书 / 微信 / QQ / 钉钉 / WhatsApp / Email / Matrix 等）
+
+---
+
+## 架构概览（了解即可）
+
+nanobot 的核心设计：**LLM 每次请求构建完整 prompt，框架保持状态持久化**。
+
+工作流程：LLM 推理 → 调用工具 → 框架执行并持久化结果 → 继续下一轮推理。工具执行结果会自动保存、断点可恢复、用户消息可在推理过程中注入。
+
+---
+
+## 功能一览
+
+| 功能 | 说明 |
+|------|------|
+| **Agent Loop** | 通用推理-执行循环，支持检查点恢复、中断续传 |
+| **文件操作** | 读写编辑文件、grep/glob 搜索、支持 docx/xlsx/pptx/pdf |
+| **命令执行** | Shell 命令执行，支持超时、沙箱隔离 |
+| **Web 搜索** | DuckDuckGo、Kagi、Tavily、SearXNG、Jina 等后端，含页面内容提取 |
+| **MCP 协议** | 支持 Model Context Protocol（stdio / SSE / Streamable HTTP） |
+| **子代理** | 派生子代理并行执行独立任务 |
+| **定时任务** | Cron 语法，自然语言描述任务 |
+| **记忆系统** | SQLite 持久化记忆，自动长期记忆提取 |
+| **聊天渠道** | Telegram、Discord、Slack、飞书、微信、QQ、钉钉、WhatsApp、Email、Matrix 等 |
+| **WebUI** | 浏览器配置页面，管理模型、工具、渠道 |
+| **Hooks** | 自定义生命周期钩子，灵活扩展 |
+
+---
+
+## 渠道配置
+
+nanobot 支持 16+ 聊天后端共享一个代理实例。渠道通过 `~/.nanobot/config.json` 配置，每种渠道的配置项各不相同，具体参考[文档](https://nanobot.wiki/)。
+
+---
+
+## 文档
+
+完整文档请访问 [nanobot.wiki](https://nanobot.wiki/docs/latest/getting-started/nanobot-overview)。
 
 ---
 
 <p align="center">
-  由 <a href="https://github.com/re-bin">Xubin Ren</a> 发起，社区贡献者共同维护 / Initiated by <a href="https://github.com/re-bin">Xubin Ren</a>, maintained with community contributors.
+  由 <a href="https://github.com/re-bin">Xubin Ren</a> 发起，社区贡献者共同维护。
 </p>
 
 <div align="center">
