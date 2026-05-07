@@ -58,10 +58,12 @@ class GatewayApplication:
     # ------------------------------------------------------------------
 
     async def _async_run(self) -> None:
+        url = f"http://{self.config.gateway.host}:{self.port}"
         console.print(
             f"{__logo__} Starting nanobot gateway version {__version__} "
             f"on port {self.port}..."
         )
+        console.print(f"[green]✓[/green] WebUI at [underline]{url}[/underline]")
         sync_workspace_templates(self.config.workspace_path)
 
         self._init_services()
