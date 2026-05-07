@@ -776,3 +776,50 @@ async def test_system_subagent_followup_uses_thread_session_and_slack_metadata(t
     loop.sessions.invalidate("slack:C123:1700.42")
     persisted = loop.sessions.get_or_create("slack:C123:1700.42")
     assert any(m.get("subagent_task_id") == "sub-1" for m in persisted.messages)
+
+
+class TestRecoveryManagerContract:
+    """RecoveryManager only touches session metadata — never calls sessions.save()."""
+
+    def test_set_runtime_checkpoint_does_not_save(self):
+        loop = MagicMock()
+        from nanobot.agent.loop_checkpoint import RecoveryManager
+        rm = RecoveryManager(loop)
+        session = MagicMock()
+
+        rm.set_runtime_checkpoint(session, {"key": "val"})
+
+        loop.sessions.save.assert_not_called()
+
+    def test_clear_runtime_checkpoint_does_not_save(self):
+        loop = MagicMock()
+        from nanobot.agent.loop_checkpoint import RecoveryManager
+        rm = RecoveryManager(loop)
+        session = MagicMock()
+        session.metadata = {"runtime_checkpoint": {}}
+
+        rm.clear_runtime_checkpoint(session)
+
+        loop.sessions.save.assert_not_called()
+
+    def test_mark_pending_user_turn_does_not_save(self):
+        loop = MagicMock()
+        from nanobot.agent.loop_checkpoint import RecoveryManager
+        rm = RecoveryManager(loop)
+        session = MagicMock()
+
+        rm.mark_pending_user_turn(session)
+
+        loop.sessions.save.assert_not_called()
+
+    def test_restore_runtime_checkpoint_does_not_save(self):
+        loop = MagicMock()
+        from nanobot.agent.loop_checkpoint import RecoveryManager
+        rm = RecoveryManager(loop)
+        session = MagicMock()
+        session.metadata = {}
+        session.messages = []
+
+        rm.restore_runtime_checkpoint(session)
+
+        loop.sessions.save.assert_not_called()

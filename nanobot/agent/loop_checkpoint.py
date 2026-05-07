@@ -27,7 +27,7 @@ def checkpoint_message_key(message: dict[str, Any]) -> tuple[Any, ...]:
 
 
 def set_runtime_checkpoint(session: Any, payload: dict[str, Any]) -> None:
-    """Persist the latest in-flight turn state into session metadata."""
+    """Store the latest in-flight turn state into session metadata."""
     session.metadata[_RUNTIME_CHECKPOINT_KEY] = payload
 
 
