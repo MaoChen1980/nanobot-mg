@@ -29,11 +29,8 @@ async def handle_settings_get(request: web.Request) -> web.Response:
     provider_cfg = config.get_provider(defaults.model)
     has_key = bool(provider_cfg and provider_cfg.api_key)
 
-    try:
-        from nanobot.providers.registry import ALL_PROVIDERS
-        providers = [{"name": p.name, "label": p.label} for p in ALL_PROVIDERS]
-    except Exception:
-        providers = [{"name": "openai", "label": "OpenAI"}]
+    from nanobot.providers.registry import PROVIDERS
+    providers = [{"name": p.name, "label": p.label} for p in PROVIDERS]
 
     return web.json_response({
         "agent": {
@@ -113,12 +110,18 @@ async def handle_provider_models(request: web.Request) -> web.Response:
         "minimax": "https://api.minimax.chat/v1/models",
         "minimax_anthropic": "https://api.minimax.chat/v1/models",
         "minimax_anthropic_cn": "https://api.minimax.chat/v1/models",
+        "minimax_cn": "https://api.minimax.chat/v1/models",
         "moonshot": "https://api.moonshot.cn/v1/models",
         "groq": "https://api.groq.com/openai/v1/models",
         "ollama": "http://localhost:11434/v1/models",
         "gemini": "https://generativelanguage.googleapis.com/v1beta3/models",
     }
-    url = f"{api_base}/v1/models" if api_base else defaults.get(provider, f"https://api.{provider}.com/v1/models")
+    if api_base:
+        # Avoid double /v1 when api_base already ends with /v1
+        prefix = api_base.rstrip("/")
+        url = f"{prefix}/models" if prefix.endswith("/v1") else f"{prefix}/v1/models"
+    else:
+        url = defaults.get(provider, f"https://api.{provider}.com/v1/models")
     try:
         import aiohttp
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
@@ -168,11 +171,8 @@ async def handle_settings_update(request: web.Request) -> web.Response:
     provider_cfg = config.get_provider(defaults.model)
     has_key = bool(provider_cfg and provider_cfg.api_key)
 
-    try:
-        from nanobot.providers.registry import ALL_PROVIDERS
-        providers = [{"name": p.name, "label": p.label} for p in ALL_PROVIDERS]
-    except Exception:
-        providers = [{"name": "openai", "label": "OpenAI"}]
+    from nanobot.providers.registry import PROVIDERS
+    providers = [{"name": p.name, "label": p.label} for p in PROVIDERS]
 
     return web.json_response({
         "agent": {
