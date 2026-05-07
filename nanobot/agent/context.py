@@ -3,6 +3,7 @@
 import base64
 import mimetypes
 import platform
+from dataclasses import dataclass
 from importlib.resources import files as pkg_files
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,23 @@ from nanobot.utils.prompt_templates import render_template
 
 # Module-level cache for template file contents (path -> (mtime, content))
 _template_content_cache: dict[str, tuple[float, str]] = {}
+
+
+@dataclass
+class ContextState:
+    """Runtime state for LLM context assembly.
+
+    Carries session-level parameters that change slowly across turns,
+    extracted from ``build_messages()`` to reduce per-call boilerplate.
+    """
+    model: str | None = None
+    tool_definitions: list[dict[str, Any]] | None = None
+    context_window_tokens: int | None = None
+    context_used_tokens: int | None = None
+    cached_tokens: int | None = None
+    current_iteration: int | None = None
+    max_iterations: int | None = None
+    session_summary: str | None = None
 
 
 class ContextBuilder:
@@ -269,28 +287,22 @@ class ContextBuilder:
         channel: str | None = None,
         chat_id: str | None = None,
         current_role: str = "user",
-        session_summary: str | None = None,
-        tool_definitions: list[dict[str, Any]] | None = None,
-        model: str | None = None,
-        context_window_tokens: int | None = None,
-        context_used_tokens: int | None = None,
-        cached_tokens: int | None = None,
-        current_iteration: int | None = None,
-        max_iterations: int | None = None,
+        context_state: ContextState | None = None,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
+        cs = context_state or ContextState()
         runtime_ctx = self._build_runtime_context(
-            channel, chat_id, self.timezone, session_summary=session_summary,
-            model=model,
-            context_window_tokens=context_window_tokens,
-            context_used_tokens=context_used_tokens,
-            cached_tokens=cached_tokens,
-            current_iteration=current_iteration,
-            max_iterations=max_iterations,
+            channel, chat_id, self.timezone, session_summary=cs.session_summary,
+            model=cs.model,
+            context_window_tokens=cs.context_window_tokens,
+            context_used_tokens=cs.context_used_tokens,
+            cached_tokens=cs.cached_tokens,
+            current_iteration=cs.current_iteration,
+            max_iterations=cs.max_iterations,
         )
         user_content = self._build_user_content(current_message, media)
         messages = [
-            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, tool_definitions=tool_definitions, runtime_context=runtime_ctx)},
+            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, tool_definitions=cs.tool_definitions, runtime_context=runtime_ctx)},
             *history,
         ]
         if messages[-1].get("role") == current_role:

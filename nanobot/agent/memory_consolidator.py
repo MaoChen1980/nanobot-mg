@@ -108,12 +108,13 @@ class Consolidator:
     ) -> tuple[int, str]:
         history = session.get_history(max_messages=0, include_timestamps=True)
         channel, chat_id = (session.key.split(":", 1) if ":" in session.key else (None, None))
+        from nanobot.agent.context import ContextState
         probe_messages = self._build_messages(
             history=history,
             current_message="[token-probe]",
             channel=channel,
             chat_id=chat_id,
-            session_summary=session_summary,
+            context_state=ContextState(session_summary=session_summary),
         )
         return estimate_prompt_tokens_chain(
             self.provider,

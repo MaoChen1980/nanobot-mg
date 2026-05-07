@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from nanobot.agent.loop import AgentLoop
     from nanobot.bus.events import InboundMessage, OutboundMessage
 
+from nanobot.agent.context import ContextState
 from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.tools.message import MessageTool
@@ -39,7 +40,24 @@ class SystemMessageHandler:
         self._loop._set_tool_context(channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True)
         current_role = "assistant" if is_subagent else "user"
-        messages = self._loop.context.build_messages(history=history, current_message="" if is_subagent else msg.content, channel=channel, chat_id=chat_id, session_summary=pending, current_role=current_role, tool_definitions=self._loop.tools.get_definitions(), model=self._loop.model, context_window_tokens=self._loop.context_window_tokens, context_used_tokens=self._loop._last_usage.get("prompt_tokens", 0) if self._loop._last_usage else None, cached_tokens=self._loop._last_usage.get("cached_tokens", 0) if self._loop._last_usage else None, current_iteration=self._loop._current_iteration, max_iterations=self._loop.max_iterations)
+        cs = ContextState(
+            session_summary=pending,
+            tool_definitions=self._loop.tools.get_definitions(),
+            model=self._loop.model,
+            context_window_tokens=self._loop.context_window_tokens,
+            context_used_tokens=self._loop._last_usage.get("prompt_tokens", 0) if self._loop._last_usage else None,
+            cached_tokens=self._loop._last_usage.get("cached_tokens", 0) if self._loop._last_usage else None,
+            current_iteration=self._loop._current_iteration,
+            max_iterations=self._loop.max_iterations,
+        )
+        messages = self._loop.context.build_messages(
+            history=history,
+            current_message="" if is_subagent else msg.content,
+            channel=channel,
+            chat_id=chat_id,
+            current_role=current_role,
+            context_state=cs,
+        )
         final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, session=session, channel=channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         self._loop._save_turn(session, all_msgs, 1 + len(history))
         session.enforce_file_cap(on_archive=self._loop.context.memory.raw_archive)
@@ -150,13 +168,8 @@ class UserMessageHandler:
                 msg.content,
             )
         else:
-            initial_messages = self._loop.context.build_messages(
-                history=history,
-                current_message=msg.content,
+            cs = ContextState(
                 session_summary=pending,
-                media=msg.media if msg.media else None,
-                channel=msg.channel,
-                chat_id=self._loop._runtime_chat_id(msg),
                 tool_definitions=self._loop.tools.get_definitions(),
                 model=self._loop.model,
                 context_window_tokens=self._loop.context_window_tokens,
@@ -164,6 +177,14 @@ class UserMessageHandler:
                 cached_tokens=self._loop._last_usage.get("cached_tokens", 0) if self._loop._last_usage else None,
                 current_iteration=self._loop._current_iteration,
                 max_iterations=self._loop.max_iterations,
+            )
+            initial_messages = self._loop.context.build_messages(
+                history=history,
+                current_message=msg.content,
+                media=msg.media if msg.media else None,
+                channel=msg.channel,
+                chat_id=self._loop._runtime_chat_id(msg),
+                context_state=cs,
             )
         return initial_messages, pending_ask_id
 
