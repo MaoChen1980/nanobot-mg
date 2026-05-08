@@ -272,13 +272,19 @@ class GatewayApplication:
                 "as a brief and natural message in their language. Speak directly to them — "
                 "do not narrate progress, summarize, include user IDs, or add status reports "
                 "like 'Done' or 'Reminded'.\n\n"
-                f"Reminder: {job.payload.message}"
+                f"Reminder: {job.payload.message}\n\n"
+                "You can use `cron` tool to manage this job:\n"
+                f"- `cron action=update job_id={job.id} message=\"...\"` — update the reminder for next run\n"
+                f"- `cron action=list` — check job status\n"
+                f"- `cron action=remove job_id={job.id}` — cancel this job"
             )
 
             cron_tool = self.agent.tools.get("cron")
             cron_token = None
+            cron_job_token = None
             if isinstance(cron_tool, CronTool):
                 cron_token = cron_tool.set_cron_context(True)
+                cron_job_token = cron_tool.set_current_job_id(job.id)
 
             async def _silent(*_args: Any, **_kwargs: Any) -> None:
                 pass
@@ -300,6 +306,8 @@ class GatewayApplication:
             finally:
                 if isinstance(cron_tool, CronTool) and cron_token is not None:
                     cron_tool.reset_cron_context(cron_token)
+                if isinstance(cron_tool, CronTool) and cron_job_token is not None:
+                    cron_tool.reset_current_job_id(cron_job_token)
                 if (
                     isinstance(message_tool, MessageTool)
                     and message_record_token is not None

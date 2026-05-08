@@ -12,7 +12,7 @@ from nanobot.cron.service import CronService
 from nanobot.cron.types import CronJob, CronJobState, CronSchedule
 
 _CRON_PARAMETERS = tool_parameters_schema(
-    action=p("string", "Action to perform", enum=["add", "list", "remove"]),
+    action=p("string", "Action to perform", enum=["add", "list", "remove", "update"]),
     name=p("string",
         "Optional short human-readable label for the job "
         "(e.g., 'weather-monitor', 'daily-standup'). Defaults to first 30 chars of message."
@@ -35,11 +35,15 @@ _CRON_PARAMETERS = tool_parameters_schema(
     deliver=p("boolean", "Whether to deliver the execution result to the user channel (default true)",
         default=True,
     ),
-    job_id=p("string", "REQUIRED when action='remove'. Job ID to remove (obtain via action='list')."),
+    job_id=p("string", "REQUIRED for action='remove' or action='update'. "
+        "Optional when inside a cron job (defaults to current job). "
+        "Obtain via action='list'."),
     required=["action"],
     description=(
         "Action-specific parameters: add requires a non-empty message plus one schedule "
-        "(every_seconds, cron_expr, or at); remove requires job_id; list only needs action. "
+        "(every_seconds, cron_expr, or at); remove requires job_id; "
+        "update accepts job_id plus any fields to change (message, schedule, name, deliver); "
+        "list only needs action. "
         "Per-action requirements are enforced at runtime (see field descriptions) so the "
         "top-level schema stays compatible with providers (e.g. OpenAI Codex/Responses) that "
         "reject oneOf/anyOf/allOf/enum/not at the root of function parameters."
@@ -59,6 +63,7 @@ class CronTool(Tool):
         self._metadata: ContextVar[dict] = ContextVar("cron_metadata", default={})
         self._session_key: ContextVar[str] = ContextVar("cron_session_key", default="")
         self._in_cron_context: ContextVar[bool] = ContextVar("cron_in_context", default=False)
+        self._current_job_id: ContextVar[str] = ContextVar("cron_job_id", default="")
 
     def set_context(
         self, channel: str, chat_id: str,
@@ -77,6 +82,14 @@ class CronTool(Tool):
     def reset_cron_context(self, token) -> None:
         """Restore previous cron context."""
         self._in_cron_context.reset(token)
+
+    def set_current_job_id(self, job_id: str):
+        """Set the current cron job ID for self-referencing update/remove."""
+        return self._current_job_id.set(job_id)
+
+    def reset_current_job_id(self, token) -> None:
+        """Restore previous current job ID."""
+        self._current_job_id.reset(token)
 
     @staticmethod
     def _validate_timezone(tz: str) -> str | None:
@@ -104,7 +117,7 @@ class CronTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Schedule reminders and recurring tasks. Actions: add, list, remove. "
+            "Schedule reminders and recurring tasks. Actions: add, list, remove, update. "
             f"If tz is omitted, cron expressions and naive ISO times default to {self._default_timezone}."
         )
 
@@ -113,8 +126,9 @@ class CronTool(Tool):
         action = params.get("action")
         if action == "add" and not str(params.get("message") or "").strip():
             errors.append("message is required when action='add'")
-        if action == "remove" and not str(params.get("job_id") or "").strip():
-            errors.append("job_id is required when action='remove'")
+        if action in ("remove", "update") and not str(params.get("job_id") or "").strip():
+            if not self._in_cron_context.get():
+                errors.append(f"job_id is required when action='{action}' (or run inside a cron job)")
         return errors
 
     async def execute(
@@ -138,6 +152,8 @@ class CronTool(Tool):
             return self._list_jobs()
         elif action == "remove":
             return self._remove_job(job_id)
+        elif action == "update":
+            return self._update_job(job_id, name, message, every_seconds, cron_expr, tz, at, deliver)
         return f"Unknown action: {action}"
 
     def _add_job(
@@ -279,3 +295,64 @@ class CronTool(Tool):
                 "This is a protected system-managed cron job."
             )
         return f"Job {job_id} not found"
+
+    def _update_job(
+        self,
+        job_id: str | None,
+        name: str | None = None,
+        message: str = "",
+        every_seconds: int | None = None,
+        cron_expr: str | None = None,
+        tz: str | None = None,
+        at: str | None = None,
+        deliver: bool = True,
+    ) -> str:
+        if not job_id:
+            job_id = self._current_job_id.get()
+        if not job_id:
+            return "Error: job_id is required for update (use job_id=... or run inside a cron job)"
+
+        # Build schedule if any scheduling param is provided
+        schedule = None
+        if every_seconds or cron_expr or at:
+            if every_seconds:
+                schedule = CronSchedule(kind="every", every_ms=every_seconds * 1000)
+            elif cron_expr:
+                effective_tz = tz or self._default_timezone
+                if err := self._validate_timezone(effective_tz):
+                    return err
+                schedule = CronSchedule(kind="cron", expr=cron_expr, tz=effective_tz)
+            elif at:
+                from zoneinfo import ZoneInfo
+                try:
+                    dt = datetime.fromisoformat(at)
+                except ValueError:
+                    return f"Error: invalid ISO datetime format '{at}'. Expected format: YYYY-MM-DDTHH:MM:SS"
+                if dt.tzinfo is None:
+                    if err := self._validate_timezone(self._default_timezone):
+                        return err
+                    dt = dt.replace(tzinfo=ZoneInfo(self._default_timezone))
+                at_ms = int(dt.timestamp() * 1000)
+                schedule = CronSchedule(kind="at", at_ms=at_ms)
+
+        # Only pass non-default values to update
+        result = self._cron.update_job(
+            job_id,
+            name=name,
+            schedule=schedule,
+            message=message or None,
+            deliver=None if deliver else False,
+        )
+
+        if result == "not_found":
+            return f"Error: job '{job_id}' not found"
+        if result == "protected":
+            return f"Error: job '{job_id}' is a protected system job and cannot be updated"
+
+        updated = result
+        parts = [f"Updated job '{updated.name}' ({updated.id})"]
+        if schedule:
+            parts.append(f"  New schedule: {self._format_timing(schedule)}")
+        if message:
+            parts.append(f"  New message: {message[:60]}{'...' if len(message) > 60 else ''}")
+        return "\n".join(parts)

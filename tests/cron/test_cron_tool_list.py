@@ -362,6 +362,7 @@ def test_cron_schema_advertises_action_specific_requirements(tmp_path) -> None:
     assert "REQUIRED" in message_desc and "action='add'" in message_desc
     job_id_desc = tool.parameters["properties"]["job_id"]["description"]
     assert "REQUIRED" in job_id_desc and "action='remove'" in job_id_desc
+    assert "action='update'" in job_id_desc
 
 
 def test_validate_params_requires_message_only_for_add(tmp_path) -> None:
@@ -369,7 +370,8 @@ def test_validate_params_requires_message_only_for_add(tmp_path) -> None:
 
     assert "message is required when action='add'" in tool.validate_params({"action": "add"})
     assert tool.validate_params({"action": "list"}) == []
-    assert "job_id is required when action='remove'" in tool.validate_params({"action": "remove"})
+    assert "job_id is required when action='remove'" in tool.validate_params({"action": "remove"})[0]
+    assert "job_id is required when action='update'" in tool.validate_params({"action": "update"})[0]
 
 
 def test_add_job_empty_message_returns_actionable_error(tmp_path) -> None:
@@ -409,3 +411,59 @@ def test_list_excludes_disabled_jobs(tmp_path) -> None:
     result = tool._list_jobs()
     assert "Paused job" not in result
     assert result == "No scheduled jobs."
+
+
+# -- _update_job tests --
+
+
+def test_update_job_message(tmp_path) -> None:
+    tool = _make_tool(tmp_path)
+    tool.set_context("telegram", "chat-1")
+    result = tool._add_job("test", "original message", 60, None, None, None)
+    job_id = result.split("id: ")[1].rstrip(")")
+
+    updated = tool._update_job(job_id, message="updated message")
+
+    assert "Updated job" in updated
+    assert job_id in updated
+    job = tool._cron.get_job(job_id)
+    assert job.payload.message == "updated message"
+
+
+def test_update_job_empty_id_uses_context(tmp_path) -> None:
+    tool = _make_tool(tmp_path)
+    tool.set_context("telegram", "chat-1")
+    result = tool._add_job("test", "original", 60, None, None, None)
+    job_id = result.split("id: ")[1].rstrip(")")
+
+    # Set current job context (simulates running inside a cron job)
+    tool.set_current_job_id(job_id)
+    updated = tool._update_job(None, message="updated from context")
+    tool.reset_current_job_id(tool.set_current_job_id(""))  # clean up
+
+    assert "Updated job" in updated
+    job = tool._cron.get_job(job_id)
+    assert job.payload.message == "updated from context"
+
+
+def test_update_job_not_found(tmp_path) -> None:
+    tool = _make_tool(tmp_path)
+    result = tool._update_job("nonexistent-id", message="test")
+    assert "not found" in result
+
+
+def test_update_job_schedule(tmp_path) -> None:
+    tool = _make_tool_with_tz(tmp_path, "UTC")
+    tool.set_context("telegram", "chat-1")
+    result = tool._add_job("test", "one-shot", None, None, None, "2030-01-01T00:00:00")
+    job_id = result.split("id: ")[1].rstrip(")")
+
+    # Change from at to every_seconds
+    updated = tool._update_job(job_id, every_seconds=300, message="recurring")
+
+    assert "Updated job" in updated
+    assert "every 5m" in updated
+    job = tool._cron.get_job(job_id)
+    assert job.schedule.kind == "every"
+    assert job.schedule.every_ms == 300_000
+    assert job.payload.message == "recurring"

@@ -80,12 +80,14 @@ The Runtime Context block is injected just before my user message each turn. It 
   - The `at` time is in ISO format, defaults to server timezone
   - `deliver=true` (default) pushes the result to the user's channel
 - **Recurring reminder**: `cron action=add message="... " cron_expr="0 9 * * *"` or `every_seconds=3600`
-- **List/remove**: `cron action=list` / `cron action=remove job_id=xxx`
-- **Cannot schedule cron from within a cron job** — blocked.
+- **List/remove/update**: `cron action=list` / `cron action=remove job_id=xxx` / `cron action=update job_id=xxx message="..." every_seconds=300`
+- **Cannot schedule cron from within a cron job** — blocked (update and remove are allowed).
 
 <br>
 
 **Isolated session — pack context at creation**: Cron jobs run in their own session (`cron:{job_id}`) — they have no access to your conversation history. When creating a cron job, put **all context the job needs** into the `message` field: what to do, what tools to use, what to say, when to stop. The cron trigger is just a timer — everything else is the full agent pipeline (LLM + tools + skills + multi-turn).
+
+**Self-management within cron runs**: When a cron job triggers, you can use `cron action=update` and `cron action=remove` to manage the job itself — e.g., counting remaining iterations, updating the reminder for next run, or cancelling after N repeats. You don't need to pass `job_id` inside a cron job (it defaults to the current job).
 
 ---
 

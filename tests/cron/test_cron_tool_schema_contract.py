@@ -86,10 +86,17 @@ class TestSchemaSelfDescribesRequirements:
         desc = tool.parameters["properties"]["message"]["description"]
         assert "REQUIRED" in desc and "action='add'" in desc
 
-    def test_job_id_description_flags_remove_requirement(self) -> None:
+    def test_job_id_description_flags_remove_and_update_requirement(self) -> None:
         tool = CronTool(_SvcStub())
         desc = tool.parameters["properties"]["job_id"]["description"]
-        assert "REQUIRED" in desc and "action='remove'" in desc
+        assert "REQUIRED" in desc
+        assert "action='remove'" in desc or "remove" in desc
+        assert "update" in desc
+
+    def test_update_in_action_enum(self) -> None:
+        tool = CronTool(_SvcStub())
+        enum = tool.parameters["properties"]["action"]["enum"]
+        assert "update" in enum
 
     def test_top_level_required_stays_narrow(self) -> None:
         # If 'message' or 'job_id' ever creep back into top-level required,

@@ -870,6 +870,7 @@ class TestOnCronJob:
         app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Hi"))
         cron_tool = MagicMock(spec=CronTool)
         cron_tool.set_cron_context.return_value = "ctx-token"
+        cron_tool.set_current_job_id.return_value = "job-token"
         app.agent.tools["cron"] = cron_tool
         app._wire_callbacks()
         job = CronJob(
@@ -881,7 +882,9 @@ class TestOnCronJob:
 
         assert result == "Hi"
         cron_tool.set_cron_context.assert_called_once_with(True)
+        cron_tool.set_current_job_id.assert_called_once_with("r1")
         cron_tool.reset_cron_context.assert_called_once_with("ctx-token")
+        cron_tool.reset_current_job_id.assert_called_once_with("job-token")
 
     async def test_no_message_tool_still_processes(self, config: Config) -> None:
         """Reminder works even when agent has no 'message' tool."""
