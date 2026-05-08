@@ -148,6 +148,12 @@ class UserMessageHandler:
         """Run command dispatch, return result if handled."""
         from nanobot.command import CommandContext
         ctx = CommandContext(msg=msg, session=session, key=key, raw=msg.content.strip(), loop=self._loop)
+        # Priority commands (e.g. /stop, /restart) are checked before the
+        # dispatch lock in the bus loop path; for direct/proxy messages we
+        # must check them here too since they aren't in the regular dispatch.
+        result = await self._loop.commands.dispatch_priority(ctx)
+        if result:
+            return result
         return await self._loop.commands.dispatch(ctx)
 
     def _maybe_start_message_tool(self):

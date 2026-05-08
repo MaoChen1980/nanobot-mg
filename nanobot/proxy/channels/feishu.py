@@ -93,6 +93,17 @@ class FeishuProxyChannel(BaseProxyChannel):
         pass
 
     # ------------------------------------------------------------------
+    # Push delivery from Hub (cron reminders, etc.)
+    # ------------------------------------------------------------------
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Handle a push delivery from hub — send as a new message to the chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            self._send_text_reply(chat_id, None, content)
+
+    # ------------------------------------------------------------------
     # Reply / reaction helpers
     # ------------------------------------------------------------------
 

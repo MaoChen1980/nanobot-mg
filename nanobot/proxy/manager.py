@@ -358,6 +358,26 @@ class ProxyManager:
                 self._proxies[key].running = False
             logger.debug("Proxy {} unregistered (TCP disconnected)", key)
 
+    async def deliver_to_proxy(self, proxy_key: str, data: dict[str, Any]) -> bool:
+        """Deliver a JSON message to a proxy via its TCP connection.
+
+        Returns True if the message was written successfully, False if
+        the proxy is not connected or the write failed.
+        """
+        proxy = self._proxies.get(proxy_key)
+        if proxy is None or proxy.writer is None or proxy.writer.is_closing():
+            logger.warning("Cannot deliver to proxy {}: not connected", proxy_key)
+            return False
+        import json
+        try:
+            proxy.writer.write((json.dumps(data) + "\n").encode())
+            await proxy.writer.drain()
+            logger.debug("Delivered to proxy {}", proxy_key)
+            return True
+        except Exception as e:
+            logger.error("Failed to deliver to proxy {}: {}", proxy_key, e)
+            return False
+
     def heartbeat(self, registration: dict[str, Any]) -> None:
         """Update last heartbeat for a proxy (HTTP-based, legacy)."""
         key = self.key_for(registration["channel"], registration["bot"])

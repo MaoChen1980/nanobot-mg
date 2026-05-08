@@ -49,6 +49,8 @@ class BaseProxyChannel:
         self._send_lock = threading.Lock()
         self._async_send_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task | None = None
+        self._reader_task: asyncio.Task | None = None
+        self._pending_response: asyncio.Future | None = None
         self._parent_pid: int = 0  # set after TCP connect
         # msg_id -> timestamp for deduplication
         self._dedup: dict[str, float] = {}
@@ -87,6 +89,7 @@ class BaseProxyChannel:
             resp = json.loads(resp_line.decode())
             if resp.get("success"):
                 logger.info("Registered with Hub via TCP")
+                await self._start_background_reader()
                 self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             else:
                 raise RuntimeError(f"TCP registration failed: {resp}")
@@ -136,14 +139,56 @@ class BaseProxyChannel:
         return HubResponse.from_dict(resp)
 
     async def _send_raw(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Low-level: write JSON dict to TCP and read one response line."""
-        self._writer.write((json.dumps(data) + "\n").encode())
-        await self._writer.drain()
-        line = await self._reader.readline()
-        return json.loads(line.decode())
+        """Low-level: write JSON dict to TCP, wait for response via background reader."""
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self._pending_response = future
+        try:
+            self._writer.write((json.dumps(data) + "\n").encode())
+            await self._writer.drain()
+            response = await asyncio.wait_for(future, timeout=120)
+            return response
+        finally:
+            self._pending_response = None
+
+    async def _background_reader(self) -> None:
+        """Continuously read TCP messages and dispatch pushes or fulfill pending responses."""
+        try:
+            while True:
+                line = await self._reader.readline()
+                if not line:
+                    break
+                data = json.loads(line.decode())
+                if data.get("type") == "deliver":
+                    await self._handle_deliver(data)
+                elif self._pending_response is not None and not self._pending_response.done():
+                    self._pending_response.set_result(data)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error("Background reader error: {}", e)
+
+    async def _start_background_reader(self) -> None:
+        """Start the background reader on the conn_loop."""
+        self._reader_task = asyncio.create_task(self._background_reader())
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Handle a push delivery from hub. Override in subclasses to send messages."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        logger.info("Push delivery to {}: {}", chat_id, content[:80])
 
     async def _reconnect_to_hub(self, max_retries: int = 3) -> bool:
         """Reconnect to Hub with exponential backoff. Runs on conn_loop."""
+        # Cancel old background reader before reconnecting
+        if self._reader_task is not None and not self._reader_task.done():
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+            self._reader_task = None
+
         for attempt in range(1, max_retries + 1):
             try:
                 if self._writer and not self._writer.is_closing():
@@ -173,6 +218,7 @@ class BaseProxyChannel:
                 resp = json.loads(resp_line.decode())
                 if resp.get("success"):
                     logger.info("Re-registered with Hub via TCP (attempt {})", attempt)
+                    await self._start_background_reader()
                     return True
                 else:
                     # Hub explicitly rejected us (stale/orphan proxy from old gateway instance)

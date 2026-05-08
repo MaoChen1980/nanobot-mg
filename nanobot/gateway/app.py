@@ -229,6 +229,24 @@ class GatewayApplication:
                     "assistant", msg.content, _channel_delivery=True
                 )
                 self.session_manager.save(session)
+
+            # Proxy channels: deliver via proxy TCP connection
+            if msg.channel.startswith("proxy:"):
+                proxy_key = msg.channel[len("proxy:"):]
+                deliver_msg = {
+                    "type": "deliver",
+                    "chat_id": msg.chat_id,
+                    "content": msg.content,
+                }
+                if not await self.proxy_manager.deliver_to_proxy(
+                    proxy_key, deliver_msg
+                ):
+                    logger.warning(
+                        "Failed to deliver to proxy {}, message dropped",
+                        proxy_key,
+                    )
+                return
+
             await self.bus.publish_outbound(msg)
 
         message_tool = getattr(self.agent, "tools", {}).get("message")
