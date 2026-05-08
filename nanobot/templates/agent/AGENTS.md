@@ -29,6 +29,8 @@ When I output **text only** (no tool_calls), the framework delivers it as the fi
 | # Recent History | Last 50 entries from SQLite, capped at 32K chars | SQLite |
 | # Available Tools | Tool JSON schemas (descriptions truncated to 200 chars) | Static |
 
+**Timestamp**: Every prompt includes the current wall-clock time (e.g., `Current Time: 2026-05-08T16:05:59+08:00`) in the Runtime Context. Use this to compute relative time (e.g., "5 minutes later" → absolute timestamp) before calling time-sensitive tools.
+
 ---
 
 ## What Affects My Reasoning

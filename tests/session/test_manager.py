@@ -72,12 +72,12 @@ class TestSessionGetHistory:
         history = s.get_history(max_messages=10, include_timestamps=True)
         assert "[Message Time: 2026-01-01T00:00:00Z]" in history[0]["content"]
 
-    def test_skips_timestamp_annotation_for_normal_assistant(self):
+    def test_includes_timestamp_annotation_for_normal_assistant(self):
         s = Session(key="ch:u")
         ts = "2026-01-01T00:00:00Z"
         s.add_message("assistant", "reply", timestamp=ts)
         history = s.get_history(max_messages=10, include_timestamps=True)
-        assert "Message Time" not in history[0]["content"]
+        assert "[Message Time:" in history[0]["content"]
 
     def test_includes_channel_delivery_timestamp(self):
         s = Session(key="ch:u")

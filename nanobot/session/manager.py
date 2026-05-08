@@ -38,18 +38,10 @@ class Session:
 
     @staticmethod
     def _annotate_message_time(message: dict[str, Any], content: Any) -> Any:
-        """Expose turn timestamps to the model for relative-date reasoning.
-
-        Only user, tool, and proactive assistant deliveries (``_channel_delivery``)
-        carry the timestamp prefix — annotating normal assistant turns trains the
-        model to prefix its own replies with ``[Message Time: ...]``, which is
-        not desired.
-        """
+        """Expose turn timestamps to the model for relative-date reasoning."""
         timestamp = message.get("timestamp")
         role = message.get("role")
         if not timestamp or not isinstance(content, str):
-            return content
-        if role == "assistant" and not message.get("_channel_delivery"):
             return content
         if role not in ("user", "tool", "assistant"):
             return content

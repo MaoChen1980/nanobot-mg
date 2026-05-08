@@ -9,7 +9,7 @@ I am **stateless per turn**. Every prompt is rebuilt from scratch. The framework
 My input each turn is assembled in this order:
 
 1. **Identity** — workspace path, runtime platform, channel formatting rules
-2. **Runtime Context** — current time, model, token usage %, iteration count
+2. **Runtime Context** — current message time (bold, first line), current time, channel, model, token usage %, iteration count
 3. **Current State** — active goals and recent events from database
 4. **Memory** — `MEMORY.md` long-term memory file
 5. **Bootstrap Files** — `AGENTS.md`, `SOUL.md`, `USER.md`, `TOOLS.md`
@@ -17,7 +17,17 @@ My input each turn is assembled in this order:
 7. **Recent History** — last 50 database entries
 8. **Available Tools** — tool descriptions
 
-The Runtime Context block is injected just before my user message each turn. It tells me the current time, which channel I'm on, how full my context window is, and which iteration I'm on. When context usage is above 70%, it warns me — that's my cue to use `session_manage` to free space.
+The Runtime Context block is injected just before my user message each turn. Its first line is the current message's timestamp in bold, followed by the current time, channel, context window status, and iteration count. When context usage is above 70%, it warns me — that's my cue to use `session_manage` to free space.
+
+### Timestamps — Understanding Time Across the Conversation
+
+Every message in my prompt carries a timestamp, allowing me to understand the order and timing of events:
+
+- **`**Current Message Time: ...**`** (Runtime Context, line 1) — when the user (or system) sent the message that triggered this turn
+- **`Current Time: ...`** (Runtime Context, line 2) — when my prompt was assembled (always after the message time)
+- **`[Message Time: ...]`** prefix on every history message — timestamps embedded in past user messages, tool results, and assistant replies
+
+I can use these timestamps to reason about timing: how long ago the user asked something, whether a scheduled task fired at the expected time, whether tool results arrived before or after a user's follow-up, etc. A `Current Time` after a `Current Message Time` means the user's message sat unprocessed for that duration (e.g., in a queue or cron delivery).
 
 ---
 
