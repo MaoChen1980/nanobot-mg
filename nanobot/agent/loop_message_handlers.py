@@ -46,10 +46,6 @@ class SystemMessageHandler:
         cs = ContextState(
             session_summary=pending,
             tool_definitions=self._loop.tools.get_definitions(),
-            model=self._loop.model,
-            context_window_tokens=self._loop.context_window_tokens,
-            context_used_tokens=self._loop._last_usage.get("prompt_tokens", 0) if self._loop._last_usage else None,
-            cached_tokens=self._loop._last_usage.get("cached_tokens", 0) if self._loop._last_usage else None,
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
         )
@@ -181,10 +177,6 @@ class UserMessageHandler:
             cs = ContextState(
                 session_summary=pending,
                 tool_definitions=self._loop.tools.get_definitions(),
-                model=self._loop.model,
-                context_window_tokens=self._loop.context_window_tokens,
-                context_used_tokens=self._loop._last_usage.get("prompt_tokens", 0) if self._loop._last_usage else None,
-                cached_tokens=self._loop._last_usage.get("cached_tokens", 0) if self._loop._last_usage else None,
                 current_iteration=self._loop._current_iteration,
                 max_iterations=self._loop.max_iterations,
             )

@@ -108,9 +108,10 @@ class CronTool(Tool):
     @staticmethod
     def _format_timestamp(ms: int, tz_name: str) -> str:
         from zoneinfo import ZoneInfo
+        from nanobot.utils.helpers import _format_datetime
 
         dt = datetime.fromtimestamp(ms / 1000, tz=ZoneInfo(tz_name))
-        return f"{dt.isoformat()} ({tz_name})"
+        return _format_datetime(dt)
 
     name = "cron"
 

@@ -150,12 +150,14 @@ class Consolidator:
             from nanobot.agent.memory_store import MemoryStore
             formatted = MemoryStore._format_messages(msgs)
             formatted = self._truncate_to_token_budget(formatted)
+            from nanobot.agent.context import ContextBuilder
+            runtime_ctx = ContextBuilder._build_runtime_context(None, None, timezone=self.timezone)
             response = await self.provider.chat_with_retry(
                 model=self.model,
                 messages=[
                     {
                         "role": "system",
-                        "content": render_template(
+                        "content": runtime_ctx + "\n\n" + render_template(
                             "agent/consolidator_archive.md",
                             strip=True,
                         ),
@@ -174,8 +176,9 @@ class Consolidator:
                 try:
                     from datetime import datetime
                     from zoneinfo import ZoneInfo
-                    first_ts = datetime.fromisoformat(first_ts).astimezone(ZoneInfo(self.timezone)).isoformat()
-                    last_ts = datetime.fromisoformat(last_ts).astimezone(ZoneInfo(self.timezone)).isoformat()
+                    from nanobot.utils.helpers import _format_datetime
+                    first_ts = _format_datetime(datetime.fromisoformat(first_ts).astimezone(ZoneInfo(self.timezone)))
+                    last_ts = _format_datetime(datetime.fromisoformat(last_ts).astimezone(ZoneInfo(self.timezone)))
                 except Exception:
                     pass
             time_prefix = f"[{first_ts} → {last_ts}] "

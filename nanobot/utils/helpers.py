@@ -37,7 +37,7 @@ def timestamp() -> str:
 
 
 def current_time_str(timezone: str | None = None) -> str:
-    """Return the current time string in ISO 8601 format."""
+    """Return the current time in LLM-friendly format."""
     from zoneinfo import ZoneInfo
 
     if timezone is None:
@@ -49,7 +49,23 @@ def current_time_str(timezone: str | None = None) -> str:
             tz = None
         now = datetime.now(tz=tz) if tz else datetime.now().astimezone()
 
-    return now.isoformat()
+    return _format_datetime(now)
+
+
+def _format_datetime(dt: datetime) -> str:
+    """Format a timezone-aware datetime as 'YYYY-MM-DD HH:MM:SS (Name, UTC±HH:MM)'."""
+    base = dt.strftime("%Y-%m-%d %H:%M:%S")
+    tz_name = getattr(dt.tzinfo, "key", "")
+    offset = dt.utcoffset()
+    if offset is not None:
+        total_min = int(offset.total_seconds() / 60)
+        sign = "+" if total_min >= 0 else "-"
+        h, m = divmod(abs(total_min), 60)
+        offset_str = f"UTC{sign}{h:02d}:{m:02d}"
+        if tz_name:
+            return f"{base} ({tz_name}, {offset_str})"
+        return f"{base} ({offset_str})"
+    return base
 
 
 _UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*]')

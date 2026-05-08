@@ -54,10 +54,11 @@ class Session:
             try:
                 from datetime import datetime
                 from zoneinfo import ZoneInfo
+                from nanobot.utils.helpers import _format_datetime
                 dt = datetime.fromisoformat(timestamp)
                 if dt.tzinfo is not None:
                     dt = dt.astimezone(ZoneInfo(timezone))
-                    timestamp = dt.isoformat()
+                    timestamp = _format_datetime(dt)
             except Exception:
                 pass
         return f"[Message Time: {timestamp}]\n{content}"

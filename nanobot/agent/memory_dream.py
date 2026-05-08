@@ -147,7 +147,8 @@ class Dream:
             try:
                 from datetime import datetime
                 from zoneinfo import ZoneInfo
-                return datetime.fromisoformat(ts).astimezone(ZoneInfo(self.timezone)).isoformat()
+                from nanobot.utils.helpers import _format_datetime
+                return _format_datetime(datetime.fromisoformat(ts).astimezone(ZoneInfo(self.timezone)))
             except Exception:
                 return ts
 
@@ -173,10 +174,12 @@ class Dream:
         phase1_prompt = f"## Conversation History\n{history_text}\n\n{file_context}"
 
         try:
+            from nanobot.agent.context import ContextBuilder
+            runtime_ctx = ContextBuilder._build_runtime_context(None, None, timezone=self.timezone)
             phase1_response = await self.provider.chat_with_retry(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": render_template("agent/dream_phase1.md", strip=True, stale_threshold_days=_STALE_THRESHOLD_DAYS)},
+                    {"role": "system", "content": runtime_ctx + "\n\n" + render_template("agent/dream_phase1.md", strip=True, stale_threshold_days=_STALE_THRESHOLD_DAYS)},
                     {"role": "user", "content": phase1_prompt},
                 ],
                 tools=None, tool_choice=None,
@@ -194,8 +197,10 @@ class Dream:
         phase2_prompt = f"## Analysis Result\n{analysis}\n\n{file_context}{skills_section}"
 
         skill_manager_path = BUILTIN_SKILLS_DIR / "skill-manager" / "SKILL.md"
+        from nanobot.agent.context import ContextBuilder
+        runtime_ctx = ContextBuilder._build_runtime_context(None, None, timezone=self.timezone)
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": render_template("agent/dream_phase2.md", strip=True, skill_manager_path=str(skill_manager_path))},
+            {"role": "system", "content": runtime_ctx + "\n\n" + render_template("agent/dream_phase2.md", strip=True, skill_manager_path=str(skill_manager_path))},
             {"role": "user", "content": phase2_prompt},
         ]
 

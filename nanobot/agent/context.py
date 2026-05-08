@@ -27,11 +27,7 @@ class ContextState:
     Carries session-level parameters that change slowly across turns,
     extracted from ``build_messages()`` to reduce per-call boilerplate.
     """
-    model: str | None = None
     tool_definitions: list[dict[str, Any]] | None = None
-    context_window_tokens: int | None = None
-    context_used_tokens: int | None = None
-    cached_tokens: int | None = None
     current_iteration: int | None = None
     max_iterations: int | None = None
     session_summary: str | None = None
@@ -143,9 +139,10 @@ class ContextBuilder:
         try:
             from datetime import datetime
             from zoneinfo import ZoneInfo
+            from nanobot.utils.helpers import _format_datetime
             dt = datetime.fromisoformat(ts)
             if dt.tzinfo is not None:
-                return dt.astimezone(ZoneInfo(timezone)).isoformat()
+                return _format_datetime(dt.astimezone(ZoneInfo(timezone)))
         except Exception:
             pass
         return ts
@@ -211,10 +208,6 @@ class ContextBuilder:
     def _build_runtime_context(
         channel: str | None, chat_id: str | None, timezone: str | None = None,
         session_summary: str | None = None,
-        model: str | None = None,
-        context_window_tokens: int | None = None,
-        context_used_tokens: int | None = None,
-        cached_tokens: int | None = None,
         current_iteration: int | None = None,
         max_iterations: int | None = None,
         message_time: str | None = None,
@@ -226,15 +219,6 @@ class ContextBuilder:
         lines.append(f"Current Time: {current_time_str(timezone)}")
         if channel and chat_id:
             lines += [f"Channel: {channel}", f"Chat ID: {chat_id}"]
-        if model:
-            lines.append(f"Model: {model}")
-        if context_window_tokens is not None and context_used_tokens is not None:
-            pct = int(100 * context_used_tokens / context_window_tokens) if context_window_tokens else 0
-            lines.append(f"Context: {pct}% ({context_used_tokens:,}/{context_window_tokens:,} tokens)")
-            if pct >= 70:
-                lines.append(f"⚠ Context usage high ({pct}%) — consider summarization")
-        if cached_tokens is not None and cached_tokens > 0:
-            lines.append(f"Cache: {cached_tokens:,} tokens reused")
         if current_iteration is not None and max_iterations is not None:
             lines.append(f"Iteration: {current_iteration}/{max_iterations}")
         if session_summary:
@@ -328,10 +312,6 @@ class ContextBuilder:
         cs = context_state or ContextState()
         runtime_ctx = self._build_runtime_context(
             channel, chat_id, self.timezone, session_summary=cs.session_summary,
-            model=cs.model,
-            context_window_tokens=cs.context_window_tokens,
-            context_used_tokens=cs.context_used_tokens,
-            cached_tokens=cs.cached_tokens,
             current_iteration=cs.current_iteration,
             max_iterations=cs.max_iterations,
             message_time=message_timestamp,
