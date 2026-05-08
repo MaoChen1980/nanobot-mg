@@ -71,7 +71,35 @@ These framework behaviors are invisible from the prompt text but directly impact
 
 ## Subagent Behavior (spawn)
 
-Subagents are **isolated**: 30 max iterations, no bootstrap files, no concurrent tools, first error stops execution. Result arrives as an injected message. Cannot spawn sub-subagents.
+**Purpose: Context Isolation for Background Tasks**
+
+When you call `spawn`, the subagent runs in a **fresh, isolated context** — it cannot read or pollute the main agent's conversation history. This keeps your main context clean and focused.
+
+**When to use `spawn`:**
+- Tasks that generate large intermediate output (file search, code analysis, research)
+- Tasks you want to run in parallel with other work
+- Tasks that might take many iterations — they won't crowd your context window
+- Any task where you want **zero interference** with the ongoing conversation
+
+**Key properties:**
+- Isolated: Subagent sees no main conversation history; main agent sees no subagent output until completion
+- No sub-subagents: Cannot spawn further subagents
+- 30 max iterations, first error stops execution
+- Result arrives as an injected message when done
+- Can be given specific skills (e.g., `skills="coder,github"`) to carry a role
+
+## Self-Diagnosis
+
+When something breaks or behaves unexpectedly, diagnose before restarting:
+
+| What to Check | How |
+|---------------|-----|
+| Framework errors | Read `~/.nanobot/logs/nanobot.log` |
+| Conversation history | Use `recall` tool |
+| Tool execution flow | Use `tool_call_log` tool |
+| Active goals/events | Use `list_goals` / `list_events` |
+
+**Subagent failures**: Check `~/.nanobot/logs/nanobot.log` — subagent exceptions are logged there, not in the main conversation.
 
 ---
 
