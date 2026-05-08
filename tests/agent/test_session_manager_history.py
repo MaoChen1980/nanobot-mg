@@ -194,13 +194,8 @@ def test_get_history_preserves_reasoning_content():
     ]
 
 
-def test_get_history_annotates_user_turns_but_not_assistant_turns():
-    """Only user turns carry the timestamp prefix.
-
-    Annotating assistant turns trains the model (via in-context examples) to
-    start its own replies with ``[Message Time: ...]``. User-side stamps are
-    enough to pin adjacent assistant replies for relative-time reasoning.
-    """
+def test_get_history_annotates_all_message_types_with_timestamps():
+    """User, tool, and assistant messages all carry the timestamp prefix."""
     session = Session(key="test:timestamps")
     session.messages.append({
         "role": "user",
@@ -223,7 +218,7 @@ def test_get_history_annotates_user_turns_but_not_assistant_turns():
         },
         {
             "role": "assistant",
-            "content": "记下来了",
+            "content": "[Message Time: 2026-04-26T22:00:05]\n记下来了",
             "timestamp": "2026-04-26T22:00:05",
         },
     ]

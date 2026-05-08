@@ -592,9 +592,9 @@ async def test_system_subagent_followup_is_persisted_before_prompt_assembly(tmp_
     non_system = [m for m in seen["initial_messages"] if m.get("role") != "system"]
     assert "question" in non_system[0]["content"]
     assert "working" in non_system[1]["content"]
-    # User/proactive messages carry timestamp prefix; normal assistant does not.
+    # All messages (user, tool, assistant) carry timestamp prefix.
     assert "[Message Time:" in non_system[0]["content"]
-    assert "[Message Time:" not in non_system[1]["content"]
+    assert "[Message Time:" in non_system[1]["content"]
     assert non_system[2]["content"].count("subagent result") == 1
     # Runtime Context is now in system message, not user
 

@@ -245,12 +245,24 @@ class ContextBuilder:
         return _to_blocks(left) + _to_blocks(right)
 
     def _load_bootstrap_files(self) -> str:
-        """Load all bootstrap files from workspace (cached by file mtime)."""
+        """Load all bootstrap files from workspace (cached by file mtime).
+
+        Falls back to the bundled template when the workspace file doesn't exist.
+        """
         parts = []
 
         for filename in self.BOOTSTRAP_FILES:
             file_path = self.workspace / filename
             if not file_path.exists():
+                # Fallback to bundled template
+                from importlib.resources import files as pkg_files
+                try:
+                    tpl = pkg_files("nanobot") / "templates" / filename
+                    if tpl.is_file():
+                        content = tpl.read_text(encoding="utf-8")
+                        parts.append(f"## {filename}\n\n{content}")
+                except Exception:
+                    pass
                 continue
 
             try:
