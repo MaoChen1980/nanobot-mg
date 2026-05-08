@@ -309,6 +309,20 @@ class CronService:
         self._timer_active = True
         try:
             now = _now_ms()
+
+            # Clean up stale one-shot jobs that were never picked up
+            # (e.g. service started after at_ms had passed)
+            stale = [
+                j for j in self._store.jobs
+                if j.enabled and j.schedule.kind == "at" and j.delete_after_run
+                and j.state.next_run_at_ms is None
+                and j.schedule.at_ms and now >= j.schedule.at_ms
+            ]
+            if stale:
+                stale_ids = {j.id for j in stale}
+                self._store.jobs = [j for j in self._store.jobs if j.id not in stale_ids]
+                logger.info("Cron: removed {} stale one-shot job(s)", len(stale))
+
             due_jobs = [
                 j for j in self._store.jobs
                 if j.enabled and j.state.next_run_at_ms and now >= j.state.next_run_at_ms
