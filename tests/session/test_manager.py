@@ -88,7 +88,23 @@ class TestSessionGetHistory:
         history = s.get_history(max_messages=10, include_timestamps=True)
         assert history[0]["content"] == "delivery"
         assert history[0]["timestamp"] == ts
-        assert history[0].get("_channel_delivery")
+        # _channel_delivery is internal metadata, not exposed in history output
+
+    def test_timestamp_property_included_by_default(self):
+        """Timestamp property is always passed through in history, not just when include_timestamps=True."""
+        s = Session(key="ch:u")
+        ts = "2026-01-01T00:00:00Z"
+        s.add_message("user", "hi", timestamp=ts)
+        history = s.get_history(max_messages=10)  # include_timestamps defaults to False
+        assert history[0]["content"] == "hi"
+        assert history[0]["timestamp"] == ts
+
+    def test_annotate_message_time_is_noop(self):
+        """_annotate_message_time now passes content through unchanged."""
+        s = Session(key="ch:u")
+        msg = {"role": "user", "content": "hello", "timestamp": "2026-01-01T00:00:00Z"}
+        result = Session._annotate_message_time(msg, "hello")
+        assert result == "hello"
 
     def test_media_breadcrumbs(self):
         s = Session(key="ch:u")
@@ -386,7 +402,15 @@ class TestStripAbandonedToolMessages:
         stripped = SessionManager._strip_abandoned_tool_messages(msgs)
         assert len(stripped) == 1
 
-    def test_handles_timestamp_prefix_with_abandoned(self):
+    def test_removes_abandoned_without_timestamp_prefix(self):
+        """[ABANDONED] is now stored directly (no [Message Time] prefix)."""
+        stripped = SessionManager._strip_abandoned_tool_messages([
+            {"role": "tool", "content": "[ABANDONED] cancelled", "tool_call_id": "c1"},
+        ])
+        assert len(stripped) == 0
+
+    def test_handles_backward_compat_timestamp_prefix_with_abandoned(self):
+        """Backward compat: old persisted data may still have [Message Time] prefix."""
         stripped = SessionManager._strip_abandoned_tool_messages([
             {"role": "tool", "content": "[Message Time: ...]\n[ABANDONED] cancelled", "tool_call_id": "c1"},
         ])
