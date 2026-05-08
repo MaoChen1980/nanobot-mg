@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -36,6 +35,7 @@ class Dream:
         max_iterations: int = 10,
         max_tool_result_chars: int = 16_000,
         annotate_line_ages: bool = True,
+        timezone: str | None = None,
     ):
         self.store = store
         self.provider = provider
@@ -44,6 +44,7 @@ class Dream:
         self.max_iterations = max_iterations
         self.max_tool_result_chars = max_tool_result_chars
         self.annotate_line_ages = annotate_line_ages
+        self.timezone = timezone
         from nanobot.agent.runner import AgentRunner
         self._runner = AgentRunner(provider)
         self._tools = self._build_tools()
@@ -138,12 +139,24 @@ class Dream:
         batch = entries[: self.max_batch_size]
         logger.info("Dream: processing {} entries (cursor {}→{}), batch={}", len(entries), last_cursor, batch[-1]["cursor"], len(batch))
 
+        from nanobot.utils.helpers import current_time_str
+
+        def _convert_ts(ts: str) -> str:
+            if not self.timezone:
+                return ts
+            try:
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                return datetime.fromisoformat(ts).astimezone(ZoneInfo(self.timezone)).isoformat()
+            except Exception:
+                return ts
+
         history_text = "\n".join(
-            f"[{e['timestamp']}] {truncate_text(e['content'], self._HISTORY_ENTRY_PREVIEW_MAX_CHARS)}"
+            f"[{_convert_ts(e['timestamp'])}] {truncate_text(e['content'], self._HISTORY_ENTRY_PREVIEW_MAX_CHARS)}"
             for e in batch
         )
 
-        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_date = current_time_str(self.timezone)[:10]
         raw_memory = self.store.read_memory() or "(empty)"
         annotated_memory = self._annotate_with_ages(raw_memory) if self.annotate_line_ages else raw_memory
         current_memory = truncate_text(annotated_memory, self._MEMORY_FILE_MAX_CHARS)

@@ -174,7 +174,8 @@ These framework behaviors are invisible from the prompt text but directly impact
 **Key difference from just replying**: When a user asks for a reminder or alarm, use the `cron` tool — don't just tell them in the current turn. The cron tool delivers the notification to their actual chat channel at the scheduled time.
 
 - **One-shot alarm**: `cron action=add message="..." at="2026-05-08T14:00:00" deliver=true`
-  - The `at` time is in ISO format, defaults to server timezone
+  - The `at` time is in ISO format (e.g. `2026-05-08T14:00:00`).
+  - **Timezone**: Use **the timezone shown in `Current Time`** (the offset in the runtime context). Naive ISO times (without `+08:00`) default to that same timezone. Example: if `Current Time` is `2026-05-08T16:16:32+08:00`, then `at="2026-05-08T16:21:00"` means 16:21 CST — do NOT convert to UTC.
   - `deliver=true` (default) pushes the result to the user's channel
 - **Recurring reminder**: `cron action=add message="..." cron_expr="0 9 * * *"` or `every_seconds=3600`
 - **List/remove/update**: `cron action=list` / `cron action=remove job_id=xxx` / `cron action=update job_id=xxx message="..." every_seconds=300`

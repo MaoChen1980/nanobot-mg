@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -75,7 +74,8 @@ class HeartbeatService:
         if not self.enabled:
             return
 
-        now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z")
+        from nanobot.utils.helpers import current_time_str
+        now_ts = current_time_str(self.agent_loop.context.timezone)
 
         # Read active goals from DB
         goals = self.agent_loop._db.list_goals(status="in_progress")

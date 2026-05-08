@@ -1,5 +1,7 @@
 """Configuration schema using Pydantic."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
@@ -8,6 +10,101 @@ from pydantic.alias_generators import to_camel
 from pydantic_settings import BaseSettings
 
 from nanobot.cron.types import CronSchedule
+
+
+# Common Windows timezone → IANA name mapping (CLDR subset).
+# Covers ~95 % of users; the rest can set timezone explicitly.
+_WINDOWS_TO_IANA: dict[str, str] = {
+    "China Standard Time": "Asia/Shanghai",
+    "Tokyo Standard Time": "Asia/Tokyo",
+    "Korea Standard Time": "Asia/Seoul",
+    "Taipei Standard Time": "Asia/Taipei",
+    "Singapore Standard Time": "Asia/Singapore",
+    "India Standard Time": "Asia/Kolkata",
+    "Hong Kong Standard Time": "Asia/Hong_Kong",
+    "Central Asia Standard Time": "Asia/Almaty",
+    "SE Asia Standard Time": "Asia/Bangkok",
+    "North Asia Standard Time": "Asia/Krasnoyarsk",
+    "North Asia East Standard Time": "Asia/Irkutsk",
+    "West Asia Standard Time": "Asia/Tashkent",
+    "Arabian Standard Time": "Asia/Dubai",
+    "Arabic Standard Time": "Asia/Baghdad",
+    "Iran Standard Time": "Asia/Tehran",
+    "Israel Standard Time": "Asia/Jerusalem",
+    "Eastern Standard Time": "America/New_York",
+    "Central Standard Time": "America/Chicago",
+    "Mountain Standard Time": "America/Denver",
+    "Pacific Standard Time": "America/Los_Angeles",
+    "Alaskan Standard Time": "America/Anchorage",
+    "Hawaiian Standard Time": "Pacific/Honolulu",
+    "Atlantic Standard Time": "America/Halifax",
+    "Newfoundland Standard Time": "America/St_Johns",
+    "Greenwich Standard Time": "Africa/Casablanca",
+    "GMT Standard Time": "Europe/London",
+    "W. Europe Standard Time": "Europe/Berlin",
+    "Central Europe Standard Time": "Europe/Paris",
+    "E. Europe Standard Time": "Europe/Bucharest",
+    "FLE Standard Time": "Europe/Helsinki",
+    "Russian Standard Time": "Europe/Moscow",
+    "Yakutsk Standard Time": "Asia/Yakutsk",
+    "Vladivostok Standard Time": "Asia/Vladivostok",
+    "Magadan Standard Time": "Asia/Magadan",
+    "Kamchatka Standard Time": "Asia/Kamchatka",
+    "Australia Eastern Standard Time": "Australia/Sydney",
+    "Australia Central Standard Time": "Australia/Adelaide",
+    "Australia Western Standard Time": "Australia/Perth",
+    "New Zealand Standard Time": "Pacific/Auckland",
+    "UTC": "UTC",
+    "Coordinated Universal Time": "UTC",
+    "Morocco Standard Time": "Africa/Casablanca",
+    "South Africa Standard Time": "Africa/Johannesburg",
+    "E. Africa Standard Time": "Africa/Nairobi",
+    "West Africa Standard Time": "Africa/Lagos",
+    "Cape Verde Standard Time": "Atlantic/Cape_Verde",
+    "Azores Standard Time": "Atlantic/Azores",
+    "SA Eastern Standard Time": "America/Sao_Paulo",
+    "SA Pacific Standard Time": "America/Bogota",
+    "SA Western Standard Time": "America/La_Paz",
+    "Central America Standard Time": "America/Guatemala",
+    "Mexico Standard Time": "America/Mexico_City",
+    "US Mountain Standard Time": "America/Phoenix",
+    "Venezuela Standard Time": "America/Caracas",
+    "Argentina Standard Time": "America/Argentina/Buenos_Aires",
+    "Middle East Standard Time": "Asia/Beirut",
+    "Montevideo Standard Time": "America/Montevideo",
+    "Pacific SA Standard Time": "America/Santiago",
+    "Eastern Standard Time (Mexico)": "America/Cancun",
+}
+
+
+def _detect_timezone() -> str:
+    """Auto-detect local IANA timezone, falling back to ``"UTC"``."""
+    # 1 — POSIX: ZoneInfo can often load the system timezone by key
+    try:
+        from datetime import datetime, timezone
+
+        local_tz = datetime.now(timezone.utc).astimezone().tzinfo
+        if local_tz is not None and hasattr(local_tz, "key"):
+            return local_tz.key
+    except Exception:
+        pass
+
+    # 2 — Windows: read the registry and map to IANA
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\TimeZoneInformation",
+        ) as key:
+            win_name = winreg.QueryValueEx(key, "TimeZoneKeyName")[0]
+            if win_name in _WINDOWS_TO_IANA:
+                return _WINDOWS_TO_IANA[win_name]
+    except Exception:
+        pass
+
+    # 3 — Everything else: UTC
+    return "UTC"
 
 
 class Base(BaseModel):
@@ -81,7 +178,7 @@ class AgentDefaults(Base):
     max_tool_result_chars: int = 16_000
     provider_retry_mode: Literal["standard", "persistent"] = "standard"
     reasoning_effort: Optional[str] = None  # low / medium / high / max / adaptive - enables LLM thinking mode
-    timezone: str = "UTC"  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
+    timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
     unified_session: bool = False  # Share one session across all channels (single-user multi-device)
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
     session_ttl_minutes: int = Field(

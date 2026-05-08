@@ -5,7 +5,7 @@ from __future__ import annotations
 import atexit
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
@@ -181,7 +181,7 @@ class MemoryStore:
                 self.legacy_history_file.stat().st_mtime,
             ).strftime("%Y-%m-%d %H:%M")
         except OSError:
-            return datetime.now().strftime("%Y-%m-%d %H:%M")
+            return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
 
     def _next_legacy_backup_path(self) -> Path:
         candidate = self.memory_dir / "HISTORY.md.bak"
@@ -223,7 +223,7 @@ class MemoryStore:
 
         limit = max_chars if max_chars is not None else _HISTORY_ENTRY_HARD_CAP
         cursor = self._next_cursor()
-        ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M")
+        ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
         raw = entry.rstrip()
         if len(raw) > limit:
             if not self._oversize_logged:

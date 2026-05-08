@@ -41,7 +41,7 @@ class SystemMessageHandler:
         # For all other channels (cron, proxy, direct), use msg.channel directly.
         effective_channel = channel if msg.channel == "system" else msg.channel
         self._loop._set_tool_context(effective_channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
-        history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True)
+        history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
             session_summary=pending,
@@ -144,7 +144,7 @@ class UserMessageHandler:
         if self._loop._recovery.restore_pending_user_turn(session):
             self._loop.sessions.save(session)
         session, pending = self._loop.auto_compact.prepare_session(session, key)
-        history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True)
+        history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True, timezone=self._loop.context.timezone)
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key
 

@@ -202,6 +202,7 @@ class AgentLoop:
             restrict_to_workspace=restrict_to_workspace,
             disabled_skills=disabled_skills,
             db=db,
+            timezone=self.context.timezone,
         )
         self._unified_session = unified_session
         self._running = False
@@ -231,6 +232,7 @@ class AgentLoop:
             get_tool_definitions=self.tools.get_definitions,
             max_completion_tokens=provider.generation.max_tokens,
             consolidation_ratio=consolidation_ratio,
+            timezone=self.context.timezone,
         )
         self.auto_compact = AutoCompact(
             sessions=self.sessions,
@@ -241,6 +243,7 @@ class AgentLoop:
             store=self.context.memory,
             provider=provider,
             model=self.model,
+            timezone=self.context.timezone,
         )
         self._register_default_tools()
         if _tc.my.enable:
@@ -798,7 +801,7 @@ class AgentLoop:
                     entry["content"] = filtered
             entry.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
             session.messages.append(entry)
-        session.updated_at = datetime.now()
+        session.updated_at = datetime.now(timezone.utc)
 
     def _persist_subagent_followup(self, session: Session, msg: InboundMessage) -> bool:
         """Persist subagent follow-ups before prompt assembly so history stays durable.

@@ -414,7 +414,7 @@ class BaseProxyChannel:
             "chat_id": chat_id,
             "content": content,
             "message_id": message_id,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
 
     # ------------------------------------------------------------------

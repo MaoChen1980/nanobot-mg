@@ -95,7 +95,7 @@ class ContextBuilder:
         if entries:
             capped = entries[-self._MAX_RECENT_HISTORY:]
             history_text = "\n".join(
-                f"- [{e['timestamp']}] {(e.get('summary') or e['content'])}" for e in capped
+                f"- [{self._convert_timestamp(e['timestamp'], self.timezone)}] {(e.get('summary') or e['content'])}" for e in capped
             )
             history_text = truncate_text(history_text, self._MAX_HISTORY_CHARS)
             parts.append("# Recent History\n\n" + history_text)
@@ -134,6 +134,21 @@ class ContextBuilder:
             runtime=runtime,
             channel=channel,
         )
+
+    @staticmethod
+    def _convert_timestamp(ts: str, timezone: str | None) -> str:
+        """Convert an ISO timestamp string to the given timezone, or return as-is."""
+        if not timezone or not ts:
+            return ts
+        try:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            dt = datetime.fromisoformat(ts)
+            if dt.tzinfo is not None:
+                return dt.astimezone(ZoneInfo(timezone)).isoformat()
+        except Exception:
+            pass
+        return ts
 
     def _build_state_section(self) -> str:
         """Build a merged Current State block from Goals + recent events.
@@ -186,7 +201,8 @@ class ContextBuilder:
             return ""
         lines = []
         for e in reversed(events):
-            ts = e["timestamp"][:26] if e["timestamp"] else "?"
+            ts = self._convert_timestamp(e["timestamp"], self.timezone)
+            ts = ts[:26] if ts else "?"
             lines.append(f"### [{ts}] {e['content']}")
         return "\n".join(lines)
 

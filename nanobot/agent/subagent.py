@@ -64,6 +64,7 @@ class SubagentManager:
         restrict_to_workspace: bool = False,
         disabled_skills: list[str] | None = None,
         db=None,
+        timezone: str | None = None,
     ):
         self.provider = provider
         self.workspace = workspace
@@ -74,6 +75,7 @@ class SubagentManager:
         self.max_tool_result_chars = max_tool_result_chars
         self.restrict_to_workspace = restrict_to_workspace
         self.disabled_skills = set(disabled_skills or [])
+        self.timezone = timezone
         self.runner = AgentRunner(provider, db=db)
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._task_statuses: dict[str, SubagentStatus] = {}
@@ -144,7 +146,7 @@ class SubagentManager:
 
         try:
             tools = build_subagent_tools(self.workspace, self.web_config, self.exec_config, self.restrict_to_workspace)
-            system_prompt = build_subagent_prompt(self.workspace, self.disabled_skills)
+            system_prompt = build_subagent_prompt(self.workspace, self.disabled_skills, timezone=getattr(self, 'timezone', None))
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": task},

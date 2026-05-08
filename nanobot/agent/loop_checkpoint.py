@@ -111,7 +111,7 @@ def restore_pending_user_turn(session: Any) -> bool:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
-        session.updated_at = datetime.now()
+        session.updated_at = datetime.now(timezone.utc)
 
     clear_pending_user_turn(session)
     return True

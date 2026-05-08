@@ -48,6 +48,7 @@ class Consolidator:
         get_tool_definitions: Callable[[], list[dict[str, Any]]],
         max_completion_tokens: int = 4096,
         consolidation_ratio: float = 0.5,
+        timezone: str | None = None,
     ):
         self.store = store
         self.provider = provider
@@ -61,6 +62,7 @@ class Consolidator:
         self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
             weakref.WeakValueDictionary()
         )
+        self.timezone = timezone
 
     def set_provider(
         self,
@@ -168,6 +170,14 @@ class Consolidator:
             summary = response.content or "[no summary]"
             first_ts = msgs[0].get("timestamp", "unknown")
             last_ts = msgs[-1].get("timestamp", "unknown")
+            if self.timezone:
+                try:
+                    from datetime import datetime
+                    from zoneinfo import ZoneInfo
+                    first_ts = datetime.fromisoformat(first_ts).astimezone(ZoneInfo(self.timezone)).isoformat()
+                    last_ts = datetime.fromisoformat(last_ts).astimezone(ZoneInfo(self.timezone)).isoformat()
+                except Exception:
+                    pass
             time_prefix = f"[{first_ts} → {last_ts}] "
             record_ts = first_ts[:16] if first_ts != "unknown" else None
             cursor = self.store.append_history(time_prefix + summary, max_chars=_ARCHIVE_SUMMARY_MAX_CHARS, timestamp=record_ts)

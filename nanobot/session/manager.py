@@ -37,14 +37,29 @@ class Session:
     last_consolidated: int = 0  # Number of messages already consolidated to files
 
     @staticmethod
-    def _annotate_message_time(message: dict[str, Any], content: Any) -> Any:
-        """Expose turn timestamps to the model for relative-date reasoning."""
+    def _annotate_message_time(message: dict[str, Any], content: Any, timezone: str | None = None) -> Any:
+        """Expose turn timestamps to the model for relative-date reasoning.
+
+        When *timezone* is provided, the stored timestamp (typically UTC) is
+        converted so that ``[Message Time]`` is consistent with the
+        ``Current Time`` shown in the runtime context.
+        """
         timestamp = message.get("timestamp")
         role = message.get("role")
         if not timestamp or not isinstance(content, str):
             return content
         if role not in ("user", "tool", "assistant"):
             return content
+        if timezone:
+            try:
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                dt = datetime.fromisoformat(timestamp)
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone(ZoneInfo(timezone))
+                    timestamp = dt.isoformat()
+            except Exception:
+                pass
         return f"[Message Time: {timestamp}]\n{content}"
 
     def add_message(self, role: str, content: str, timestamp: str | None = None, **kwargs: Any) -> None:
@@ -64,11 +79,17 @@ class Session:
         *,
         max_tokens: int = 0,
         include_timestamps: bool = False,
+        timezone: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return unconsolidated messages for LLM input.
 
         History is sliced by message count first (``max_messages``), then by
         token budget from the tail (``max_tokens``) when provided.
+
+        When *timezone* (e.g. ``"Asia/Shanghai"``) is given together with
+        ``include_timestamps=True``, the ``[Message Time]`` annotations are
+        converted to that timezone so they stay consistent with the runtime
+        context's ``Current Time``.
         """
         unconsolidated = self.messages[self.last_consolidated:]
         sliced = unconsolidated[-max_messages:]
@@ -103,7 +124,7 @@ class Session:
                 )
                 content = f"{content}\n{breadcrumbs}" if content else breadcrumbs
             if include_timestamps:
-                content = self._annotate_message_time(message, content)
+                content = self._annotate_message_time(message, content, timezone=timezone)
             entry: dict[str, Any] = {"role": message["role"], "content": content}
             for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "thinking_blocks", "timestamp"):
                 if key in message:
