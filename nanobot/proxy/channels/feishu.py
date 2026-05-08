@@ -108,7 +108,42 @@ class FeishuProxyChannel(BaseProxyChannel):
     # ------------------------------------------------------------------
 
     def _send_text_reply(self, chat_id: str, root_id: str | None, content: str) -> None:
-        """Send a text reply to the chat."""
+        """Send a reply — uses interactive card with lark_md for markdown rendering, falls back to plain text."""
+        try:
+            from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
+
+            card = {
+                "config": {"wide_screen_mode": True},
+                "elements": [
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "lark_md",
+                            "content": content,
+                        },
+                    }
+                ],
+            }
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type("chat_id")
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(chat_id)
+                    .msg_type("interactive")
+                    .content(json.dumps(card))
+                    .build()
+                )
+                .build()
+            )
+            resp = self._client.im.v1.message.create(request)
+            if resp.success():
+                return
+            logger.warning("Failed to send card reply: {} - {}", resp.code, resp.msg)
+        except Exception as e:
+            logger.error("Failed to send card reply, falling back to text: {}", e)
+
+        # Fallback to plain text
         try:
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
@@ -124,11 +159,9 @@ class FeishuProxyChannel(BaseProxyChannel):
                 )
                 .build()
             )
-            resp = self._client.im.v1.message.create(request)
-            if not resp.success():
-                logger.warning("Failed to send reply: {} - {}", resp.code, resp.msg)
+            self._client.im.v1.message.create(request)
         except Exception as e:
-            logger.error("Failed to send reply: {}", e)
+            logger.error("Failed to send text fallback reply: {}", e)
 
     def _add_reaction(self, message_id: str, emoji: str) -> None:
         """Add reaction emoji to message."""

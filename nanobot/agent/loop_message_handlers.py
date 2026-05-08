@@ -65,6 +65,9 @@ class SystemMessageHandler:
         self._loop.sessions.save(session)
         self._loop._schedule_background(self._loop.consolidator.maybe_consolidate_by_tokens(session))
         options = ask_user_options_from_messages(all_msgs) if stop_reason == "ask_user" else []
+        import re
+        if final_content:
+            final_content = re.sub(r'^\[Message Time: [^\]]*\]\n?', '', final_content)
         content, buttons = ask_user_outbound(final_content or "Background task completed.", options, effective_channel)
         outbound_metadata: dict[str, Any] = {}
         if effective_channel == "slack" and key.startswith("slack:") and key.count(":") >= 2:
@@ -235,12 +238,15 @@ class UserMessageHandler:
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
         """Format the final OutboundMessage for the user."""
+        import re
         from nanobot.agent.tools.ask import ask_user_options_from_messages, ask_user_outbound
         if (mt := self._loop.tools.get("message")) and isinstance(mt, MessageTool) and mt._sent_in_turn:
             if not had_injections or stop_reason == "empty_final_response":
                 return None
         if final_content is None:
             final_content = ""
+        # Strip [Message Time: ...] prefix that the LLM may have mimicked from history context
+        final_content = re.sub(r'^\[Message Time: [^\]]*\]\n?', '', final_content)
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
         meta = dict(msg.metadata or {})
