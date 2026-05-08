@@ -548,6 +548,34 @@ def agent(
         else:
             cli_channel, cli_chat_id = "cli", session_id
 
+        # Wire cron handler for interactive mode
+        async def _cli_cron_handler(job: Any) -> str | None:
+            if job.name == "dream":
+                try:
+                    await agent_loop.dream.run()
+                except Exception:
+                    logger.exception("Dream cron job failed")
+                return None
+            reminder_note = (
+                "The scheduled time has arrived. Deliver this reminder to the user now, "
+                "as a brief and natural message in their language. Speak directly to them — "
+                "do not narrate progress, summarize, include user IDs, or add status reports "
+                "like 'Done' or 'Reminded'.\n\n"
+                f"Reminder: {job.payload.message}"
+            )
+            resp = await agent_loop.process_direct(
+                reminder_note,
+                session_key=f"cron:{job.id}",
+                channel=job.payload.channel or cli_channel,
+                chat_id=job.payload.to or cli_chat_id,
+            )
+            response = resp.content if resp else ""
+            if response:
+                console.print(f"\n[bold yellow]⏰ Cron:[/bold yellow] {response}\n")
+            return response
+
+        cron.on_job = _cli_cron_handler
+
         def _handle_signal(signum, frame):
             sig_name = signal.Signals(signum).name
             _restore_terminal()
@@ -565,6 +593,7 @@ def agent(
             signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
         async def run_interactive():
+            await cron.start()
             bus_task = asyncio.create_task(agent_loop.run())
             turn_done = asyncio.Event()
             turn_done.set()
@@ -669,6 +698,7 @@ def agent(
                         console.print("\nGoodbye!")
                         break
             finally:
+                cron.stop()
                 agent_loop.stop()
                 outbound_task.cancel()
                 await asyncio.gather(bus_task, outbound_task, return_exceptions=True)

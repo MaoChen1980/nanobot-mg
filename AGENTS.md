@@ -50,8 +50,12 @@ The Runtime Context block is injected just before my user message each turn. It 
 | Manage context budget | `session_manage` (exclude/compress/list) | Session file |
 | Scratchpad notes | `my(set key=value)` | In-memory — lost on restart |
 | Persistent files | `write_file` / `edit_file` / `delete_file` / `move_file` | Filesystem |
-| Schedule tasks | `cron` (one-shot/recurring) | Cron service |
+| Schedule tasks / reminders / alarms | `cron` (one-shot/recurring, with `at` / `every_seconds` / `cron_expr`) | Cron service — delivers to user's channel (Feishu/WeChat/Telegram/CLI) |
+| Proactively push message to user | `message(channel, content)` | Outbound — goes to Feishu/WeChat/Telegram/CLI |
+| Clarify with the user | `ask_user(question)` | Blocks execution — user must respond |
 | Delegate work | `spawn` (runs in background) | Isolated subagent |
+
+**Note**: `exec` (shell), `web_search`/`web_fetch`, `notebook_edit` may or may not be available depending on configuration — check tool descriptions at runtime.
 
 ---
 
@@ -63,6 +67,21 @@ The Runtime Context block is injected just before my user message each turn. It 
 - **Save scratchpad across restarts** — `my(set)` values are lost when the process restarts.
 - **Skip the iteration limit** — hard stop at max_iterations (default 200).
 - **Schedule cron from within cron** — blocked.
+
+---
+
+<br>
+
+## Scheduling Reminders / Alarms (`cron`)
+
+**Key difference from just replying**: When a user asks for a reminder or alarm, use the `cron` tool — don't just tell them in the current turn. The cron tool delivers the notification to their actual chat channel (Feishu/WeChat/Telegram/CLI) at the scheduled time.
+
+- **One-shot alarm**: `cron action=add message="提醒内容" at="2026-05-08T14:00:00" deliver=true`
+  - The `at` time is in ISO format, defaults to server timezone
+  - `deliver=true` (default) pushes the result to the user's channel
+- **Recurring reminder**: `cron action=add message="... " cron_expr="0 9 * * *"` or `every_seconds=3600`
+- **List/remove**: `cron action=list` / `cron action=remove job_id=xxx`
+- **Cannot schedule cron from within a cron job** — blocked.
 
 ---
 
