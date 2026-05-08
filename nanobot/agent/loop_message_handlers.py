@@ -37,7 +37,10 @@ class SystemMessageHandler:
         is_subagent = msg.sender_id == "subagent"
         if is_subagent and self._loop._persist_subagent_followup(session, msg):
             self._loop.sessions.save(session)
-        self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
+        # For "system" channel (subagent), use channel extracted from chat_id (e.g. "slack").
+        # For all other channels (cron, proxy, direct), use msg.channel directly.
+        effective_channel = channel if msg.channel == "system" else msg.channel
+        self._loop._set_tool_context(effective_channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True)
         current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
@@ -53,23 +56,23 @@ class SystemMessageHandler:
         messages = self._loop.context.build_messages(
             history=history,
             current_message="" if is_subagent else msg.content,
-            channel=channel,
+            channel=effective_channel,
             chat_id=chat_id,
             current_role=current_role,
             context_state=cs,
         )
-        final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, session=session, channel=channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
+        final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         self._loop._record_turn(session, all_msgs, 1 + len(history))
         session.enforce_file_cap(on_archive=self._loop.context.memory.raw_archive)
         self._loop._recovery.clear_runtime_checkpoint(session)
         self._loop.sessions.save(session)
         self._loop._schedule_background(self._loop.consolidator.maybe_consolidate_by_tokens(session))
         options = ask_user_options_from_messages(all_msgs) if stop_reason == "ask_user" else []
-        content, buttons = ask_user_outbound(final_content or "Background task completed.", options, channel)
+        content, buttons = ask_user_outbound(final_content or "Background task completed.", options, effective_channel)
         outbound_metadata: dict[str, Any] = {}
-        if channel == "slack" and key.startswith("slack:") and key.count(":") >= 2:
+        if effective_channel == "slack" and key.startswith("slack:") and key.count(":") >= 2:
             outbound_metadata["slack"] = {"thread_ts": key.split(":", 2)[2]}
-        return OutboundMessage(channel=channel, chat_id=chat_id, content=content, buttons=buttons, metadata=outbound_metadata)
+        return OutboundMessage(channel=effective_channel, chat_id=chat_id, content=content, buttons=buttons, metadata=outbound_metadata)
 
 
 class UserMessageHandler:
@@ -117,7 +120,7 @@ class UserMessageHandler:
             on_stream_end=on_stream_end,
             on_retry_wait=on_retry_wait,
             session=session,
-            channel=channel,
+            channel=msg.channel,
             chat_id=chat_id,
             message_id=msg.metadata.get("message_id"),
             metadata=msg.metadata,
