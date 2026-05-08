@@ -35,6 +35,35 @@ class SkillsLoader:
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
         self.disabled_skills = disabled_skills or set()
         self._skill_cache: dict[str, tuple[float, str, str]] = {}
+        # list_skills cache: invalidated when skills directory mtimes change
+        self._list_cache: list[dict[str, str]] | None = None
+        self._list_cache_sig: object = None
+
+    def _skills_dir_signature(self) -> int:
+        """Return a hash of skills directory state for cache invalidation."""
+        sig = 0
+        for root in (self.workspace_skills, self.builtin_skills):
+            if root and root.exists():
+                try:
+                    sig ^= hash(root.stat().st_mtime)
+                    for d in root.iterdir():
+                        if d.is_dir() and (d / "SKILL.md").exists():
+                            sig ^= hash(d.name)
+                except OSError:
+                    pass
+        return sig
+
+    def _refresh_skills_list(self) -> list[dict[str, str]]:
+        """Scan skills directories and build the raw (unfiltered) list."""
+        skills = self._skill_entries_from_dir(self.workspace_skills, "workspace")
+        workspace_names = {entry["name"] for entry in skills}
+        if self.builtin_skills and self.builtin_skills.exists():
+            skills.extend(
+                self._skill_entries_from_dir(self.builtin_skills, "builtin", skip_names=workspace_names)
+            )
+        if self.disabled_skills:
+            skills = [s for s in skills if s["name"] not in self.disabled_skills]
+        return skills
 
     def _skill_entries_from_dir(self, base: Path, source: str, *, skip_names: set[str] | None = None) -> list[dict[str, str]]:
         if not base.exists():
@@ -62,19 +91,14 @@ class SkillsLoader:
         Returns:
             List of skill info dicts with 'name', 'path', 'source'.
         """
-        skills = self._skill_entries_from_dir(self.workspace_skills, "workspace")
-        workspace_names = {entry["name"] for entry in skills}
-        if self.builtin_skills and self.builtin_skills.exists():
-            skills.extend(
-                self._skill_entries_from_dir(self.builtin_skills, "builtin", skip_names=workspace_names)
-            )
-
-        if self.disabled_skills:
-            skills = [s for s in skills if s["name"] not in self.disabled_skills]
+        sig = self._skills_dir_signature()
+        if self._list_cache is None or sig != self._list_cache_sig:
+            self._list_cache = self._refresh_skills_list()
+            self._list_cache_sig = sig
 
         if filter_unavailable:
-            return [skill for skill in skills if self._check_requirements(self._get_skill_meta(skill["name"]))]
-        return skills
+            return [skill for skill in self._list_cache if self._check_requirements(self._get_skill_meta(skill["name"]))]
+        return self._list_cache
 
     def load_skill(self, name: str) -> str | None:
         """

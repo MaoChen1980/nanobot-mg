@@ -5,10 +5,13 @@ from __future__ import annotations
 import base64
 import mimetypes
 import platform
+import time
 from dataclasses import dataclass
 from importlib.resources import files as pkg_files
 from pathlib import Path
 from typing import Any
+
+from loguru import logger
 
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
@@ -50,6 +53,17 @@ class ContextBuilder:
         self._bootstrap_cache: dict[str, tuple[float, str]] = {}
 
 
+    def warmup(self) -> None:
+        """Pre-load all file-based caches so the first build_system_prompt is fast."""
+        _t0 = time.time()
+        self.memory.read_memory()
+        self._load_bootstrap_files()
+        self.skills.build_skills_summary()
+        self.skills.get_always_skills()
+        _elapsed = (time.time() - _t0) * 1000
+        if _elapsed > 50:
+            logger.info("ContextBuilder warmup took {:.0f}ms", _elapsed)
+
     def build_system_prompt(
         self,
         skill_names: list[str] | None = None,
@@ -58,6 +72,7 @@ class ContextBuilder:
         runtime_context: str = "",
     ) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
+        _t0 = time.time()
         parts = [self._get_identity(channel=channel)]
 
         if runtime_context:
@@ -102,6 +117,9 @@ class ContextBuilder:
             if section:
                 parts.append(section)
 
+        _elapsed = (time.time() - _t0) * 1000
+        if _elapsed > 100:
+            logger.info("build_system_prompt took {:.0f}ms", _elapsed)
         return "\n\n---\n\n".join(parts)
 
     def _build_tools_section(self, tool_definitions: list[dict[str, Any]]) -> str:
