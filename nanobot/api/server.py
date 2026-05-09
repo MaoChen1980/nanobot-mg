@@ -33,7 +33,7 @@ def _cached_config() -> Any:
         mtime = 0
     if _config_cache is not None and _config_cache[0] == mtime:
         return _config_cache[1]
-    config = _cached_config()
+    config = load_config()
     _config_cache = (mtime, config)
     return config
 
