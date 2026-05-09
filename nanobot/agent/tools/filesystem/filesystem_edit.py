@@ -196,6 +196,10 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
         last_line=p("integer", "Line number to end replacing at (1-indexed, inclusive). Must be >= first_line.",
             minimum=1,
         ),
+        then_grep=p("string",
+            "If set, greps the edited file for this pattern after saving and "
+            "returns matching lines. Helps verify the edit landed correctly."
+        ),
         required=["path", "new_text"],
     )
 )
@@ -228,6 +232,7 @@ class EditFileTool(_FsTool):
         replace_all: bool = False,
         first_line: int | None = None,
         last_line: int | None = None,
+        then_grep: str | None = None,
         **kwargs: Any,
     ) -> str:
         try:
@@ -240,7 +245,11 @@ class EditFileTool(_FsTool):
             if first_line is not None or last_line is not None:
                 if first_line is None or last_line is None:
                     raise ValueError("Both first_line and last_line must be provided (or neither)")
-                return await self._edit_by_lines(path, new_text, first_line, last_line)
+                result = await self._edit_by_lines(path, new_text, first_line, last_line)
+                if then_grep and result.startswith("Successfully"):
+                    fp = self._resolve(path)
+                    result += f"\n{self._grep_file(fp, then_grep)}"
+                return result
 
             if old_text is None:
                 raise ValueError("Unknown old_text")
@@ -257,7 +266,10 @@ class EditFileTool(_FsTool):
                     fp.parent.mkdir(parents=True, exist_ok=True)
                     fp.write_text(new_text, encoding="utf-8")
                     file_state.record_write(fp)
-                    return f"Successfully created {fp}"
+                    msg = f"Successfully created {fp}"
+                    if then_grep:
+                        msg += f"\n{self._grep_file(fp, then_grep)}"
+                    return msg
                 return self._file_not_found_msg(path, fp)
 
             # File size protection
@@ -276,7 +288,10 @@ class EditFileTool(_FsTool):
                     return f"Error: Cannot create file — {path} already exists and is not empty."
                 fp.write_text(new_text, encoding="utf-8")
                 file_state.record_write(fp)
-                return f"Successfully edited {fp}"
+                msg = f"Successfully edited {fp}"
+                if then_grep:
+                    msg += f"\n{self._grep_file(fp, then_grep)}"
+                return msg
 
             # Read-before-edit check
             warning = file_state.check_read(fp)
@@ -328,6 +343,8 @@ class EditFileTool(_FsTool):
             msg = f"Successfully edited {fp}"
             if warning:
                 msg = f"{warning}\n{msg}"
+            if then_grep:
+                msg += f"\n{self._grep_file(fp, then_grep)}"
             return msg
         except PermissionError as e:
             logger.warning("EditFile permission denied: {}", e)

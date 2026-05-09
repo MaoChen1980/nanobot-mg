@@ -25,6 +25,11 @@ from nanobot.agent.tools import file_state
             "'tsc' (TypeScript/JavaScript). Returns pass/fail + errors. "
             "Works with then_exec: write → check → exec."
         ),
+        then_grep=p("string",
+            "If set, greps the written file for this pattern and returns matching "
+            "line numbers and content. Helps verify the write landed correctly "
+            "without re-reading the entire file."
+        ),
         required=["path", "content"],
     )
 )
@@ -45,6 +50,7 @@ class WriteFileTool(_FsTool):
         self, path: str | None = None, content: str | None = None,
         then_exec: str | None = None,
         then_check: str | None = None,
+        then_grep: str | None = None,
         **kwargs: Any,
     ) -> str:
         try:
@@ -78,6 +84,8 @@ class WriteFileTool(_FsTool):
                 parts.append(check_result)
             if exec_result:
                 parts.append(exec_result)
+            if then_grep:
+                parts.append(self._grep_file(fp, then_grep))
             return "\n".join(parts)
         except PermissionError as e:
             logger.warning("WriteFile permission denied: {}", e)

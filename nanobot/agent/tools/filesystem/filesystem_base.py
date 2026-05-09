@@ -64,6 +64,35 @@ class _FsTool(Tool):
     def _resolve(self, path: str) -> Path:
         return _resolve_path(path, self._workspace, self._allowed_dir, self._extra_allowed_dirs)
 
+    @staticmethod
+    def _grep_file(fp: Path, pattern: str, max_matches: int = 5) -> str:
+        """Search *pattern* in *fp* and return a compact verification result."""
+        try:
+            content = fp.read_text(encoding="utf-8")
+        except Exception as e:
+            return f"Verification: could not read file — {e}"
+
+        lines = content.split("\n")
+        matches: list[tuple[int, str]] = []
+        for i, line in enumerate(lines, 1):
+            if pattern in line:
+                text = line.strip()
+                if len(text) > 120:
+                    text = text[:117] + "..."
+                matches.append((i, text))
+
+        if not matches:
+            return f"Verification FAILED: pattern {pattern!r} not found in {fp.name}"
+
+        result = f"Verification: pattern {pattern!r} found at line {matches[0][0]}"
+        if len(matches) > 1:
+            result += f"–{matches[-1][0]} ({len(matches)} matches)"
+        for line_no, text in matches[:max_matches]:
+            result += f"\n  {line_no}:{text}"
+        if len(matches) > max_matches:
+            result += f"\n  … and {len(matches) - max_matches} more"
+        return result
+
 
 # ---------------------------------------------------------------------------
 # read_file
