@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from nanobot.utils.document import (
     SUPPORTED_EXTENSIONS,
-    _is_text_extension,
     extract_documents,
     extract_text,
     stringify_text_blocks,
@@ -131,8 +130,8 @@ class TestExtractText:
 
         result = extract_text(xlsx_file)
         assert result is not None
-        assert "--- Sheet: Sheet1 ---" in result
-        assert "--- Sheet: Sheet2 ---" in result
+        assert "## Sheet1" in result
+        assert "## Sheet2" in result
         assert "Alice" in result
         assert "Bob" in result
         assert "Widget" in result
@@ -152,8 +151,8 @@ class TestExtractText:
         wb.close()
 
         result = extract_text(xlsx_file)
-        # Empty sheets should return empty string or header only
-        assert result == "--- Sheet: EmptySheet ---" or result == ""
+        # Empty sheets produce a Markdown table with header-only row
+        assert "EmptySheet" in result
 
     def test_extract_text_docx(self, tmp_path: Path):
         """Test extracting text from a .docx file."""
@@ -207,8 +206,8 @@ class TestExtractText:
 
         result = extract_text(pptx_file)
         assert result is not None
-        assert "--- Slide 1 ---" in result
-        assert "--- Slide 2 ---" in result
+        assert "Slide number: 1" in result
+        assert "Slide number: 2" in result
         # Text content may vary depending on PowerPoint layout defaults
         assert len(result) > 0
 
@@ -281,42 +280,6 @@ class TestExtractText:
         assert result is not None
         assert "[image:" in result
         assert "test.png" in result
-
-
-class TestIsTextExtension:
-    """Test the _is_text_extension helper."""
-
-    def test_text_extensions_return_true(self):
-        """Test that known text extensions return True."""
-        assert _is_text_extension(".txt") is True
-        assert _is_text_extension(".md") is True
-        assert _is_text_extension(".csv") is True
-        assert _is_text_extension(".json") is True
-        assert _is_text_extension(".yaml") is True
-        assert _is_text_extension(".yml") is True
-        assert _is_text_extension(".xml") is True
-        assert _is_text_extension(".html") is True
-        assert _is_text_extension(".htm") is True
-
-    def test_non_text_extensions_return_false(self):
-        """Test that non-text extensions return False."""
-        assert _is_text_extension(".pdf") is False
-        assert _is_text_extension(".docx") is False
-        assert _is_text_extension(".xlsx") is False
-        assert _is_text_extension(".pptx") is False
-        assert _is_text_extension(".png") is False
-        assert _is_text_extension(".xyz") is False
-
-    def test_case_sensitivity(self):
-        """Test that _is_text_extension requires lowercase extension.
-
-        Note: The main extract_text function handles case-insensitivity by
-        converting extensions to lowercase before calling _is_text_extension.
-        """
-        # _is_text_extension itself is case-sensitive (lowercase only)
-        assert _is_text_extension(".txt") is True
-        assert _is_text_extension(".TXT") is False
-        assert _is_text_extension(".pdf") is False
 
 
 # ---------------------------------------------------------------------------

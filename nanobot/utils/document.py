@@ -16,6 +16,9 @@ SUPPORTED_EXTENSIONS: set[str] = {
     ".docx",
     ".xlsx",
     ".pptx",
+    ".xls",
+    ".epub",
+    ".msg",
     # Text formats
     ".txt",
     ".md",
@@ -40,6 +43,31 @@ SUPPORTED_EXTENSIONS: set[str] = {
 
 _MAX_TEXT_LENGTH = 200_000
 
+# Format groups for MarkItDown routing
+_MARKITDOWN_FORMATS: set[str] = {
+    ".pdf", ".docx", ".xlsx", ".pptx", ".xls",
+    ".epub", ".html", ".htm", ".msg",
+}
+_TEXT_FORMATS: set[str] = {
+    ".txt", ".md", ".csv", ".json", ".xml",
+    ".log", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+}
+_IMAGE_FORMATS: set[str] = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+_HAS_MARKITDOWN: bool | None = None
+
+
+def _check_markitdown() -> bool:
+    """Check if MarkItDown is installed (cached after first call)."""
+    global _HAS_MARKITDOWN
+    if _HAS_MARKITDOWN is None:
+        try:
+            from markitdown import MarkItDown  # noqa: F401
+            _HAS_MARKITDOWN = True
+        except ImportError:
+            _HAS_MARKITDOWN = False
+    return _HAS_MARKITDOWN
+
 
 def extract_text(path: Path) -> Optional[str]:
     """Extract text from a file.
@@ -59,9 +87,18 @@ def extract_text(path: Path) -> Optional[str]:
 
     ext = path.suffix.lower()
 
-    # Document formats -- each branch lazily imports its parser so that
-    # startup does not pay the ~25 MB cost of loading openpyxl /
-    # python-docx / python-pptx / pypdf up front (see issue #3422).
+    # MarkItDown handles most document formats with richer output (tables,
+    # headings, links preserved as Markdown).  Falls back to per-format
+    # extractors when a format-specific converter is not installed.
+    if ext in _MARKITDOWN_FORMATS and _check_markitdown():
+        result = _extract_with_markitdown(path)
+        if result is not None:
+            return result
+
+    # Legacy per-format extractors (fallback when MarkItDown unavailable).
+    # Each branch lazily imports its parser so that startup does not pay
+    # the ~25 MB cost of loading openpyxl/python-docx/python-pptx/pypdf
+    # up front (see issue #3422).
     if ext == ".pdf":
         return _extract_pdf(path)
     elif ext == ".docx":
@@ -70,9 +107,9 @@ def extract_text(path: Path) -> Optional[str]:
         return _extract_xlsx(path)
     elif ext == ".pptx":
         return _extract_pptx(path)
-    elif _is_text_extension(ext):
+    elif ext in _TEXT_FORMATS:
         return _extract_text_file(path)
-    elif ext in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+    elif ext in _IMAGE_FORMATS:
         # Image files - for future OCR support
         return f"[image: {path.name}]"
     else:
@@ -186,6 +223,33 @@ def _collect_pptx_shape_text(shape, out: list[str]) -> None:
         out.append(text)
 
 
+def _extract_with_markitdown(path: Path) -> str | None:
+    """Extract text using MarkItDown for rich Markdown output.
+
+    Returns ``None`` when a format-specific converter is not installed so that
+    callers can fall back to legacy extractors.
+    """
+    try:
+        from markitdown import MarkItDown
+        from markitdown._exceptions import FileConversionException
+    except ImportError:
+        return None
+
+    try:
+        md = MarkItDown()
+        result = md.convert(str(path))
+    except FileConversionException:
+        return None
+    except Exception as e:
+        logger.error("MarkItDown extraction failed for {}: {}", path, e)
+        return f"[error: MarkItDown extraction failed: {e!s}]"
+
+    text_content = result.text_content
+    if not text_content or not text_content.strip():
+        return f"({path.suffix.upper().lstrip('.')} has no extractable text: {path.name})"
+    return _truncate(text_content, _MAX_TEXT_LENGTH)
+
+
 def _extract_text_file(path: Path) -> str:
     """Extract text from a plain text file."""
     try:
@@ -205,25 +269,6 @@ def _truncate(text: str, max_length: int) -> str:
     if len(text) <= max_length:
         return text
     return text[:max_length] + f"... (truncated, {len(text)} chars total)"
-
-
-def _is_text_extension(ext: str) -> bool:
-    """Check if extension is a text format."""
-    return ext in {
-        ".txt",
-        ".md",
-        ".csv",
-        ".json",
-        ".xml",
-        ".html",
-        ".htm",
-        ".log",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".ini",
-        ".cfg",
-    }
 
 
 # ---------------------------------------------------------------------------
