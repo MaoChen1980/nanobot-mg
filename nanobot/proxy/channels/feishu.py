@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 import time
 import threading
@@ -107,13 +108,49 @@ class FeishuProxyChannel(BaseProxyChannel):
     # Reply / reaction helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _preprocess_markdown(content: str) -> str:
-        """Convert markdown tables to code blocks for Feishu lark_md compatibility.
+    # ── Content detection ──────────────────────────────────────────────
 
-        lark_md in Feishu cards supports bold, code, inline code, lists, and
-        links, but not markdown table syntax (``|``-delimited rows). Wrapping
-        tables in code fences preserves their visual layout.
+    @staticmethod
+    def _has_rich_content(text: str) -> bool:
+        """Detect content that benefits from interactive card rendering.
+
+        Checks for code blocks (```` ``` ````) and markdown tables (``|...|``
+        followed by a separator line ``|---|``), which Feishu post messages
+        and legacy ``lark_md`` tags cannot render properly.
+        """
+        if "```" in text:
+            return True
+        return bool(re.search(r'\|.+\|\r?\n\|[-:| ]+\|', text))
+
+    @staticmethod
+    def _extract_header(content: str) -> tuple[str | None, str]:
+        """Extract first level-1 heading as a card header title.
+
+        Looks for ``# Title`` among the first few non-empty lines. When found,
+        the heading line is removed from the body content so it doesn't
+        render twice — once in the header bar and once in the body.
+
+        Returns ``(header_title, remaining_content)``.
+        """
+        lines = content.split("\n")
+        for i, line in enumerate(lines[:10]):
+            stripped = line.strip()
+            if stripped:
+                m = re.match(r"^#\s+(.+)$", stripped)
+                if m:
+                    body = "\n".join(lines[i + 1 :]).strip()
+                    return m.group(1), body
+                break
+        return None, content
+
+    # ── Table fallback for non-card paths ──────────────────────────────
+
+    @staticmethod
+    def _wrap_tables_in_code_fences(content: str) -> str:
+        """Wrap markdown tables in code fences for compatibility with non-card message types.
+
+        ``tag: "md"`` in post messages and ``lark_md`` in v1 cards cannot render
+        pipe-delimited tables, so wrapping them in ``` fences preserves layout.
         """
         lines = content.split("\n")
         result: list[str] = []
@@ -152,24 +189,34 @@ class FeishuProxyChannel(BaseProxyChannel):
 
         return "\n".join(result)
 
-    def _send_text_reply(self, chat_id: str, root_id: str | None, content: str) -> None:
-        """Send a reply — uses interactive card with lark_md for markdown rendering, falls back to plain text."""
-        content = self._preprocess_markdown(content)
+    # ── Send strategies ────────────────────────────────────────────────
+
+    def _send_card_reply(self, chat_id: str, content: str) -> bool:
+        """Send as Feishu interactive card v2.0 with native markdown.
+
+        Supports the full markdown spec including tables, code blocks,
+        headings, lists, and inline formatting. Caller should fall back to
+        :meth:`_send_post_reply` or :meth:`_send_plain_text` on failure.
+        """
         try:
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
-            card = {
-                "config": {"wide_screen_mode": True},
-                "elements": [
-                    {
-                        "tag": "div",
-                        "text": {
-                            "tag": "lark_md",
-                            "content": content,
-                        },
-                    }
-                ],
+            header_text, body = self._extract_header(content)
+            elements: list[dict[str, Any]] = [
+                {"tag": "markdown", "content": body or content},
+            ]
+
+            card: dict[str, Any] = {
+                "schema": "2.0",
+                "config": {"width_mode": "fill"},
+                "body": {"elements": elements},
             }
+            if header_text:
+                template = self.config.get("cardTemplate", "blue")
+                card["header"] = {
+                    "title": {"tag": "plain_text", "content": header_text},
+                    "template": template,
+                }
             request = (
                 CreateMessageRequest.builder()
                 .receive_id_type("chat_id")
@@ -184,12 +231,51 @@ class FeishuProxyChannel(BaseProxyChannel):
             )
             resp = self._client.im.v1.message.create(request)
             if resp.success():
-                return
-            logger.warning("Failed to send card reply: {} - {}", resp.code, resp.msg)
+                return True
+            logger.warning("Card send failed ({}): {} - will fall back", resp.code, resp.msg)
         except Exception as e:
-            logger.error("Failed to send card reply, falling back to text: {}", e)
+            logger.error("Card send exception: {}", e)
+        return False
 
-        # Fallback to plain text
+    def _send_post_reply(self, chat_id: str, content: str) -> bool:
+        """Send as post message with a markdown body.
+
+        Lighter than interactive cards — good for simple text without
+        tables or code blocks. ``tag: "md"`` supports bold, italic,
+        inline code, links, and lists.
+        """
+        try:
+            from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
+
+            payload = {
+                "zh_cn": {
+                    "content": [
+                        [{"tag": "md", "text": content}],
+                    ],
+                },
+            }
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type("chat_id")
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(chat_id)
+                    .msg_type("post")
+                    .content(json.dumps(payload))
+                    .build()
+                )
+                .build()
+            )
+            resp = self._client.im.v1.message.create(request)
+            if resp.success():
+                return True
+            logger.warning("Post send failed ({}): {} - will fall back", resp.code, resp.msg)
+        except Exception as e:
+            logger.error("Post send exception: {}", e)
+        return False
+
+    def _send_plain_text(self, chat_id: str, content: str) -> None:
+        """Last-resort fallback: send as plain text with no formatting."""
         try:
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
@@ -207,7 +293,34 @@ class FeishuProxyChannel(BaseProxyChannel):
             )
             self._client.im.v1.message.create(request)
         except Exception as e:
-            logger.error("Failed to send text fallback reply: {}", e)
+            logger.error("Plain-text fallback failed: {}", e)
+
+    # ── Public send ────────────────────────────────────────────────────
+
+    def _send_text_reply(self, chat_id: str, root_id: str | None, content: str) -> None:
+        """Send a reply with automatic format selection based on content and config.
+
+        Routing logic (config key ``renderMode``):
+          * ``card`` (default) — always use interactive card v2.0 (native markdown with tables)
+          * ``raw`` — use post message (lightweight, tables → code fences)
+          * ``auto`` — detect rich content (code blocks, tables) → card; else post
+
+        Falls back through the chain: card → post → plain text.
+        """
+        render_mode = self.config.get("renderMode", "card")
+        use_card = render_mode == "card" or (
+            render_mode == "auto" and self._has_rich_content(content)
+        )
+
+        if use_card:
+            if self._send_card_reply(chat_id, content):
+                return
+
+        processed = self._wrap_tables_in_code_fences(content)
+        if self._send_post_reply(chat_id, processed):
+            return
+
+        self._send_plain_text(chat_id, processed)
 
     def _add_reaction(self, message_id: str, emoji: str) -> None:
         """Add reaction emoji to message."""

@@ -266,20 +266,20 @@ class TestFeishuHandleDeliver:
 
 
 # ---------------------------------------------------------------------------
-# FeishuProxyChannel._preprocess_markdown
+# FeishuProxyChannel._wrap_tables_in_code_fences & _has_rich_content
 # ---------------------------------------------------------------------------
 
 
-class TestFeishuPreprocessMarkdown:
-    """_preprocess_markdown wraps markdown tables in code blocks for lark_md."""
+class TestFeishuWrapTablesInCodeFences:
+    """_wrap_tables_in_code_fences wraps markdown tables in code blocks for post/lark_md."""
 
     def test_no_table_passthrough(self):
-        result = FeishuProxyChannel._preprocess_markdown("**bold** and `code`")
+        result = FeishuProxyChannel._wrap_tables_in_code_fences("**bold** and `code`")
         assert result == "**bold** and `code`"
 
     def test_wraps_table_in_code_fence(self):
         content = "before\n| A | B |\n|---|---|\n| 1 | 2 |\nafter"
-        result = FeishuProxyChannel._preprocess_markdown(content)
+        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
         assert "```" in result
         assert "| A | B |" in result
         parts = result.split("```")
@@ -288,32 +288,87 @@ class TestFeishuPreprocessMarkdown:
         assert "| 1 | 2 |" in parts[1]
 
     def test_no_wrap_for_single_pipe_line(self):
-        content = "| just a line"
-        result = FeishuProxyChannel._preprocess_markdown(content)
+        result = FeishuProxyChannel._wrap_tables_in_code_fences("| just a line")
         assert "```" not in result
 
     def test_multiple_tables(self):
         content = "| A | B |\n|---|---|\n| 1 | 2 |\n\n| X | Y |\n|---|---|\n| 3 | 4 |"
-        result = FeishuProxyChannel._preprocess_markdown(content)
+        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
         assert result.count("```") == 4
 
     def test_table_at_end_of_content(self):
         content = "text\n| A | B |\n|---|---|\n| 1 | 2 |"
-        result = FeishuProxyChannel._preprocess_markdown(content)
+        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
         assert "```" in result
 
     def test_pipe_in_normal_text_not_wrapped(self):
         content = "this | is not a table"
-        result = FeishuProxyChannel._preprocess_markdown(content)
+        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
         assert "```" not in result
 
     def test_empty_content(self):
-        assert FeishuProxyChannel._preprocess_markdown("") == ""
-        assert FeishuProxyChannel._preprocess_markdown("\n\n") == "\n\n"
+        assert FeishuProxyChannel._wrap_tables_in_code_fences("") == ""
+        assert FeishuProxyChannel._wrap_tables_in_code_fences("\n\n") == "\n\n"
 
     def test_two_row_header_table(self):
-        """Table with empty first column in header row (the format you asked about)."""
         content = "| | QwenPaw | nanobot |\n|---|---|---|\n| 多 Looper | ✅ | ❌ |"
-        result = FeishuProxyChannel._preprocess_markdown(content)
+        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
         assert "```" in result
         assert "| | QwenPaw | nanobot |" in result
+
+
+class TestFeishuHasRichContent:
+    """_has_rich_content detects tables and code blocks."""
+
+    def test_plain_text(self):
+        assert not FeishuProxyChannel._has_rich_content("hello world")
+
+    def test_code_block(self):
+        assert FeishuProxyChannel._has_rich_content("before\n```\ncode\n```\nafter")
+
+    def test_markdown_table(self):
+        assert FeishuProxyChannel._has_rich_content("| A | B |\n|---|---|\n| 1 | 2 |")
+
+    def test_bold_text_only(self):
+        assert not FeishuProxyChannel._has_rich_content("**bold** and `inline`")
+
+    def test_empty(self):
+        assert not FeishuProxyChannel._has_rich_content("")
+
+
+class TestFeishuExtractHeader:
+    """_extract_header extracts first # heading for card header bar."""
+
+    def test_extracts_h1_at_start(self):
+        header, body = FeishuProxyChannel._extract_header("# Hello\n\nSome text")
+        assert header == "Hello"
+        assert body == "Some text"
+
+    def test_extracts_h1_with_leading_blanks(self):
+        header, body = FeishuProxyChannel._extract_header("\n\n# Title\n\nBody text")
+        assert header == "Title"
+        assert "Body text" in body
+
+    def test_no_header_returns_none(self):
+        header, body = FeishuProxyChannel._extract_header("Just plain text\n\nNo heading")
+        assert header is None
+        assert body == "Just plain text\n\nNo heading"
+
+    def test_skips_h2_h3(self):
+        """Only H1 (#) triggers header bar — H2/3 stay in the body."""
+        header, body = FeishuProxyChannel._extract_header("## Section\n\nContent")
+        assert header is None
+        assert "## Section" in body
+
+    def test_header_removed_from_body(self):
+        """The heading line is stripped from body so it doesn't render twice."""
+        header, body = FeishuProxyChannel._extract_header(
+            "# Header\n\nparagraph1\n\nparagraph2",
+        )
+        assert header == "Header"
+        assert "Header" not in body
+
+    def test_empty_content(self):
+        header, body = FeishuProxyChannel._extract_header("")
+        assert header is None
+        assert body == ""
