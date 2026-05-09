@@ -544,7 +544,7 @@ class ProxyManager:
         (e.g. user toggles enabled: false while gateway is running).
         Falls back to empty dict if config file is unreadable.
         """
-        if not self._config_path:
+        if not self._config_path or not os.path.exists(self._config_path):
             return {}
         import json
         try:
