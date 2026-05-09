@@ -40,11 +40,17 @@
   header h1 { font-size: 1.3rem; font-weight: 700; color: var(--text); letter-spacing: -0.03em; }
 
   /* Tabs */
-  .tabs-wrap { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+  .tabs-wrap { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
   .tabs { display: flex; gap: 0.25rem; background: var(--surface); padding: 0.3rem; border-radius: var(--radius); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
   .tab { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.8rem; font-weight: 500; color: var(--text-muted); border-radius: 6px; transition: all 0.15s; border: none; background: transparent; }
   .tab:hover { color: var(--text); background: var(--bg); }
   .tab.active { color: var(--primary); background: var(--primary-light); }
+
+  .sub-tabs-wrap { margin-bottom: 1.25rem; }
+  .sub-tabs { display: flex; gap: 0.25rem; padding: 0.2rem 0; }
+  .sub-tab { padding: 0.4rem 0.85rem; cursor: pointer; font-size: 0.75rem; font-weight: 500; color: var(--text-hint); border-radius: 6px; transition: all 0.15s; border: none; background: transparent; }
+  .sub-tab:hover { color: var(--text); background: var(--bg); }
+  .sub-tab.active { color: var(--primary); background: var(--primary-light); }
 
   /* Tab panels */
   .tab-panel { display: none; }
@@ -208,12 +214,17 @@
 
   <div class="tabs-wrap">
     <div class="tabs">
-      <div class="tab active" data-tab="agent">Agent</div>
-      <div class="tab" data-tab="channels">Channels</div>
-      <div class="tab" data-tab="providers">Providers</div>
-      <div class="tab" data-tab="tools">Tools</div>
-      <div class="tab" data-tab="gateway">Gateway</div>
+      <div class="tab active" data-tab="settings">Settings</div>
       <div class="tab" data-tab="memory">Memory</div>
+    </div>
+  </div>
+  <div id="subTabs" class="sub-tabs-wrap">
+    <div class="sub-tabs">
+      <div class="sub-tab active" data-subtab="agent">Agent</div>
+      <div class="sub-tab" data-subtab="channels">Channels</div>
+      <div class="sub-tab" data-subtab="providers">Providers</div>
+      <div class="sub-tab" data-subtab="tools">Tools</div>
+      <div class="sub-tab" data-subtab="gateway">Gateway</div>
     </div>
   </div>
 
@@ -305,8 +316,25 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
-    document.getElementById('tab' + capitalize(tab.dataset.tab)).classList.add('active');
-    if (tab.dataset.tab === 'memory') loadMemory();
+    if (tab.dataset.tab === 'memory') {
+      document.getElementById('subTabs').style.display = 'none';
+      document.getElementById('tabMemory').classList.add('active');
+      loadMemory();
+    } else {
+      document.getElementById('subTabs').style.display = '';
+      document.getElementById('tab' + capitalize(currentSubTab)).classList.add('active');
+    }
+  });
+});
+
+let currentSubTab = 'agent';
+document.querySelectorAll('.sub-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentSubTab = tab.dataset.subtab;
+    document.getElementById('tab' + capitalize(currentSubTab)).classList.add('active');
   });
 });
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
