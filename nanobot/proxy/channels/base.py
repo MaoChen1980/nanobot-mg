@@ -275,7 +275,9 @@ class BaseProxyChannel:
         try:
             with open(config_path, encoding="utf-8") as f:
                 data = json.load(f)
-            ch = data.get("channels", {}).get(self.channel, {})
+            ch = data.get("channels", {})
+            if isinstance(ch, dict):
+                ch = ch.get(self.channel, {})
             if not isinstance(ch, dict) or not ch.get("enabled", False):
                 logger.warning("Channel {} disabled in config, exiting", self.channel)
                 os._exit(0)

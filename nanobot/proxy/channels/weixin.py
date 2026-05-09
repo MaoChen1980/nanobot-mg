@@ -64,7 +64,8 @@ class WeixinProxyChannel(BaseProxyChannel):
                         if self.check_duplicate(msg_id):
                             continue
 
-                        content = item.get("content", {}).get("text", "") or item.get("text", "")
+                        content_data = isinstance(item.get("content"), dict) and item["content"]
+                        content = content_data.get("text", "") if content_data else item.get("text", "")
                         sender_id = item.get("fromusername", "")
                         chat_id = item.get("chat_id", sender_id)
 

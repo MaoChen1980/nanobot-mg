@@ -33,10 +33,11 @@ class DingTalkProxyChannel(BaseProxyChannel):
             content = ""
             if chatbot_msg.text:
                 content = chatbot_msg.text.content.strip()
-            elif chatbot_msg.extensions.get("content", {}).get("recognition"):
-                content = chatbot_msg.extensions["content"]["recognition"].strip()
+            elif isinstance(chatbot_msg.extensions.get("content"), dict):
+                content = chatbot_msg.extensions["content"].get("recognition", "").strip()
             if not content:
-                content = data.get("text", {}).get("content", "").strip()
+                text_data = isinstance(data.get("text"), dict) and data["text"]
+                content = text_data.get("content", "").strip() if text_data else ""
 
             if not content:
                 logger.warning("Received empty or unsupported message type: {}", chatbot_msg.message_type)

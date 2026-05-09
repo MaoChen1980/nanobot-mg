@@ -39,11 +39,13 @@ class WecomProxyChannel(BaseProxyChannel):
 
             content_parts = []
             if msg_type == "text":
-                text = body.get("text", {}).get("content", "")
-                if text:
-                    content_parts.append(text)
+                text = body.get("text", {}) if isinstance(body.get("text"), dict) else {}
+                text_content = text.get("content", "")
+                if text_content:
+                    content_parts.append(text_content)
             elif msg_type == "voice":
-                voice_content = body.get("voice", {}).get("content", "")
+                voice = body.get("voice", {}) if isinstance(body.get("voice"), dict) else {}
+                voice_content = voice.get("content", "")
                 if voice_content:
                     content_parts.append(f"[voice] {voice_content}")
 
