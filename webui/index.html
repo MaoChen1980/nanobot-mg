@@ -726,6 +726,18 @@ function renderGateway() {
 // ── Memory ──────────────────────────────────────────────────────────────────
 const memoryStack = ['memory/MEMORY.md'];
 
+function resolveMemoryPath(href) {
+  // Resolve a relative link (e.g., ../AGENTS.md) against the current file's directory
+  const current = memoryStack[memoryStack.length - 1] || 'memory/MEMORY.md';
+  const parts = current.split('/');
+  parts.pop(); // remove filename
+  for (const seg of href.split('/')) {
+    if (seg === '..') { if (parts.length > 0) parts.pop(); }
+    else if (seg !== '.') parts.push(seg);
+  }
+  return parts.join('/');
+}
+
 function renderMemory() {
   const el = document.getElementById('tabMemory');
   delete el.dataset.loaded;
@@ -768,7 +780,8 @@ async function loadMemory(path) {
     el.querySelectorAll('.markdown-body a[href$=".md"]').forEach(a => {
       a.addEventListener('click', e => {
         e.preventDefault();
-        loadMemory(a.getAttribute('href'));
+        const href = a.getAttribute('href');
+        loadMemory(href.startsWith('http') ? href : resolveMemoryPath(href));
       });
     });
   } catch(e) {
