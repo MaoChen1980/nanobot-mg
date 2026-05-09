@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>nanobot settings</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
     --bg: #f0f2f5;
@@ -175,6 +177,26 @@
     .row .field { width: 100%; justify-content: space-between; }
     .row input[type="text"], .row input[type="number"], .row input[type="password"], .row select { min-width: 0; width: 100%; }
   }
+
+  /* Memory tab markdown content */
+  .markdown-body { padding: 1.5rem; font-size: 0.875rem; line-height: 1.7; color: var(--text); }
+  .markdown-body h1 { font-size: 1.3rem; font-weight: 700; margin: 1.5rem 0 0.75rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+  .markdown-body h2 { font-size: 1.1rem; font-weight: 700; margin: 1.25rem 0 0.5rem; }
+  .markdown-body h3 { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+  .markdown-body p { margin: 0.5rem 0; }
+  .markdown-body ul, .markdown-body ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+  .markdown-body li { margin: 0.25rem 0; }
+  .markdown-body code { background: #f1f5f9; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.8rem; font-family: "SF Mono","Fira Code",monospace; }
+  .markdown-body pre { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+  .markdown-body pre code { background: none; padding: 0; }
+  .markdown-body blockquote { border-left: 3px solid var(--primary); padding-left: 1rem; color: var(--text-muted); margin: 0.75rem 0; }
+  .markdown-body table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.8rem; }
+  .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 0.4rem 0.75rem; text-align: left; }
+  .markdown-body th { background: #f8fafc; font-weight: 600; }
+  .markdown-body a { color: var(--primary); text-decoration: none; }
+  .markdown-body a:hover { text-decoration: underline; }
+  .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+  .markdown-body strong { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -191,6 +213,7 @@
       <div class="tab" data-tab="providers">Providers</div>
       <div class="tab" data-tab="tools">Tools</div>
       <div class="tab" data-tab="gateway">Gateway</div>
+      <div class="tab" data-tab="memory">Memory</div>
     </div>
   </div>
 
@@ -200,6 +223,7 @@
     <div id="tabProviders" class="tab-panel"></div>
     <div id="tabTools" class="tab-panel"></div>
     <div id="tabGateway" class="tab-panel"></div>
+    <div id="tabMemory" class="tab-panel"></div>
   </form>
 </div>
 
@@ -282,6 +306,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab' + capitalize(tab.dataset.tab)).classList.add('active');
+    if (tab.dataset.tab === 'memory') loadMemory();
   });
 });
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -293,6 +318,7 @@ function renderAll() {
   renderProviders();
   renderTools();
   renderGateway();
+  renderMemory();
 }
 
 // ── Agent ──────────────────────────────────────────────────────────────────────
@@ -695,6 +721,64 @@ function renderGateway() {
       ${field('log_console', 'Console', config.logging?.console, 'checkbox', 'logging.console')}
     </div>
   `;
+}
+
+// ── Memory ──────────────────────────────────────────────────────────────────
+const memoryStack = ['memory/MEMORY.md'];
+
+function renderMemory() {
+  const el = document.getElementById('tabMemory');
+  delete el.dataset.loaded;
+  memoryStack.length = 1;
+  memoryStack[0] = 'memory/MEMORY.md';
+  el.innerHTML = '<div class="card"><div class="markdown-body loading">Switch to Memory tab to load.</div></div>';
+}
+
+async function loadMemory(path) {
+  const el = document.getElementById('tabMemory');
+  if (path) {
+    memoryStack.push(path);
+  } else if (memoryStack.length === 1 && el.dataset.loaded) {
+    return;  // already loaded the root
+  }
+  const target = path || memoryStack[memoryStack.length - 1] || 'memory/MEMORY.md';
+  try {
+    el.innerHTML = '<div class="card"><div class="markdown-body loading">Loading...</div></div>';
+    const res = await fetch('/api/workspace/file?path=' + encodeURIComponent(target));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.exists) {
+      el.innerHTML = '<div class="card"><div class="markdown-body"><p class="error">File not found: ' + esc(target) + '</p></div></div>';
+      return;
+    }
+    const html = marked.parse(data.content, {breaks: true});
+    let navHtml = '';
+    if (memoryStack.length > 1) {
+      navHtml = '<div style="padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;align-items:center">'
+        + '<button type="button" onclick="memoryGoBack()" style="font-size:0.8rem">← Back</button>'
+        + '<span style="font-size:0.75rem;color:var(--text-muted)">' + esc(target) + '</span></div>';
+    }
+    el.innerHTML = '<div class="card">' + navHtml + '<div class="markdown-body">' + html + '</div></div>';
+    // Render mermaid diagrams
+    try {
+      mermaid.initialize({startOnLoad: false, theme: 'default'});
+      mermaid.run({querySelector: '.markdown-body pre code.language-mermaid'});
+    } catch(e) { /* mermaid not loaded or no diagrams */ }
+    // Intercept .md links
+    el.querySelectorAll('.markdown-body a[href$=".md"]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        loadMemory(a.getAttribute('href'));
+      });
+    });
+  } catch(e) {
+    el.innerHTML = '<div class="card"><div class="markdown-body"><p class="error">Failed to load: ' + esc(e.message) + '</p></div></div>';
+  }
+}
+
+function memoryGoBack() {
+  if (memoryStack.length > 1) memoryStack.pop();
+  loadMemory(memoryStack[memoryStack.length - 1]);
 }
 
 // ── Field helpers ─────────────────────────────────────────────────────────────

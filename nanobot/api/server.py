@@ -23,6 +23,21 @@ async def handle_health(request: Request) -> Response:
     return JSONResponse({"status": "ok"})
 
 
+async def handle_workspace_file(request: Request) -> Response:
+    """GET /api/workspace/file?path=... — serve a markdown file from workspace with path-traversal guard."""
+    from nanobot.config.loader import load_config
+    config = load_config()
+    workspace = config.workspace_path
+    file_path = request.query_params.get("path", "memory/MEMORY.md")
+    resolved = (workspace / file_path).resolve()
+    if not str(resolved).startswith(str(workspace.resolve())):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+    if not resolved.exists() or not resolved.is_file():
+        return JSONResponse({"content": "", "exists": False})
+    content = resolved.read_text(encoding="utf-8")
+    return JSONResponse({"content": content, "path": file_path, "exists": True})
+
+
 async def handle_settings_get(request: Request) -> Response:
     """GET /api/settings"""
     try:
@@ -281,6 +296,7 @@ def create_app(index_html_path: str | Path = "", proxy_manager=None) -> Starlett
         Route("/api/settings/update", endpoint=handle_settings_update, methods=["PUT"]),
         Route("/api/shutdown", endpoint=handle_shutdown, methods=["POST"]),
         Route("/api/stop", endpoint=handle_stop, methods=["POST"]),
+        Route("/api/workspace/file", endpoint=handle_workspace_file),
     ]
     if public_dir.is_dir():
         routes.append(
