@@ -226,7 +226,7 @@ async def handle_config_update(request: Request) -> Response:
             for key in list(proxy_manager.get_proxy_keys()):
                 ch, _ = key.split(":", 1)
                 ch_cfg = channels_data.get(ch, {})
-                if not ch_cfg.get("enabled", False):
+                if isinstance(ch_cfg, dict) and not ch_cfg.get("enabled", False):
                     proxy_manager.stop_proxy(key)
 
         return JSONResponse({"ok": True})
@@ -276,7 +276,7 @@ async def handle_provider_models(request: Request) -> Response:
             resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
             data = resp.json()
         models = []
-        if isinstance(data, dict) and "data" in data:
+        if isinstance(data, dict) and data.get("data"):
             models = [m["id"] for m in data["data"]]
         elif isinstance(data, dict) and "models" in data:
             models = [m["name"] for m in data["models"]]

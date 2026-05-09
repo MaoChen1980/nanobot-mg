@@ -551,9 +551,16 @@ class ProxyManager:
             with open(self._config_path, encoding="utf-8") as f:
                 data = json.load(f)
             channels = data.get("channels", {})
-            return {name: ch.get("enabled", False) for name, ch in channels.items()}
+            return {
+                name: ch.get("enabled", False)
+                for name, ch in channels.items()
+                if isinstance(ch, dict)
+            }
+        except FileNotFoundError:
+            logger.debug("Config file not found at {}", self._config_path)
+            return {}
         except Exception:
-            logger.debug("Failed to read config from {}", self._config_path)
+            logger.warning("Failed to read config from {}", self._config_path)
             return {}
 
     @property
