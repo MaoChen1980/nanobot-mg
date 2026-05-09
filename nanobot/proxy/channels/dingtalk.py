@@ -62,9 +62,21 @@ class DingTalkProxyChannel(BaseProxyChannel):
             logger.error("DingTalk proxy message handler error: {}", e)
 
     def _send_reply(self, chat_id: str, sender_id: str, is_group: bool, content: str) -> None:
-        """Send a text reply via DingTalk API."""
+        """Send a reply via DingTalk. Passes markdown content directly, no extra wrapping."""
         try:
             import httpx
+
+            # Strip the "Nanobot Reply" title wrapper if present
+            import re
+
+            content = re.sub(
+                r"^\*\*Nanobot Reply\*\*\s*\n+",
+                "",
+                content,
+                count=1,
+                flags=re.IGNORECASE,
+            ).strip()
+
             token = self._get_access_token()
             if not token:
                 return
@@ -75,7 +87,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     "robotCode": self.config.get("clientId", ""),
                     "openConversationId": chat_id,
                     "msgKey": "sampleMarkdown",
-                    "msgParam": json.dumps({"text": content, "title": "Nanobot Reply"}, ensure_ascii=False),
+                    "msgParam": json.dumps({"text": content}, ensure_ascii=False),
                 }
             else:
                 url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
@@ -83,7 +95,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     "robotCode": self.config.get("clientId", ""),
                     "userIds": [sender_id],
                     "msgKey": "sampleMarkdown",
-                    "msgParam": json.dumps({"text": content, "title": "Nanobot Reply"}, ensure_ascii=False),
+                    "msgParam": json.dumps({"text": content}, ensure_ascii=False),
                 }
 
             headers = {"x-acs-dingtalk-access-token": token}
@@ -108,7 +120,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 if resp.status_code == 200:
                     return resp.json().get("accessToken")
         except Exception:
-            pass
+            logger.exception("Failed to get DingTalk access token")
         return None
 
     def start(self) -> None:

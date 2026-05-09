@@ -1153,6 +1153,16 @@ class OpenAICompatProvider(LLMProvider):
         retry_after = LLMProvider._extract_retry_after_from_headers(getattr(response, "headers", None))
         if retry_after is None:
             retry_after = LLMProvider._extract_retry_after(msg)
+
+        error_meta = OpenAICompatProvider._extract_error_metadata(e)
+        logger.error(
+            "OpenAI-compat API error: status={}, type={}, code={}, msg={}",
+            error_meta.get("error_status_code"),
+            error_meta.get("error_type"),
+            error_meta.get("error_code"),
+            msg[:200],
+        )
+
         return LLMResponse(
             content=msg,
             finish_reason="error",
@@ -1281,6 +1291,7 @@ class OpenAICompatProvider(LLMProvider):
                         await on_content_delta(text)
             return self._parse_chunks(chunks)
         except asyncio.TimeoutError:
+            logger.warning("OpenAI-compat stream timed out after {}s", idle_timeout_s)
             return LLMResponse(
                 content=(
                     f"Error calling LLM: stream stalled for more than "

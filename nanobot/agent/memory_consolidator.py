@@ -140,6 +140,7 @@ class Consolidator:
                 return text
             return enc.decode(tokens[:budget]) + "\n... (truncated)"
         except Exception:
+            logger.warning("Tokenizer failed, falling back to char-length truncation")
             return truncate_text(text, budget * 4)
 
     async def archive(self, messages: list[dict]) -> str | None:
@@ -180,7 +181,7 @@ class Consolidator:
                     first_ts = _format_datetime(datetime.fromisoformat(first_ts).astimezone(ZoneInfo(self.timezone)))
                     last_ts = _format_datetime(datetime.fromisoformat(last_ts).astimezone(ZoneInfo(self.timezone)))
                 except Exception:
-                    pass
+                    logger.warning("Failed to format timestamp in archive")
             time_prefix = f"[{first_ts} → {last_ts}] "
             record_ts = first_ts[:16] if first_ts != "unknown" else None
             cursor = self.store.append_history(time_prefix + summary, max_chars=_ARCHIVE_SUMMARY_MAX_CHARS, timestamp=record_ts)

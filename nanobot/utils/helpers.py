@@ -277,6 +277,7 @@ def estimate_prompt_tokens(
         per_message_overhead = len(messages) * 4
         return len(_get_encoder().encode("\n".join(parts))) + per_message_overhead
     except Exception:
+        logger.debug("Token estimation failed")
         return 0
 
 
@@ -322,6 +323,7 @@ def estimate_message_tokens(message: dict[str, Any]) -> int:
         enc = _get_encoder()
         return max(4, len(enc.encode(payload)) + 4)
     except Exception:
+        logger.debug("Message token estimation failed")
         return max(4, len(payload) // 4 + 4)
 
 
@@ -339,7 +341,7 @@ def estimate_prompt_tokens_chain(
             if isinstance(tokens, (int, float)) and tokens > 0:
                 return int(tokens), str(source or "provider_counter")
         except Exception:
-            pass
+            logger.debug("Provider token counter failed")
 
     estimated = estimate_prompt_tokens(messages, tools)
     if estimated > 0:

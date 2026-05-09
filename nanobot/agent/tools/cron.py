@@ -6,6 +6,8 @@ from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from nanobot.cron.service import CronService
@@ -128,6 +130,7 @@ class CronTool(Tool):
         try:
             ZoneInfo(tz)
         except (KeyError, Exception):
+            logger.warning("Invalid timezone: {}", tz)
             return f"Error: unknown timezone '{tz}'"
         return None
 
@@ -458,5 +461,6 @@ class CronTool(Tool):
                 self.reset_current_job_id(job_token)
 
         except Exception as e:
+            logger.exception("Cron test failed for job '{}'", job_id)
             steps.append(f"❌ Test run failed: {e}")
             return "\n".join(steps)

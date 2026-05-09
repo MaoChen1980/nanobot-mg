@@ -186,7 +186,7 @@ class NanobotDB:
                     )
                     count += 1
                 except Exception:
-                    pass
+                    logger.warning("Failed to parse history line: {}", line[:200])
         self._conn.commit()
         logger.info(f"Migrated {count} history entries from {path}")
 
@@ -199,7 +199,7 @@ class NanobotDB:
             self.set_metadata("cursor", str(cursor))
             logger.info(f"Migrated cursor={cursor} from {path}")
         except Exception:
-            pass
+            logger.warning("Failed to migrate cursor from {}", self._cursor_file)
 
     def _migrate_dream_cursor(self) -> None:
         path = self._dream_cursor_file
@@ -210,7 +210,7 @@ class NanobotDB:
             self.set_metadata("dream_cursor", str(cursor))
             logger.info(f"Migrated dream_cursor={cursor} from {path}")
         except Exception:
-            pass
+            logger.warning("Failed to migrate dream cursor")
 
     def _migrate_sessions(self) -> None:
         d = self._sessions_dir
@@ -259,8 +259,8 @@ class NanobotDB:
                         ),
                     )
                 count += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to migrate session from {}", fpath)
         self._conn.commit()
         logger.info(f"Migrated {count} sessions from {d}")
 
@@ -290,7 +290,7 @@ class NanobotDB:
                     )
                     logger.info(f"Migrated {cur} naive timestamps in {table}.{col}")
                 except Exception:
-                    pass
+                    logger.debug("Failed to migrate timestamps for {}", table)
         self._conn.commit()
 
     def _migrate_add_bot_column(self) -> None:
@@ -299,8 +299,10 @@ class NanobotDB:
             self._conn.execute("ALTER TABLE goals ADD COLUMN bot TEXT")
             self._conn.commit()
             logger.info("Migrated goals table: added bot column")
-        except Exception:
+        except sqlite3.OperationalError:
             pass  # Column may already exist
+        except Exception:
+            logger.warning("Failed to add bot column to goals table")
 
     # --------------------------------------------------------------------------
     # Metadata

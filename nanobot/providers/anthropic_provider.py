@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import json_repair
+from loguru import logger
 
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
 
@@ -95,6 +96,11 @@ class AnthropicProvider(LLMProvider):
         elif "connection" in error_name:
             error_kind = "connection"
         error_type, error_code = LLMProvider._extract_error_type_code(payload)
+
+        logger.error(
+            "Anthropic API error: status={}, type={}, code={}, msg={}",
+            status_code, error_type, error_code, msg[:200],
+        )
 
         return LLMResponse(
             content=msg,
@@ -592,6 +598,7 @@ class AnthropicProvider(LLMProvider):
                 )
             return self._parse_response(response)
         except asyncio.TimeoutError:
+            logger.warning("Anthropic stream timed out after {}s", idle_timeout_s)
             return LLMResponse(
                 content=(
                     f"Error calling LLM: stream stalled for more than "

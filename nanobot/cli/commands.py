@@ -20,7 +20,7 @@ if sys.platform == "win32":
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
             sys.stderr.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
-            pass
+            logger.debug("Failed to reconfigure stdout/stderr")
 
 import typer
 from loguru import logger
@@ -329,6 +329,7 @@ def _make_provider(config: Config):
     try:
         return make_provider(config)
     except ValueError as exc:
+        logger.error("Failed to create provider: {}", exc)
         console.print(f"[red]Error: {exc}[/red]")
         raise typer.Exit(1) from exc
 
@@ -341,6 +342,7 @@ def _load_runtime_config(config: str | None = None, workspace: str | None = None
     if config:
         config_path = Path(config).expanduser().resolve()
         if not config_path.exists():
+            logger.error("Config file not found: {}", config_path)
             console.print(f"[red]Error: Config file not found: {config_path}[/red]")
             raise typer.Exit(1)
         set_config_path(config_path)
@@ -349,6 +351,7 @@ def _load_runtime_config(config: str | None = None, workspace: str | None = None
     try:
         loaded = resolve_config_env_vars(load_config(config_path))
     except ValueError as e:
+        logger.error("Config loading error: {}", e)
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
     _warn_deprecated_config_keys(config_path)
@@ -994,7 +997,7 @@ def _login_openai_codex() -> None:
         try:
             token = get_token()
         except Exception:
-            pass
+            logger.warning("Failed to retrieve saved OAuth token")
         if not (token and token.access):
             console.print("[cyan]Starting interactive OAuth login...[/cyan]\n")
             token = login_oauth_interactive(

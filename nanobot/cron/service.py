@@ -167,7 +167,7 @@ class CronService:
                             _update(action.get("params", {}))
                         changed = True
                     except Exception as exp:
-                        logger.debug(f"load action line error: {exp}")
+                        logger.warning("Failed to load cron action line: {}", exp)
                         continue
             self._store.jobs = list(jobs_map.values())
             if self._running and changed:

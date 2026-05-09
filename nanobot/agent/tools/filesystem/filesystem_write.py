@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from .filesystem_base import _FsTool
@@ -78,8 +80,10 @@ class WriteFileTool(_FsTool):
                 parts.append(exec_result)
             return "\n".join(parts)
         except PermissionError as e:
+            logger.warning("WriteFile permission denied: {}", e)
             return f"Error: {e}"
         except Exception as e:
+            logger.warning("WriteFile failed: {}", e)
             return f"Error writing file: {e}"
 
     async def _run_type_check(self, fp: Path, checker: str) -> str:
@@ -140,6 +144,7 @@ class WriteFileTool(_FsTool):
                 lines_out.append(f"  ... and {len(diags) - 5} more")
             return "\n".join(lines_out)
         except Exception:
+            logger.warning("Failed to parse pyright output")
             return f"\nCheck: pyright output (raw):\n{raw[:500]}"
 
     @staticmethod

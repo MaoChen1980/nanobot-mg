@@ -6,6 +6,8 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from nanobot.agent.context_vars import _current_messages_for_subagent
@@ -111,5 +113,6 @@ Spawn a subagent to handle independent tasks in the background. The subagent wil
             if path.exists():
                 return path.read_text(encoding="utf-8")
         except Exception:
+            logger.debug("Failed to read workspace file {} for subagent context", filename)
             pass
         return ""

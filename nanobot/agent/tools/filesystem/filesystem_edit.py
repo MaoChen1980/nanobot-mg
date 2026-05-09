@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from .filesystem_base import _FsTool, _normalize_quotes, _preserve_quote_style, _reindent_like_match
@@ -328,8 +330,10 @@ class EditFileTool(_FsTool):
                 msg = f"{warning}\n{msg}"
             return msg
         except PermissionError as e:
+            logger.warning("EditFile permission denied: {}", e)
             return f"Error: {e}"
         except Exception as e:
+            logger.warning("EditFile failed: {}", e)
             return f"Error editing file: {e}"
 
     def _file_not_found_msg(self, path: str, fp: Path) -> str:

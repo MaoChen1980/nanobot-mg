@@ -632,6 +632,7 @@ class SessionManager:
                                 "path": str(path)
                             })
             except Exception:
+                logger.warning("Failed to parse session file, attempting repair: {}", path)
                 repaired = self._repair(fallback_key)
                 if repaired is not None:
                     sessions.append({

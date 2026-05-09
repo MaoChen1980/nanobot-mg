@@ -356,8 +356,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .build()
             )
             self._client.im.v1.message_reaction.delete(request)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to remove reaction: {}", e)
 
     # ------------------------------------------------------------------
     # Lifecycle

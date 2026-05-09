@@ -152,6 +152,7 @@ class Dream:
                 from nanobot.utils.helpers import _format_datetime
                 return _format_datetime(datetime.fromisoformat(ts).astimezone(ZoneInfo(self.timezone)))
             except Exception:
+                logger.warning("Failed to convert timestamp in dream")
                 return ts
 
         history_text = "\n".join(

@@ -8,6 +8,8 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, TypeVar
 
+from loguru import logger
+
 from nanobot.agent.tools.filesystem.filesystem import ListDirTool, _FsTool
 
 _DEFAULT_HEAD_LIMIT = 250
@@ -245,8 +247,10 @@ class GlobTool(_SearchTool):
                 result += f"\n\n{note}"
             return result
         except PermissionError as e:
+            logger.warning("Glob permission denied: {}", e)
             return f"Error: {e}"
         except Exception as e:
+            logger.warning("Glob failed: {}", e)
             return f"Error finding files: {e}"
 
 
@@ -550,6 +554,8 @@ class GrepTool(_SearchTool):
                 result += "\n\n" + "\n".join(notes)
             return result
         except PermissionError as e:
+            logger.warning("Grep permission denied: {}", e)
             return f"Error: {e}"
         except Exception as e:
+            logger.warning("Grep failed: {}", e)
             return f"Error searching files: {e}"

@@ -6,6 +6,8 @@ import json
 import uuid
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from nanobot.agent.tools.filesystem.filesystem import _FsTool
@@ -152,6 +154,8 @@ class NotebookEditTool(_FsTool):
             return f"Successfully edited cell {cell_index} in {fp}"
 
         except PermissionError as e:
+            logger.warning("NotebookEdit permission denied: {}", e)
             return f"Error: {e}"
         except Exception as e:
+            logger.warning("NotebookEdit failed: {}", e)
             return f"Error editing notebook: {e}"

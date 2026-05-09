@@ -116,7 +116,7 @@ class HubTCPServer:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.debug("Proxy TCP connection error from {}: {}", peername, e)
+            logger.warning("Proxy TCP connection error from {}: {}", peername, e)
         finally:
             logger.info("Proxy TCP disconnected: {}", peername)
             self._proxy_manager.unregister_by_writer(writer)
@@ -124,7 +124,7 @@ class HubTCPServer:
             try:
                 await writer.wait_closed()
             except Exception:
-                pass
+                logger.warning("Error closing proxy TCP writer")
 
     async def _route_message(
         self,

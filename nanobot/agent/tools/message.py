@@ -7,6 +7,8 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from nanobot.bus.events import OutboundMessage
@@ -176,4 +178,5 @@ class MessageTool(Tool):
             button_info = f" with {sum(len(row) for row in buttons)} button(s)" if buttons else ""
             return f"Message sent to {channel}:{chat_id}{media_info}{button_info}"
         except Exception as e:
+            logger.exception("Failed to send message")
             return f"Error sending message: {str(e)}"

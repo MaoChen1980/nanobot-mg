@@ -7,6 +7,7 @@ import ipaddress
 import re
 import socket
 from urllib.parse import urlparse
+from loguru import logger
 
 _BLOCKED_NETWORKS = [
     ipaddress.ip_network("0.0.0.0/8"),
@@ -34,7 +35,7 @@ def configure_ssrf_whitelist(cidrs: list[str]) -> None:
         try:
             nets.append(ipaddress.ip_network(cidr, strict=False))
         except ValueError:
-            pass
+            logger.warning("Invalid CIDR notation in network whitelist: {}", cidr)
     _allowed_networks = nets
 
 

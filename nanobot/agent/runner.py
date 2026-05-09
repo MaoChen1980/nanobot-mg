@@ -544,7 +544,7 @@ class AgentRunner:
                 success=success, error=error,
             )
         except Exception:
-            pass
+            logger.debug("Failed to log tool call to DB")
 
     async def _emit_checkpoint(self, spec: AgentRunSpec, payload: dict[str, Any]) -> None:
         if spec.checkpoint_callback is not None:

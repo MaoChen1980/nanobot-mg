@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool
 
 
@@ -113,6 +115,7 @@ class ToolRegistry:
                 return result + _HINT
             return result
         except Exception as e:
+            logger.exception("Tool '{}' execution failed", name)
             return f"Error executing {name}: {str(e)}" + _HINT
 
     @property

@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+from loguru import logger
+
 
 @dataclass
 class SearchUsageInfo:
@@ -118,6 +120,7 @@ async def _fetch_tavily_usage(api_key: str | None) -> SearchUsageInfo:
             error=f"HTTP {e.response.status_code}",
         )
     except Exception as e:
+        logger.warning("Failed to fetch Tavily usage: {}", str(e)[:80])
         return SearchUsageInfo(
             provider="tavily",
             supported=True,

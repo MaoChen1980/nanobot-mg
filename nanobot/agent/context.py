@@ -158,7 +158,7 @@ class ContextBuilder:
             if dt.tzinfo is not None:
                 return _format_datetime(dt.astimezone(ZoneInfo(timezone)))
         except Exception:
-            pass
+            logger.warning("Failed to convert timestamp '{}' to timezone '{}'", ts, timezone)
         return ts
 
     def _build_state_section(self) -> str:
@@ -327,8 +327,8 @@ class ContextBuilder:
                     if tpl.is_file():
                         content = tpl.read_text(encoding="utf-8")
                         parts.append(f"## {filename}\n\n{content}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to load bundled template {}: {}", filename, e)
                 continue
 
             try:
@@ -359,7 +359,8 @@ class ContextBuilder:
                 _template_content_cache[template_path] = (mtime, tpl.read_text(encoding="utf-8"))
                 cached = _template_content_cache[template_path]
             return content.strip() == cached[1].strip()
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to read bundled template: {}", e)
             return False
 
     def build_messages(

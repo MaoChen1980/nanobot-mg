@@ -15,6 +15,8 @@ from pathlib import Path
 
 from typing import Any
 
+from loguru import logger
+
 from nanobot.utils.helpers import safe_filename
 
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024
@@ -46,6 +48,7 @@ def save_base64_data_url(
     try:
         raw = base64.b64decode(b64_payload)
     except Exception:
+        logger.debug("Failed to decode base64 data URL")
         return None
     limit = DEFAULT_MAX_BYTES if max_bytes is None else max_bytes
     if len(raw) > limit:

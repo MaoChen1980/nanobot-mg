@@ -360,6 +360,7 @@ class MyTool(Tool):
                 else:
                     parts.append("skills: none")
             except Exception:
+                logger.debug("Failed to list skills")
                 parts.append("skills: <error>")
 
         return "\n".join(parts)

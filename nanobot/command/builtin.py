@@ -55,7 +55,7 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
     try:
         ctx_est, _ = loop.consolidator.estimate_session_prompt_tokens(session)
     except Exception:
-        pass
+        logger.debug("Failed to estimate session prompt tokens for /status")
     if ctx_est <= 0:
         ctx_est = loop._last_usage.get("prompt_tokens", 0)
 
@@ -71,13 +71,13 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
             usage = await fetch_search_usage(provider=provider, api_key=api_key)
             search_usage_text = usage.format()
     except Exception:
-        pass  # Never let usage fetch break /status
+        logger.debug("Failed to fetch search usage for /status")  # Never let usage fetch break /status
     active_tasks = loop._active_tasks.get(ctx.key, [])
     task_count = sum(1 for t in active_tasks if not t.done())
     try:
         task_count += loop.subagents.get_running_count_by_session(ctx.key)
     except Exception:
-        pass
+        logger.debug("Failed to get subagent count for /status")
     return OutboundMessage(
         channel=ctx.msg.channel,
         chat_id=ctx.msg.chat_id,

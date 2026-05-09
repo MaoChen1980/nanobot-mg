@@ -176,6 +176,7 @@ class WebSearchTool(WebToolBase, Tool):
             ]
             return _format_results(query, items, n)
         except Exception as e:
+            logger.warning("Brave search failed: {}", e)
             return f"Error: {e}"
 
     async def _search_tavily(self, query: str, n: int) -> str:
@@ -194,6 +195,7 @@ class WebSearchTool(WebToolBase, Tool):
                 r.raise_for_status()
             return _format_results(query, r.json().get("results", []), n)
         except Exception as e:
+            logger.warning("Tavily search failed: {}", e)
             return f"Error: {e}"
 
     async def _search_searxng(self, query: str, n: int) -> str:
@@ -216,6 +218,7 @@ class WebSearchTool(WebToolBase, Tool):
                 r.raise_for_status()
             return _format_results(query, r.json().get("results", []), n)
         except Exception as e:
+            logger.warning("SearXNG search failed: {}", e)
             return f"Error: {e}"
 
     async def _search_jina(self, query: str, n: int) -> str:
@@ -264,6 +267,7 @@ class WebSearchTool(WebToolBase, Tool):
             ]
             return _format_results(query, items, n)
         except Exception as e:
+            logger.warning("Kagi search failed: {}", e)
             return f"Error: {e}"
 
     async def _search_duckduckgo(self, query: str, n: int) -> str:

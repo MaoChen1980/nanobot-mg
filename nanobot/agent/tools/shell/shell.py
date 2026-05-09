@@ -126,6 +126,7 @@ class ExecTool(Tool):
                 requested = Path(cwd).expanduser().resolve()
                 workspace_root = Path(self.working_dir).expanduser().resolve()
             except Exception:
+                logger.warning("Failed to resolve working_dir")
                 return "Error: working_dir could not be resolved"
             if requested != workspace_root and workspace_root not in requested.parents:
                 return "Error: working_dir is outside the configured workspace"
@@ -188,6 +189,7 @@ class ExecTool(Tool):
                         stdout_chunks.append(text.encode("utf-8"))
                 except asyncio.TimeoutError:
                     await self._kill_process(process)
+                    logger.warning("Command timed out after {}s", effective_timeout)
                     return f"Error: Command timed out after {effective_timeout} seconds"
                 except asyncio.CancelledError:
                     await self._kill_process(process)
@@ -209,6 +211,7 @@ class ExecTool(Tool):
                     )
                 except asyncio.TimeoutError:
                     await self._kill_process(process)
+                    logger.warning("Command timed out after {}s", effective_timeout)
                     return f"Error: Command timed out after {effective_timeout} seconds"
                 except asyncio.CancelledError:
                     await self._kill_process(process)
@@ -238,6 +241,7 @@ class ExecTool(Tool):
             return result
 
         except Exception as e:
+            logger.exception("Command execution failed")
             return f"Error executing command: {str(e)}"
 
     @staticmethod

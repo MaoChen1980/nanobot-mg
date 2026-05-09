@@ -79,6 +79,7 @@ class OpenAICodexProvider(LLMProvider):
                 )
             return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=finish_reason)
         except Exception as e:
+            logger.exception("Codex API call failed")
             msg = f"Error calling Codex: {e}"
             retry_after = getattr(e, "retry_after", None) or self._extract_retry_after(msg)
             return LLMResponse(content=msg, finish_reason="error", retry_after=retry_after)

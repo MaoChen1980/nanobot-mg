@@ -98,7 +98,7 @@ class ProxyManager:
             with open(pid_file, "w") as f:
                 f.write(str(os.getpid()))
         except OSError:
-            pass
+            logger.warning("Failed to write PID file at {}", pid_file)
 
     @staticmethod
     def _pid_is_alive(pid: int) -> bool:
@@ -156,7 +156,7 @@ class ProxyManager:
                             except (ValueError, IndexError):
                                 pass
         except Exception:
-            pass
+            logger.warning("Failed to enumerate proxy processes")
 
         return pids
 
@@ -175,8 +175,8 @@ class ProxyManager:
                 )
             else:
                 os.kill(pid, signal.SIGKILL)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to kill process {}: {}", pid, e)
 
     @staticmethod
     def cleanup_orphans() -> None:
@@ -238,7 +238,7 @@ class ProxyManager:
                     proxy_output.write(line)
                     logger.debug("[proxy {}] {}".format(channel, line.decode().rstrip()))
             except Exception:
-                pass
+                logger.warning("Error capturing proxy {} output", channel)
 
         threading.Thread(target=capture_output, daemon=True).start()
         return process, proxy_output
@@ -433,8 +433,8 @@ class ProxyManager:
                 proxy.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proxy.process.kill()
-            except Exception:
-                pass  # process may have exited between checks
+            except Exception as e:
+                logger.debug("Non-critical error during proxy {} stop", key)
 
         await asyncio.gather(*[_wait_or_force(k, p) for k, p in proxies])
         self._proxies.clear()
@@ -518,7 +518,7 @@ class ProxyManager:
                     capture_output=True,
                 )
             except Exception:
-                pass
+                logger.warning("Failed to force-kill old proxy {} (pid={})", proxy.key, pid)
         else:
             try:
                 old_process.terminate()
@@ -553,6 +553,7 @@ class ProxyManager:
             channels = data.get("channels", {})
             return {name: ch.get("enabled", False) for name, ch in channels.items()}
         except Exception:
+            logger.warning("Failed to read config from {}", self._config_path)
             return {}
 
     @property

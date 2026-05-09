@@ -83,6 +83,7 @@ class GatewayApplication:
             import traceback
 
             console.print("\n[red]Error: Gateway crashed unexpectedly[/red]")
+            logger.exception("Gateway crashed unexpectedly")
             console.print(traceback.format_exc())
         finally:
             await self._shutdown()
@@ -110,6 +111,7 @@ class GatewayApplication:
         try:
             self.provider_snapshot = build_provider_snapshot(self.config)
         except ValueError as exc:
+            logger.error("Provider init failed: {}", exc)
             console.print(f"[red]Error: {exc}[/red]")
             raise SystemExit(1) from exc
         self.provider = self.provider_snapshot.provider
@@ -660,6 +662,7 @@ class GatewayApplication:
                 f"[green]✓[/green] Opened browser at {self.open_browser_url}"
             )
         except Exception as e:
+            logger.warning("Could not open browser: {}", e)
             console.print(
                 f"[yellow]Could not open browser ({e}); "
                 f"visit {self.open_browser_url}[/yellow]"
@@ -686,7 +689,7 @@ class GatewayApplication:
             try:
                 await self.api_server.shutdown()
             except Exception:
-                pass
+                logger.debug("Error waiting for API server shutdown")
 
     # ------------------------------------------------------------------
     # Helpers (shared with CLI but kept here for self-containment)

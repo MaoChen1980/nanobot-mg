@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loguru import logger
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -86,6 +87,7 @@ async def handle_memory_search(request: Request) -> Response:
             )
             resp["interpretation"] = interpretation.content if interpretation else None
         except Exception as e:
+            logger.exception("Memory search LLM interpretation failed")
             resp["interpretation"] = f"LLM interpretation unavailable: {e}"
 
     return JSONResponse(resp)
@@ -104,6 +106,7 @@ def _grep_memory(workspace: Path, q: str, k: int = 5) -> list[dict]:
         try:
             text = f.read_text(encoding="utf-8")
         except Exception:
+            logger.debug("Failed to read memory file for grep: {}", f)
             continue
         lines = text.split("\n")
         # Score: count matching lines (case-insensitive)
@@ -149,6 +152,7 @@ async def handle_memory_rebuild_index(request: Request) -> Response:
         result = await loop.run_in_executor(None, _build)
         return JSONResponse({"ok": True, **result})
     except Exception as e:
+        logger.exception("Memory rebuild index failed")
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
@@ -157,6 +161,7 @@ async def handle_settings_get(request: Request) -> Response:
     try:
         from nanobot.config.loader import load_config
     except Exception as e:
+        logger.exception("Failed to import load_config for /api/settings")
         return JSONResponse({"error": str(e)}, status_code=500)
 
     config = load_config()
@@ -188,11 +193,13 @@ async def handle_config_get(request: Request) -> Response:
     try:
         from nanobot.config.loader import load_config
     except Exception as e:
+        logger.exception("Failed to import load_config for /api/config")
         return JSONResponse({"error": str(e)}, status_code=500)
     try:
         config = load_config()
         return JSONResponse(config.model_dump())
     except Exception as e:
+        logger.exception("Failed to load config for /api/config")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -202,6 +209,7 @@ async def handle_config_update(request: Request) -> Response:
         from nanobot.config.loader import load_config, save_config
         from nanobot.config.schema import Config
     except Exception as e:
+        logger.exception("Failed to import for /api/config update")
         return JSONResponse({"error": str(e)}, status_code=500)
     try:
         data = await request.json()
@@ -223,6 +231,7 @@ async def handle_config_update(request: Request) -> Response:
 
         return JSONResponse({"ok": True})
     except Exception as e:
+        logger.exception("Config validation failed on update")
         return JSONResponse({"error": f"Validation failed: {e}"}, status_code=400)
 
 
@@ -234,6 +243,7 @@ async def handle_provider_models(request: Request) -> Response:
     try:
         from nanobot.config.loader import load_config
     except Exception as e:
+        logger.exception("Failed to import load_config for /api/provider-models")
         return JSONResponse({"error": str(e)}, status_code=500)
     config = load_config()
     provider_cfg = getattr(config.providers, provider, None)
@@ -272,6 +282,7 @@ async def handle_provider_models(request: Request) -> Response:
             models = [m["name"] for m in data["models"]]
         return JSONResponse({"models": models})
     except Exception as e:
+        logger.exception("Failed to fetch models from provider '{}'", provider)
         return JSONResponse({"models": [], "error": str(e)})
 
 
@@ -280,6 +291,7 @@ async def handle_settings_update(request: Request) -> Response:
     try:
         from nanobot.config.loader import load_config, save_config
     except Exception as e:
+        logger.exception("Failed to import for /api/settings/update")
         return JSONResponse({"error": str(e)}, status_code=500)
 
     try:
@@ -301,6 +313,7 @@ async def handle_settings_update(request: Request) -> Response:
         try:
             save_config(config)
         except Exception as e:
+            logger.exception("Failed to save config on update")
             return JSONResponse({"error": f"Failed to save config: {e}"}, status_code=500)
 
     defaults = config.agents.defaults
@@ -338,7 +351,7 @@ async def handle_shutdown(request: Request) -> Response:
         try:
             await proxy_manager.stop()
         except Exception:
-            pass
+            logger.warning("Failed to stop proxy manager during shutdown")
 
     def deferred_restart():
         import time
@@ -382,7 +395,7 @@ async def handle_stop(request: Request) -> Response:
         try:
             await proxy_manager.stop()
         except Exception:
-            pass
+            logger.warning("Failed to stop proxy manager during stop")
 
     def deferred_exit():
         import time
@@ -471,6 +484,7 @@ async def handle_memory_chat(request: Request) -> Response:
                     on_content_delta=on_token,
                 )
             except Exception as e:
+                logger.exception("Memory chat streaming failed")
                 await queue.put(f"__error__:{e}")
             finally:
                 await queue.put(None)

@@ -257,8 +257,9 @@ class BaseProxyChannel:
                     finally:
                         kernel32.CloseHandle(handle)
                 return False
-            except Exception:
-                return False  # assume dead on error
+            except Exception as e:
+                logger.warning("Failed to check parent process health: {}", e)
+                return False
         return os.getppid() == self._parent_pid
 
     def _check_config_enabled(self) -> None:
@@ -278,8 +279,8 @@ class BaseProxyChannel:
             if not ch.get("enabled", False):
                 logger.warning("Channel {} disabled in config, exiting", self.channel)
                 os._exit(0)
-        except Exception:
-            pass  # benign — will retry on next cycle
+        except Exception as e:
+            logger.debug("Failed to read config for {}: {}", self.channel, e)
 
     async def _heartbeat_loop(self) -> None:
         """Periodic health check: parent alive + hub connected + config enabled.

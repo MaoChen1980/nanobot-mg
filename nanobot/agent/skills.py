@@ -50,7 +50,7 @@ class SkillsLoader:
                         if d.is_dir() and (d / "SKILL.md").exists():
                             sig ^= hash(d.name)
                 except OSError:
-                    pass
+                    logger.debug("Failed to stat skills directory")
         return sig
 
     def _refresh_skills_list(self) -> list[dict[str, str]]:
@@ -117,7 +117,7 @@ class SkillsLoader:
                 if path.exists() and path.stat().st_mtime == cached[0]:
                     return cached[2]
             except OSError:
-                pass
+                logger.debug("Failed to stat cached skill path")
 
         roots = [self.workspace_skills]
         if self.builtin_skills:
@@ -130,8 +130,8 @@ class SkillsLoader:
                     content = path.read_text(encoding="utf-8")
                     self._skill_cache[name] = (mtime, str(path), content)
                     return content
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.warning("Failed to read skill {}: {}", name, e)
         logger.warning(f"[SKILL] Not found: {name}")
         return None
 

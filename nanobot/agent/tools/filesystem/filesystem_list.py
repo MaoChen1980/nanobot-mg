@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from .filesystem_base import _FsTool
@@ -79,7 +81,9 @@ class ListDirTool(_FsTool):
                 result += f"\n\n(truncated, showing first {cap} of {total} entries)"
             return result
         except PermissionError as e:
+            logger.warning("ListDir permission denied: {}", e)
             return f"Error: {e}"
         except Exception as e:
+            logger.warning("ListDir failed: {}", e)
             return f"Error listing directory: {e}"
 

@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from .filesystem_base import _FsTool, _is_blocked_device, _parse_page_range
@@ -154,8 +156,10 @@ class ReadFileTool(_FsTool):
             file_state.record_read(fp, offset=offset, limit=limit)
             return result
         except PermissionError as e:
+            logger.warning("ReadFile permission denied: {}", e)
             return f"Error: {e}"
         except Exception as e:
+            logger.warning("ReadFile failed: {}", e)
             return f"Error reading file: {e}"
 
     def _read_pdf(self, fp: Path, pages: str | None) -> str:
@@ -167,6 +171,7 @@ class ReadFileTool(_FsTool):
         try:
             doc = fitz.open(str(fp))
         except Exception as e:
+            logger.warning("Failed to read PDF: {}", e)
             return f"Error reading PDF: {e}"
 
         total_pages = len(doc)

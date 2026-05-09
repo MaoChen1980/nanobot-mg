@@ -66,8 +66,8 @@ class HeartbeatService:
                     await self._tick()
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.error("Heartbeat error: {}", e)
+            except Exception:
+                logger.exception("Heartbeat error")
 
     async def _tick(self) -> None:
         """Fire a heartbeat trigger into the main session via the bus."""

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import httpx
+from loguru import logger
 
 if TYPE_CHECKING:
     from oauth_cli_kit.models import OAuthToken
@@ -93,8 +94,8 @@ def login_github_copilot(
         if verify_complete:
             try:
                 webbrowser.open(verify_complete)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to open browser for GitHub device login: {}", e)
 
         deadline = time.time() + expires_in
         current_interval = interval
