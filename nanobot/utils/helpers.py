@@ -45,7 +45,7 @@ def current_time_str(timezone: str | None = None) -> str:
     else:
         try:
             tz = ZoneInfo(timezone) if timezone else None
-        except (KeyError, Exception):
+        except Exception:
             tz = None
         now = datetime.now(tz=tz) if tz else datetime.now().astimezone()
 

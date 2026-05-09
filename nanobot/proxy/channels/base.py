@@ -120,7 +120,7 @@ class BaseProxyChannel:
                 if tcp_keepalive is not None and not hasattr(_socket, "TCP_KEEPIDLE"):
                     sock.setsockopt(_socket.IPPROTO_TCP, tcp_keepalive, 5)
         except Exception:
-            pass  # best-effort
+            logger.debug("Failed to enable TCP keepalive options")  # best-effort
 
     def _enable_tcp_keepalive(self) -> None:
         """Configure TCP keepalive on the connection socket."""
@@ -130,7 +130,7 @@ class BaseProxyChannel:
             if sock is not None:
                 self._enable_tcp_keepalive_from_sock(sock)
         except Exception:
-            pass
+            logger.debug("Failed to enable TCP keepalive")
 
     async def _do_send(self, msg: dict[str, Any]) -> HubResponse:
         """Raw send to Hub — no retry logic."""
@@ -196,7 +196,7 @@ class BaseProxyChannel:
                     try:
                         await self._writer.wait_closed()
                     except Exception:
-                        pass
+                        logger.debug("Failed to close writer during reconnect")
 
                 self._reader, self._writer = await asyncio.open_connection(
                     self.hub_tcp_host, self.hub_tcp_port,

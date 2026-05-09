@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from starlette.applications import Starlette
@@ -18,6 +19,34 @@ from nanobot.utils.media_decode import FileSizeExceeded as _FileSizeExceeded  # 
 from nanobot.utils.media_decode import MAX_FILE_SIZE  # noqa: F401
 from nanobot.utils.media_decode import save_base64_data_url as _save_base64_data_url  # noqa: F401
 
+# Config cache: keyed by config file mtime, auto-invalidates on save
+_config_cache: tuple[float, Any] | None = None
+
+def _cached_config() -> Any:
+    global _config_cache
+    from nanobot.config.loader import load_config
+    from nanobot.config.paths import get_config_path
+    path = get_config_path()
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = 0
+    if _config_cache is not None and _config_cache[0] == mtime:
+        return _config_cache[1]
+    config = _cached_config()
+    _config_cache = (mtime, config)
+    return config
+
+# MemoryStore shared instance (workspace never changes at runtime)
+_memory_store: Any | None = None
+
+def _get_memory_store(workspace: Path) -> Any:
+    global _memory_store
+    if _memory_store is None:
+        from nanobot.agent.memory_store import MemoryStore
+        _memory_store = MemoryStore(workspace)
+    return _memory_store
+
 
 async def handle_health(request: Request) -> Response:
     """GET /health"""
@@ -27,7 +56,7 @@ async def handle_health(request: Request) -> Response:
 async def handle_workspace_file(request: Request) -> Response:
     """GET /api/workspace/file?path=... — serve a markdown file from workspace with path-traversal guard."""
     from nanobot.config.loader import load_config
-    config = load_config()
+    config = _cached_config()
     workspace = config.workspace_path
     file_path = request.query_params.get("path", "memory/MEMORY.md")
     resolved = (workspace / file_path).resolve()
@@ -35,7 +64,11 @@ async def handle_workspace_file(request: Request) -> Response:
         return JSONResponse({"error": "Access denied"}, status_code=403)
     if not resolved.exists() or not resolved.is_file():
         return JSONResponse({"content": "", "exists": False})
-    content = resolved.read_text(encoding="utf-8")
+    try:
+        content = resolved.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.exception("Failed to read workspace file: {}", file_path)
+        return JSONResponse({"error": str(e)}, status_code=500)
     return JSONResponse({"content": content, "path": file_path, "exists": True})
 
 
@@ -47,10 +80,9 @@ async def handle_memory_search(request: Request) -> Response:
     if not q:
         return JSONResponse({"results": []})
 
-    config = load_config()
+    config = _cached_config()
     workspace = config.workspace_path
-    from nanobot.agent.memory_store import MemoryStore
-    store = MemoryStore(workspace)
+    store = _get_memory_store(workspace)
 
     # Try vector search first
     store.vector_index.load()
@@ -134,7 +166,7 @@ async def handle_memory_rebuild_index(request: Request) -> Response:
     import asyncio
     from nanobot.config.loader import load_config
 
-    config = load_config()
+    config = _cached_config()
     workspace = config.workspace_path
 
     loop = asyncio.get_event_loop()
@@ -164,7 +196,7 @@ async def handle_settings_get(request: Request) -> Response:
         logger.exception("Failed to import load_config for /api/settings")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-    config = load_config()
+    config = _cached_config()
     defaults = config.agents.defaults
 
     provider_name = config.get_provider_name(defaults.model) or defaults.provider
@@ -196,7 +228,7 @@ async def handle_config_get(request: Request) -> Response:
         logger.exception("Failed to import load_config for /api/config")
         return JSONResponse({"error": str(e)}, status_code=500)
     try:
-        config = load_config()
+        config = _cached_config()
         return JSONResponse(config.model_dump())
     except Exception as e:
         logger.exception("Failed to load config for /api/config")
@@ -227,7 +259,7 @@ async def handle_config_update(request: Request) -> Response:
                 ch, _ = key.split(":", 1)
                 ch_cfg = channels_data.get(ch, {})
                 if isinstance(ch_cfg, dict) and not ch_cfg.get("enabled", False):
-                    proxy_manager.stop_proxy(key)
+                    await proxy_manager.stop_proxy(key)
 
         return JSONResponse({"ok": True})
     except Exception as e:
@@ -245,7 +277,7 @@ async def handle_provider_models(request: Request) -> Response:
     except Exception as e:
         logger.exception("Failed to import load_config for /api/provider-models")
         return JSONResponse({"error": str(e)}, status_code=500)
-    config = load_config()
+    config = _cached_config()
     provider_cfg = getattr(config.providers, provider, None)
     if not provider_cfg or not provider_cfg.api_key:
         return JSONResponse({"models": []})
@@ -299,7 +331,7 @@ async def handle_settings_update(request: Request) -> Response:
     except Exception:
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
-    config = load_config()
+    config = _cached_config()
     updated = False
 
     if "model" in data and data["model"]:
@@ -426,15 +458,12 @@ async def handle_memory_chat(request: Request) -> Response:
 
     from nanobot.config.loader import load_config
 
-    config = load_config()
+    config = _cached_config()
     workspace = config.workspace_path
     model = config.agents.defaults.model
 
     # Search memory via FAISS + grep fallback
-    from nanobot.agent.memory_store import MemoryStore
-
-    store = MemoryStore(workspace)
-    store.vector_index.load()
+    store = _get_memory_store(workspace)
     results = store.vector_index.search(message, k=5)
     if not results:
         results = _grep_memory(workspace, message)

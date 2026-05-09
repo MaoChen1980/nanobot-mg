@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext
 
 
@@ -23,7 +24,7 @@ class ContextMonitorHook(AgentHook):
         try:
             self._check(context)
         except Exception:
-            pass
+            logger.debug("ContextMonitorHook.before_iteration failed")
 
     def _check(self, context: AgentHookContext) -> None:
         workspace = self._resolve_workspace(context)

@@ -508,7 +508,7 @@ class SessionManager:
                         os.close(fd)
                 except PermissionError:
                     pass  # Windows — directory fsync not supported
-        except BaseException:
+        except Exception:
             tmp_path.unlink(missing_ok=True)
             raise
 

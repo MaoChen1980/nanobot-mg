@@ -99,8 +99,9 @@ async def validate_resolved_url(url: str) -> tuple[bool, str]:
     """Validate an already-fetched URL (e.g. after redirect). Only checks the IP, skips DNS."""
     try:
         p = urlparse(url)
-    except Exception:
-        return True, ""
+    except Exception as e:
+        logger.warning("Failed to parse URL in validate_resolved_url: {} ({})", url, e)
+        return False, f"Invalid URL: {e}"
 
     hostname = p.hostname
     if not hostname:
@@ -133,7 +134,8 @@ def contains_internal_url(command: str) -> bool:
         url = m.group(0)
         try:
             p = urlparse(url)
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to parse URL in contains_internal_url: {} ({})", url, e)
             continue
         if p.scheme not in ("http", "https"):
             continue

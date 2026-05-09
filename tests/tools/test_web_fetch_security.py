@@ -100,7 +100,7 @@ async def test_web_fetch_blocks_private_redirect_before_returning_image(monkeypa
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        def stream(self, method, url, headers=None):
+        def stream(self, method, url, **kwargs):
             return FakeStreamResponse()
 
     monkeypatch.setattr("nanobot.agent.tools.web.httpx.AsyncClient", FakeClient)

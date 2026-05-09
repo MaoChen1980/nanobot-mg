@@ -37,6 +37,15 @@ class WebToolBase:
         self.proxy = proxy if proxy else None
         self.user_agent = user_agent if user_agent is not None else _DEFAULT_USER_AGENT
 
+    @property
+    def _client(self) -> httpx.AsyncClient:
+        """Lazily-initialized shared HTTP client for connection pooling."""
+        try:
+            return self.__client
+        except AttributeError:
+            self.__client = httpx.AsyncClient(proxy=self.proxy, max_redirects=MAX_REDIRECTS)
+            return self.__client
+
 
 def _strip_tags(text: str) -> str:
     """Remove HTML tags and decode entities."""
@@ -162,14 +171,14 @@ class WebSearchTool(WebToolBase, Tool):
             logger.warning("BRAVE_API_KEY not set, falling back to DuckDuckGo")
             return await self._search_duckduckgo(query, n)
         try:
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
-                r = await client.get(
-                    "https://api.search.brave.com/res/v1/web/search",
-                    params={"q": query, "count": n},
-                    headers={"Accept": "application/json", "X-Subscription-Token": api_key},
-                    timeout=10.0,
-                )
-                r.raise_for_status()
+            client = self._client
+            r = await client.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                params={"q": query, "count": n},
+                headers={"Accept": "application/json", "X-Subscription-Token": api_key},
+                timeout=10.0,
+            )
+            r.raise_for_status()
             items = [
                 {"title": x.get("title", ""), "url": x.get("url", ""), "content": x.get("description", "")}
                 for x in r.json().get("web", {}).get("results", [])
@@ -185,14 +194,14 @@ class WebSearchTool(WebToolBase, Tool):
             logger.warning("TAVILY_API_KEY not set, falling back to DuckDuckGo")
             return await self._search_duckduckgo(query, n)
         try:
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
-                r = await client.post(
-                    "https://api.tavily.com/search",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    json={"query": query, "max_results": n},
-                    timeout=15.0,
-                )
-                r.raise_for_status()
+            client = self._client
+            r = await client.post(
+                "https://api.tavily.com/search",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"query": query, "max_results": n},
+                timeout=15.0,
+            )
+            r.raise_for_status()
             return _format_results(query, r.json().get("results", []), n)
         except Exception as e:
             logger.warning("Tavily search failed: {}", e)
@@ -208,14 +217,14 @@ class WebSearchTool(WebToolBase, Tool):
         if not is_valid:
             return f"Error: invalid SearXNG URL: {error_msg}"
         try:
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
-                r = await client.get(
-                    endpoint,
-                    params={"q": query, "format": "json"},
-                    headers={"User-Agent": self.user_agent},
-                    timeout=10.0,
-                )
-                r.raise_for_status()
+            client = self._client
+            r = await client.get(
+                endpoint,
+                params={"q": query, "format": "json"},
+                headers={"User-Agent": self.user_agent},
+                timeout=10.0,
+            )
+            r.raise_for_status()
             return _format_results(query, r.json().get("results", []), n)
         except Exception as e:
             logger.warning("SearXNG search failed: {}", e)
@@ -229,13 +238,13 @@ class WebSearchTool(WebToolBase, Tool):
         try:
             headers = {"Accept": "application/json", "Authorization": f"Bearer {api_key}"}
             encoded_query = quote(query, safe="")
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
-                r = await client.get(
-                    f"https://s.jina.ai/{encoded_query}",
-                    headers=headers,
-                    timeout=15.0,
-                )
-                r.raise_for_status()
+            client = self._client
+            r = await client.get(
+                f"https://s.jina.ai/{encoded_query}",
+                headers=headers,
+                timeout=15.0,
+            )
+            r.raise_for_status()
             data = r.json().get("data", [])[:n]
             items = [
                 {"title": d.get("title", ""), "url": d.get("url", ""), "content": d.get("content", "")[:500]}
@@ -252,14 +261,14 @@ class WebSearchTool(WebToolBase, Tool):
             logger.warning("KAGI_API_KEY not set, falling back to DuckDuckGo")
             return await self._search_duckduckgo(query, n)
         try:
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
-                r = await client.get(
-                    "https://kagi.com/api/v0/search",
-                    params={"q": query, "limit": n},
-                    headers={"Authorization": f"Bot {api_key}"},
-                    timeout=10.0,
-                )
-                r.raise_for_status()
+            client = self._client
+            r = await client.get(
+                "https://kagi.com/api/v0/search",
+                params={"q": query, "limit": n},
+                headers={"Authorization": f"Bot {api_key}"},
+                timeout=10.0,
+            )
+            r.raise_for_status()
             # t=0 items are search results; other values are related searches, etc.
             items = [
                 {"title": d.get("title", ""), "url": d.get("url", ""), "content": d.get("snippet", "")}
@@ -334,8 +343,8 @@ class WebFetchTool(WebToolBase, Tool):
 
         # Detect and fetch images directly to avoid Jina's textual image captioning
         try:
-            async with httpx.AsyncClient(proxy=self.proxy, follow_redirects=True, max_redirects=MAX_REDIRECTS, timeout=15.0) as client:
-                async with client.stream("GET", url, headers={"User-Agent": self.user_agent}) as r:
+            client = self._client
+            async with client.stream("GET", url, headers={"User-Agent": self.user_agent}, follow_redirects=True, timeout=15.0) as r:
                     from nanobot.security.network import validate_resolved_url
 
                     redir_ok, redir_err = await validate_resolved_url(str(r.url))
@@ -364,12 +373,12 @@ class WebFetchTool(WebToolBase, Tool):
             jina_key = os.environ.get("JINA_API_KEY", "")
             if jina_key:
                 headers["Authorization"] = f"Bearer {jina_key}"
-            async with httpx.AsyncClient(proxy=self.proxy, timeout=20.0) as client:
-                r = await client.get(f"https://r.jina.ai/{url}", headers=headers)
-                if r.status_code == 429:
-                    logger.debug("Jina Reader rate limited, falling back to readability")
-                    return None
-                r.raise_for_status()
+            client = self._client
+            r = await client.get(f"https://r.jina.ai/{url}", headers=headers, timeout=20.0)
+            if r.status_code == 429:
+                logger.debug("Jina Reader rate limited, falling back to readability")
+                return None
+            r.raise_for_status()
 
             data = r.json().get("data", {})
             title = data.get("title", "")
@@ -398,14 +407,9 @@ class WebFetchTool(WebToolBase, Tool):
         from readability import Document
 
         try:
-            async with httpx.AsyncClient(
-                follow_redirects=True,
-                max_redirects=MAX_REDIRECTS,
-                timeout=30.0,
-                proxy=self.proxy,
-            ) as client:
-                r = await client.get(url, headers={"User-Agent": self.user_agent})
-                r.raise_for_status()
+            client = self._client
+            r = await client.get(url, headers={"User-Agent": self.user_agent}, follow_redirects=True, timeout=30.0)
+            r.raise_for_status()
 
             from nanobot.security.network import validate_resolved_url
             redir_ok, redir_err = await validate_resolved_url(str(r.url))

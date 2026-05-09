@@ -788,6 +788,7 @@ def _get_bridge_dir() -> Path:
     # Check for npm
     npm_path = shutil.which("npm")
     if not npm_path:
+        logger.error("npm not found. Please install Node.js >= 18.")
         console.print("[red]npm not found. Please install Node.js >= 18.[/red]")
         raise typer.Exit(1)
 
@@ -802,6 +803,7 @@ def _get_bridge_dir() -> Path:
         source = src_bridge
 
     if not source:
+        logger.error("Bridge source not found")
         console.print("[red]Bridge source not found.[/red]")
         console.print("Try reinstalling: pip install --force-reinstall nanobot")
         raise typer.Exit(1)
@@ -824,6 +826,7 @@ def _get_bridge_dir() -> Path:
 
         console.print("[green]✓[/green] Bridge ready\n")
     except subprocess.CalledProcessError as e:
+        logger.error("Bridge build failed: {}", e)
         console.print(f"[red]Build failed: {e}[/red]")
         if e.stderr:
             console.print(f"[dim]{e.stderr.decode()[:500]}[/dim]")
@@ -853,6 +856,7 @@ def channels_login(
     all_channels = discover_all()
     if channel_name not in all_channels:
         available = ", ".join(all_channels.keys())
+        logger.error("Unknown channel: {}  Available: {}", channel_name, available)
         console.print(f"[red]Unknown channel: {channel_name}[/red]  Available: {available}")
         raise typer.Exit(1)
 
@@ -976,11 +980,13 @@ def provider_login(
     spec = next((s for s in PROVIDERS if s.name == key and s.is_oauth), None)
     if not spec:
         names = ", ".join(s.name.replace("_", "-") for s in PROVIDERS if s.is_oauth)
+        logger.error("Unknown OAuth provider: {}  Supported: {}", provider, names)
         console.print(f"[red]Unknown OAuth provider: {provider}[/red]  Supported: {names}")
         raise typer.Exit(1)
 
     handler = _LOGIN_HANDLERS.get(spec.name)
     if not handler:
+        logger.error("Login not implemented for {}", spec.label)
         console.print(f"[red]Login not implemented for {spec.label}[/red]")
         raise typer.Exit(1)
 
@@ -1005,10 +1011,12 @@ def _login_openai_codex() -> None:
                 prompt_fn=lambda s: typer.prompt(s),
             )
         if not (token and token.access):
+            logger.error("Authentication failed for OpenAI Codex")
             console.print("[red]✗ Authentication failed[/red]")
             raise typer.Exit(1)
         console.print(f"[green]✓ Authenticated with OpenAI Codex[/green]  [dim]{token.account_id}[/dim]")
     except ImportError:
+        logger.warning("oauth_cli_kit not installed")
         console.print("[red]oauth_cli_kit not installed. Run: pip install oauth-cli-kit[/red]")
         raise typer.Exit(1)
 

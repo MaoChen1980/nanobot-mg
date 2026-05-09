@@ -42,7 +42,8 @@ def _compute_next_run(schedule: CronSchedule, now_ms: int) -> Optional[int]:
             cron = croniter(schedule.expr, base_dt)
             next_dt = cron.get_next(datetime)
             return int(next_dt.timestamp() * 1000)
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to compute next cron trigger time: {}", e)
             return None
 
     return None

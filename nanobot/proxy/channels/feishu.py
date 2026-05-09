@@ -8,6 +8,7 @@ import re
 import sys
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from loguru import logger
@@ -32,6 +33,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             if config.get("domain", "feishu") == "feishu"
             else "https://open.larksuite.com"
         )
+        self._thread_pool = ThreadPoolExecutor(max_workers=10)
 
     # ------------------------------------------------------------------
     # Message handler (called from Feishu SDK thread)
@@ -80,11 +82,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                     logger.error("Failed to send reply/reaction: {}", e)
 
             msg_data = self.build_message(sender_id, chat_id, text, message_id)
-            t = threading.Thread(
-                target=lambda: _do_reply(self.send_to_hub(msg_data)),
-                daemon=True,
-            )
-            t.start()
+            self._thread_pool.submit(lambda: _do_reply(self.send_to_hub(msg_data)))
 
         except Exception as e:
             logger.error("Feishu proxy message handler error: {}", e)

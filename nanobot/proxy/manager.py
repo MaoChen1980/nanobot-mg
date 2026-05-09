@@ -487,9 +487,9 @@ class ProxyManager:
                         "Proxy {} TCP connection lost, restarting...",
                         key
                     )
-                    self._restart_proxy(proxy)
+                    await self._restart_proxy(proxy)
 
-    def _restart_proxy(self, proxy: ProxyInfo) -> None:
+    async def _restart_proxy(self, proxy: ProxyInfo) -> None:
         """Restart a dead proxy."""
         import platform
 
@@ -513,7 +513,8 @@ class ProxyManager:
         # Force-kill on Windows since terminate/wait is unreliable
         if platform.system() == "Windows":
             try:
-                subprocess.run(
+                await asyncio.to_thread(
+                    subprocess.run,
                     ["taskkill", "/F", "/T", "/PID", str(pid)],
                     capture_output=True,
                 )
@@ -570,7 +571,7 @@ class ProxyManager:
     def get_proxy_keys(self) -> list[str]:
         return list(self._proxies.keys())
 
-    def stop_proxy(self, key: str) -> None:
+    async def stop_proxy(self, key: str) -> None:
         """Stop a single proxy process and remove it from tracking."""
         proxy = self._proxies.pop(key, None)
         if proxy is None:
@@ -590,7 +591,11 @@ class ProxyManager:
         pid = proxy.process.pid
         try:
             if platform.system() == "Windows":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                )
             else:
                 proxy.process.terminate()
                 proxy.process.wait(timeout=3)

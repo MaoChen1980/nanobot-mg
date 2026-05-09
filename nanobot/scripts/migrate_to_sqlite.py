@@ -70,8 +70,8 @@ def migrate_history(conn: sqlite3.Connection, workspace: Path) -> int:
                     (rec["cursor"], rec["timestamp"], rec["content"]),
                 )
                 count += 1
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Warning: failed to migrate history entry: {e}")
     conn.commit()
     return count
 
@@ -88,8 +88,8 @@ def migrate_cursors(conn: sqlite3.Connection, workspace: Path) -> tuple[int, int
                 "INSERT OR REPLACE INTO metadata (key, value) VALUES ('cursor', ?)",
                 (str(cursor_val),),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: failed to migrate cursor: {e}")
     if dream_file.exists():
         try:
             dream_val = int(dream_file.read_text(encoding="utf-8").strip())
@@ -97,8 +97,8 @@ def migrate_cursors(conn: sqlite3.Connection, workspace: Path) -> tuple[int, int
                 "INSERT OR REPLACE INTO metadata (key, value) VALUES ('dream_cursor', ?)",
                 (str(dream_val),),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: failed to migrate dream cursor: {e}")
     if cursor_val or dream_val:
         conn.commit()
     return cursor_val, dream_val
@@ -151,8 +151,8 @@ def migrate_sessions(conn: sqlite3.Connection, workspace: Path) -> int:
                     ),
                 )
             count += 1
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: failed to migrate session {key}: {e}")
     conn.commit()
     return count
 

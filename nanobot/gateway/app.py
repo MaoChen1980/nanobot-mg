@@ -406,6 +406,7 @@ class GatewayApplication:
                 f"{', '.join(self.channels.enabled_channels)}"
             )
         else:
+            logger.warning("No channels enabled")
             console.print("[yellow]Warning: No channels enabled[/yellow]")
 
         cron_status = self.cron.status()
