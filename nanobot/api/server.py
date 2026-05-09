@@ -6,7 +6,7 @@ from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -393,6 +393,118 @@ async def handle_stop(request: Request) -> Response:
     return JSONResponse({"ok": True, "message": "Gateway shutting down"})
 
 
+async def handle_memory_chat(request: Request) -> Response:
+    """POST /api/memory/chat — AI chat over memory with SSE streaming (Google AI mode-style)."""
+    import asyncio
+    import json
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    message = (body.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"error": "message required"}, status_code=400)
+
+    history = body.get("history", [])
+    if not isinstance(history, list):
+        return JSONResponse({"error": "history must be a list"}, status_code=400)
+
+    from nanobot.config.loader import load_config
+
+    config = load_config()
+    workspace = config.workspace_path
+    model = config.agents.defaults.model
+
+    # Search memory via FAISS + grep fallback
+    from nanobot.agent.memory_store import MemoryStore
+
+    store = MemoryStore(workspace)
+    store.vector_index.load()
+    results = store.vector_index.search(message, k=5)
+    if not results:
+        results = _grep_memory(workspace, message)
+
+    # Build system prompt with search results as context
+    sources_data: list[dict] = []
+    context_parts: list[str] = []
+    for r in results:
+        label = f"{r['source']} — {r['heading']}" if r.get("heading") else r["source"]
+        context_parts.append(f"### {label} (relevance: {r.get('score', 0):.2f})\n{r['text']}")
+        sources_data.append({
+            "source": r["source"],
+            "heading": r.get("heading", ""),
+            "score": r.get("score", 0),
+            "text": r["text"][:200],
+        })
+
+    context_str = "\n\n".join(context_parts) if context_parts else "No relevant memory found."
+
+    system_prompt = (
+        "You are an AI assistant answering questions about the user's personal memory and knowledge base. "
+        "Use the retrieved context below to answer. "
+        "Cite sources inline using the format `[source: filename]`. "
+        "If the context doesn't contain relevant information, say so clearly.\n\n"
+        f"## Retrieved Context\n{context_str}"
+    )
+
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": message})
+
+    from nanobot.providers.factory import make_provider
+
+    provider = make_provider(config)
+
+    async def event_stream():
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        async def on_token(token: str):
+            await queue.put(token)
+
+        async def run_chat():
+            try:
+                await provider.chat_stream_with_retry(
+                    model=model,
+                    messages=messages,
+                    on_content_delta=on_token,
+                )
+            except Exception as e:
+                await queue.put(f"__error__:{e}")
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run_chat())
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            if item.startswith("__error__:"):
+                payload = json.dumps({"error": item[10:]}, ensure_ascii=False)
+                yield f"event: error\ndata: {payload}\n\n"
+            else:
+                payload = json.dumps({"token": item}, ensure_ascii=False)
+                yield f"event: token\ndata: {payload}\n\n"
+
+        # Send sources after tokens complete
+        sources_payload = json.dumps({"sources": sources_data}, ensure_ascii=False)
+        yield f"event: sources\ndata: {sources_payload}\n\n"
+        yield "event: done\ndata: {}\n\n"
+
+        await task
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 def create_app(index_html_path: str | Path = "", proxy_manager=None) -> Starlette:
     """Create Starlette app with only settings API."""
     public_dir = Path(index_html_path).parent / "public"
@@ -413,6 +525,7 @@ def create_app(index_html_path: str | Path = "", proxy_manager=None) -> Starlett
         Route("/api/workspace/file", endpoint=handle_workspace_file),
         Route("/api/memory/search", endpoint=handle_memory_search),
         Route("/api/memory/rebuild-index", endpoint=handle_memory_rebuild_index, methods=["POST"]),
+        Route("/api/memory/chat", endpoint=handle_memory_chat, methods=["POST"]),
     ]
     if public_dir.is_dir():
         routes.append(

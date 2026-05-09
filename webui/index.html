@@ -211,6 +211,41 @@
   .memory-search-bar button { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.875rem; transition: all 0.15s; }
   .memory-search-bar button:hover { background: var(--header-hover); border-color: var(--border-hover); }
   .memory-search-bar .llm-active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+
+  /* Memory mode toggle */
+  .memory-mode-tabs { display: flex; gap: 0.25rem; flex-shrink: 0; }
+  .memory-mode-tab { padding: 0.35rem 0.65rem; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text-muted); transition: all 0.15s; white-space: nowrap; }
+  .memory-mode-tab:hover { border-color: var(--border-hover); background: var(--header-hover); }
+  .memory-mode-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  /* AI Chat view */
+  #aiChatView { display: none; flex-direction: column; gap: 0; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow-sm); height: calc(100vh - 420px); min-height: 300px; margin-bottom: 0.5rem; }
+  .chat-welcome { text-align: center; color: var(--text-muted); padding: 3rem 1rem; font-size: 0.875rem; }
+  .chat-msg { margin-bottom: 1rem; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .chat-msg-user { text-align: right; }
+  .chat-msg-assistant { text-align: left; }
+  .chat-bubble { display: inline-block; max-width: 85%; padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.875rem; line-height: 1.6; text-align: left; word-wrap: break-word; }
+  .chat-bubble-user { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+  .chat-bubble-assistant { background: var(--bg); color: var(--text); border-bottom-left-radius: 4px; }
+  .chat-bubble-assistant p { margin: 0.25rem 0; }
+  .chat-bubble-assistant p:first-child { margin-top: 0; }
+  .chat-bubble-assistant p:last-child { margin-bottom: 0; }
+  .chat-bubble-assistant code { background: #e8ecf0; padding: 0.15rem 0.3rem; border-radius: 4px; font-size: 0.8rem; }
+  .chat-bubble-assistant pre { background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; overflow-x: auto; margin: 0.5rem 0; }
+  .chat-bubble-assistant pre code { background: none; padding: 0; }
+  .chat-bubble-assistant ul, .chat-bubble-assistant ol { padding-left: 1.25rem; margin: 0.25rem 0; }
+  .chat-bubble-assistant blockquote { border-left: 3px solid var(--primary); padding-left: 0.75rem; margin: 0.5rem 0; color: var(--text-muted); }
+  .chat-sources { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--text-muted); }
+  .chat-source-chip { display: inline-block; padding: 0.2rem 0.5rem; margin: 0.15rem; background: var(--primary-light); border-radius: 4px; cursor: pointer; font-size: 0.7rem; color: var(--primary); transition: all 0.15s; }
+  .chat-source-chip:hover { background: var(--primary); color: white; }
+  .chat-input-bar { display: flex; gap: 0.5rem; padding: 0; }
+  .chat-input-bar input { flex: 1; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; font-size: 0.875rem; outline: none; transition: border-color 0.15s; background: var(--surface); }
+  .chat-input-bar input:focus { border-color: var(--primary); }
+  .chat-input-bar button { padding: 0.6rem 1.25rem; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 0.875rem; }
+  .chat-input-bar button:hover { background: var(--primary-hover); }
+  .chat-input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -244,13 +279,25 @@
     <div id="tabGateway" class="tab-panel"></div>
     <div id="tabMemory" class="tab-panel">
       <div class="memory-search-bar">
+        <div class="memory-mode-tabs">
+          <button type="button" class="memory-mode-tab active" data-mode="browse" onclick="setMemoryMode('browse')">Browse</button>
+          <button type="button" class="memory-mode-tab" data-mode="chat" onclick="setMemoryMode('chat')">AI Chat</button>
+        </div>
         <input type="text" id="memorySearchInput" placeholder="Search memory..." onkeydown="if(event.key==='Enter') doMemorySearch()">
         <button type="button" onclick="doMemorySearch()" title="Search">&#x1F50D;</button>
-        <button type="button" id="memoryLlmToggle" onclick="toggleMemoryLlm()" title="LLM interpretation">AI</button>
         <button type="button" onclick="rebuildMemoryIndex()" title="Rebuild index" style="font-size:0.75rem">&#x1F504; Rebuild</button>
       </div>
       <div id="memoryIndexStatus" style="padding:0.25rem 0.75rem;font-size:0.75rem;color:var(--text-muted)"></div>
       <div id="memoryContent"><div class="card"><div class="markdown-body loading">Switch to Memory tab to load.</div></div></div>
+      <div id="aiChatView">
+        <div id="aiChatMessages" class="chat-messages">
+          <div class="chat-welcome">Ask anything about your memory archives...</div>
+        </div>
+        <div class="chat-input-bar">
+          <input type="text" id="aiChatInput" placeholder="Ask a follow-up..." onkeydown="if(event.key==='Enter') sendAiChat()">
+          <button type="button" id="aiChatSendBtn" onclick="sendAiChat()">Send</button>
+        </div>
+      </div>
     </div>
   </form>
 </div>
@@ -783,13 +830,11 @@ function resolveMemoryPath(href) {
   return parts.join('/');
 }
 
-let memorySearchLlm = false; // toggle for LLM interpretation
-
-function toggleMemoryLlm() {
-  memorySearchLlm = !memorySearchLlm;
-  const btn = document.getElementById('memoryLlmToggle');
-  if (btn) btn.className = memorySearchLlm ? 'llm-active' : '';
-}
+// ── AI Chat state ──
+let aiChatMode = false;
+let chatHistory = [];
+let chatMessages = [];
+let isStreaming = false;
 
 function renderMemory() {
   const el = document.getElementById('tabMemory');
@@ -797,7 +842,6 @@ function renderMemory() {
   memoryStack.length = 1;
   memoryStack[0] = 'memory/MEMORY.md';
   el.querySelector('#memorySearchInput').value = '';
-  el.querySelector('#memoryLlmToggle').className = '';
   el.querySelector('#memoryContent').innerHTML = '<div class="card"><div class="markdown-body loading">Switch to Memory tab to load.</div></div>';
 }
 
@@ -856,7 +900,7 @@ async function doMemorySearch() {
   const content = document.getElementById('memoryContent');
   content.innerHTML = '<div class="card"><div class="markdown-body loading">Searching...</div></div>';
   try {
-    const res = await fetch('/api/memory/search?q=' + encodeURIComponent(q) + (memorySearchLlm ? '&llm=1' : ''));
+    const res = await fetch('/api/memory/search?q=' + encodeURIComponent(q));
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     let html = '<div class="card">';
@@ -909,6 +953,155 @@ async function rebuildMemoryIndex() {
   } catch(e) {
     status.textContent = 'Failed: ' + e.message;
   }
+}
+
+// ── AI Chat Mode ───────────────────────────────────────────────────────────────
+function setMemoryMode(mode) {
+  aiChatMode = mode === 'chat';
+  document.querySelectorAll('.memory-mode-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mode === mode);
+  });
+  document.getElementById('memoryContent').style.display = aiChatMode ? 'none' : '';
+  document.getElementById('aiChatView').style.display = aiChatMode ? 'flex' : 'none';
+  document.getElementById('memorySearchInput').style.display = aiChatMode ? 'none' : '';
+  document.getElementById('memoryIndexStatus').style.display = aiChatMode ? 'none' : '';
+  // Hide the search and rebuild buttons in AI Chat mode
+  const searchBar = document.querySelector('.memory-search-bar');
+  searchBar.querySelectorAll('button').forEach(b => {
+    if (!b.classList.contains('memory-mode-tab')) b.style.display = aiChatMode ? 'none' : '';
+  });
+  if (aiChatMode) {
+    document.getElementById('aiChatInput').focus();
+  }
+}
+
+async function sendAiChat() {
+  const input = document.getElementById('aiChatInput');
+  const msg = input.value.trim();
+  if (!msg || isStreaming) return;
+
+  // Add user message to display and history
+  chatHistory.push({role: 'user', content: msg});
+  chatMessages.push({role: 'user', content: msg});
+  renderChatMessages();
+  input.value = '';
+  isStreaming = true;
+  document.getElementById('aiChatSendBtn').disabled = true;
+
+  // Add placeholder assistant message
+  const assistantMsg = {role: 'assistant', content: '', sources: []};
+  chatMessages.push(assistantMsg);
+  renderChatMessages();
+
+  try {
+    const res = await fetch('/api/memory/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        message: msg,
+        history: chatHistory.slice(0, -1), // exclude current message since it's in messages
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      assistantMsg.content = 'Error: ' + (errData.error || 'HTTP ' + res.status);
+      renderChatMessages();
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+
+      // Split SSE events by double newline
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() || '';
+
+      for (const chunk of chunks) {
+        if (!chunk.trim()) continue;
+        const lines = chunk.split('\n');
+        let eventType = '';
+        let dataStr = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            dataStr = line.slice(6);
+          }
+        }
+        if (!dataStr) continue;
+        try {
+          const data = JSON.parse(dataStr);
+          if (eventType === 'token') {
+            assistantMsg.content += data.token || '';
+            renderChatMessages();
+          } else if (eventType === 'sources') {
+            assistantMsg.sources = data.sources || [];
+            renderChatMessages();
+          } else if (eventType === 'error') {
+            assistantMsg.content += '\n\n*Error: ' + esc(data.error || 'Unknown error') + '*';
+            renderChatMessages();
+          }
+        } catch (e) {
+          // skip malformed JSON
+        }
+      }
+    }
+  } catch (e) {
+    assistantMsg.content = 'Failed to get response: ' + e.message;
+    renderChatMessages();
+  } finally {
+    isStreaming = false;
+    document.getElementById('aiChatSendBtn').disabled = false;
+    chatHistory.push({role: 'assistant', content: assistantMsg.content});
+    scrollChatToBottom();
+    document.getElementById('aiChatInput').focus();
+  }
+}
+
+function renderChatMessages() {
+  const container = document.getElementById('aiChatMessages');
+  let html = '';
+  for (const msg of chatMessages) {
+    if (msg.role === 'user') {
+      html += '<div class="chat-msg chat-msg-user"><div class="chat-bubble chat-bubble-user">'
+        + esc(msg.content) + '</div></div>';
+    } else if (msg.role === 'assistant') {
+      const contentHtml = msg.content
+        ? marked.parse(msg.content, {breaks: true})
+        : '<em>Thinking...</em>';
+      html += '<div class="chat-msg chat-msg-assistant"><div class="chat-bubble chat-bubble-assistant">'
+        + contentHtml + '</div>';
+      if (msg.sources && msg.sources.length > 0) {
+        html += '<div class="chat-sources"><strong>Sources:</strong> ';
+        for (const s of msg.sources) {
+          const label = s.heading ? s.source + ' — ' + s.heading : s.source;
+          html += '<span class="chat-source-chip" onclick="openMemorySource(\'' + esc(s.source) + '\')">📄 ' + esc(label) + ' (' + s.score.toFixed(2) + ')</span> ';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+  }
+  container.innerHTML = html;
+  scrollChatToBottom();
+}
+
+function scrollChatToBottom() {
+  const container = document.getElementById('aiChatMessages');
+  if (container) container.scrollTop = container.scrollHeight;
+}
+
+function openMemorySource(source) {
+  // Switch to Browse mode and open the source file
+  setMemoryMode('browse');
+  loadMemory(source);
 }
 
 // ── Field helpers ─────────────────────────────────────────────────────────────
