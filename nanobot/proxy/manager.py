@@ -544,7 +544,7 @@ class ProxyManager:
         (e.g. user toggles enabled: false while gateway is running).
         Falls back to empty dict if config file is unreadable.
         """
-        if not self._config_path or not os.path.exists(self._config_path):
+        if not self._config_path:
             return {}
         import json
         try:
@@ -553,7 +553,7 @@ class ProxyManager:
             channels = data.get("channels", {})
             return {name: ch.get("enabled", False) for name, ch in channels.items()}
         except Exception:
-            logger.warning("Failed to read config from {}", self._config_path)
+            logger.debug("Failed to read config from {}", self._config_path)
             return {}
 
     @property
