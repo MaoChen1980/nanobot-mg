@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +73,7 @@ class GatewayApplication:
         self._wire_callbacks()
         self._print_startup_status()
         self._register_dream_job()
+        self._register_log_check_job()
 
         try:
             await self._start_all()
@@ -267,6 +270,10 @@ class GatewayApplication:
                     logger.exception("Dream cron job failed")
                 return None
 
+            if job.name == "log_check":
+                await self._run_log_check(_deliver_to_channel)
+                return None
+
             # Check if this is a test/dry-run execution
             is_test_mode = isinstance(getattr(self.agent.tools.get("cron"), "_test_mode", None), object)
 
@@ -319,6 +326,9 @@ class GatewayApplication:
                         line = content.strip().split("\n")[0][:80]
                         if line:
                             log.append(f"  [Thought] {line}")
+
+            async def _silent(content: str, *, tool_hint: bool = False, tool_events: list = None) -> None:
+                pass
 
             # Determine on_progress: use visible in test mode, silent otherwise
             is_test = getattr(cron_tool, "_test_mode", None) and cron_tool._test_mode.get()
@@ -431,6 +441,136 @@ class GatewayApplication:
         console.print(
             f"[green]✓[/green] Dream: {dream_cfg.describe_schedule()}"
         )
+
+    def _register_log_check_job(self) -> None:
+        """Register the log check system cron job (every 2 hours)."""
+        from nanobot.cron.types import CronJob, CronPayload, CronSchedule
+
+        self.cron.register_system_job(
+            CronJob(
+                id="log_check",
+                name="log_check",
+                schedule=CronSchedule(kind="every", every_ms=7_200_000),
+                payload=CronPayload(kind="system_event"),
+            )
+        )
+        console.print("[green]✓[/green] Log check: every 2 hours")
+
+    async def _run_log_check(self, deliver_fn) -> None:
+        """Check JSONL log for new ERROR/CRITICAL entries and alert active sessions."""
+        from nanobot.bus.events import OutboundMessage
+        from nanobot.config.paths import get_data_dir
+
+        log_name = self.config.logging.file
+        if not log_name:
+            return
+        log_path = get_data_dir() / log_name
+        if not log_path.exists():
+            return
+
+        # Track byte offset to avoid re-reporting
+        cursor_path = get_data_dir() / ".log_check_cursor"
+        is_first_run = not cursor_path.exists()
+        cursor = 0
+        if not is_first_run:
+            try:
+                cursor = int(cursor_path.read_text().strip())
+            except (ValueError, OSError):
+                cursor = 0
+
+        file_size = log_path.stat().st_size
+        if file_size < cursor:  # log was rotated
+            cursor = 0
+        if file_size == cursor:
+            return
+
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                f.seek(cursor)
+                new_content = f.read()
+            cursor_path.write_text(str(file_size))
+        except OSError:
+            logger.exception("Log check: failed to read log file")
+            return
+
+        if not new_content:
+            return
+
+        # JSONL format: {"t":"...","l":"ERROR","n":"...","f":"...","m":"..."}
+        errors = []
+        for line in new_content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("l") in ("ERROR", "CRITICAL"):
+                errors.append(entry)
+
+        if not errors:
+            return
+
+        # Don't alert on the very first run (would report all historical errors)
+        if is_first_run:
+            logger.info("Log check: first run, skipping alert (cursor={})", file_size)
+            return
+
+        # Build concise alert
+        MAX_SHOWN = 15
+        shown = errors[:MAX_SHOWN]
+        total_new = len(new_content.splitlines())
+        parts = [
+            f"[Log Alert] {len(errors)} new error(s) in {total_new} new log entries:"
+        ]
+        for entry in shown:
+            ts = entry.get("t", "")[-8:]  # HH:MM:SS
+            src = entry.get("f", "?")
+            msg = entry.get("m", "")
+            parts.append(f"  [{ts}] {src} - {msg[:200]}")
+        if len(errors) > MAX_SHOWN:
+            parts.append(f"  ... and {len(errors) - MAX_SHOWN} more")
+
+        alert = "\n".join(parts)
+
+        # Broadcast to recently active proxy sessions
+        sessions = self.session_manager.list_sessions()
+        now = datetime.now(timezone.utc)
+        sent = 0
+        for session in sessions:
+            key = session.get("key", "")
+            if not key.startswith("proxy:"):
+                continue
+            # Skip stale sessions (>24h idle)
+            updated = session.get("updated_at")
+            if updated:
+                try:
+                    updated_dt = datetime.fromisoformat(updated)
+                    if (now - updated_dt).total_seconds() > 86400:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            # key format: proxy:<channel>:<bot>:<chat_id>
+            parts_key = key.split(":", 3)
+            if len(parts_key) < 4:
+                continue
+            proxy_key = f"{parts_key[1]}:{parts_key[2]}"
+            chat_id = parts_key[3]
+            try:
+                await deliver_fn(
+                    OutboundMessage(
+                        channel=f"proxy:{proxy_key}",
+                        chat_id=chat_id,
+                        content=alert,
+                    ),
+                )
+                sent += 1
+            except Exception:
+                logger.exception("Log check: failed to deliver to session {}", key)
+
+        if sent:
+            logger.info("Log check: alerted {} session(s)", sent)
 
     # ------------------------------------------------------------------
     # Service lifecycle

@@ -34,24 +34,13 @@ class LoggerConfig:
                 format="<green>{time:YYYY-MM-DDTHH:mm:ss.SSSZ}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
             )
 
-        # Add file handler if file path is provided
+        # Add JSONL log file (machine-parseable, agent-friendly)
         if log_config.file:
             log_path = get_data_dir() / log_config.file
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Plain text log (human-readable)
             logger.add(
                 sink=log_path,
-                level=log_config.level,
-                format=_FORMAT,
-                rotation="50 MB",
-                retention="7 days",
-                compression="zip",
-            )
-
-            # JSONL log (machine-parseable, agent-friendly)
-            logger.add(
-                sink=log_path.with_suffix(".jsonl"),
                 level=log_config.level,
                 format=_JSON_FORMAT,
                 rotation="50 MB",

@@ -881,7 +881,7 @@ class TestOnCronJob:
         result = await app.cron.on_job(job)
 
         assert result == "Hi"
-        cron_tool.set_cron_context.assert_called_once_with(True)
+        cron_tool.set_cron_context.assert_called_once_with(True, dry_run=True)
         cron_tool.set_current_job_id.assert_called_once_with("r1")
         cron_tool.reset_cron_context.assert_called_once_with("ctx-token")
         cron_tool.reset_current_job_id.assert_called_once_with("job-token")
