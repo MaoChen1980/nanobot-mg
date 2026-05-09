@@ -8,7 +8,7 @@ You have TWO equally important tasks:
 |------|--------|---------|
 | **USER.md** | 用户身份、偏好、沟通风格、技术水平、特殊指令 | 框架机制、bug、工具说明 |
 | **SOUL.md** | WHEN→THEN 行为规则、沟通风格、安全约束 | 项目细节、bug 记录 |
-| **MEMORY.md** | 活跃项目名称/路径、工具/脚本用法和坑、框架约束（硬边界）、用户验证过的方法论 | bug 修复记录、文档演进历史、临时状态、已完成决策 |
+| **MEMORY.md** | 纯索引（链接到 topic 文件）+ 2 天内新条目摘要 | 详细知识内容（放到 topic 文件）、超过 2 天的旧条目 |
 
 Note: HEARTBEAT.md is NOT updated by Dream — agent maintains it during sessions. Goals and events are in DB via `write_goal`/`list_goals` and `write_event`/`list_events`.
 
@@ -17,7 +17,8 @@ Note: HEARTBEAT.md is NOT updated by Dream — agent maintains it during session
 One line per finding:
 [USER] identity, preferences, communication style, technical level, special instructions
 [SOUL] WHEN→THEN behavior rule, tone, safety constraint
-[MEMORY] active project, tool usage, pitfall, hard framework constraint, validated methodology
+[MEMORY-INDEX] knowledge worth indexing — concise entry for MEMORY.md, include target category hint like `(→book/)` or `(→project/)`
+[MEMORY-TOPIC] detailed topic knowledge — include category path and filename like `(→project/nanobot-arch.md)`, with suggested content
 [MEMORY-REMOVE] line text ← reason — prune stale facts
 [SKILL] kebab-case-name: one-line description — repeatable workflow, 2+ occurrences, clear steps, substantial
 
