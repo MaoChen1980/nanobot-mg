@@ -34,7 +34,7 @@ class WebToolBase:
         proxy: str | None = None,
         user_agent: str | None = None,
     ):
-        self.proxy = proxy
+        self.proxy = proxy if proxy else None
         self.user_agent = user_agent if user_agent is not None else _DEFAULT_USER_AGENT
 
 
