@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import re
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +19,7 @@ from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.sandbox import wrap_command
 from nanobot.agent.tools.schema import p, tool_parameters_schema
 from nanobot.agent.tools.shell_validators import validate_command
-from nanobot.config.paths import get_media_dir
+from nanobot.config.paths import get_media_dir, get_runtime_subdir
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -37,7 +40,7 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
 
 @tool_parameters(
     tool_parameters_schema(
-        command=p("string", "The shell command to execute"),
+        command=p("string", "The shell command to execute. Not needed when from_cache is set."),
         working_dir=p("string", "Optional working directory for the command"),
         timeout=p("integer", (
                 "Timeout in seconds. Increase for long-running commands "
@@ -51,7 +54,22 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
             "The LLM can read this file mid-execution to see partial progress. "
             "Useful for long commands like npm install or compilation."
         ),
-        required=["command"],
+        grep=p("string",
+            "If set, filter cached output to only show lines containing this pattern "
+            "(pure Python substring match, cross-platform). "
+            "Combine with from_cache to re-examine previous output without re-executing."
+        ),
+        extract=p("string",
+            "If set, run this command against the cached output file. "
+            "Use {cache} as placeholder for the cache file path. "
+            "Example: extract=\"python -c \\\"import sys; d=open('{cache}').read(); print(d.count('FAILED'))\\\"\""
+        ),
+        from_cache=p("string",
+            "Path to a previous cache file (shown when the command was first run). "
+            "Skip execution and operate on cached output. "
+            "Use with grep/extract to re-examine, or alone to see full cached output."
+        ),
+        required=[],
     )
 )
 class ExecTool(Tool):
@@ -99,21 +117,40 @@ class ExecTool(Tool):
 
     _MAX_TIMEOUT = 600
     _MAX_OUTPUT = 10_000
+    _CACHE_DIR_NAME = "exec_cache"
+    _DEFAULT_TAIL_LINES = 5
+    _TAIL_LINES_ON_ERROR = 15
 
     description = (
             "Execute a shell command and return its output. "
             "Prefer read_file/write_file/edit_file over cat/echo/sed, "
             "and grep/glob over shell find/grep. "
             "Use -y or --yes flags to avoid interactive prompts. "
-            "Output is truncated at 10 000 chars; timeout defaults to 60s."
+            "Output is truncated at 10 000 chars; timeout defaults to 60s.\n\n"
+            "All output is automatically cached. After running, you can re-examine "
+            "results in three ways without re-executing:\n"
+            "  - grep: filter cached output for matching lines (pure Python, cross-platform)\n"
+            "  - extract: run a script against cached output using {cache} placeholder\n"
+            "  - from_cache: pass a previous cache path to re-examine its output\n\n"
+            "Workflow: exec once, inspect multiple ways. "
+            "No need to re-run a command just to grep its output — use from_cache."
         )
 
     exclusive = True
 
     async def execute(
-        self, command: str, working_dir: str | None = None,
-        timeout: int | None = None, capture_file: str | None = None, **kwargs: Any,
+        self, command: str = "", working_dir: str | None = None,
+        timeout: int | None = None, capture_file: str | None = None,
+        grep: str | None = None, extract: str | None = None,
+        from_cache: str | None = None, **kwargs: Any,
     ) -> str:
+        # ── from_cache mode: skip execution, operate on cached output ──
+        if from_cache:
+            return await self._from_cache_mode(from_cache, grep, extract)
+
+        if not command:
+            return "Error: command is required (or use from_cache to re-examine cached output)."
+
         cwd = working_dir or self.working_dir or os.getcwd()
 
         # Prevent an LLM-supplied working_dir from escaping the configured
@@ -238,11 +275,157 @@ class ExecTool(Tool):
                     + result[-half:]
                 )
 
+            # Save full output to cache
+            cache_path = self._save_to_cache(command, stdout_text, stderr_text, process.returncode)
+
+            # Route through grep/extract modes
+            if grep:
+                return self._format_grep_result(stdout_text, stderr_text, process.returncode, grep)
+            if extract:
+                return await self._format_extract_result(cache_path, stdout_text, stderr_text, process.returncode, extract)
+
+            # Default: append cache path to result
+            result += f"\n[Full output cached: {cache_path}]"
             return result
 
         except Exception as e:
             logger.exception("Command execution failed")
             return f"Error executing command: {str(e)}"
+
+    # ------------------------------------------------------------------
+    # Cache helpers
+    # ------------------------------------------------------------------
+
+    def _save_to_cache(self, command: str, stdout: str, stderr: str, exit_code: int) -> Path:
+        """Save command output to a cache file and return the path."""
+        cache_dir = get_runtime_subdir(self._CACHE_DIR_NAME)
+        cmd_hash = hashlib.sha256(command.encode()).hexdigest()[:12]
+        ts = int(time.time())
+        cache_path = cache_dir / f"{cmd_hash}_{ts}.json"
+
+        cache_data = {
+            "command": command,
+            "exit_code": exit_code,
+            "stdout": stdout,
+            "stderr": stderr,
+            "timestamp": ts,
+        }
+        cache_path.write_text(json.dumps(cache_data, ensure_ascii=False), encoding="utf-8")
+
+        # Also write plain text for easy reading
+        txt_path = cache_path.with_suffix(".txt")
+        combined = stdout
+        if stderr.strip():
+            combined += f"\n\nSTDERR:\n{stderr}"
+        txt_path.write_text(combined, encoding="utf-8")
+
+        logger.debug("Saved exec output to cache: {}", cache_path)
+        return cache_path
+
+    def _load_from_cache(self, cache_path_str: str) -> dict:
+        """Load cached output from a JSON cache file."""
+        path = Path(cache_path_str)
+        if not path.exists():
+            # Try relative to cache dir
+            alt = get_runtime_subdir(self._CACHE_DIR_NAME) / path.name
+            if alt.exists():
+                path = alt
+            else:
+                raise FileNotFoundError(f"Cache file not found: {cache_path_str}")
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    async def _from_cache_mode(self, cache_path: str, grep: str | None, extract: str | None) -> str:
+        """Re-examine cached output without re-executing."""
+        try:
+            data = self._load_from_cache(cache_path)
+        except FileNotFoundError as e:
+            return f"Error: {e}"
+        except json.JSONDecodeError:
+            return f"Error: Invalid cache file: {cache_path}"
+
+        exit_code = data["exit_code"]
+        stdout = data["stdout"]
+        stderr = data["stderr"]
+
+        if grep:
+            return self._format_grep_result(stdout, stderr, exit_code, grep)
+        if extract:
+            txt_path = Path(cache_path).with_suffix(".txt")
+            return await self._format_extract_result(txt_path, stdout, stderr, exit_code, extract)
+
+        # Default: show full cached output
+        combined = stdout
+        if stderr.strip():
+            combined += f"\n\nSTDERR:\n{stderr}"
+        tail_lines = self._TAIL_LINES_ON_ERROR if exit_code != 0 else self._DEFAULT_TAIL_LINES
+        lines = combined.splitlines()
+        tail = lines[-tail_lines:] if len(lines) > tail_lines else lines
+        tail_text = "\n".join(tail)
+
+        result = f"[Loaded from cache: {cache_path}]\nExit code: {exit_code}"
+        if tail_text:
+            result += f"\n\nLast {len(tail)} lines:\n{tail_text}"
+        return result
+
+    # ------------------------------------------------------------------
+    # grep
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_grep_result(stdout: str, stderr: str, exit_code: int, pattern: str) -> str:
+        """Filter output lines matching pattern and return compact result."""
+        combined = stdout
+        if stderr.strip():
+            combined += f"\n{stderr}"
+        lines = combined.splitlines()
+        matched = [(i + 1, line) for i, line in enumerate(lines) if pattern in line]
+
+        if not matched:
+            return f"[No lines matched {pattern!r}]\nExit code: {exit_code}"
+
+        result_lines = [f"[Filtered: {len(matched)} of {len(lines)} lines matching {pattern!r}]"]
+        for line_no, text in matched:
+            display = text if len(text) <= 200 else text[:197] + "..."
+            result_lines.append(f"  {line_no}:{display}")
+
+        result_lines.append(f"Exit code: {exit_code}")
+        return "\n".join(result_lines)
+
+    # ------------------------------------------------------------------
+    # extract
+    # ------------------------------------------------------------------
+
+    async def _format_extract_result(
+        self, cache_path: Path, stdout: str, stderr: str, exit_code: int, extract_cmd: str,
+    ) -> str:
+        """Run an extract command against the cached output file."""
+        txt_path = cache_path.with_suffix(".txt")
+        # Ensure text file exists
+        if not txt_path.exists():
+            combined = stdout
+            if stderr.strip():
+                combined += f"\n\nSTDERR:\n{stderr}"
+            txt_path.parent.mkdir(parents=True, exist_ok=True)
+            txt_path.write_text(combined, encoding="utf-8")
+
+        cmd = extract_cmd.replace("{cache}", str(txt_path))
+        try:
+            proc = await self._spawn(cmd, str(txt_path.parent), self._build_env())
+            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=30)
+            out = stdout_b.decode("utf-8", errors="replace") if stdout_b else ""
+            err = stderr_b.decode("utf-8", errors="replace") if stderr_b else ""
+            parts = [f"[Extract result]:"]
+            if out.strip():
+                parts.append(out.rstrip())
+            if err.strip():
+                parts.append(f"STDERR:\n{err}")
+            parts.append(f"Exit code: {proc.returncode}")
+            return "\n".join(parts)
+        except asyncio.TimeoutError:
+            await self._kill_process(proc)
+            return f"[Extract timed out after 30s]"
+        except Exception as e:
+            return f"[Extract error: {e}]"
 
     @staticmethod
     def _try_direct_args(command: str) -> list[str] | None:

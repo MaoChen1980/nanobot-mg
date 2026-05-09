@@ -218,7 +218,9 @@ class EditFileTool(_FsTool):
             "If old_text matches multiple times, provide more context or set replace_all=true.\n"
             "2. Line-based: set first_line and last_line to replace lines N through M directly. "
             "Fastest for simple edits — no text matching needed. "
-            "Shows a diff of the closest match on failure."
+            "Shows a diff of the closest match on failure.\n\n"
+            "Use then_grep to verify the edit landed correctly without a separate read_file call. "
+            "Example: then_grep='def new_function' confirms the new code is in place."
         )
 
     @staticmethod

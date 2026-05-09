@@ -42,8 +42,11 @@ class WriteFileTool(_FsTool):
             "Write content to a file. Overwrites if the file already exists; "
             "creates parent directories as needed. "
             "For partial edits, prefer edit_file instead.\n\n"
-            "Use then_check='auto' to automatically type-check Python/TypeScript files "
-            "after writing — saves a separate exec(pyright/tsc) call."
+            "Built-in verification (use instead of a separate read/exec call):\n"
+            "  - then_grep: verify content was written correctly by searching for a pattern\n"
+            "    Example: then_grep='def my_function' to confirm the function definition landed\n"
+            "  - then_check='auto': auto type-check Python/TypeScript files after writing\n"
+            "  - then_exec: run a command after writing (works with then_check for write→check→exec)"
         )
 
     async def execute(

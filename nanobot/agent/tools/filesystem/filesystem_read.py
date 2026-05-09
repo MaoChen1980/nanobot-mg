@@ -36,10 +36,10 @@ class ReadFileTool(_FsTool):
     name = "read_file"
 
     description = (
-            "Read a file (text, image, or document). "
+            "Read a file. Preferred over exec(cat/head/tail) — handles images, PDFs, "
+            "DOCX, XLSX, PPTX automatically.\n"
             "Text output format: LINE_NUM|CONTENT. "
             "Images return visual content for analysis. "
-            "Supports PDF, DOCX, XLSX, PPTX documents. "
             "Use offset and limit for large text files. "
             "Reads exceeding ~128K chars are truncated."
         )
