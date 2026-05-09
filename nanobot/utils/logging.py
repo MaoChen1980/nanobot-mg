@@ -1,12 +1,32 @@
 """Logging configuration and initialization."""
 
+import subprocess
+from pathlib import Path
+
 from loguru import logger
 
 from nanobot.config.paths import get_data_dir
 from nanobot.config.schema import LogConfig
 
-_FORMAT = "{time:YYYY-MM-DDTHH:mm:ss.SSSZ} | {level: <8} | {name}:{function}:{line} - {message}"
-_JSON_FORMAT = '{{"t":"{time:YYYY-MM-DDTHH:mm:ss.SSSZ}","l":"{level}","n":"{name}","f":"{function}:{line}","m":"{message}"}}'
+
+def _get_git_commit() -> str:
+    """Return short git commit hash, or 'unknown' if not a git repo."""
+    try:
+        project_root = Path(__file__).resolve().parent.parent.parent
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+            cwd=str(project_root),
+        )
+        return result.stdout.strip() if result.returncode == 0 else "unknown"
+    except Exception:
+        return "unknown"
+
+
+_COMMIT = _get_git_commit()
+
+_FORMAT = "{time:YYYY-MM-DDTHH:mm:ss.SSSZ} | {level: <8} | [" + _COMMIT + "] | {name}:{function}:{line} - {message}"
+_JSON_FORMAT = '{{"t":"{time:YYYY-MM-DDTHH:mm:ss.SSSZ}","v":"' + _COMMIT + '","l":"{level}","n":"{name}","f":"{function}:{line}","m":"{message}"}}'
 
 
 class LoggerConfig:
@@ -31,7 +51,7 @@ class LoggerConfig:
             logger.add(
                 sink=lambda msg: print(msg, end=""),
                 level=log_config.level,
-                format="<green>{time:YYYY-MM-DDTHH:mm:ss.SSSZ}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+                format="<green>{time:YYYY-MM-DDTHH:mm:ss.SSSZ}</green> | <level>{level: <8}</level> | [<yellow>" + _COMMIT + r"</yellow>] | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
             )
 
         # Add JSONL log file (machine-parseable, agent-friendly)
