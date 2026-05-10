@@ -34,6 +34,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             else "https://open.larksuite.com"
         )
         self._thread_pool = ThreadPoolExecutor(max_workers=10)
+        self._notified_chats: set[str] = set()  # chat_ids already sent ready notification  # chat_ids already sent ready notification
 
     # ------------------------------------------------------------------
     # Message handler (called from Feishu SDK thread)
