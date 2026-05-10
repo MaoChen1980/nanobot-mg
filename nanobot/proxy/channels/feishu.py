@@ -103,9 +103,9 @@ class FeishuProxyChannel(BaseProxyChannel):
     def on_card_action(self, data: Any) -> None:
         """Handle card button click — forward reply text to Hub as user message."""
         try:
-            event = data.event
-            action = event.action
-            operator = event.operator
+            event = data.event  # P2CardActionTriggerData
+            operator = event.operator  # CallBackOperator
+            action = event.action  # CallBackAction
 
             value: dict = action.value if isinstance(action.value, dict) else {}
 
@@ -115,18 +115,18 @@ class FeishuProxyChannel(BaseProxyChannel):
                 logger.warning("Card action missing qr/cid: {}", value)
                 return
 
-            sender_id = ""
-            if operator and hasattr(operator, "operator_id"):
-                sender_id = (operator.operator_id.open_id or "")
+            # CallBackOperator has .open_id directly (not .operator_id.open_id)
+            sender_id = operator.open_id if operator else ""
             if not sender_id:
-                logger.warning("Card action missing operator")
+                logger.warning("Card action missing open_id in operator")
                 return
 
-            unique_id = f"card_{action.action_id or ''}_{int(time.time())}"
+            # CallBackAction has no .action_id — use .name for dedup key
+            unique_id = f"card_{action.name or ''}_{int(time.time())}"
             if self.check_duplicate(unique_id):
                 return
 
-            logger.info("Card action: {} -> {}", reply_text[:50], chat_id)
+            logger.info("Card action: {} -> {} (from {})", reply_text[:50], chat_id, sender_id)
             msg_data = self.build_message(sender_id, chat_id, reply_text, unique_id)
             result = self.send_to_hub(msg_data)
             if result and result.success and result.content:
