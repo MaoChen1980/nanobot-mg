@@ -100,6 +100,40 @@ class FeishuProxyChannel(BaseProxyChannel):
         """Handle reaction events (im.message.reaction.created_v1)."""
         pass
 
+    def on_card_action(self, data: Any) -> None:
+        """Handle card button click — forward reply text to Hub as user message."""
+        try:
+            event = data.event
+            action = event.action
+            operator = event.operator
+
+            value: dict = action.value if isinstance(action.value, dict) else {}
+
+            reply_text = value.get("qr", "")
+            chat_id = value.get("cid", "")
+            if not reply_text or not chat_id:
+                logger.warning("Card action missing qr/cid: {}", value)
+                return
+
+            sender_id = ""
+            if operator and hasattr(operator, "operator_id"):
+                sender_id = (operator.operator_id.open_id or "")
+            if not sender_id:
+                logger.warning("Card action missing operator")
+                return
+
+            unique_id = f"card_{action.action_id or ''}_{int(time.time())}"
+            if self.check_duplicate(unique_id):
+                return
+
+            logger.info("Card action: {} -> {}", reply_text[:50], chat_id)
+            msg_data = self.build_message(sender_id, chat_id, reply_text, unique_id)
+            result = self.send_to_hub(msg_data)
+            if result and result.success and result.content:
+                self._send_text_reply(chat_id, None, result.content)
+        except Exception as e:
+            logger.error("Failed to handle card action: {}", e)
+
     # ------------------------------------------------------------------
     # Fetch quoted message
     # ------------------------------------------------------------------
@@ -172,6 +206,36 @@ class FeishuProxyChannel(BaseProxyChannel):
                 break
         return None, content
 
+    @staticmethod
+    def _parse_quick_replies(content: str) -> tuple[str, list[dict[str, str]] | None]:
+        """Extract ``---quick-replies`` section from agent response.
+
+        Format::
+
+            ---quick-replies
+            标签1 || 回复文本1
+            标签2 || 回复文本2
+
+        Returns ``(cleaned_text, quick_replies_or_None)``.
+        """
+        marker = "---quick-replies"
+        if marker not in content:
+            return content, None
+
+        before, section = content.split(marker, 1)
+        cleaned = before.strip()
+
+        quick_replies: list[dict[str, str]] = []
+        for line in section.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if "||" in line:
+                label, reply = line.split("||", 1)
+                quick_replies.append({"label": label.strip(), "reply": reply.strip()})
+
+        return cleaned, quick_replies or None
+
     # ── Table fallback for non-card paths ──────────────────────────────
 
     @staticmethod
@@ -220,12 +284,15 @@ class FeishuProxyChannel(BaseProxyChannel):
 
     # ── Send strategies ────────────────────────────────────────────────
 
-    def _send_card_reply(self, chat_id: str, content: str) -> bool:
+    def _send_card_reply(self, chat_id: str, content: str,
+                          quick_replies: list[dict[str, str]] | None = None) -> bool:
         """Send as Feishu interactive card v2.0 with native markdown.
 
         Supports the full markdown spec including tables, code blocks,
         headings, lists, and inline formatting. Caller should fall back to
         :meth:`_send_post_reply` or :meth:`_send_plain_text` on failure.
+
+        When *quick_replies* is provided, buttons are appended to the card.
         """
         try:
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
@@ -235,11 +302,28 @@ class FeishuProxyChannel(BaseProxyChannel):
                 {"tag": "markdown", "content": body or content},
             ]
 
+            # V1 schema for full send_feedback button support (V2 removed this)
             card: dict[str, Any] = {
-                "schema": "2.0",
                 "config": {"width_mode": "fill"},
-                "body": {"elements": elements},
+                "schema": "1.0",
             }
+
+            if quick_replies:
+                btn_elements = [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": qr["label"]},
+                        "action_type": "send_feedback",
+                        "value": {"qr": qr["reply"], "cid": chat_id},
+                    }
+                    for qr in quick_replies
+                ]
+                elements.append({
+                    "tag": "action",
+                    "actions": btn_elements,
+                })
+
+            card["body"] = {"elements": elements}
             if header_text:
                 template = self.config.get("cardTemplate", "blue")
                 card["header"] = {
@@ -334,18 +418,22 @@ class FeishuProxyChannel(BaseProxyChannel):
           * ``raw`` — use post message (lightweight, tables → code fences)
           * ``auto`` — detect rich content (code blocks, tables) → card; else post
 
+        When the content contains a ``---quick-replies`` section, card mode is
+        forced and buttons are rendered from the parsed labels.
+
         Falls back through the chain: card → post → plain text.
         """
+        cleaned, qrs = self._parse_quick_replies(content)
         render_mode = self.config.get("renderMode", "card")
-        use_card = render_mode == "card" or (
-            render_mode == "auto" and self._has_rich_content(content)
+        use_card = qrs is not None or render_mode == "card" or (
+            render_mode == "auto" and self._has_rich_content(cleaned)
         )
 
         if use_card:
-            if self._send_card_reply(chat_id, content):
+            if self._send_card_reply(chat_id, cleaned, quick_replies=qrs):
                 return
 
-        processed = self._wrap_tables_in_code_fences(content)
+        processed = self._wrap_tables_in_code_fences(cleaned)
         if self._send_post_reply(chat_id, processed):
             return
 
@@ -412,6 +500,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             )
             .register_p2_im_message_receive_v1(self.on_message)
             .register_p2_im_message_reaction_created_v1(self.on_reaction)
+            .register_p2_card_action_trigger(self.on_card_action)
         )
         event_handler = builder.build()
 
