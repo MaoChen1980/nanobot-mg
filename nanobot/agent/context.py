@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import mimetypes
 import platform
+import threading
 import time
 from dataclasses import dataclass
 from importlib.resources import files as pkg_files
@@ -60,6 +61,12 @@ class ContextBuilder:
         self._load_bootstrap_files()
         self.skills.build_skills_summary()
         self.skills.get_always_skills()
+        # Preload embedding model in background — loading SentenceTransformer
+        # synchronously blocks the event loop for ~8s, starving proxy heartbeats.
+        threading.Thread(
+            target=self.memory.vector_index._load_model,
+            daemon=True,
+        ).start()
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 50:
             logger.info("ContextBuilder warmup took {:.0f}ms", _elapsed)

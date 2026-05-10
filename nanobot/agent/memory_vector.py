@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ class MemoryVectorIndex:
         self._memory_dir = memory_dir
         self._index_dir = memory_dir / self._INDEX_DIR
         self._model: Any = None  # lazy-loaded
+        self._model_lock = threading.Lock()
         self._index: Any = None  # faiss Index
         self._chunks: list[dict[str, Any]] = []
 
@@ -33,13 +35,16 @@ class MemoryVectorIndex:
         """Lazy-load sentence-transformers model. Returns True if loaded."""
         if self._model is not None:
             return True
-        try:
-            from sentence_transformers import SentenceTransformer
+        with self._model_lock:
+            if self._model is not None:
+                return True
+            try:
+                from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer("all-MiniLM-L6-v2")
-            return True
-        except ImportError:
-            return False
+                self._model = SentenceTransformer("all-MiniLM-L6-v2")
+                return True
+            except ImportError:
+                return False
 
     # -- chunking --------------------------------------------------------------
 
