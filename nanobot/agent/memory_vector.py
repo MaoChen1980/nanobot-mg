@@ -178,6 +178,7 @@ class MemoryVectorIndex:
         self._index_dir.mkdir(parents=True, exist_ok=True)
 
         if self._index is not None:
+            import faiss
             faiss.write_index(self._index, str(self._index_dir / self._INDEX_FILE))
 
         (self._index_dir / self._CHUNKS_FILE).write_text(

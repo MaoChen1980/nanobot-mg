@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +17,16 @@ from nanobot.config.schema import Config
 from nanobot.utils.gitstore import sync_workspace_templates
 
 console = Console()
+
+
+def _looks_like_traceback(line: str) -> bool:
+    """Check if a non-JSON line is part of a traceback."""
+    return (line.startswith("Traceback")
+            or line.startswith('  File "')
+            or line.startswith("    ")  # indented code in traceback
+            or line.startswith("  ") and any(
+                kw in line for kw in ("Error:", "Exception:")
+            ))
 
 
 class GatewayApplication:
@@ -463,6 +473,7 @@ class GatewayApplication:
         """Check JSONL log for new ERROR/CRITICAL entries and alert active sessions."""
         from nanobot.bus.events import OutboundMessage
         from nanobot.config.paths import get_data_dir
+        from nanobot.utils.logging import _COMMIT as current_commit
 
         log_name = self.config.logging.file
         if not log_name:
@@ -471,69 +482,113 @@ class GatewayApplication:
         if not log_path.exists():
             return
 
-        # Track byte offset to avoid re-reporting
+        # Read last-check timestamp (ISO format, no byte offset)
         cursor_path = get_data_dir() / ".log_check_cursor"
-        is_first_run = not cursor_path.exists()
-        cursor = 0
-        if not is_first_run:
+        last_check_ts: datetime | None = None
+        if cursor_path.exists():
             try:
-                cursor = int(cursor_path.read_text().strip())
-            except (ValueError, OSError):
-                cursor = 0
+                raw = cursor_path.read_text().strip()
+                last_check_ts = datetime.fromisoformat(raw)
+            except (ValueError, TypeError, OSError):
+                pass
 
-        file_size = log_path.stat().st_size
-        if file_size < cursor:  # log was rotated
-            cursor = 0
-        if file_size == cursor:
-            return
+        now = datetime.now(timezone.utc)
+        two_days_ago = now - timedelta(days=2)
 
+        # Read all lines and iterate backwards (newest first)
         try:
-            with open(log_path, "r", encoding="utf-8") as f:
-                f.seek(cursor)
-                new_content = f.read()
-            cursor_path.write_text(str(file_size))
+            lines = log_path.read_text(encoding="utf-8").splitlines()
         except OSError:
             logger.exception("Log check: failed to read log file")
             return
 
-        if not new_content:
-            return
-
-        # JSONL format: {"t":"...","l":"ERROR","n":"...","f":"...","m":"..."}
-        errors = []
-        for line in new_content.splitlines():
+        # Traceback lines (non-JSON) appear after the ERROR in original order.
+        # Since we iterate reversed, they show up *before* their ERROR line.
+        # Accumulate them and attach when we reach the owning ERROR entry.
+        pending_tb: list[str] = []
+        new_errors: list[dict[str, Any]] = []
+        for line in reversed(lines):
             line = line.strip()
             if not line:
                 continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("l") in ("ERROR", "CRITICAL"):
-                errors.append(entry)
 
-        if not errors:
+            # Non-JSON line — could be traceback context
+            if not line.startswith("{"):
+                if _looks_like_traceback(line):
+                    pending_tb.append(line)
+                continue
+
+            # JSON line — flush pending traceback if this is its ERROR owner
+            if pending_tb:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    pending_tb.clear()
+                    continue
+                if entry.get("l") in ("ERROR", "CRITICAL"):
+                    entry["_traceback"] = list(reversed(pending_tb))
+                else:
+                    entry = None  # skip; traceback was orphaned
+                pending_tb.clear()
+                if entry is None:
+                    continue
+            else:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+            ts_str = entry.get("t", "")
+            if not ts_str:
+                continue
+            try:
+                entry_ts = datetime.fromisoformat(ts_str)
+            except (ValueError, TypeError):
+                continue
+
+            # Stop scanning entries older than 2 days
+            if entry_ts < two_days_ago:
+                break
+
+            # Only check entries from the current deployment
+            if entry.get("v") != current_commit:
+                continue
+
+            if entry.get("l") in ("ERROR", "CRITICAL"):
+                if last_check_ts is None or entry_ts > last_check_ts:
+                    new_errors.append(entry)
+
+        # Save cursor regardless — prevents re-alerting old errors next run
+        cursor_path.write_text(now.isoformat())
+
+        if not new_errors:
             return
 
         # Don't alert on the very first run (would report all historical errors)
-        if is_first_run:
-            logger.info("Log check: first run, skipping alert (cursor={})", file_size)
+        if last_check_ts is None:
+            logger.info("Log check: first run, skipping alert")
             return
 
         # Build concise alert
         MAX_SHOWN = 15
-        shown = errors[:MAX_SHOWN]
-        total_new = len(new_content.splitlines())
+        shown = new_errors[:MAX_SHOWN]
         parts = [
-            f"[Log Alert] {len(errors)} new error(s) in {total_new} new log entries:"
+            f"[Log Alert] {len(new_errors)} new error(s):"
         ]
         for entry in shown:
             ts = entry.get("t", "")[-8:]  # HH:MM:SS
             src = entry.get("f", "?")
             msg = entry.get("m", "")
-            parts.append(f"  [{ts}] {src} - {msg[:200]}")
-        if len(errors) > MAX_SHOWN:
-            parts.append(f"  ... and {len(errors) - MAX_SHOWN} more")
+            trace = entry.get("_traceback")
+            if trace:
+                tb_compact = "\n".join(
+                    ln[:120] for ln in trace[-3:]  # last 3 lines of traceback
+                )
+                parts.append(f"  [{ts}] {src} - {msg[:200]}\n    {tb_compact}")
+            else:
+                parts.append(f"  [{ts}] {src} - {msg[:200]}")
+        if len(new_errors) > MAX_SHOWN:
+            parts.append(f"  ... and {len(new_errors) - MAX_SHOWN} more")
 
         alert = "\n".join(parts)
 
