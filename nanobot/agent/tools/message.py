@@ -149,10 +149,13 @@ class MessageTool(Tool):
         if media:
             resolved = []
             for p in media:
-                if p.startswith(("http://", "https://")) or os.path.isabs(p):
+                if p.startswith(("http://", "https://")):
                     resolved.append(p)
                 else:
-                    resolved.append(str(self._workspace / p))
+                    fp = Path(p) if os.path.isabs(p) else self._workspace / p
+                    if not fp.exists():
+                        return f"Error: media file not found: {fp}"
+                    resolved.append(str(fp))
             media = resolved
 
         metadata = dict(self._default_metadata.get()) if same_target else {}
