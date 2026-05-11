@@ -42,6 +42,15 @@ class MemoryVectorIndex:
                 from sentence_transformers import SentenceTransformer
 
                 self._model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
+                if self._index is not None:
+                    dim = self._model.get_sentence_embedding_dimension()
+                    if dim != self._index.d:
+                        logger.warning(
+                            "Index dimension ({}) differs from model dimension ({}), "
+                            "discarding old index; rebuild on next write",
+                            self._index.d, dim,
+                        )
+                        self._index = None
                 return True
             except ImportError:
                 return False
