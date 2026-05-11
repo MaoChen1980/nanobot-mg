@@ -41,7 +41,7 @@ class MemoryVectorIndex:
             try:
                 from sentence_transformers import SentenceTransformer
 
-                self._model = SentenceTransformer("all-MiniLM-L6-v2")
+                self._model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
                 return True
             except ImportError:
                 return False
