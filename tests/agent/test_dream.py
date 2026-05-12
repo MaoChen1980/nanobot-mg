@@ -286,7 +286,9 @@ class TestDreamConcurrency:
         finally:
             dream._lock.release()
 
-        await asyncio.wait_for(task, timeout=1)
+        # Mock build_vector_index to avoid loading the real BGE model (slow).
+        with patch.object(store, "build_vector_index", return_value=None):
+            await asyncio.wait_for(task, timeout=30)
         assert ran, "run() should complete after lock is released"
 
     async def test_cursor_not_advanced_on_phase2_exception(self, dream, mock_provider, mock_runner, store):

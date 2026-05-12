@@ -153,7 +153,8 @@ class MemoryVectorIndex:
         texts = [c["text"] for c in chunks]
         embeddings = self._model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
-        index = faiss.IndexFlatIP(embeddings.shape[1])
+        index = faiss.IndexHNSWFlat(embeddings.shape[1], 32, faiss.METRIC_INNER_PRODUCT)
+        index.hnsw.ef_construction = 80
         index.add(np.array(embeddings, dtype=np.float32))
 
         self._index = index
@@ -178,6 +179,11 @@ class MemoryVectorIndex:
         import numpy as np
 
         query_vec = self._model.encode([query], normalize_embeddings=True)
+
+        # Set HNSW search quality (no-op for non-HNSW indexes loaded from disk)
+        if hasattr(self._index, "hnsw"):
+            self._index.hnsw.ef_search = 40
+
         scores, indices = self._index.search(
             np.array(query_vec, dtype=np.float32),
             k=min(k, len(self._chunks)),
