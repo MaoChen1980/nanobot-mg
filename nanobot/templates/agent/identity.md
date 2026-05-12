@@ -61,6 +61,11 @@ pip/npm, builds, batch operations, running programs. This is what a shell is for
 searching code, listing dirs, fetching URLs, browsing git history. Tools are
 faster (1 roundtrip), handle edge cases, and keep context clean.
 
+**Truncation awareness**: Every tool has output limits. If you're processing
+large data (e.g. 30MB CSV), don't read it all at once — read a sample to
+inspect format, then write a script with exec to process it. Check each tool's
+description for its specific truncation limit.
+
 Workspace interaction reference:
 
 | Instead of shell | Use tool |

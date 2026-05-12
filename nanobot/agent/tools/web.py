@@ -322,7 +322,7 @@ class WebFetchTool(WebToolBase, Tool):
     description = (
         "Fetch a URL and extract readable content — has built-in regex `extract` parameter "
         "for filtering lines from the fetched page (e.g. extract='price.*\\\\d+'). "
-        "Output is capped at maxChars (default 50 000). "
+        "Output capped at maxChars (default 100 000). "
         "Works for most web pages and docs; may fail on login-walled or JS-heavy sites. "
         "Preferred over exec curl/wget."
     )

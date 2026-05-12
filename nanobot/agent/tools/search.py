@@ -146,7 +146,7 @@ class GlobTool(_SearchTool):
         return (
             "Find files matching a glob pattern (e.g. '*.py', 'tests/**/test_*.py'). "
             "Preferred over exec find/ls/dir — no shell escaping needed. "
-            "Results are sorted by modification time (newest first). "
+            "Results sorted by modtime (newest first), max 250 by default (1000 max). "
             "Skips .git, node_modules, __pycache__, and other noise directories."
         )
 
@@ -271,7 +271,8 @@ class GrepTool(_SearchTool):
             "Preferred over exec grep/findstr/Select-String. "
             "Default output_mode is files_with_matches (file paths only); "
             "use content mode for matching lines with context. "
-            "Skips binary and files >2 MB. Supports glob/type filtering."
+            "Skips binary and files >2 MB. Supports glob/type filtering. "
+            "Results truncated at ~256K chars."
         )
 
     @property

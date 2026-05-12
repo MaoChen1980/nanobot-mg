@@ -164,7 +164,9 @@ class ExecTool(Tool):
             "use dedicated tools instead: read_file, write_file, edit_file, "
             "grep, glob, list_dir, web_fetch.\n\n"
             "Use -y or --yes flags to avoid interactive prompts. "
-            "Output is truncated at 20 000 chars; timeout defaults to 60s.\n\n"
+            "Output truncated after 10 000 chars (runner may truncate further). "
+            "For large output, use capture_file=... and read the file in chunks. "
+            "Timeout defaults to 60s.\n\n"
             "All output is automatically cached. After running, you can re-examine "
             "results in three ways without re-executing:\n"
             "  - grep: filter cached output for matching lines (pure Python, cross-platform)\n"
@@ -179,7 +181,7 @@ class ExecTool(Tool):
             "    Example: verify=\"exit:0,output_contains:Build OK,file_created:dist/app.exe\"\n"
             "  - check: arbitrary shell script for custom validation (exit 0 = pass, non-zero = fail).\n"
             "    Use {cache} to reference the cached output file.\n"
-            "  Both verify and check run after the command and report ✓/❌ per check."
+            "  Both verify and run after the command and report ✓/❌ per check."
         )
 
     exclusive = True

@@ -43,8 +43,8 @@ class ReadFileTool(_FsTool):
             "Text output format: LINE_NUM|CONTENT. "
             "Also handles images, PDFs, DOCX, XLSX, PPTX automatically.\n"
             "Use `extract` to filter by regex and only see matching lines (+ context).\n"
-            "Use offset and limit for large text files.\n"
-            "Reads exceeding ~256K chars are truncated.\n"
+            "Use offset and limit for large text files. "
+            "Default limit 2000 lines, max ~128K chars. PDF max 20 pages.\n"
             "Framework auto-validates: path is required and non-empty."
         )
 

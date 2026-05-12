@@ -31,7 +31,7 @@ class AnalyzeTool(Tool):
         "Provide `data` (inline text) or `path` (file to read). Optionally give "
         "a `question` to focus the analysis on relevant sections.\n\n"
         "Returns: line/word/character counts, detected sections (headings), "
-        "most frequent keywords, and lines matching your question.\n\n"
+        "most frequent keywords (max 50), and lines matching your question.\n\n"
         "Use this when:\n"
         "- You need a quick summary of a long document or log file\n"
         "- You want to understand what a file is about without reading it fully\n"
@@ -39,7 +39,8 @@ class AnalyzeTool(Tool):
         "Do NOT use when:\n"
         "- You need the full text content — use read_file instead\n"
         "- You need to search for a specific pattern — use grep instead\n"
-        "- You need to explore code structure — use explore_module instead"
+        "- You need to explore code structure — use explore_module instead\n\n"
+        "Limits: 500K chars max input."
     )
 
     MAX_TEXT_SIZE = 500_000

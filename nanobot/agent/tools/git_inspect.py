@@ -36,7 +36,8 @@ class GitInspectTool(_FsTool):
         "- You need to understand why a change was made\n"
         "- You're debugging and want to see recent changes to a file\n"
         "- You want to find who modified something and when\n\n"
-        "All arguments are optional — calling with no args shows the last 10 commits."
+        "All arguments are optional — calling with no args shows the last 10 commits. "
+        "Max 50 commits per query; 30s timeout."
     )
 
     async def execute(

@@ -35,7 +35,7 @@ class ListDirTool(_FsTool):
             "List the contents of a directory. "
             "Preferred over exec(ls/dir) — auto-ignores noise directories "
             "(.git, node_modules, __pycache__, etc.). "
-            "Set recursive=true to explore nested structure."
+            "Max 400 entries by default; use recursive=true for nested structure."
         )
 
     read_only = True

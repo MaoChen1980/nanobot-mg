@@ -46,7 +46,7 @@ class RecallTool(Tool):
             "- 'what was the final decision on MEMORY.md management?' → recall(keyword='MEMORY.md')\n"
             "- 'summarize changes made on 2026-04-28' → recall(start='2026-04-28')\n"
             "- 'trace the SOUL.md rewrite discussion' → recall(keyword='SOUL.md', start='2026-04-28')\n\n"
-            "Returns relevant snippets with timestamps.\n"
+            "Returns relevant snippets with timestamps (max 50 entries).\n"
             "IMPORTANT: Do not dump raw results — synthesize into your answer.\n\n"
             "Without this tool, you work with no memory of the user or past sessions."
         )
