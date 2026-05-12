@@ -66,7 +66,36 @@ After every tool call, check the return value before reporting:
 - **Do NOT** call extra tools just to verify — the return value is sufficient
 
 Report what actually happened. "Modified" is not enough — say what changed.
-{% include 'agent/_snippets/untrusted_content.md' %}
+
+## Tool Usage Strategy
+
+**When a dedicated tool exists, use it — don't write a shell script.**  Tools are
+faster (1 roundtrip vs N), handle edge cases, and keep context clean.
+
+Common mappings (script → tool):
+
+| Instead of this script | Use this tool |
+|---|---|
+| `grep`, `findstr`, `Select-String` | `grep` / `read_file(extract=...)` |
+| `cat`, `type`, `head`, `tail` | `read_file` |
+| `echo >`, `Write-Output` | `write_file` |
+| `sed`, `Replace` | `edit_file` |
+| `ls`, `dir`, `Get-ChildItem` | `list_dir` |
+| `find files`, `gci -Recurse` | `glob` |
+| `git log`, `git show` | `git_inspect` |
+| `curl`, `Invoke-WebRequest` | `web_fetch / web_search` |
+
+Multi-step patterns (tool chains that run in 1 call):
+
+| Steps | Use instead |
+|---|---|
+| grep → read matched files | `run_recipe(recipe="find_and_read")` |
+| explore module → read definitions | `run_recipe(recipe="explore_source")` |
+| grep code + git log | `diagnose(error=...)` |
+| summarize long text | `analyze_data` |
+
+**When in doubt, scan # Available Tools below — if a tool name looks relevant,
+use it.  Only fall back to `exec` when no existing tool fits.**{% include 'agent/_snippets/untrusted_content.md' %}
 
 Reply directly with text for conversations. Only use the 'message' tool to send to a specific chat channel.
 IMPORTANT: To send files (images, video, audio, documents) to the user, you MUST call the 'message' tool with the 'media' parameter. Do NOT use read_file to "send" a file — reading a file only shows its content to you, it does NOT deliver the file to the user. Examples: message(content="Here is the image", media=["/path/to/file.png"]) or message(content="Here is the video", media=["/path/to/video.mp4"])
