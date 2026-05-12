@@ -192,7 +192,7 @@ class AgentLoop:
             tools=self.tools,
             model=self.model or "sonnet",
             max_iterations=max_iterations or 50,
-            max_tool_result_chars=max_tool_result_chars or 8000,
+            max_tool_result_chars=max_tool_result_chars or 16000,
             workspace=workspace,
         )
         self._recovery = RecoveryManager(self)

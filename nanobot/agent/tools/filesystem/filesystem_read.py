@@ -44,7 +44,7 @@ class ReadFileTool(_FsTool):
             "Images return visual content for analysis. "
             "Use offset and limit for large text files. "
             "Use `extract` to filter by regex and only see matching lines (+ context).\n"
-            "Reads exceeding ~128K chars are truncated.\n"
+            "Reads exceeding ~256K chars are truncated.\n"
             "Framework auto-validates: path is required and non-empty."
         )
 
@@ -228,7 +228,7 @@ class ReadFileTool(_FsTool):
         if end < total_pages - 1:
             result += f"\n\n(Showing pages {start + 1}-{end + 1} of {total_pages}. Use pages='{end + 2}-{min(end + 1 + self._MAX_PDF_PAGES, total_pages)}' to continue.)"
         if len(result) > self._MAX_CHARS:
-            result = result[:self._MAX_CHARS] + "\n\n(PDF text truncated at ~128K chars)"
+            result = result[:self._MAX_CHARS] + "\n\n(PDF text truncated at ~256K chars)"
         return result
 
     def _read_office_doc(self, fp: Path) -> str:
@@ -246,7 +246,7 @@ class ReadFileTool(_FsTool):
             return f"({fp.suffix.upper().lstrip('.')} has no extractable text: {fp})"
 
         if len(result) > self._MAX_CHARS:
-            result = result[:self._MAX_CHARS] + "\n\n(Document text truncated at ~128K chars)"
+            result = result[:self._MAX_CHARS] + "\n\n(Document text truncated at ~256K chars)"
 
         return result
 

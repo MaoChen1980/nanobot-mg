@@ -146,7 +146,7 @@ class ExecTool(Tool):
             "Prefer read_file/write_file/edit_file over cat/echo/sed, "
             "and grep/glob over shell find/grep. "
             "Use -y or --yes flags to avoid interactive prompts. "
-            "Output is truncated at 10 000 chars; timeout defaults to 60s.\n\n"
+            "Output is truncated at 20 000 chars; timeout defaults to 60s.\n\n"
             "All output is automatically cached. After running, you can re-examine "
             "results in three ways without re-executing:\n"
             "  - grep: filter cached output for matching lines (pure Python, cross-platform)\n"

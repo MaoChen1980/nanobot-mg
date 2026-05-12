@@ -256,7 +256,7 @@ class GlobTool(_SearchTool):
 
 class GrepTool(_SearchTool):
     """Search file contents using a regex-like pattern."""
-    _MAX_RESULT_CHARS = 128_000
+    _MAX_RESULT_CHARS = 256_000
     _MAX_FILE_BYTES = 2_000_000
 
     @property

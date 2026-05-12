@@ -22,7 +22,7 @@ from .filesystem_base import _FsTool
 class ListDirTool(_FsTool):
     """List directory contents with optional recursion."""
 
-    _DEFAULT_MAX = 200
+    _DEFAULT_MAX = 400
     _IGNORE_DIRS = {
         ".git", "node_modules", "__pycache__", ".venv", "venv",
         "dist", "build", ".tox", ".mypy_cache", ".pytest_cache",

@@ -327,7 +327,7 @@ class WebFetchTool(WebToolBase, Tool):
         "Works for most web pages and docs; may fail on login-walled or JS-heavy sites."
     )
 
-    def __init__(self, config: WebFetchConfig | None = None, proxy: str | None = None, user_agent: str | None = None, max_chars: int = 50000):
+    def __init__(self, config: WebFetchConfig | None = None, proxy: str | None = None, user_agent: str | None = None, max_chars: int = 100000):
         from nanobot.config.schema import WebFetchConfig
 
         WebToolBase.__init__(self, proxy=proxy, user_agent=user_agent)

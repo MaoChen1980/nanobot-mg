@@ -21,10 +21,10 @@ _STALE_THRESHOLD_DAYS = 14
 class Dream:
     """Two-phase memory processor: analyze history.jsonl, then edit files via AgentRunner."""
 
-    _MEMORY_FILE_MAX_CHARS = 32_000
-    _SOUL_FILE_MAX_CHARS = 16_000
-    _USER_FILE_MAX_CHARS = 16_000
-    _HISTORY_ENTRY_PREVIEW_MAX_CHARS = 4_000
+    _MEMORY_FILE_MAX_CHARS = 64_000
+    _SOUL_FILE_MAX_CHARS = 32_000
+    _USER_FILE_MAX_CHARS = 32_000
+    _HISTORY_ENTRY_PREVIEW_MAX_CHARS = 8_000
 
     def __init__(
         self,
