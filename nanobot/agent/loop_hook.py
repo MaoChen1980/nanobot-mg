@@ -101,11 +101,19 @@ class _LoopHook(AgentHook):
 
         # Send LLM thinking when /think is on and not streaming
         if self._observe_think and not self._on_stream:
-            thought = self._loop._strip_think(
-                context.response.content if context.response else None
-            )
-            if thought:
-                await self._on_progress(thought)
+            # Prefer explicit reasoning_content (DeepSeek-R1 etc.)
+            reasoning = (context.response.reasoning_content
+                         if context.response and context.response.reasoning_content
+                         else None)
+            if reasoning:
+                await self._on_progress(reasoning)
+            else:
+                # Fall back to text outside think tags as a "preview"
+                thought = self._loop._strip_think(
+                    context.response.content if context.response else None
+                )
+                if thought:
+                    await self._on_progress(thought)
 
         # Send tool start events when /tool is on
         if self._observe_tool:
@@ -125,6 +133,15 @@ class _LoopHook(AgentHook):
         )
 
     async def after_iteration(self, context: AgentHookContext) -> None:
+        # Send LLM reasoning when /think is on and no tool calls (before_execute_tools
+        # handles the tool-call path) and not streaming.
+        if self._observe_think and not self._on_stream and not context.tool_calls:
+            reasoning = (context.response.reasoning_content
+                         if context.response and context.response.reasoning_content
+                         else None)
+            if reasoning:
+                await self._on_progress(reasoning)
+
         # Send tool finish events when /tool is on
         if (
             self._observe_tool

@@ -159,14 +159,33 @@ class HubTCPServer:
             tool_hint: bool = False,
             tool_events: list | None = None,
         ) -> None:
-            if not content:
-                return
-            deliver_data = {
-                "type": "deliver",
-                "chat_id": msg.chat_id,
-                "content": content,
-            }
-            await self._proxy_manager.deliver_to_proxy(proxy_key, deliver_data)
+            # Send tool finish/error events — these arrive with empty content
+            # from after_iteration but carry structured event data.
+            if tool_events:
+                for te in tool_events:
+                    if not isinstance(te, dict):
+                        continue
+                    phase = te.get("phase", "")
+                    name = te.get("name", "tool")
+                    if phase == "end":
+                        text = f"✅ {name} completed"
+                    elif phase == "error":
+                        error = te.get("error", "")
+                        text = f"❌ {name}: {error}" if error else f"❌ {name} failed"
+                    else:
+                        continue
+                    await self._proxy_manager.deliver_to_proxy(proxy_key, {
+                        "type": "deliver",
+                        "chat_id": msg.chat_id,
+                        "content": text,
+                    })
+            # Send thinking text and tool hint text
+            if content:
+                await self._proxy_manager.deliver_to_proxy(proxy_key, {
+                    "type": "deliver",
+                    "chat_id": msg.chat_id,
+                    "content": content,
+                })
 
         inbound = msg.to_inbound_message()
 
