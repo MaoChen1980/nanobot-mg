@@ -89,8 +89,9 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
             maximum=600,
         ),
         capture_file=p("string",
-            "If set, write command output to this file path as it runs. "
-            "The LLM can read this file mid-execution to see partial progress. "
+            "If set, write command output to this file path in real-time as it runs. "
+            "You can use read_file on this path mid-execution to see partial progress "
+            "before the command finishes. "
             "Useful for long commands like npm install or compilation."
         ),
         grep=p("string",
@@ -106,7 +107,10 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
         from_cache=p("string",
             "Path to a previous cache file (shown when the command was first run). "
             "Skip execution and operate on cached output. "
-            "Use with grep/extract to re-examine, or alone to see full cached output."
+            "Use cases: (a) context was compressed and you lost previous output, "
+            "(b) you want to grep for specific lines or extract data from prior output "
+            "without re-running a slow command. "
+            "Combine with grep/extract to re-examine, or use alone to see full cached output."
         ),
         verify=p("string",
             "Post-execution checks: comma-separated list (no shell needed). "
@@ -196,7 +200,9 @@ class ExecTool(Tool):
             "- 只需要读文件 → 用 read_file（更好的格式支持）\n"
             "- 只需要搜索 → 用 grep\n"
             "- 只需要网络请求 → 用 web_fetch\n"
-            "- 输出会被自动缓存，可用 from_cache/grep/extract 重新查看\n\n"
+            "- 输出会被自动缓存，显示 [Full output cached: path] — 后续可用 from_cache 重新查看\n"
+            "- from_cache 场景：context 压缩后丢失了输出、想从之前输出中 grep 特定信息\n"
+            "- capture_file 场景：长时间命令（编译、安装），可中途 read_file 查看进度\n\n"
             "**极简案例**: exec(command='python -c \"print(1+1)\"', verify='exit:0,output_contains:2')\n"
             "→ 执行计算并验证结果"
         )

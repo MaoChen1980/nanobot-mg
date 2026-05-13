@@ -129,7 +129,11 @@ class ContextBuilder:
         """Build the available tools section for the system prompt."""
         if not tool_definitions:
             return ""
-        lines = ["# Available Tools\n"]
+        lines = [
+            "# Available Tools\n",
+            "注意：只读工具（grep/read_file/glob 等）相同参数 60s 内重复调用返回缓存结果。"
+            "任何工具连续返回相同内容会被去重为简短提示。\n",
+        ]
         for schema in tool_definitions:
             fn = schema.get("function", {})
             name = fn.get("name", "unknown")

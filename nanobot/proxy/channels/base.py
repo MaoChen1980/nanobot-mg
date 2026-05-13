@@ -192,7 +192,7 @@ class BaseProxyChannel:
                     logger.debug("Background reader: deliver msg to chat={}", data.get("chat_id", "")[:20])
                     await self._handle_deliver(data)
                 elif self._pending_response is not None and not self._pending_response.done():
-                    logger.debug("Background reader: fulfill pending response")
+                    logger.trace("Background reader: fulfill pending response")
                     self._pending_response.set_result(data)
                 else:
                     has_content = bool(data.get("content"))

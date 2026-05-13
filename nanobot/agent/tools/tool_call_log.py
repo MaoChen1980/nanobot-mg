@@ -11,7 +11,13 @@ from nanobot.agent.tools.schema import p, tool_parameters_schema
 
 @tool_parameters(
     tool_parameters_schema(
-        session_key=p("string", "Filter by session key (session identifier)"),
+        session_key=p("string",
+            "Filter by session key (session identifier). "
+            "To find the current session's key: run list_goals or check the "
+            "session info at the top of your context (usually displayed as "
+            "'Session: <key>' in the system prompt). "
+            "Without a session_key filter, returns calls from all sessions."
+        ),
         tool_name=p("string", "Filter by tool name (e.g. 'exec', 'read_file', 'grep')"),
         success=p("integer", "Filter by success (1=success, 0=failed)"),
         min_result_size=p("integer", "Filter to results larger than N characters"),
@@ -35,7 +41,7 @@ class ToolCallLogTool(Tool):
             "- Tracking large results (min_result_size > 5000)\n\n"
             "Parameters:\n"
             "limit: max 100 records.\n"
-            "- session_key: Filter by session\n"
+            "- session_key: Filter by session. Current session key is shown in system prompt.\n"
             "- tool_name: Filter by tool (e.g. 'exec', 'read_file', 'grep')\n"
             "- success: true=failed only, false=success only\n"
             "- min_result_size: results larger than N chars\n"

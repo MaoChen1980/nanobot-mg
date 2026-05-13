@@ -31,7 +31,9 @@ class RecallTool(Tool):
 
     description = (
         "**用途**: 搜索历史记忆，用于回答关于过去事件的问题。"
-        "搜索范围：session 历史记录（SQLite 或 history.jsonl）+ MEMORY.md。\n\n"
+        "搜索范围：session 历史记录（SQLite 或 history.jsonl）+ MEMORY.md。"
+        "注意：只能搜历史会话记录，不能搜 goal/event 表。"
+        "查询当前目标的进度请用 list_goals/list_events。\n\n"
         "**限制**:\n"
         "- 最多返回 50 条结果\n"
         "- keyword 不区分大小写，多个关键词用空格分隔（OR 逻辑）\n"

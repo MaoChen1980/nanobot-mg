@@ -189,7 +189,13 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
         path=p("string", "The file path to edit"),
         old_text=p("string", "The text to find and replace"),
         new_text=p("string", "The text to replace with"),
-        replace_all=p("boolean", "Replace all occurrences (default false)"),
+        replace_all=p("boolean",
+            "Replace all occurrences (default false). "
+            "When old_text appears multiple times and replace_all=false, "
+            "the tool returns a warning listing the line numbers of each match. "
+            "If you only want to replace one specific occurrence, add more surrounding "
+            "context to old_text to make it unique."
+        ),
         first_line=p("integer", "Line number to start replacing from (1-indexed). When set with last_line, replaces that line range with new_text directly — no fuzzy matching needed.",
             minimum=1,
         ),
@@ -218,6 +224,7 @@ class EditFileTool(_FsTool):
         "- 文本匹配容忍空格差异，但不能跨越函数/类重组\n\n"
         "**错误应对**:\n"
         "- old_text 找不到 → 显示 diff 辅助定位\n"
+        "- old_text 出现多次且 replace_all=false → 显示每处匹配的行号，要求提供更多上下文或设置 replace_all=true\n"
         "- 文件不存在 → 返回错误\n\n"
         "**边界条件**:\n"
         "- 需要创建新文件 → 用 write_file\n"

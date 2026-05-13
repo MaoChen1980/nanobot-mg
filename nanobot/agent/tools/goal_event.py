@@ -34,15 +34,17 @@ from nanobot.agent.tools.schema import p
         "properties": {
             "id": p("string", "Subtask ID"),
             "title": p("string", "Subtask title"),
-            "status": p("string", "Status: todo/done"),
+            "status": p("string", "Status: todo (未开始) / done (已完成)"),
         },
     }),
     "scopes": p("array",
-        "Functional scopes this goal belongs to (e.g. ['memory', 'agent/loop'])",
+        "Functional scopes this goal belongs to. Uses hierarchical naming: "
+        "'module' for broad, 'module/submodule' for specific. "
+        "Examples: ['memory'], ['agent/loop'], ['tools/shell']",
         items=p("string", ""),
     ),
     "notes": p("array", "Additional notes", items=p("string", "")),
-    "blockers": p("array", "Blocking issues", items=p("string", "")),
+    "blockers": p("array", "Blocking issues — free text descriptions of what's blocking this goal", items=p("string", "")),
 }, required=["id", "title", "action"])
 class WriteGoal(Tool):
     """Create or update a goal in structured DB.
