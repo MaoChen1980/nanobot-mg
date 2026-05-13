@@ -224,10 +224,16 @@ class HubTCPServer:
         # Route response through proxy_manager so it reaches the CURRENT
         # TCP connection — the proxy may have reconnected during processing.
         proxy_key = f"{msg.channel}:{msg.bot}"
+        resp_dict = resp.to_dict()
         delivered = await self._proxy_manager.deliver_to_proxy(
-            proxy_key, resp.to_dict(),
+            proxy_key, resp_dict,
         )
-        if not delivered:
+        if delivered:
+            logger.info(
+                "Hub response delivered to proxy {}: content={}",
+                proxy_key, resp_dict.get("content", "")[:60],
+            )
+        else:
             logger.warning(
                 "Response not delivered to proxy {} (disconnected during processing)",
                 proxy_key,

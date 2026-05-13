@@ -121,6 +121,7 @@ class FeishuProxyChannel(BaseProxyChannel):
 
                     response = self.send_to_hub(msg_data)
                     if response and response.success and response.content:
+                        logger.info("Proxy sending response to Feishu: {}:{}", chat_id[:20], response.content[:60])
                         self._send_text_reply(chat_id, message_id, response.content)
                     if response and response.success and response.metadata.get("done_emoji"):
                         self._add_reaction(message_id, response.metadata["done_emoji"])
