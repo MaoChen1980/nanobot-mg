@@ -13,7 +13,7 @@ def register_observe_commands(router) -> None:
 
 async def cmd_think(ctx) -> OutboundMessage:
     """Toggle LLM thinking/thinking block visibility in the channel."""
-    session_key = ctx.loop._effective_session_key(ctx.msg)
+    session_key = ctx.key
     enabled = ctx.loop._session_observe["_observe_think"].get(session_key, False)
     enabled = not enabled
     ctx.loop._session_observe["_observe_think"][session_key] = enabled
@@ -30,7 +30,7 @@ async def cmd_think(ctx) -> OutboundMessage:
 
 async def cmd_tool(ctx) -> OutboundMessage:
     """Toggle tool call start/end events visibility in the channel."""
-    session_key = ctx.loop._effective_session_key(ctx.msg)
+    session_key = ctx.key
     enabled = ctx.loop._session_observe["_observe_tool"].get(session_key, False)
     enabled = not enabled
     ctx.loop._session_observe["_observe_tool"][session_key] = enabled
@@ -47,7 +47,7 @@ async def cmd_tool(ctx) -> OutboundMessage:
 
 async def cmd_opt(ctx) -> OutboundMessage:
     """Toggle context optimizer — two-stage context optimization."""
-    session_key = ctx.loop._effective_session_key(ctx.msg)
+    session_key = ctx.key
     enabled = ctx.loop._session_observe["_observe_opt"].get(session_key, False)
     enabled = not enabled
     ctx.loop._session_observe["_observe_opt"][session_key] = enabled
