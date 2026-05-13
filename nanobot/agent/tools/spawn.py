@@ -58,13 +58,15 @@ Spawn a subagent to handle independent tasks in the background. The subagent wil
 - Tasks requiring your intermediate decisions or feedback
 - Tasks whose results are needed by subsequent steps in the main agent
 - Creating external resources, accounts, or services
+- Anything requiring skills or custom tooling — subagent has no skills access
 
 ## Constraints
 - Subagent has its own isolated session (no access to main conversation)
 - Subagent cannot spawn further subagents (no nesting)
 - Results will be announced as a system message
 - Max 30 tool-use iterations per subagent
-- Subagent tools: read_file, list_dir, glob, grep, write_file, edit_file, web_search, web_fetch, exec (no spawn, no session_manage)
+- Subagent tools: read_file, list_dir, glob, grep, write_file, edit_file, web_search, web_fetch, exec (no spawn, no session_manage, no skills)
+- Skills are NOT passed to the subagent — only bootstrap files (SOUL.md, USER.md, etc.) are included as context
 """.strip()
 
     async def execute(self, task: str, label: str | None = None, **kwargs: Any) -> str:

@@ -32,7 +32,14 @@ class ListDirTool(_FsTool):
     name = "list_dir"
 
     description = (
-            "List the contents of a directory. "
+            "List the contents of a directory.\n\n"
+            "Use this when:\n"
+            "- You need to see what files are in a directory\n"
+            "- You want to explore a project's structure\n"
+            "- You need to find files by name (use glob for pattern matching)\n\n"
+            "Do NOT use when:\n"
+            "- You need to find files matching a pattern — use glob instead\n"
+            "- You need to search file contents — use grep instead\n\n"
             "Preferred over exec(ls/dir) — auto-ignores noise directories "
             "(.git, node_modules, __pycache__, etc.). "
             "Max 400 entries by default; use recursive=true for nested structure."

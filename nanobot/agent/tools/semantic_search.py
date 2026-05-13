@@ -46,7 +46,9 @@ class SearchMemoryTool(Tool):
         "- You want to check if memory already has relevant info before asking the user\n\n"
         "Do NOT use when:\n"
         "- You need exact keyword matches — use grep instead\n"
-        "- You know the exact file path — just use read_file\n\n"
+        "- You know the exact file path — just use read_file\n"
+        "- You need to search within a single text/document — use search_text instead\n"
+        "- You need a table of contents preview — use inspect_text instead\n\n"
         "Results: each has a score (0-1), source file, and line range.\n"
         "How to act:\n"
         "- score > 0.6: highly relevant — use read_file to read the full section\n"
@@ -119,7 +121,8 @@ class SearchTextTool(Tool):
         self._allowed_dir = allowed_dir
 
     description = (
-        "Find relevant passages in a large text by meaning, without reading it all.\n\n"
+        "Find relevant passages in a single text block by meaning, without reading it all. "
+        "Operates on one text you provide (inline or file path).\n\n"
         "Use this when:\n"
         "- web_fetch returned a long article and you only need parts relevant to "
         "your question\n"
@@ -128,7 +131,8 @@ class SearchTextTool(Tool):
         "- You want to extract just the useful parts from a long text\n\n"
         "Do NOT use when:\n"
         "- You need exact keyword matches — use grep instead\n"
-        "- You don't yet know what the text contains — use inspect_text first\n\n"
+        "- You don't yet know what the text contains — use inspect_text first\n"
+        "- You need to search across memory/ directory — use search_memory instead\n\n"
         "Results: each has a score (0-1), char offset, and length.\n"
         "How to act:\n"
         "- score > 0.6: relevant — read it with text[offset:offset+length]\n"

@@ -17,13 +17,13 @@ _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv"
 
 @tool_parameters(
     tool_parameters_schema(
-        glob=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py'"),
+        pattern=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py' (legacy alias: glob)"),
         grep=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context)"),
         path=p("string", "Directory to search from (default '.')"),
         max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50),
         max_lines=p("integer", "Maximum lines per file (default 100)", minimum=1, maximum=500),
     ),
-    required=["glob"],
+    required=["pattern"],
 )
 class ReadFilesTool(_FsTool):
     """Read multiple files at once by glob pattern — no more glob→read loops."""
@@ -38,26 +38,29 @@ class ReadFilesTool(_FsTool):
         "- You want to see several related files in one call\n"
         "- You find yourself calling glob then read_file multiple times\n"
         "- You need to grep for a pattern across files and see the full context\n\n"
-        "Each file is shown with its path as a header, content below.\n"
-        "Files are sorted by modification time (newest first).\n"
-        "Skips binary files and files >2 MB.\n"
-        "Supply `grep` to only return matching lines from each file.\n\n"
         "Do NOT use when:\n"
         "- You need to read from a specific offset — use read_file instead\n"
-        "- You only need file names — use glob instead\n\n"
-        "Limits: max 50 files, ~500 lines each, ~128K chars total output."
-        "- You're searching for specific content — use grep instead"
+        "- You only need file names — use glob instead\n"
+        "- You're searching for specific content — use grep instead\n\n"
+        "Each file is shown with its path as a header, content below. "
+        "Files sorted by modtime (newest first). "
+        "Skips binary files and files >2 MB. "
+        "Limit: max 50 files, ~500 lines each, ~128K chars total output. "
+        "Supply `grep` to only return matching lines."
     )
 
     async def execute(
         self,
-        glob: str = "",
+        pattern: str = "",
         grep: str | None = None,
         path: str = ".",
         max_files: int = 10,
         max_lines: int = 100,
         **kwargs: Any,
     ) -> str:
+        # Backwards compat: legacy alias "glob"
+        if not pattern and kwargs.get("glob"):
+            pattern = kwargs["glob"]
         try:
             root = self._resolve(path or ".")
             if not root.exists():
@@ -71,7 +74,7 @@ class ReadFilesTool(_FsTool):
                 for filename in sorted(filenames):
                     fp = Path(dirpath) / filename
                     rel = fp.relative_to(root).as_posix()
-                    if _match_glob(rel, filename, glob):
+                    if _match_glob(rel, filename, pattern):
                         try:
                             mtime = fp.stat().st_mtime
                         except OSError:
@@ -79,7 +82,7 @@ class ReadFilesTool(_FsTool):
                         matches.append((fp, mtime))
 
             if not matches:
-                return f"No files matched glob pattern: {glob}"
+                return f"No files matched glob pattern: {pattern}"
 
             matches.sort(key=lambda x: (-x[1], x[0]))
             selected = matches[:max_files]
@@ -139,7 +142,7 @@ class ReadFilesTool(_FsTool):
                 total_chars += extra_sep + len(block)
 
             if not parts:
-                return f"No readable text files matched: {glob}"
+                return f"No readable text files matched: {pattern}"
 
             result = "\n\n".join(parts)
 

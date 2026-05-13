@@ -106,9 +106,17 @@ class WebSearchTool(WebToolBase, Tool):
 
     name = "web_search"
     description = (
-        "Search the web. Returns titles, URLs, and snippets. "
+        "Search the web using the configured provider.\n\n"
+        "Use this when:\n"
+        "- You need current information, news, or facts not in your training data\n"
+        "- You want to find URLs to fetch via web_fetch\n"
+        "- You need to research a topic or verify claims\n\n"
+        "Do NOT use when:\n"
+        "- You already have a URL — use web_fetch instead\n"
+        "- You need to read a specific page — that's web_fetch\n\n"
+        "Returns titles, URLs, and snippets. "
         "count defaults to 5 (max 10). "
-        "Use web_fetch to read a specific page in full."
+        "Auto-falls back to DuckDuckGo when configured provider lacks API keys."
     )
 
     def __init__(self, config: WebSearchConfig | None = None, proxy: str | None = None, user_agent: str | None = None):
@@ -320,11 +328,17 @@ class WebFetchTool(WebToolBase, Tool):
 
     name = "web_fetch"
     description = (
-        "Fetch a URL and extract readable content — has built-in regex `extract` parameter "
-        "for filtering lines from the fetched page (e.g. extract='price.*\\\\d+'). "
-        "Output capped at maxChars (default 100 000). "
-        "Works for most web pages and docs; may fail on login-walled or JS-heavy sites. "
-        "Preferred over exec curl/wget."
+        "Fetch a URL and extract readable content — preferred over exec curl/wget.\n\n"
+        "Use this when:\n"
+        "- You have a URL and need its content\n"
+        "- You need to read documentation, API responses, or rendered web pages\n"
+        "- You want to follow up on a web_search result\n\n"
+        "Do NOT use when:\n"
+        "- You don't have a URL yet — use web_search first\n"
+        "- You need page metadata only — search results already provide titles and URLs\n\n"
+        "Built-in regex extract parameter filters lines from the fetched page "
+        "(e.g. extract='price.*\\\\d+'). Output capped at maxChars (default 100 000). "
+        "Works for most web pages and docs; may fail on login-walled or JS-heavy sites."
     )
 
     def __init__(self, config: WebFetchConfig | None = None, proxy: str | None = None, user_agent: str | None = None, max_chars: int = 100000):

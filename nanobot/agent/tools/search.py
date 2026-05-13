@@ -144,7 +144,14 @@ class GlobTool(_SearchTool):
     @property
     def description(self) -> str:
         return (
-            "Find files matching a glob pattern (e.g. '*.py', 'tests/**/test_*.py'). "
+            "Find files matching a glob pattern.\n\n"
+            "Use this when:\n"
+            "- You need to find files by name pattern (e.g. '*.py', 'tests/**/test_*.py')\n"
+            "- You want to explore a directory structure filtered by file type\n"
+            "- You need to verify a file exists before reading it\n\n"
+            "Do NOT use when:\n"
+            "- You need to search file contents — use grep instead\n"
+            "- You want to see all files in a directory — use list_dir instead\n\n"
             "Preferred over exec find/ls/dir — no shell escaping needed. "
             "Results sorted by modtime (newest first), max 250 by default (1000 max). "
             "Skips .git, node_modules, __pycache__, and other noise directories."
@@ -267,11 +274,19 @@ class GrepTool(_SearchTool):
     @property
     def description(self) -> str:
         return (
-            "Search file contents with a regex pattern. "
+            "Search file contents with a regex pattern.\n\n"
+            "Use this when:\n"
+            "- You need to find where a function, variable, or string is used in the codebase\n"
+            "- You want to search for patterns across multiple files\n"
+            "- You need to explore code that matches a specific pattern\n\n"
+            "Do NOT use when:\n"
+            "- You just need to find files by name — use glob instead\n"
+            "- You need to read a specific file — use read_file instead\n"
+            "- You need an exact line number from a known file — use read_file with offset\n\n"
             "Preferred over exec grep/findstr/Select-String. "
             "Default output_mode is files_with_matches (file paths only); "
             "use content mode for matching lines with context. "
-            "Skips binary and files >2 MB. Supports glob/type filtering. "
+            "Skips binary files >2 MB. Supports glob/type filtering. "
             "Results truncated at ~256K chars."
         )
 
@@ -297,9 +312,9 @@ class GrepTool(_SearchTool):
                     "type": "string",
                     "description": "Optional file filter, e.g. '*.py' or 'tests/**/test_*.py'",
                 },
-                "type": {
+                "file_type": {
                     "type": "string",
-                    "description": "Optional file type shorthand, e.g. 'py', 'ts', 'md', 'json'",
+                    "description": "Optional file type shorthand, e.g. 'py', 'ts', 'md', 'json' (legacy alias: type)",
                 },
                 "case_insensitive": {
                     "type": "boolean",
@@ -388,7 +403,7 @@ class GrepTool(_SearchTool):
         pattern: str,
         path: str = ".",
         glob: str | None = None,
-        type: str | None = None,
+        file_type: str | None = None,
         case_insensitive: bool = False,
         fixed_strings: bool = False,
         output_mode: str = "files_with_matches",
@@ -400,6 +415,9 @@ class GrepTool(_SearchTool):
         offset: int = 0,
         **kwargs: Any,
     ) -> str:
+        # Backwards compat: legacy alias "type"
+        if file_type is None and kwargs.get("type"):
+            file_type = kwargs["type"]
         try:
             target = self._resolve(path or ".")
             if not target.exists():
@@ -438,7 +456,7 @@ class GrepTool(_SearchTool):
                 rel_path = file_path.relative_to(root).as_posix()
                 if glob and not _match_glob(rel_path, file_path.name, glob):
                     continue
-                if not _matches_type(file_path.name, type):
+                if not _matches_type(file_path.name, file_type):
                     continue
 
                 raw = file_path.read_bytes()

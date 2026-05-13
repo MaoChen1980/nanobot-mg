@@ -212,15 +212,19 @@ class EditFileTool(_FsTool):
     name = "edit_file"
 
     description = (
-            "Edit a file. Two modes:\n"
+            "Edit a file by replacing text or replacing line ranges.\n\n"
+            "Use this when:\n"
+            "- You need to modify an existing file\n"
+            "- You need to fix a bug, update a function, or change configuration\n"
+            "- You want to make surgical changes without rewriting the whole file\n\n"
+            "Do NOT use when:\n"
+            "- You need to create a new file — use write_file instead\n"
+            "- You need to do a find-and-replace across many files — use exec sed\n\n"
+            "Two modes:\n"
             "1. Text-matching (default): replace old_text with new_text. "
-            "Tolerates minor whitespace/indentation differences and curly/straight quote mismatches. "
-            "If old_text matches multiple times, provide more context or set replace_all=true.\n"
-            "2. Line-based: set first_line and last_line to replace lines N through M directly. "
-            "Fastest for simple edits — no text matching needed. "
-            "Shows a diff of the closest match on failure.\n\n"
-            "Use then_grep to verify the edit landed correctly without a separate read_file call. "
-            "Example: then_grep='def new_function' confirms the new code is in place."
+            "Tolerates minor whitespace/indentation differences.\n"
+            "2. Line-based: set first_line and last_line to replace lines N through M.\n"
+            "Shows a diff on failure. Use then_grep to verify the edit landed."
         )
 
     @staticmethod

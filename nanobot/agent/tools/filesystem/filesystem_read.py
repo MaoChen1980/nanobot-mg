@@ -38,14 +38,19 @@ class ReadFileTool(_FsTool):
     name = "read_file"
 
     description = (
-            "Read a file (or grep/filter a log) — has built-in regex `extract` parameter. "
-            "Preferred over exec(cat/head/tail/grep/findstr/PowerShell)...\n"
+            "Read a file or filter a log.\n\n"
+            "Use this when:\n"
+            "- You need to read a file's contents\n"
+            "- You want to grep/filter a log with the built-in regex extract parameter\n"
+            "- You need to view images, PDFs, DOCX, XLSX, or PPTX\n\n"
+            "Do NOT use when:\n"
+            "- You need to read multiple files — use read_files instead\n"
+            "- You only need file names or structure — use list_dir or glob instead\n"
+            "- You have a URL — use web_fetch instead\n\n"
+            "Preferred over exec(cat/head/tail/grep). "
             "Text output format: LINE_NUM|CONTENT. "
-            "Also handles images, PDFs, DOCX, XLSX, PPTX automatically.\n"
-            "Use `extract` to filter by regex and only see matching lines (+ context).\n"
-            "Use offset and limit for large text files. "
-            "Default limit 2000 lines, max ~128K chars. PDF max 20 pages.\n"
-            "Framework auto-validates: path is required and non-empty."
+            "Use offset and limit for large files. "
+            "Default limit 2000 lines, max ~128K chars. PDF max 20 pages."
         )
 
     read_only = True

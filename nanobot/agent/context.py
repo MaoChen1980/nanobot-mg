@@ -134,13 +134,13 @@ class ContextBuilder:
             fn = schema.get("function", {})
             name = fn.get("name", "unknown")
             desc = fn.get("description", "")
-            # Keep the headline (~first 2 sentences / 400 chars) so LLM
+            # Keep the headline (~first sentences / 800 chars) so LLM
             # sees "use when" / "do NOT use" guidance in the reference list.
-            if len(desc) > 400:
+            if len(desc) > 800:
                 # Try to break at the last sentence boundary within limit
-                truncated = desc[:397]
+                truncated = desc[:797]
                 last_break = max(truncated.rfind(". "), truncated.rfind("\n\n"))
-                if last_break > 200:
+                if last_break > 400:
                     desc = truncated[:last_break + 1]
                 else:
                     desc = truncated + "..."

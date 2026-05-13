@@ -110,14 +110,8 @@ class BaseProxyChannel:
                 logger.info("Registered with Hub via TCP")
                 await self._start_background_reader()
                 self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-                # Notify last chat if we have one (startup message)
-                # Use hasattr + create_task to avoid blocking conn_loop, and handle missing _send_plain_text
-                if self._last_chat_id and hasattr(self, "_send_plain_text"):
-                    # Schedule startup notification on conn_loop (non-blocking)
-                    future = asyncio.run_coroutine_threadsafe(
-                        self._send_startup_notification(), self._conn_loop
-                    )
-                    # Don't wait — let it run in background
+                # Startup notification is the subclass's responsibility — call
+                # notify_ready() or override _send_startup_notification in start().
             else:
                 raise RuntimeError(f"TCP registration failed: {resp}")
 

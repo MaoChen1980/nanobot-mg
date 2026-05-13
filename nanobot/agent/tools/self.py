@@ -120,11 +120,11 @@ class MyTool(Tool):
             "max_iterations - _current_iteration = remaining iterations.\n"
             "Note: web_config and exec_config are readable but read-only.\n"
             "\n"
-            "When to use:\n"
-            "- User asks about your model, settings, or token usage → check that key.\n"
-            "- A tool fails or behaves unexpectedly → check the related config to diagnose.\n"
-            "- User asks you to remember a preference for this session → set to store it in your scratchpad.\n"
-            "- About to start a large task → check context_window_tokens and max_iterations first.\n"
+            "Why use this:\n"
+            "- Understand your own limits before starting large tasks — check context_window_tokens and max_iterations.\n"
+            "- Diagnose tool failures — check related config (web_config, exec_config).\n"
+            "- Track state across turns — use scratchpad to remember user preferences.\n"
+            "- Avoid guessing about your own config — use `self check` instead.\n"
             "Scratchpad: max 64 keys, values must be JSON-safe types."
         )
         if not self._modify_allowed:

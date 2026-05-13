@@ -100,10 +100,15 @@ class MessageTool(Tool):
     name = "message"
 
     description = (
-            "Send a message to the user, optionally with file attachments. "
-            "This is the ONLY way to deliver files (images, documents, audio, video) to the user. "
-            "Use the 'media' parameter with file paths to attach files. "
-            "Do NOT use read_file to send files — that only reads content for your own analysis."
+            "Send a message to the user, optionally with file attachments.\n\n"
+            "Use this when:\n"
+            "- You need to deliver text content to the user\n"
+            "- You need to send files (images, documents, audio, video) — this is the ONLY way\n"
+            "- You want to present results or notifications\n\n"
+            "Do NOT use when:\n"
+            "- You need to ask a blocking question — use ask_user instead\n"
+            "- You only need to read a file for your own analysis — use read_file\n\n"
+            "Use the 'media' parameter with file paths to attach files."
         )
 
     async def execute(

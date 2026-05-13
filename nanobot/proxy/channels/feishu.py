@@ -564,17 +564,22 @@ class FeishuProxyChannel(BaseProxyChannel):
 
     async def _send_startup_notification(self) -> None:
         """Send startup notification to the last chat that messaged us."""
+        if not self._last_chat_id or self._last_chat_id in self._notified_chats:
+            return
         # Wait a moment for WS to settle
         await asyncio.sleep(2)
-        if self._last_chat_id:
-            try:
-                # Use to_thread to avoid blocking conn_loop
-                await asyncio.to_thread(
-                    self._send_plain_text, self._last_chat_id, "Nano Bot 已启动，Proxy ready ✅"
-                )
-                logger.info("Startup notification sent to {}", self._last_chat_id)
-            except Exception as e:
-                logger.error("Failed to send startup notification: {}", e)
+        # Double-check after sleep in case another task beat us
+        if self._last_chat_id in self._notified_chats:
+            return
+        self._notified_chats.add(self._last_chat_id)
+        try:
+            # Use to_thread to avoid blocking conn_loop
+            await asyncio.to_thread(
+                self._send_plain_text, self._last_chat_id, "Nano Bot 已启动，Proxy ready ✅"
+            )
+            logger.info("Startup notification sent to {}", self._last_chat_id)
+        except Exception as e:
+            logger.error("Failed to send startup notification: {}", e)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -634,8 +639,10 @@ class FeishuProxyChannel(BaseProxyChannel):
         thread.start()
 
         # Wait for WS loop to initialize (lark client is created in this method)
-        # then send startup notification to last chat that messaged us
-        asyncio.run_coroutine_threadsafe(self._send_startup_notification(), self._conn_loop)
+        # then send startup notification to last chat that messaged us.
+        # Only send if we have a last_chat_id to avoid empty notifications.
+        if self._last_chat_id:
+            asyncio.run_coroutine_threadsafe(self._send_startup_notification(), self._conn_loop)
 
         while True:
             time.sleep(5)

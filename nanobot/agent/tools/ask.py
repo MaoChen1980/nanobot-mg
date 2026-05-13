@@ -30,9 +30,15 @@ class AskUserTool(Tool):
     name = "ask_user"
 
     description = (
-            "Pause and ask the user a question when their answer is required to continue. "
-            "Use options for likely answers; the user's reply, typed or selected, is returned as the tool result. "
-            "For non-blocking notifications or buttons, use the message tool instead."
+            "Pause and ask the user a question when their answer is required to continue.\n\n"
+            "Use this when:\n"
+            "- You need a decision from the user before proceeding\n"
+            "- The task requires information only the user can provide\n"
+            "- You need to clarify ambiguous requirements\n\n"
+            "Do NOT use when:\n"
+            "- You just want to notify the user — use the message tool instead\n"
+            "- You can proceed with reasonable defaults — just continue\n\n"
+            "Provide options for likely answers; the user's reply is returned as the tool result."
         )
 
     exclusive = True

@@ -17,8 +17,15 @@ class DeleteFileTool(_FsTool):
 
     name = "delete_file"
     description = (
-        "Delete a file. Safer than exec rm — workspace-guarded and single-file only.\n"
-        "Framework auto-verifies: path exists, path is a file (not directory).\n"
+        "Delete a file.\n\n"
+        "Use this when:\n"
+        "- You need to remove a file that is no longer needed\n"
+        "- You need to clean up temporary or generated files\n\n"
+        "Do NOT use when:\n"
+        "- You need to delete a directory — use exec rm -rf / rmdir instead\n"
+        "- You want to move a file to trash — no undo available\n\n"
+        "Safer than exec rm — workspace-guarded and single-file only. "
+        "Framework auto-verifies: path exists, path is a file (not directory). "
         "Auto-confirms deletion after execution."
     )
 

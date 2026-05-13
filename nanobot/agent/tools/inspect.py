@@ -44,7 +44,7 @@ class InspectTextTool(Tool):
 
     description = (
         "Get a map of what a document covers before reading it — like a table of "
-        "contents.\n\n"
+        "contents. Operates on a single text block or file.\n\n"
         "Use this when:\n"
         "- You received a long text (web_fetch, API response, file) and need to "
         "decide what's worth reading\n"
@@ -52,7 +52,9 @@ class InspectTextTool(Tool):
         "- You're not sure if a text is relevant and want a preview first\n\n"
         "Do NOT use when:\n"
         "- You already know what the text contains — just read the relevant parts\n"
-        "- You need to find specific info — use search_text instead\n\n"
+        "- You need to find specific info by meaning — use search_text instead\n"
+        "- You need exact keyword matches — use grep instead\n"
+        "- You need to search across memory files — use search_memory instead\n\n"
         "Results: a list of sections, each with:\n"
         "- heading (from markdown, JSON key, separator, or auto-labeled)\n"
         "- representative sentence (the sentence that best represents the section)\n"

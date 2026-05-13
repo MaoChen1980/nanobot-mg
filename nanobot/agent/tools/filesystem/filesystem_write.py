@@ -39,14 +39,17 @@ class WriteFileTool(_FsTool):
     name = "write_file"
 
     description = (
-            "Write content to a file. Overwrites if the file already exists; "
-            "creates parent directories as needed. "
-            "For partial edits, prefer edit_file instead.\n\n"
-            "Built-in verification (use instead of a separate read/exec call):\n"
-            "  - then_grep: verify content was written correctly by searching for a pattern\n"
-            "    Example: then_grep='def my_function' to confirm the function definition landed\n"
-            "  - then_check='auto': auto type-check Python/TypeScript files after writing\n"
-            "  - then_exec: run a command after writing (works with then_check for write→check→exec)"
+            "Write content to a file.\n\n"
+            "Use this when:\n"
+            "- You need to create a new file\n"
+            "- You need to overwrite an existing file with new content\n"
+            "- You need to generate code, config, or data files\n\n"
+            "Do NOT use when:\n"
+            "- You need to make partial edits to a file — use edit_file instead\n"
+            "- You only need to read a file — use read_file\n\n"
+            "Overwrites if the file already exists; creates parent directories as needed. "
+            "Built-in verification: then_grep (verify pattern), "
+            "then_check='auto' (type-check Python/TS), then_exec (run command after write)."
         )
 
     async def execute(

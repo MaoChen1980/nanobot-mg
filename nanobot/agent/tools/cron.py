@@ -47,13 +47,18 @@ _CRON_PARAMETERS = tool_parameters_schema(
     ),
     required=["action"],
     description=(
-        "Action-specific parameters: add requires a non-empty message plus one schedule "
-        "(every_seconds, cron_expr, or at); remove requires job_id; "
-        "update accepts job_id plus any fields to change (message, schedule, name, deliver); "
-        "test runs the job immediately for debugging (job_id required unless inside a cron job). "
-        "Per-action requirements are enforced at runtime (see field descriptions) so the "
-        "top-level schema stays compatible with providers (e.g. OpenAI Codex/Responses) that "
-        "reject oneOf/anyOf/allOf/enum/not at the root of function parameters."
+        "Schedule recurring or one-shot tasks.\n\n"
+        "Use this when:\n"
+        "- You need a reminder at a specific time or interval\n"
+        "- You want to schedule recurring checks or maintenance\n"
+        "- You need to run a task at a future time\n\n"
+        "Do NOT use when:\n"
+        "- You want to execute something immediately — use exec or other tools\n"
+        "- You're inside a cron job and need job_id — it's auto-injected\n\n"
+        "Actions: add (needs message + schedule), remove (needs job_id), "
+        "update (job_id + fields to change), list (view all), "
+        "test (run immediately for debugging). "
+        "Schedule options: every_seconds, cron_expr, or at (ISO 8601)."
     ),
 )
 

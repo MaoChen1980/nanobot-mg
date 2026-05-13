@@ -335,7 +335,11 @@ class DeclareAssumption(Tool):
     """
 
     name = "declare_assumption"
-    description = "Declare hypothesis assumption for subtask_0. Must be called before proceeding past subtask_0."
+    description = (
+        "Declare a hypothesis assumption for goal subtask_0. "
+        "Must be called before proceeding past subtask_0. "
+        "The system (not LLM) will compare expected vs actual to determine the verdict."
+    )
 
     def __init__(self, memory: MemoryStore):
         super().__init__()
@@ -428,7 +432,10 @@ class VerifyAssumption(Tool):
     """
 
     name = "verify_assumption"
-    description = "Verify hypothesis assumption - system compares expected vs actual to determine verdict."
+    description = (
+        "Verify a hypothesis assumption — system compares expected vs actual to determine verdict. "
+        "Called by the system (not LLM). Sets passed=True only if actual matches expected."
+    )
 
     def __init__(self, memory: MemoryStore):
         super().__init__()
