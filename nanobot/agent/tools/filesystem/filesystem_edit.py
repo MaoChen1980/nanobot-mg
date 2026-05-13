@@ -212,20 +212,19 @@ class EditFileTool(_FsTool):
     name = "edit_file"
 
     description = (
-            "Edit a file by replacing text or replacing line ranges.\n\n"
-            "Use this when:\n"
-            "- You need to modify an existing file\n"
-            "- You need to fix a bug, update a function, or change configuration\n"
-            "- You want to make surgical changes without rewriting the whole file\n\n"
-            "Do NOT use when:\n"
-            "- You need to create a new file — use write_file instead\n"
-            "- You need to do a find-and-replace across many files — use exec sed\n\n"
-            "Two modes:\n"
-            "1. Text-matching (default): replace old_text with new_text. "
-            "Tolerates minor whitespace/indentation differences.\n"
-            "2. Line-based: set first_line and last_line to replace lines N through M.\n"
-            "Shows a diff on failure. Use then_grep to verify the edit landed."
-        )
+        "**用途**: 通过文本匹配或行号范围修改文件内容。\n\n"
+        "**限制**:\n"
+        "- 不支持跨文件的查找替换\n"
+        "- 文本匹配容忍空格差异，但不能跨越函数/类重组\n\n"
+        "**错误应对**:\n"
+        "- old_text 找不到 → 显示 diff 辅助定位\n"
+        "- 文件不存在 → 返回错误\n\n"
+        "**边界条件**:\n"
+        "- 需要创建新文件 → 用 write_file\n"
+        "- 需要跨文件查找替换 → 用 exec sed\n\n"
+        "**极简案例**: edit_file(path='main.py', old_text='foo()', new_text='bar()')\n"
+        "→ 替换文件中的文本，返回确认"
+    )
 
     @staticmethod
     def _strip_trailing_ws(text: str) -> str:

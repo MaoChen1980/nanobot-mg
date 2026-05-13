@@ -18,16 +18,18 @@ class MoveFileTool(_FsTool):
 
     name = "move_file"
     description = (
-        "Move or rename a file.\n\n"
-        "Use this when:\n"
-        "- You need to rename a file\n"
-        "- You need to move a file to a different directory\n\n"
-        "Do NOT use when:\n"
-        "- You need to copy a file — use exec cp/xcopy instead\n"
-        "- You need to move directories — file operations only\n\n"
-        "Safer than exec mv — workspace-guarded and single-file only. "
-        "Framework auto-verifies: source exists, source is a file, destination does not exist. "
-        "Auto-confirms both files after execution."
+        "**用途**: 移动或重命名文件。\n\n"
+        "**限制**:\n"
+        "- 只支持单文件操作\n"
+        "- 目标路径不可已存在\n\n"
+        "**错误应对**:\n"
+        "- 源文件不存在 → 返回错误\n"
+        "- 目标已存在 → 返回错误（不会覆盖）\n\n"
+        "**边界条件**:\n"
+        "- 需要复制文件 → 用 exec cp / xcopy\n"
+        "- 需要移动目录 → 用 exec mv\n\n"
+        "**极简案例**: move_file(source='a.txt', dest='bak/a.txt')\n"
+        "→ 移动文件，返回确认"
     )
 
     _pre_validators = [PathExists("source"), PathType("source", "file"), PathNotExists("dest")]

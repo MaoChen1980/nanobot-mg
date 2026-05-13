@@ -27,17 +27,19 @@ class GitInspectTool(_FsTool):
     read_only = True
 
     description = (
-        "Inspect git history — who changed what and why.\n\n"
-        "Without arguments: shows recent commits.\n"
-        "With `path`: filter commits touching that file/directory.\n"
-        "With `since`: filter by time range.\n"
-        "With `commit`: show full commit details including diff.\n\n"
-        "Use this when:\n"
-        "- You need to understand why a change was made\n"
-        "- You're debugging and want to see recent changes to a file\n"
-        "- You want to find who modified something and when\n\n"
-        "All arguments are optional — calling with no args shows the last 10 commits. "
-        "Max 50 commits per query; 30s timeout."
+        "**用途**: 查看 git 历史 — 谁改了什么、为什么改。\n\n"
+        "**限制**:\n"
+        "- 最多返回 50 个 commit\n"
+        "- git 查询超时 30 秒\n\n"
+        "**错误应对**:\n"
+        "- 不在 git 仓库 → 返回错误\n"
+        "- commit SHA 无效 → 返回提示\n\n"
+        "**边界条件**:\n"
+        "- 无参数 → 显示最近 10 个 commit\n"
+        "- 传 path → 过滤该文件的 commit\n"
+        "- 传 commit → 显示该 commit 完整 diff\n\n"
+        "**极简案例**: git_inspect(path='src/main.py', since='7 days ago')\n"
+        "→ 返回 7 天内修改过 src/main.py 的 commits"
     )
 
     async def execute(

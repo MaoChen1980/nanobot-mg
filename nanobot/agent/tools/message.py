@@ -100,16 +100,19 @@ class MessageTool(Tool):
     name = "message"
 
     description = (
-            "Send a message to the user, optionally with file attachments.\n\n"
-            "Use this when:\n"
-            "- You need to deliver text content to the user\n"
-            "- You need to send files (images, documents, audio, video) — this is the ONLY way\n"
-            "- You want to present results or notifications\n\n"
-            "Do NOT use when:\n"
-            "- You need to ask a blocking question — use ask_user instead\n"
-            "- You only need to read a file for your own analysis — use read_file\n\n"
-            "Use the 'media' parameter with file paths to attach files."
-        )
+        "**用途**: 向用户发送消息，支持文字和文件附件。\n\n"
+        "**限制**:\n"
+        "- 只能发送，不能接收用户回复\n"
+        "- media 参数需要本地文件路径\n\n"
+        "**错误应对**:\n"
+        "- channel/chat_id 无效 → 返回错误\n"
+        "- media 路径不存在 → 返回错误\n\n"
+        "**边界条件**:\n"
+        "- 需要阻塞式提问 → 用 ask_user\n"
+        "- 需要发送文件附件 → 必须用 message（唯一方式）\n\n"
+        "**极简案例**: message(content='任务完成', media=['report.pdf'])\n"
+        "→ 发送消息和附件给用户"
+    )
 
     async def execute(
         self,

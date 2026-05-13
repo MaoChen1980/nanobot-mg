@@ -39,18 +39,19 @@ class WriteFileTool(_FsTool):
     name = "write_file"
 
     description = (
-            "Write content to a file.\n\n"
-            "Use this when:\n"
-            "- You need to create a new file\n"
-            "- You need to overwrite an existing file with new content\n"
-            "- You need to generate code, config, or data files\n\n"
-            "Do NOT use when:\n"
-            "- You need to make partial edits to a file — use edit_file instead\n"
-            "- You only need to read a file — use read_file\n\n"
-            "Overwrites if the file already exists; creates parent directories as needed. "
-            "Built-in verification: then_grep (verify pattern), "
-            "then_check='auto' (type-check Python/TS), then_exec (run command after write)."
-        )
+        "**用途**: 创建新文件或覆写已有文件。\n\n"
+        "**限制**:\n"
+        "- 会覆盖已有文件（没有回收站）\n"
+        "- 不支持部分修改\n\n"
+        "**错误应对**:\n"
+        "- 路径不存在 → 自动创建父目录\n"
+        "- 无权限 → 返回错误信息\n\n"
+        "**边界条件**:\n"
+        "- 只修改部分内容 → 用 edit_file\n"
+        "- 只读取文件 → 用 read_file\n\n"
+        "**极简案例**: write_file(path='hello.py', content='print(\"hello\")')\n"
+        "→ 创建文件，返回确认信息"
+    )
 
     async def execute(
         self, path: str | None = None, content: str | None = None,

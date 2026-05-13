@@ -30,16 +30,18 @@ class AskUserTool(Tool):
     name = "ask_user"
 
     description = (
-            "Pause and ask the user a question when their answer is required to continue.\n\n"
-            "Use this when:\n"
-            "- You need a decision from the user before proceeding\n"
-            "- The task requires information only the user can provide\n"
-            "- You need to clarify ambiguous requirements\n\n"
-            "Do NOT use when:\n"
-            "- You just want to notify the user — use the message tool instead\n"
-            "- You can proceed with reasonable defaults — just continue\n\n"
-            "Provide options for likely answers; the user's reply is returned as the tool result."
-        )
+        "**用途**: 阻塞式提问 — 暂停执行直到用户回答。\n\n"
+        "**限制**:\n"
+        "- 会暂停当前任务，必须等用户回复\n"
+        "- options 只是建议，用户仍可自由输入\n\n"
+        "**错误应对**:\n"
+        "- 用户不回复 → 任务一直暂停\n\n"
+        "**边界条件**:\n"
+        "- 只是通知用户 → 用 message\n"
+        "- 可以合理默认值继续 → 不问，直接做\n\n"
+        "**极简案例**: ask_user(question='继续吗？', options=['是','否'])\n"
+        "→ 暂停等待用户选择"
+    )
 
     exclusive = True
 

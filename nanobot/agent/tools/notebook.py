@@ -64,17 +64,20 @@ class NotebookEditTool(_FsTool):
     name = "notebook_edit"
 
     description = (
-        "Edit a Jupyter notebook (.ipynb) cell. "
-        "Modes: replace (default) replaces cell content, "
-        "insert adds a new cell after the target index, "
-        "delete removes the cell at the index. "
-        "cell_index is 0-based.\n\n"
-        "Use this when:\n"
-        "- You need to modify a Jupyter notebook's code or markdown cells\n"
-        "- Adding, replacing, or deleting cells in .ipynb files\n\n"
-        "Do NOT use when:\n"
-        "- Editing regular Python/text files — use edit_file instead\n"
-        "- Creating a new notebook from scratch — use insert mode on a non-existent file"
+        "**用途**: 编辑 Jupyter notebook (.ipynb) 单元格。\n\n"
+        "**限制**:\n"
+        "- 仅支持 .ipynb 文件\n"
+        "- 三种模式：replace（替换）、insert（在目标后插入）、delete（删除）\n"
+        "- cell_index 从 0 开始\n\n"
+        "**错误应对**:\n"
+        "- 文件不存在且不是 insert 模式 → 返回错误\n"
+        "- cell_index 越界 → 返回错误\n"
+        "- 解析失败 → 返回 JSON 解析错误\n\n"
+        "**边界条件**:\n"
+        "- 编辑 .py 等文本文件 → 用 edit_file\n"
+        "- 创建新 notebook → 用 insert 模式\n\n"
+        "**极简案例**: notebook_edit(path='notebook.ipynb', cell_index=0, new_source='print(1+1)')\n"
+        "→ 替换第一个单元格内容"
     )
 
     async def execute(

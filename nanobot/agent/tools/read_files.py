@@ -33,20 +33,20 @@ class ReadFilesTool(_FsTool):
     _MAX_FILE_BYTES = 2_000_000
 
     description = (
-        "Read multiple files at once matching a glob pattern.\n\n"
-        "Use this when:\n"
-        "- You want to see several related files in one call\n"
-        "- You find yourself calling glob then read_file multiple times\n"
-        "- You need to grep for a pattern across files and see the full context\n\n"
-        "Do NOT use when:\n"
-        "- You need to read from a specific offset — use read_file instead\n"
-        "- You only need file names — use glob instead\n"
-        "- You're searching for specific content — use grep instead\n\n"
-        "Each file is shown with its path as a header, content below. "
-        "Files sorted by modtime (newest first). "
-        "Skips binary files and files >2 MB. "
-        "Limit: max 50 files, ~500 lines each, ~128K chars total output. "
-        "Supply `grep` to only return matching lines."
+        "**用途**: 按 glob 模式批量读取多个文件，一次调用替代 glob+read 循环。\n\n"
+        "**限制**:\n"
+        "- 最多 50 个文件，每个最多 ~500 行\n"
+        "- 总输出最多 ~128K 字符\n"
+        "- 跳过二进制文件和 >2 MB 的文件\n\n"
+        "**错误应对**:\n"
+        "- 无匹配文件 → 返回提示\n"
+        "- 目录不存在 → 返回错误\n\n"
+        "**边界条件**:\n"
+        "- 需要从特定行号开始读 → 用 read_file\n"
+        "- 只需要文件名 → 用 glob\n"
+        "- 搜索内容 → 用 grep\n\n"
+        "**极简案例**: read_files(pattern='src/**/*.py', grep='def handle')\n"
+        "→ 返回所有匹配文件中包含 def handle 的行"
     )
 
     async def execute(

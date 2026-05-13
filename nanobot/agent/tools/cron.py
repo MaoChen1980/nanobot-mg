@@ -156,8 +156,22 @@ class CronTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Schedule reminders and recurring tasks. Actions: add, list, remove, update. "
-            f"If tz is omitted, cron expressions and naive ISO times default to {self._default_timezone}."
+            "**用途**: 安排定时或周期性任务。\n\n"
+            "**限制**:\n"
+            "- 支持三种调度方式：every_seconds（间隔）、cron_expr（cron 表达式）、at（一次性）\n"
+            "- 从 cron 任务执行中不能创建新任务\n"
+            "- tz 参数只能与 cron_expr 一起使用\n\n"
+            "**错误应对**:\n"
+            "- job_id 不存在 → 返回 job not found\n"
+            "- 时区无效 → 返回错误提示\n"
+            "- 缺少必要参数 → 返回具体错误信息\n\n"
+            "**边界条件**:\n"
+            "- action='add' 需 message + 调度参数\n"
+            "- action='remove'/'update'/'test' 需 job_id\n"
+            "- 系统任务（如 dream）不可删除/修改\n"
+            "- 无调度参数 → 返回错误\n\n"
+            "**极简案例**: cron(action='add', message='每小时检查状态', every_seconds=3600)\n"
+            "→ 创建每小时执行的任务"
         )
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:

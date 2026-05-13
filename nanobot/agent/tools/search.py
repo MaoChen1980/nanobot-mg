@@ -144,17 +144,19 @@ class GlobTool(_SearchTool):
     @property
     def description(self) -> str:
         return (
-            "Find files matching a glob pattern.\n\n"
-            "Use this when:\n"
-            "- You need to find files by name pattern (e.g. '*.py', 'tests/**/test_*.py')\n"
-            "- You want to explore a directory structure filtered by file type\n"
-            "- You need to verify a file exists before reading it\n\n"
-            "Do NOT use when:\n"
-            "- You need to search file contents — use grep instead\n"
-            "- You want to see all files in a directory — use list_dir instead\n\n"
-            "Preferred over exec find/ls/dir — no shell escaping needed. "
-            "Results sorted by modtime (newest first), max 250 by default (1000 max). "
-            "Skips .git, node_modules, __pycache__, and other noise directories."
+            "**用途**: 按文件名模式搜索文件。\n\n"
+            "**限制**:\n"
+            "- 默认最多返回 250 条（最多 1000）\n"
+            "- 不搜索文件内容\n"
+            "- 自动跳过 .git / node_modules 等目录\n\n"
+            "**错误应对**:\n"
+            "- 目录不存在 → 返回错误\n"
+            "- 无匹配 → 返回提示信息\n\n"
+            "**边界条件**:\n"
+            "- 需要搜索文件内容 → 用 grep\n"
+            "- 需要看目录所有文件 → 用 list_dir\n\n"
+            "**极简案例**: glob(pattern='*.py', path='src')\n"
+            "→ 返回 src/ 下所有 .py 文件路径"
         )
 
     @property
@@ -274,20 +276,20 @@ class GrepTool(_SearchTool):
     @property
     def description(self) -> str:
         return (
-            "Search file contents with a regex pattern.\n\n"
-            "Use this when:\n"
-            "- You need to find where a function, variable, or string is used in the codebase\n"
-            "- You want to search for patterns across multiple files\n"
-            "- You need to explore code that matches a specific pattern\n\n"
-            "Do NOT use when:\n"
-            "- You just need to find files by name — use glob instead\n"
-            "- You need to read a specific file — use read_file instead\n"
-            "- You need an exact line number from a known file — use read_file with offset\n\n"
-            "Preferred over exec grep/findstr/Select-String. "
-            "Default output_mode is files_with_matches (file paths only); "
-            "use content mode for matching lines with context. "
-            "Skips binary files >2 MB. Supports glob/type filtering. "
-            "Results truncated at ~256K chars."
+            "**用途**: 用正则表达式搜索文件内容。\n\n"
+            "**限制**:\n"
+            "- 跳过二进制文件和 >2 MB 的文件\n"
+            "- 输出最多 ~256K 字符\n"
+            "- 默认最多返回 250 条结果\n\n"
+            "**错误应对**:\n"
+            "- 无效正则 → 返回错误信息\n"
+            "- 路径不存在 → 返回错误\n"
+            "- 无匹配 → 返回提示\n\n"
+            "**边界条件**:\n"
+            "- 需要按文件名搜 → 用 glob\n"
+            "- 需要读特定文件 → 用 read_file\n\n"
+            "**极简案例**: grep(pattern='def handle', path='src', file_type='py', output_mode='content')\n"
+            "→ 返回匹配行及上下文"
         )
 
     @property

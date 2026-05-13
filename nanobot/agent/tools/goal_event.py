@@ -52,16 +52,20 @@ class WriteGoal(Tool):
 
     name = "write_goal"
     description = (
-        "Create or update a goal — a high-level objective tracked across sessions.\n\n"
-        "Goals are stored in DB (not files) and automatically loaded into context "
-        "each turn so you can track progress without writing markdown.\n\n"
-        "Use this when:\n"
-        "- Starting work on a new feature/fix — create a goal to track progress\n"
-        "- Updating status of an ongoing task (in_progress → completed, etc.)\n"
-        "- You want progress to persist across context compactions and restarts\n\n"
-        "Do NOT use when:\n"
-        "- You just need a quick note — use scratchpad (self set) instead\n"
-        "- The info is temporary and won't be needed next session"
+        "**用途**: 创建或更新目标（goal），目标跨会话跟踪。\n\n"
+        "**限制**:\n"
+        "- 存储在 SQLite DB，非文件\n"
+        "- 每次 turn 自动加载到 context\n"
+        "- 必须提供 id、title、action\n\n"
+        "**错误应对**:\n"
+        "- DB 不可用 → 返回错误\n"
+        "- goal_id 重复 → upsert 语义，覆盖更新\n\n"
+        "**边界条件**:\n"
+        "- 只需临时笔记 → 用 scratchpad（self set）\n"
+        "- 只需查看目标 → 用 list_goals\n"
+        "- project 未指定且含 '.' → 自动继承父 goal 的 project\n\n"
+        "**极简案例**: write_goal(id='g1', title='实现登录功能', action='upsert', status='in_progress')\n"
+        "→ 创建新目标"
     )
 
     def __init__(self, memory: MemoryStore):
@@ -141,14 +145,17 @@ class ListGoals(Tool):
 
     name = "list_goals"
     description = (
-        "List goals from DB. Filter by status, project, or scope.\n\n"
-        "Use this when:\n"
-        "- You want to see what goals are active before starting work\n"
-        "- You need to find a goal's ID to update or log events against it\n"
-        "- Checking progress across projects\n\n"
-        "Do NOT use when:\n"
-        "- You need to update a goal — use write_goal instead\n"
-        "- You need detailed event history — use list_events instead"
+        "**用途**: 从 DB 列出目标，可按状态/项目/范围过滤。\n\n"
+        "**限制**:\n"
+        "- 最多返回 100 条\n\n"
+        "**错误应对**:\n"
+        "- DB 不可用 → 返回 'DB not available'\n"
+        "- 无匹配 → 返回 'No goals found'\n\n"
+        "**边界条件**:\n"
+        "- 需要更新目标 → 用 write_goal\n"
+        "- 需要查看事件历史 → 用 list_events\n\n"
+        "**极简案例**: list_goals(status='in_progress')\n"
+        "→ 列出所有进行中的目标"
     )
 
     def __init__(self, memory: MemoryStore):
@@ -202,17 +209,17 @@ class WriteEvent(Tool):
 
     name = "write_event"
     description = (
-        "Log a progress event — milestone, decision, blocker, or note — to "
-        "the current goal's timeline.\n\n"
-        "Events are stored in DB and shown in context alongside goals.\n\n"
-        "Use this when:\n"
-        "- You hit a milestone worth recording\n"
-        "- You made a design decision that future-you should know\n"
-        "- Something is blocking progress\n"
-        "- You want to log a quick progress update against a goal\n\n"
-        "Do NOT use when:\n"
-        "- The info belongs in the goal description itself (long-lived, not event-like)\n"
-        "- You're logging something not related to any goal"
+        "**用途**: 记录进度事件（里程碑、决策、阻塞项）到当前目标的时间线。\n\n"
+        "**限制**:\n"
+        "- 必须提供 content 和 action\n"
+        "- 存储在 DB，关联 goal_id\n\n"
+        "**错误应对**:\n"
+        "- DB 不可用 → 返回 'DB not available'\n\n"
+        "**边界条件**:\n"
+        "- 信息属于 goal 描述本身 → 用 write_goal 更新描述\n"
+        "- 不关联任何目标 → 不要用\n\n"
+        "**极简案例**: write_event(content='完成 API 设计评审', action='milestone', goal_id='g1')\n"
+        "→ 记录里程碑事件"
     )
 
     def __init__(self, memory: MemoryStore):
@@ -269,15 +276,17 @@ class ListEvents(Tool):
 
     name = "list_events"
     description = (
-        "List recent events from DB. Filter by goal or event type.\n\n"
-        "Use this when:\n"
-        "- You want to see what happened recently on a goal\n"
-        "- Checking the timeline of decisions and milestones\n"
-        "- Reviewing blockers before reporting status\n\n"
-        "Do NOT use when:\n"
-        "- You need to see active goals — use list_goals instead\n"
-        "- You need to log a new event — use write_event instead\n\n"
-        "Limits: max 100 events per query."
+        "**用途**: 列出最近的事件，可按目标或事件类型过滤。\n\n"
+        "**限制**:\n"
+        "- 最多返回 100 条\n\n"
+        "**错误应对**:\n"
+        "- DB 不可用 → 返回 'DB not available'\n"
+        "- 无匹配 → 返回 'No events found'\n\n"
+        "**边界条件**:\n"
+        "- 需要查看活跃目标 → 用 list_goals\n"
+        "- 需要记录新事件 → 用 write_event\n\n"
+        "**极简案例**: list_events(goal_id='g1', limit=5)\n"
+        "→ 查看目标 g1 最近的 5 个事件"
     )
 
     def __init__(self, memory: MemoryStore):
@@ -336,9 +345,17 @@ class DeclareAssumption(Tool):
 
     name = "declare_assumption"
     description = (
-        "Declare a hypothesis assumption for goal subtask_0. "
-        "Must be called before proceeding past subtask_0. "
-        "The system (not LLM) will compare expected vs actual to determine the verdict."
+        "**用途**: 为目标 subtask_0 声明假设（hypothesis），系统验证。\n\n"
+        "**限制**:\n"
+        "- 必须在完成 subtask_0 之前调用\n"
+        "- 结果由系统判定（非 LLM 自评）\n\n"
+        "**错误应对**:\n"
+        "- DB 不可用 → 返回 'DB not available'\n"
+        "- goal 不存在 → 返回错误\n\n"
+        "**边界条件**:\n"
+        "- 已有 assumption → 追加为新的 verification attempt\n\n"
+        "**极简案例**: declare_assumption(goal_id='g1', claim='接口已就绪', expected='200 OK', files_read=['main.py'], verification_method='exec')\n"
+        "→ 声明假设等待验证"
     )
 
     def __init__(self, memory: MemoryStore):
@@ -433,8 +450,17 @@ class VerifyAssumption(Tool):
 
     name = "verify_assumption"
     description = (
-        "Verify a hypothesis assumption — system compares expected vs actual to determine verdict. "
-        "Called by the system (not LLM). Sets passed=True only if actual matches expected."
+        "**用途**: 验证假设 — 系统比较 expected 和 actual 判定 verdict。\n\n"
+        "**限制**:\n"
+        "- 由系统调用（非 LLM）\n"
+        "- passed=True 仅当 actual == expected\n\n"
+        "**错误应对**:\n"
+        "- goal 不存在 → 返回错误\n"
+        "- 未先 declare_assumption → 返回错误\n\n"
+        "**边界条件**:\n"
+        "- 必须先调用 declare_assumption\n\n"
+        "**极简案例**: verify_assumption(goal_id='g1', actual='200 OK')\n"
+        "→ 系统验证假设是否通过"
     )
 
     def __init__(self, memory: MemoryStore):
@@ -527,10 +553,16 @@ class DeclareCheckpoint(Tool):
 
     name = "declare_checkpoint"
     description = (
-        "Declare a subtask as complete with a summary and optional artifacts.\n\n"
-        "Use this when finishing a subtask within a goal — records what was done\n"
-        "and what was produced.\n\n"
-        "Does NOT enforce subtask ordering — allows early/skip completion."
+        "**用途**: 声明子任务已完成，附带摘要和可选产出物。\n\n"
+        "**限制**:\n"
+        "- 不强制子任务顺序 — 允许提前/跳过完成\n\n"
+        "**错误应对**:\n"
+        "- DB 不可用 → 返回 'DB not available'\n"
+        "- goal 不存在 → 返回错误\n\n"
+        "**边界条件**:\n"
+        "- 当前子任务与你声明的不一致 → 返回警告但不阻止\n\n"
+        "**极简案例**: declare_checkpoint(goal_id='g1', subtask_id='s0', summary='完成需求分析')\n"
+        "→ 声明子任务完成"
     )
 
     def __init__(self, memory: MemoryStore):

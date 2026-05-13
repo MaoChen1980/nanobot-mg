@@ -83,21 +83,18 @@ class ExploreModuleTool(_FsTool):
     read_only = True
 
     description = (
-        "Get a structured overview of a code file or directory.\n\n"
-        "For a FILE: returns all class and function definitions with signatures, "
-        "line numbers, and optionally internal references.\n"
-        "For a DIRECTORY: lists files grouped by type with file sizes.\n\n"
-        "Use this when:\n"
-        "- You need to understand a module's structure before reading details\n"
-        "- You want to find where a specific function/class is defined\n"
-        "- You're exploring an unfamiliar codebase\n\n"
-        "Do NOT use when:\n"
-        "- You need the full file content — use read_file instead\n"
-        "- You only need to search for a keyword — use grep instead\n\n"
-        "Supports Python, JavaScript, TypeScript, Go, Rust, Java, Kotlin. "
-        "Nesting depth: max 5 levels."
-        "For Python files, uses AST parsing for accurate results. For other "
-        "languages, uses regex-based extraction."
+        "**用途**: 获取代码文件或目录的结构化概览（函数/类定义、签名、行号）。\n\n"
+        "**限制**:\n"
+        "- 嵌套深度最多 5 层\n"
+        "- Python 用 AST 解析（精确），其他语言用正则（可能不完整）\n\n"
+        "**错误应对**:\n"
+        "- 路径不存在 → 返回错误\n"
+        "- 不支持的语言 → 返回基本信息\n\n"
+        "**边界条件**:\n"
+        "- 需要完整文件内容 → 用 read_file\n"
+        "- 只需要搜索关键词 → 用 grep\n\n"
+        "**极简案例**: explore_module(path='src/main.py')\n"
+        "→ 返回文件中所有类和函数的定义及行号"
     )
 
     async def execute(

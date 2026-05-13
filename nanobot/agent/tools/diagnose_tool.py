@@ -27,24 +27,20 @@ class DiagnoseTool(_FsTool):
     read_only = True
 
     description = (
-        "Investigate an error by combining code search with git history — in one call.\n\n"
-        "Extracts key terms from the error message, searches the codebase for "
-        "matching code, and checks recent commits that touched related files.\n"
-        "Returns a structured diagnosis with code locations and recent changes.\n\n"
-        "Parameters:\n"
-        "  `error` (required) — Error message, traceback, or keyword to investigate\n"
-        "  `path` (optional) — Narrow search to a specific file or directory\n"
-        "  `max_results` (optional) — Max grep results (default 20)\n"
-        "  `days` (optional) — How far back to check git history (default 7)\n\n"
-        "Use this when:\n"
-        "- You encounter an error and need to find what code produces it\n"
-        "- You want to know if recent commits introduced a bug\n"
-        "- Debugging: just paste the error traceback and get back code locations + git context\n\n"
-        "Do NOT use when:\n"
-        "- You only need code search (use grep instead)\n"
-        "- You only need git log (use git_inspect instead)\n"
-        "- The error is clearly a configuration or environment issue, not code-related\n\n"
-        "Limits: max_results max 50, days max 90, 15s git timeout."
+        "**用途**: 结合代码搜索和 git 历史，一站式调查错误根因。\n\n"
+        "**限制**:\n"
+        "- 默认搜索 7 天内的 git 历史\n"
+        "- max_results 最多 50，days 最多 90\n"
+        "- git 查询超时 15 秒\n\n"
+        "**错误应对**:\n"
+        "- 无匹配 → 扩大 days 或换 error 关键词\n"
+        "- 不在 git 仓库 → git 历史部分不可用\n\n"
+        "**边界条件**:\n"
+        "- 只需要代码搜索 → 用 grep\n"
+        "- 只需要 git 历史 → 用 git_inspect\n"
+        "- 配置/环境问题 → diagnose 不适合，直接排查配置\n\n"
+        "**极简案例**: diagnose(error='TypeError: object str', days=3)\n"
+        "→ 返回相关代码位置和最近触及的 commits"
     )
 
     async def execute(

@@ -27,20 +27,20 @@ class AnalyzeTool(Tool):
     read_only = True
 
     description = (
-        "Analyze text content and return structured insights without reading every line.\n\n"
-        "Provide `data` (inline text) or `path` (file to read). Optionally give "
-        "a `question` to focus the analysis on relevant sections.\n\n"
-        "Returns: line/word/character counts, detected sections (headings), "
-        "most frequent keywords (max 50), and lines matching your question.\n\n"
-        "Use this when:\n"
-        "- You need a quick summary of a long document or log file\n"
-        "- You want to understand what a file is about without reading it fully\n"
-        "- You need to find keywords or patterns in a text corpus\n\n"
-        "Do NOT use when:\n"
-        "- You need the full text content — use read_file instead\n"
-        "- You need to search for a specific pattern — use grep instead\n"
-        "- You need to explore code structure — use explore_module instead\n\n"
-        "Limits: 500K chars max input."
+        "**用途**: 分析文本内容并返回结构化洞察（无需逐行阅读）。\n\n"
+        "**限制**:\n"
+        "- data（内联文本）和 path（文件路径）二选一\n"
+        "- 最大输入 500K 字符\n"
+        "- 关键词提取基于词频，非语义\n\n"
+        "**错误应对**:\n"
+        "- 文件不存在或无法解码 → 返回错误\n"
+        "- 文件太大 → 返回大小超限错误\n\n"
+        "**边界条件**:\n"
+        "- 需要完整文本 → 用 read_file\n"
+        "- 需要搜索特定模式 → 用 grep\n"
+        "- 需要探索代码结构 → 用 explore_module\n\n"
+        "**极简案例**: analyze_data(path='long_log.txt', question='有哪些错误？')\n"
+        "→ 返回行统计、段落、关键词和相关行"
     )
 
     MAX_TEXT_SIZE = 500_000

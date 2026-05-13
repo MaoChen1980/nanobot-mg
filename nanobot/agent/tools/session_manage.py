@@ -56,22 +56,21 @@ class SessionManageTool(Tool):
 
     @property
     def description(self) -> str:
-        return """Your context gets polluted with bloated tool results you don't need.
-
-Use session_manage when:
-- A tool result was large (>5KB) and you're done processing it
-- You called read_file on a persisted full output → compress it after
-- Context feels heavy or >70% full → audit and exclude aggressively
-- You want to see what's taking up space → call list
-
-Actions:
-- list: see all messages with id, role, size, status
-- exclude: remove from context (won't affect history)
-- compress: replace with your summary of key points
-- archive: move to persistent storage
-- auto_clean: batch-exclude all non-user messages larger than size_threshold (default 5000). Use when context is bloated and you don't want to manually pick IDs.
-
-Without this tool, bloated tool results accumulate forever and starve your context budget."""
+        return (
+            "**用途**: 管理会话消息，控制上下文空间。\n\n"
+            "**限制**:\n"
+            "- 只能管理当前会话的消息\n"
+            "- exclude 不影响持久化历史，只影响上下文\n\n"
+            "**错误应对**:\n"
+            "- message_id 不存在 → 返回错误\n"
+            "- 缺少必需参数 → 返回具体错误\n\n"
+            "**边界条件**:\n"
+            "- 工具结果太大（>5KB）且已处理完 → 压缩或排除\n"
+            "- 上下文感觉沉重（>70%）→ audit 后激进排除\n"
+            "- 手动排除太多 → 用 list 检查后恢复\n\n"
+            "**极简案例**: session_manage(action='auto_clean', size_threshold=5000)\n"
+            "→ 自动排除所有 >5000 字符的非用户消息"
+        )
 
     @property
     def read_only(self) -> bool:

@@ -42,32 +42,24 @@ class SpawnTool(Tool):
 
     @property
     def description(self) -> str:
-        return """
-Spawn a subagent to handle independent tasks in the background. The subagent will complete the task and report back when done.
-
-## ✅ When to Use
-- Search and analyze multiple files in parallel
-- Fetch and summarize content from multiple URLs
-- Read, write, or edit files
-- Run read-only analysis (code analysis, data inspection)
-- Execute shell commands or scripts
-- Read multiple documents and compile findings
-- Quick research or coding tasks that don't affect main context
-
-## ❌ NEVER Use For
-- Tasks requiring your intermediate decisions or feedback
-- Tasks whose results are needed by subsequent steps in the main agent
-- Creating external resources, accounts, or services
-- Anything requiring skills or custom tooling — subagent has no skills access
-
-## Constraints
-- Subagent has its own isolated session (no access to main conversation)
-- Subagent cannot spawn further subagents (no nesting)
-- Results will be announced as a system message
-- Max 30 tool-use iterations per subagent
-- Subagent tools: read_file, list_dir, glob, grep, write_file, edit_file, web_search, web_fetch, exec (no spawn, no session_manage, no skills)
-- Skills are NOT passed to the subagent — only bootstrap files (SOUL.md, USER.md, etc.) are included as context
-""".strip()
+        return (
+            "**用途**: 生成子 agent 在后台执行独立任务，完成后报告结果。\n\n"
+            "**限制**:\n"
+            "- 子 agent 有独立隔离的会话，无法访问主对话\n"
+            "- 最多 30 次工具调用迭代\n"
+            "- 子 agent 不能嵌套 spawn\n"
+            "- 子 agent 没有 skills 访问权限\n"
+            "- 可用工具：read_file, list_dir, glob, grep, write_file, edit_file, web_search, web_fetch, exec\n\n"
+            "**错误应对**:\n"
+            "- 任务失败 → 子 agent 返回错误信息\n"
+            "- 结果为空 → 子 agent 报告无结果\n\n"
+            "**边界条件**:\n"
+            "- 任务需要你的中间决策 → 不要用 spawn（子 agent 无法咨询你）\n"
+            "- 后续步骤依赖结果 → 不要用 spawn，直接做\n"
+            "- 创建外部资源/账户 → 不要用 spawn（子 agent 无权）\n\n"
+            "**极简案例**: spawn(task='搜索所有包含 \"TODO\" 的文件', label='find-todos')\n"
+            "→ 后台搜索 TODO，完成后报告结果"
+        )
 
     async def execute(self, task: str, label: str | None = None, **kwargs: Any) -> str:
         """Spawn a subagent to execute the given task."""

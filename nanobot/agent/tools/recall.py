@@ -30,26 +30,21 @@ class RecallTool(Tool):
     name = "recall"
 
     description = (
-            "MANDATORY before answering questions about past events: use this to search memories.\n\n"
-            "You tend to forget: past decisions, user preferences, what was agreed, what was tried.\n\n"
-            "Use when:\n"
-            "- User says 'as we discussed', 'remember when', 'earlier we'\n"
-            "- User references a past project, decision, or conversation\n"
-            "- You feel like you've had this conversation before but can't recall details\n"
-            "- User's behavior seems inconsistent with what they asked before\n\n"
-            "Parameters:\n"
-            "- start: Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive\n"
-            "- end: End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive\n"
-            "- keyword: Optional keyword to filter\n\n"
-            "Examples:\n"
-            "- 'what did the user say about OpenClaw architecture?' → recall(keyword='openclaw')\n"
-            "- 'what was the final decision on MEMORY.md management?' → recall(keyword='MEMORY.md')\n"
-            "- 'summarize changes made on 2026-04-28' → recall(start='2026-04-28')\n"
-            "- 'trace the SOUL.md rewrite discussion' → recall(keyword='SOUL.md', start='2026-04-28')\n\n"
-            "Returns relevant snippets with timestamps (max 50 entries).\n"
-            "IMPORTANT: Do not dump raw results — synthesize into your answer.\n\n"
-            "Without this tool, you work with no memory of the user or past sessions."
-        )
+        "**用途**: 搜索历史记忆，用于回答关于过去事件的问题。\n\n"
+        "**限制**:\n"
+        "- 最多返回 50 条结果\n"
+        "- keyword 不区分大小写，多个关键词用空格分隔（OR 逻辑）\n"
+        "- MEMORY.md 内容无时间戳，只要 keyword 匹配就返回\n\n"
+        "**错误应对**:\n"
+        "- 无结果 → 返回 \"No memories found\" + 日期范围提示\n"
+        "- 日期格式无法解析 → 尝试多种格式（ISO 8601、YYYY-MM-DD HH:MM、YYYY-MM-DD）\n\n"
+        "**边界条件**:\n"
+        "- 只需要当前会话内容 → 不用 recall，检查历史即可\n"
+        "- 时间范围默认 inclusive（end 自动延至 23:59:59）\n"
+        "- 无 keyword → 返回时间范围内的所有记忆\n\n"
+        "**极简案例**: recall(keyword='openclaw')\n"
+        "→ 搜索包含 'openclaw' 的所有记忆"
+    )
 
     read_only = True
 

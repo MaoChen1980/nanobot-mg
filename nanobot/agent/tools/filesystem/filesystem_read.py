@@ -38,20 +38,20 @@ class ReadFileTool(_FsTool):
     name = "read_file"
 
     description = (
-            "Read a file or filter a log.\n\n"
-            "Use this when:\n"
-            "- You need to read a file's contents\n"
-            "- You want to grep/filter a log with the built-in regex extract parameter\n"
-            "- You need to view images, PDFs, DOCX, XLSX, or PPTX\n\n"
-            "Do NOT use when:\n"
-            "- You need to read multiple files — use read_files instead\n"
-            "- You only need file names or structure — use list_dir or glob instead\n"
-            "- You have a URL — use web_fetch instead\n\n"
-            "Preferred over exec(cat/head/tail/grep). "
-            "Text output format: LINE_NUM|CONTENT. "
-            "Use offset and limit for large files. "
-            "Default limit 2000 lines, max ~128K chars. PDF max 20 pages."
-        )
+        "**用途**: 读取文件内容，支持按行分页和正则过滤。\n\n"
+        "**限制**:\n"
+        "- 默认最多输出 2000 行，单次最多 ~128K 字符\n"
+        "- PDF 最多 20 页\n\n"
+        "**错误应对**:\n"
+        "- 文件不存在/无权限 → 返回错误信息\n"
+        "- 文件过大 → 用 offset+limit 分批读取\n\n"
+        "**边界条件**:\n"
+        "- 需要读多个文件 → 用 read_files\n"
+        "- 只看文件名/结构 → 用 list_dir 或 glob\n"
+        "- 需要读取 URL → 用 web_fetch\n\n"
+        "**极简案例**: read_file(path='main.py', offset=1, limit=50)\n"
+        "→ 返回文件前 50 行，每行带行号前缀"
+    )
 
     read_only = True
 

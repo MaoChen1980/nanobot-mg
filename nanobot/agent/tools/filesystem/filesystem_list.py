@@ -32,18 +32,18 @@ class ListDirTool(_FsTool):
     name = "list_dir"
 
     description = (
-            "List the contents of a directory.\n\n"
-            "Use this when:\n"
-            "- You need to see what files are in a directory\n"
-            "- You want to explore a project's structure\n"
-            "- You need to find files by name (use glob for pattern matching)\n\n"
-            "Do NOT use when:\n"
-            "- You need to find files matching a pattern — use glob instead\n"
-            "- You need to search file contents — use grep instead\n\n"
-            "Preferred over exec(ls/dir) — auto-ignores noise directories "
-            "(.git, node_modules, __pycache__, etc.). "
-            "Max 400 entries by default; use recursive=true for nested structure."
-        )
+        "**用途**: 列出目录内容，支持递归。\n\n"
+        "**限制**:\n"
+        "- 默认最多 400 条\n"
+        "- 自动跳过 .git / node_modules 等噪音目录\n\n"
+        "**错误应对**:\n"
+        "- 目录不存在 → 返回错误\n\n"
+        "**边界条件**:\n"
+        "- 需要按模式匹配文件名 → 用 glob\n"
+        "- 需要搜索文件内容 → 用 grep\n\n"
+        "**极简案例**: list_dir(path='src', recursive=True)\n"
+        "→ 返回 src/ 下所有文件和目录的列表"
+    )
 
     read_only = True
 
