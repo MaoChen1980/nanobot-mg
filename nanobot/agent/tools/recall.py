@@ -30,7 +30,8 @@ class RecallTool(Tool):
     name = "recall"
 
     description = (
-        "**用途**: 搜索历史记忆，用于回答关于过去事件的问题。\n\n"
+        "**用途**: 搜索历史记忆，用于回答关于过去事件的问题。"
+        "搜索范围：session 历史记录（SQLite 或 history.jsonl）+ MEMORY.md。\n\n"
         "**限制**:\n"
         "- 最多返回 50 条结果\n"
         "- keyword 不区分大小写，多个关键词用空格分隔（OR 逻辑）\n"

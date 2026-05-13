@@ -39,7 +39,9 @@ class SearchMemoryTool(Tool):
         self._store = store
 
     description = (
-        "**用途**: 在 memory/ 目录中按语义搜索相关段落，不是关键词匹配。\n\n"
+        "**用途**: 在 memory/ 目录中按语义搜索相关段落，不是关键词匹配。"
+        "与 search_text 的区别：search_memory 搜的是 memory/ 目录（持久化记忆），"
+        "search_text 搜的是你传入的文本或文件。\n\n"
         "**限制**:\n"
         "- 只搜索 memory/ 目录下的 .md 文件\n"
         "- 新建或修改的内容不会立刻出现，需要等索引重建\n"
@@ -120,8 +122,10 @@ class SearchTextTool(Tool):
         self._allowed_dir = allowed_dir
 
     description = (
-        "**用途**: 在一段文本中按语义搜索相关段落，不需要全文阅读。"
-        "text 和 path 二选一传入。\n\n"
+        "**用途**: 在给定文本或文件中按语义搜索相关段落，不需要全文阅读。"
+        "text 和 path 二选一传入。"
+        "与 search_memory 的区别：search_text 搜的是你传入的文本/文件，"
+        "search_memory 搜的是 memory/ 目录（持久化记忆）。\n\n"
         "**限制**:\n"
         "- 输入最大 5 MB\n"
         "- 每次最多返回 20 条结果（k ≤ 20）\n"
