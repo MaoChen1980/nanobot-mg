@@ -44,7 +44,21 @@ class Session:
         converted so that it is consistent with the ``Current Time`` shown in
         the runtime context.
         """
-        return content
+        if not isinstance(content, str):
+            return content
+        ts = message.get("timestamp")
+        if not ts:
+            return content
+        try:
+            dt = datetime.fromisoformat(ts)
+            if timezone:
+                from zoneinfo import ZoneInfo
+                dt = dt.astimezone(ZoneInfo(timezone))
+            formatted = dt.strftime("%Y-%m-%d %H:%M:%S")
+            tz_abbr = dt.strftime("%Z") or (timezone or "UTC")
+            return f"[{formatted} {tz_abbr}]\n{content}"
+        except Exception:
+            return content
 
     def add_message(self, role: str, content: str, timestamp: str | None = None, **kwargs: Any) -> None:
         """Add a message to the session. *timestamp* should be an ISO-format str if provided."""
