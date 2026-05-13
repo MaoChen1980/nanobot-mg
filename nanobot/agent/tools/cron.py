@@ -168,6 +168,8 @@ class CronTool(Tool):
             "**边界条件**:\n"
             "- action='add' 需 message + 调度参数\n"
             "- action='remove'/'update'/'test' 需 job_id\n"
+            "- action='test' 执行完整流程，实时显示执行步骤（不会实际发送消息给用户）\n"
+            "- dry_run=true 只执行不发送，dry_run=false 会发送执行结果给用户\n"
             "- 系统任务（如 dream）不可删除/修改\n"
             "- 无调度参数 → 返回错误\n\n"
             "**极简案例**: cron(action='add', message='每小时检查状态', every_seconds=3600)\n"
