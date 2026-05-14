@@ -230,7 +230,7 @@ class ContextBuilder:
         return ts
 
     @staticmethod
-    def _build_message_timeline(history: list[dict], timezone: str | None = None) -> str:
+    def _build_message_timeline(history: list[dict]) -> str:
         """Build a compact chronological index from user/assistant messages.
 
         Extracts only user and assistant messages with timestamps — tool calls
@@ -244,8 +244,8 @@ class ContextBuilder:
             if role not in ("user", "assistant"):
                 continue
             ts = msg.get("timestamp", "") or ""
-            if ts and timezone:
-                ts = ContextBuilder._convert_timestamp(ts, timezone)
+            # Timestamp is already formatted by get_history(include_timestamps=True, timezone=...)
+            # so no further conversion needed.
             content = msg.get("content", "")
             if isinstance(content, list):
                 texts = [
@@ -537,7 +537,7 @@ class ContextBuilder:
                 user_content = [{"type": "text", "text": runtime_ctx}] + list(user_content)
         sys_prompt = self.build_system_prompt(skill_names, channel=channel, tool_definitions=cs.tool_definitions)
         if timeline_history:
-            timeline = self._build_message_timeline(timeline_history, self.timezone)
+            timeline = self._build_message_timeline(timeline_history)
             sys_prompt = f"{sys_prompt}\n\n{timeline}"
         messages = [
             {"role": "system", "content": sys_prompt},
