@@ -100,35 +100,37 @@ class UserMessageHandler:
         preview = msg.content[:80] + "..." if len(msg.content) > 80 else msg.content
         logger.info("Processing message from {}:{}: {}", msg.channel, msg.sender_id, preview)
 
-        # Stage 1: session preparation
-        session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
-
-        # Stage 2: command dispatch (early return)
+        # Stage 0: fast-path command dispatch — skip heavy session prep for commands
+        key = session_key or msg.session_key
+        session = self._loop.sessions.get_or_create(key)
         if result := await self._dispatch_command(msg, session, key):
             return result
 
-        # Stage 3: consolidation + tool context
+        # Stage 1: session preparation
+        session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
+
+        # Stage 2: consolidation + tool context
         await self._loop.consolidator.maybe_consolidate_by_tokens(session, session_summary=pending)
         self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         self._maybe_start_message_tool()
 
-        # Stage 4: build initial messages
+        # Stage 3: build initial messages
         initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session)
 
-        # Stage 4.5: context optimization (skip when waiting for ask_user answer)
+        # Stage 3.5: context optimization (skip when waiting for ask_user answer)
         if not pending_ask_id and self._loop._session_observe["_observe_opt"].get(key, False):
             initial_messages = await self._loop.context_optimizer.optimize(initial_messages)
 
-        # Stage 5: callbacks
+        # Stage 4: callbacks
         on_progress_final = on_progress or self._make_bus_progress_callback(msg)
         on_retry_wait = self._make_retry_wait_callback(msg)
 
-        # Stage 6: persist user message before loop runs
+        # Stage 5: persist user message before loop runs
         user_persisted_early = False
         if not msg.ephemeral:
             user_persisted_early = self._persist_user_message_early(session, msg, pending_ask_id)
 
-        # Stage 7: run agent loop
+        # Stage 6: run agent loop
         final_content, _, all_msgs, stop_reason, had_injections = await self._loop._run_agent_loop(
             initial_messages,
             on_progress=on_progress_final,
@@ -144,7 +146,7 @@ class UserMessageHandler:
             pending_queue=pending_queue,
         )
 
-        # Stage 8: finalize — save, file cap, recovery clear, background schedule
+        # Stage 7: finalize — save, file cap, recovery clear, background schedule
         if msg.ephemeral:
             # Ephemeral messages (e.g. heartbeat) skip history persistence,
             # but still clear any runtime checkpoint the loop may have set.
@@ -153,7 +155,7 @@ class UserMessageHandler:
         else:
             self._finalize_turn(session, all_msgs, history, user_persisted_early, final_content)
 
-        # Stage 9: build outbound response
+        # Stage 8: build outbound response
         return self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)
 
     def _prepare_session(self, msg, session_key):
