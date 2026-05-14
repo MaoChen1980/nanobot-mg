@@ -54,14 +54,6 @@ def tool_hint(tool_calls: list) -> str:
     return format_tool_hints(tool_calls)
 
 
-def effective_session_key(loop: Any, msg: Any) -> str:
-    """Return the session key used for task routing and mid-turn injections."""
-    from nanobot.agent.loop_constants import UNIFIED_SESSION_KEY
-    if loop._unified_session and not msg.session_key_override:
-        return UNIFIED_SESSION_KEY
-    return msg.session_key
-
-
 def replay_token_budget(loop: Any) -> int:
     """Derive a token budget for session history replay from the context window."""
     if loop.context_window_tokens <= 0:
@@ -80,7 +72,8 @@ async def cancel_active_tasks(loop: Any, key: str) -> int:
 
     Returns the total number of cancelled tasks + subagents.
     """
-    tasks = loop._active_tasks.pop(key, [])
+    state = loop._session_dispatch.pop(key, None)
+    tasks = state.tasks if state else []
     cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
     for t in tasks:
         try:

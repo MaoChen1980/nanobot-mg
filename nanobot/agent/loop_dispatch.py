@@ -60,13 +60,13 @@ class DispatchManager:
                 await self._drain_leftover_queue(session_key, pending)
 
     def _gate(self):
-        """Return the concurrency gate context manager."""
-        return self._loop._concurrency_gate or __import__("contextlib").nullcontext()
+        """Per-session lock already serializes dispatches within a session."""
+        return __import__("contextlib").nullcontext()
 
     def _effective_session_key(self, msg: InboundMessage) -> str:
-        if self._loop._unified_session:
+        if self._loop._unified_session and not msg.session_key_override:
             return UNIFIED_SESSION_KEY
-        return f"{msg.channel}:{msg.chat_id}"
+        return msg.session_key
 
     def _maybe_streaming(
         self, msg: InboundMessage,
@@ -132,9 +132,10 @@ class DispatchManager:
         self, session_key: str, queue: asyncio.Queue,
     ) -> None:
         """Re-publish leftover messages from pending queue to bus."""
-        queue = self._loop._pending_queues.pop(session_key, None)
-        if queue is None:
+        state = self._loop._session_dispatch.pop(session_key, None)
+        if state is None:
             return
+        queue = state.pending
         leftover = 0
         while True:
             try:

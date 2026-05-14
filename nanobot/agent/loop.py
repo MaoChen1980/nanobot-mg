@@ -76,7 +76,6 @@ from .loop_utils import (
     strip_think,
     runtime_chat_id,
     tool_hint,
-    effective_session_key,
     replay_token_budget,
     cancel_active_tasks,
 )
@@ -98,6 +97,13 @@ from .loop_message_handlers import SystemMessageHandler, UserMessageHandler
 if TYPE_CHECKING:
     from nanobot.config.schema import ChannelsConfig, ExecToolConfig, ToolsConfig, WebToolsConfig
     from nanobot.cron.service import CronService
+
+
+@dataclasses.dataclass
+class _SessionDispatchState:
+    """Per-session dispatch tracking: active tasks and mid-turn injection queue."""
+    tasks: list[asyncio.Task]
+    pending: asyncio.Queue
 
 
 class AgentLoop:
@@ -219,13 +225,9 @@ class AgentLoop:
         self._mcp_stacks: dict[str, AsyncExitStack] = {}
         self._mcp_connected = False
         self._mcp_connecting = False
-        self._active_tasks: dict[str, list[asyncio.Task]] = {}  # session_key -> tasks
+        self._session_dispatch: dict[str, _SessionDispatchState] = {}
         self._background_tasks: list[asyncio.Task] = []
         self._session_locks: dict[str, asyncio.Lock] = {}
-        # Per-session pending queues for mid-turn message injection.
-        # When a session has an active task, new messages for that session
-        # are routed here instead of creating a new task.
-        self._pending_queues: dict[str, asyncio.Queue] = {}
         # NANOBOT_MAX_CONCURRENT_REQUESTS: <=0 means unlimited (default).
         _max = int(os.environ.get("NANOBOT_MAX_CONCURRENT_REQUESTS", "0"))
         self._concurrency_gate: asyncio.Semaphore | None = (
@@ -270,6 +272,18 @@ class AgentLoop:
         }
 
     # ------------------------------------------------------------------
+    # Backward-compat properties for _session_dispatch
+    # ------------------------------------------------------------------
+
+    @property
+    def _pending_queues(self) -> dict[str, asyncio.Queue]:
+        return {k: v.pending for k, v in self._session_dispatch.items()}
+
+    @property
+    def _active_tasks(self) -> dict[str, list[asyncio.Task]]:
+        return {k: v.tasks for k, v in self._session_dispatch.items()}
+
+    # ------------------------------------------------------------------
     # Observe events — /think and /tool
     # ------------------------------------------------------------------
 
@@ -290,7 +304,7 @@ class AgentLoop:
             return
 
         # Skip if observe toggle is off for this session
-        session_key = self._effective_session_key(inbound)
+        session_key = self._dispatch_manager._effective_session_key(inbound)
         if event_type == "thinking":
             if not self._session_observe["_observe_think"].get(session_key, False):
                 return
@@ -473,7 +487,8 @@ class AgentLoop:
 
         Returns the total number of cancelled tasks + subagents.
         """
-        tasks = self._active_tasks.pop(key, [])
+        state = self._session_dispatch.pop(key, None)
+        tasks = state.tasks if state else []
         cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
         for t in tasks:
             try:
@@ -484,12 +499,6 @@ class AgentLoop:
                 logger.warning("Error during task cancellation")
         sub_cancelled = await self.subagents.cancel_by_session(key)
         return cancelled + sub_cancelled
-
-    def _effective_session_key(self, msg: InboundMessage) -> str:
-        """Return the session key used for task routing and mid-turn injections."""
-        if self._unified_session and not msg.session_key_override:
-            return UNIFIED_SESSION_KEY
-        return msg.session_key
 
     def _get_session_key_for_chat(self, chat_id: str, channel: str) -> str:
         """Derive session_key from chat_id and channel for observe toggle commands.
@@ -682,7 +691,7 @@ class AgentLoop:
             except asyncio.TimeoutError:
                 self.auto_compact.check_expired(
                     self._schedule_background,
-                    active_session_keys=self._pending_queues.keys(),
+                    active_session_keys=self._session_dispatch.keys(),
                 )
                 continue
             except asyncio.CancelledError:
@@ -702,11 +711,11 @@ class AgentLoop:
                     self.commands.dispatch_priority,
                 )
                 continue
-            effective_key = self._effective_session_key(msg)
+            effective_key = self._dispatch_manager._effective_session_key(msg)
             # If this session already has an active pending queue (i.e. a task
             # is processing this session), route the message there for mid-turn
             # injection instead of creating a competing task.
-            if effective_key in self._pending_queues:
+            if effective_key in self._session_dispatch:
                 # Non-priority commands must not be queued for injection;
                 # dispatch them directly (same pattern as priority commands).
                 if self.commands.is_dispatchable_command(raw):
@@ -722,7 +731,7 @@ class AgentLoop:
                         session_key_override=effective_key,
                     )
                 try:
-                    self._pending_queues[effective_key].put_nowait(pending_msg)
+                    self._session_dispatch[effective_key].pending.put_nowait(pending_msg)
                 except asyncio.QueueFull:
                     logger.warning(
                         "Pending queue full for session {}, creating queued task instead",
@@ -737,17 +746,19 @@ class AgentLoop:
             # Compute the effective session key before dispatching
             # This ensures /stop command can find tasks correctly when unified session is enabled
             task = asyncio.create_task(self._dispatch(msg))
-            self._active_tasks.setdefault(effective_key, []).append(task)
+            state = self._session_dispatch.setdefault(effective_key, _SessionDispatchState(tasks=[], pending=asyncio.Queue(maxsize=20)))
+            state.tasks.append(task)
             task.add_done_callback(
-                lambda t, k=effective_key: self._active_tasks.get(k, [])
-                and self._active_tasks[k].remove(t)
-                if t in self._active_tasks.get(k, [])
-                else None
+                lambda t, k=effective_key: (
+                    self._session_dispatch[k].tasks.remove(t)
+                    if k in self._session_dispatch and t in self._session_dispatch[k].tasks
+                    else None
+                )
             )
 
     async def _dispatch(self, msg: InboundMessage) -> None:
         """Process a message: per-session serial, cross-session concurrent."""
-        session_key = self._effective_session_key(msg)
+        session_key = self._dispatch_manager._effective_session_key(msg)
         if session_key != msg.session_key:
             msg = dataclasses.replace(msg, session_key_override=session_key)
         lock = self._session_locks.setdefault(session_key, asyncio.Lock())
@@ -755,7 +766,7 @@ class AgentLoop:
         # Register a pending queue so follow-up messages for this session are
         # routed here (mid-turn injection) instead of spawning a new task.
         pending = asyncio.Queue(maxsize=20)
-        self._pending_queues[session_key] = pending
+        self._session_dispatch[session_key] = _SessionDispatchState(tasks=[], pending=pending)
 
         async with lock:
             await self._dispatch_manager.run_dispatch(msg, session_key, pending)
@@ -1052,7 +1063,8 @@ class AgentLoop:
         (no active task — message will be picked up as a new inbound message
         when the bus processes it).
         """
-        if session_key not in self._pending_queues:
+        state = self._session_dispatch.get(session_key)
+        if state is None:
             return False
         msg = InboundMessage(
             channel=channel, sender_id="heartbeat",
@@ -1062,7 +1074,7 @@ class AgentLoop:
             msg, session_key_override=session_key,
         )
         try:
-            self._pending_queues[session_key].put_nowait(pending_msg)
+            state.pending.put_nowait(pending_msg)
             return True
         except asyncio.QueueFull:
             logger.warning("Heartbeat: pending queue full for {}", session_key)

@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
+from nanobot.agent.loop import AgentLoop, _SessionDispatchState
 from nanobot.bus.events import InboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.command.builtin import cmd_new, register_builtin_commands
@@ -432,14 +432,14 @@ class TestStopCommandWithUnifiedSession:
         # Simulate the task creation flow (from _run loop)
         effective_key = UNIFIED_SESSION_KEY if loop._unified_session and not msg.session_key_override else msg.session_key
         task = asyncio.create_task(loop._dispatch(msg))
-        loop._active_tasks.setdefault(effective_key, []).append(task)
+        loop._session_dispatch.setdefault(effective_key, _SessionDispatchState(tasks=[], pending=asyncio.Queue())).tasks.append(task)
 
         # Wait for task to complete
         await task
 
         # Verify the task is stored under UNIFIED_SESSION_KEY, not the original channel:chat_id
-        assert UNIFIED_SESSION_KEY in loop._active_tasks
-        assert "telegram:123456" not in loop._active_tasks
+        assert UNIFIED_SESSION_KEY in loop._session_dispatch
+        assert "telegram:123456" not in loop._session_dispatch
 
     @pytest.mark.asyncio
     async def test_stop_command_finds_task_in_unified_mode(self, tmp_path: Path):
@@ -454,7 +454,7 @@ class TestStopCommandWithUnifiedSession:
             await asyncio.sleep(10)  # Will be cancelled
 
         task = asyncio.create_task(long_running())
-        loop._active_tasks[UNIFIED_SESSION_KEY] = [task]
+        loop._session_dispatch[UNIFIED_SESSION_KEY] = _SessionDispatchState(tasks=[task], pending=asyncio.Queue())
 
         # Create a message that would have session_key=UNIFIED_SESSION_KEY after dispatch
         msg = InboundMessage(
@@ -488,7 +488,7 @@ class TestStopCommandWithUnifiedSession:
 
         task1 = asyncio.create_task(long_running())
         task2 = asyncio.create_task(long_running())
-        loop._active_tasks[UNIFIED_SESSION_KEY] = [task1, task2]
+        loop._session_dispatch[UNIFIED_SESSION_KEY] = _SessionDispatchState(tasks=[task1, task2], pending=asyncio.Queue())
 
         # /stop from discord should cancel tasks started from telegram
         msg = InboundMessage(

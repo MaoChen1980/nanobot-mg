@@ -14,6 +14,7 @@ from nanobot.config.schema import AgentDefaults
 from nanobot.agent.tools.base import Tool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.providers.base import LLMResponse, ToolCallRequest
+from nanobot.agent.loop import _SessionDispatchState
 
 _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
@@ -2330,12 +2331,12 @@ async def test_pending_queue_cleanup_on_dispatch(tmp_path):
 
     msg = InboundMessage(channel="cli", sender_id="u", chat_id="c", content="hello")
     # The queue should not exist before dispatch
-    assert msg.session_key not in loop._pending_queues
+    assert msg.session_key not in loop._session_dispatch
 
     await loop._dispatch(msg)
 
     # The queue should be cleaned up after dispatch
-    assert msg.session_key not in loop._pending_queues
+    assert msg.session_key not in loop._session_dispatch
 
 
 @pytest.mark.asyncio
@@ -2349,7 +2350,7 @@ async def test_followup_routed_to_pending_queue(tmp_path):
     loop._dispatch = AsyncMock()  # type: ignore[method-assign]
 
     pending = asyncio.Queue(maxsize=20)
-    loop._pending_queues[UNIFIED_SESSION_KEY] = pending
+    loop._session_dispatch[UNIFIED_SESSION_KEY] = _SessionDispatchState(tasks=[], pending=pending)
 
     run_task = asyncio.create_task(loop.run())
     msg = InboundMessage(channel="discord", sender_id="u", chat_id="c", content="follow-up")
@@ -2432,7 +2433,7 @@ async def test_pending_queue_full_falls_back_to_queued_task(tmp_path):
 
     pending = asyncio.Queue(maxsize=1)
     pending.put_nowait(InboundMessage(channel="cli", sender_id="u", chat_id="c", content="already queued"))
-    loop._pending_queues["cli:c"] = pending
+    loop._session_dispatch["cli:c"] = _SessionDispatchState(tasks=[], pending=pending)
 
     run_task = asyncio.create_task(loop.run())
     msg = InboundMessage(channel="cli", sender_id="u", chat_id="c", content="follow-up")
@@ -2468,12 +2469,13 @@ async def test_dispatch_republishes_leftover_queue_messages(tmp_path):
     # with leftover messages, then running the cleanup logic directly.
     pending = asyncio.Queue(maxsize=20)
     session_key = "cli:c"
-    loop._pending_queues[session_key] = pending
+    loop._session_dispatch[session_key] = _SessionDispatchState(tasks=[], pending=pending)
     pending.put_nowait(InboundMessage(channel="cli", sender_id="u", chat_id="c", content="leftover-1"))
     pending.put_nowait(InboundMessage(channel="cli", sender_id="u", chat_id="c", content="leftover-2"))
 
     # Execute the cleanup logic from the finally block
-    queue = loop._pending_queues.pop(session_key, None)
+    state = loop._session_dispatch.pop(session_key, None)
+    queue = state.pending if state else None
     assert queue is not None
     leftover = 0
     while True:

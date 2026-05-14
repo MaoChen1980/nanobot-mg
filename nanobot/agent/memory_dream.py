@@ -67,9 +67,7 @@ class Dream:
         extra_read = [d for d in (BUILTIN_SKILLS_DIR, project_root) if d.exists()]
         tools.register(ReadFileTool(workspace=workspace, allowed_dir=workspace, extra_allowed_dirs=extra_read))
         tools.register(EditFileTool(workspace=workspace, allowed_dir=workspace, extra_allowed_dirs=[project_root]))
-        skills_dir = workspace / "skills"
-        skills_dir.mkdir(parents=True, exist_ok=True)
-        tools.register(WriteFileTool(workspace=workspace, allowed_dir=skills_dir))
+        tools.register(WriteFileTool(workspace=workspace, allowed_dir=workspace))
         return tools
 
     def _list_existing_skills(self) -> list[str]:
@@ -169,7 +167,7 @@ class Dream:
 
         file_context = (
             f"## Current Date\n{current_date}\n\n"
-            f"## Current MEMORY.md ({len(current_memory)} chars)\n{current_memory}\n\n"
+            f"## Current memory/MEMORY.md ({len(current_memory)} chars)\n{current_memory}\n\n"
             f"## Current SOUL.md ({len(current_soul)} chars)\n{current_soul}\n\n"
             f"## Current USER.md ({len(current_user)} chars)\n{current_user}"
         )
@@ -203,7 +201,7 @@ class Dream:
         from nanobot.agent.context import ContextBuilder
         runtime_ctx = ContextBuilder._build_runtime_context(None, None, timezone=self.timezone)
         ws_path = str(self.store.workspace.resolve())
-        ws_hint = f"## Workspace\nYour workspace is at: {ws_path}\nAll file paths are relative to this directory. Use relative paths like `MEMORY.md`, `SOUL.md`, `USER.md` — NOT absolute paths.\n"
+        ws_hint = f"## Workspace\nYour workspace is at: {ws_path}\nAll file paths are relative to this directory. Use relative paths like `memory/MEMORY.md`, `SOUL.md`, `USER.md` — NOT absolute paths.\n"
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": ws_hint + runtime_ctx + "\n\n" + render_template("agent/dream_phase2.md", strip=True, skill_manager_path=str(skill_manager_path))},
             {"role": "user", "content": phase2_prompt},

@@ -25,9 +25,8 @@ def mock_loop():
     with patch.object(AgentLoop, "__init__", lambda self: None):
         loop = AgentLoop()
         loop.sessions = MagicMock()
-        loop._pending_queues = {}
+        loop._session_dispatch = {}
         loop._session_locks = {}
-        loop._active_tasks = {}
         loop._concurrency_gate = None
         loop._RUNTIME_CHECKPOINT_KEY = "runtime_checkpoint"
         loop._PENDING_USER_TURN_KEY = "pending_user_turn"

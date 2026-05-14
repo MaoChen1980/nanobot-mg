@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nanobot.agent.context import ContextBuilder
-from nanobot.agent.loop import AgentLoop
+from nanobot.agent.loop import AgentLoop, _SessionDispatchState
 from nanobot.bus.events import InboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.session.manager import Session
@@ -502,7 +502,7 @@ async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -
 
     first_msg = InboundMessage(channel="feishu", sender_id="u1", chat_id="c4", content="keep progress")
     task = asyncio.create_task(loop._process_message(first_msg))
-    loop._active_tasks[first_msg.session_key] = [task]
+    loop._session_dispatch[first_msg.session_key] = _SessionDispatchState(tasks=[task], pending=asyncio.Queue())
     await asyncio.wait_for(checkpoint_saved.wait(), timeout=1.0)
 
     stop_msg = InboundMessage(channel="feishu", sender_id="u1", chat_id="c4", content="/stop")

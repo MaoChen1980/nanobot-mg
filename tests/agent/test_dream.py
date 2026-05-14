@@ -144,7 +144,7 @@ class TestDreamRun:
         # The MEMORY.md section should not crash and should contain the memory content
         call_args = mock_provider.chat_with_retry.call_args
         user_msg = call_args.kwargs.get("messages", call_args[1].get("messages"))[1]["content"]
-        assert "## Current MEMORY.md" in user_msg
+        assert "## Current memory/MEMORY.md" in user_msg
 
     async def test_phase1_annotates_only_memory_not_soul_or_user(self, dream, mock_provider, mock_runner, store):
         """SOUL.md and USER.md should never have age annotations — they are permanent."""
@@ -160,7 +160,7 @@ class TestDreamRun:
         call_args = mock_provider.chat_with_retry.call_args
         user_msg = call_args.kwargs.get("messages", call_args[1].get("messages"))[1]["content"]
         # The ← suffix should only appear in MEMORY.md section
-        memory_section = user_msg.split("## Current MEMORY.md")[1].split("## Current SOUL.md")[0]
+        memory_section = user_msg.split("## Current memory/MEMORY.md")[1].split("## Current SOUL.md")[0]
         soul_section = user_msg.split("## Current SOUL.md")[1].split("## Current USER.md")[0]
         user_section = user_msg.split("## Current USER.md")[1]
         # SOUL and USER should not contain age arrows
@@ -179,7 +179,7 @@ class TestDreamRun:
         mock_provider.chat_with_retry.assert_called_once()
         call_args = mock_provider.chat_with_retry.call_args
         user_msg = call_args.kwargs.get("messages", call_args[1].get("messages"))[1]["content"]
-        assert "## Current MEMORY.md" in user_msg
+        assert "## Current memory/MEMORY.md" in user_msg
 
     async def test_phase1_prompt_carries_age_suffix_for_stale_lines(
         self, dream, mock_provider, mock_runner, store,
@@ -203,7 +203,7 @@ class TestDreamRun:
 
         call_args = mock_provider.chat_with_retry.call_args
         user_msg = call_args.kwargs.get("messages", call_args[1].get("messages"))[1]["content"]
-        memory_section = user_msg.split("## Current MEMORY.md")[1].split("## Current SOUL.md")[0]
+        memory_section = user_msg.split("## Current memory/MEMORY.md")[1].split("## Current SOUL.md")[0]
         assert "\u2190 30d" in memory_section
         assert "\u2190 20d" in memory_section
         assert "\u2190 14d" not in memory_section
@@ -243,7 +243,7 @@ class TestDreamRun:
 
         call_args = mock_provider.chat_with_retry.call_args
         user_msg = call_args.kwargs.get("messages", call_args[1].get("messages"))[1]["content"]
-        memory_section = user_msg.split("## Current MEMORY.md")[1].split("## Current SOUL.md")[0]
+        memory_section = user_msg.split("## Current memory/MEMORY.md")[1].split("## Current SOUL.md")[0]
         # No age arrow at all — we refused to annotate rather than tag the wrong line.
         assert "\u2190" not in memory_section
 
@@ -336,7 +336,7 @@ class TestDreamPromptCaps:
         await dream.run()
 
         user_msg = mock_provider.chat_with_retry.call_args.kwargs["messages"][1]["content"]
-        memory_section = user_msg.split("## Current MEMORY.md")[1].split("## Current SOUL.md")[0]
+        memory_section = user_msg.split("## Current memory/MEMORY.md")[1].split("## Current SOUL.md")[0]
         assert len(memory_section) < dream._MEMORY_FILE_MAX_CHARS + 500
 
     async def test_phase1_caps_huge_history_entry(
