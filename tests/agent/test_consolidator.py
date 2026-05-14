@@ -4,6 +4,7 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from nanobot.agent.db import NanobotDB
 from nanobot.agent.memory import (
     Consolidator,
     MemoryStore,
@@ -14,7 +15,9 @@ from nanobot.agent.memory import (
 
 @pytest.fixture
 def store(tmp_path):
-    return MemoryStore(tmp_path)
+    db_path = tmp_path / "test.db"
+    db = NanobotDB(db_path, workspace=tmp_path)
+    return MemoryStore(tmp_path, db=db)
 
 
 @pytest.fixture

@@ -549,21 +549,6 @@ class ContextBuilder:
             messages[-1] = last
         else:
             messages.append({"role": current_role, "content": user_content})
-        import json as _json
-        prompt_file = self.workspace / ".prompt_dump.jsonl"
-        sys_prompt = messages[0]["content"] if messages else ""
-        with open(prompt_file, "a", encoding="utf-8") as _f:
-            _f.write("### SYSTEM PROMPT ###\n")
-            _f.write(sys_prompt)
-            _f.write("\n### END SYSTEM PROMPT ###\n")
-            for m in messages[-3:]:
-                c = m.get("content", "")
-                if isinstance(c, str):
-                    c = c[:2000]
-                elif isinstance(c, list):
-                    c = str(c)[:2000]
-                _f.write(_json.dumps({"role": m["role"], "content_snippet": c}, ensure_ascii=False) + "\n")
-            _f.write("---\n")
         return messages
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:

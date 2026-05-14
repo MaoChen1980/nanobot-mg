@@ -13,13 +13,11 @@ from nanobot.agent.context import ContextBuilder
 
 def _add_with_summary(memory, content: str) -> int:
     """Append history entry and set its summary (simulating Dream processing)."""
+    if memory._db is None:
+        from nanobot.agent.db import NanobotDB
+        memory._db = NanobotDB(memory.workspace / "test.db", workspace=memory.workspace)
     cursor = memory.append_history(content)
-    entries = memory._read_entries()
-    for entry in reversed(entries):
-        if entry["cursor"] == cursor:
-            entry["summary"] = content
-            break
-    memory._write_entries(entries)
+    memory.update_summary(cursor, content)
     return cursor
 
 
@@ -66,11 +64,8 @@ def test_system_prompt_reflects_current_dream_memory_contract(tmp_path) -> None:
 
     prompt = builder.build_system_prompt()
 
-    assert "memory/history.jsonl" in prompt
     assert "automatically managed by Dream" in prompt
     assert "do not edit directly" in prompt
-    assert "memory/HISTORY.md" not in prompt
-    assert "write important facts here" not in prompt
 
 
 def test_runtime_context_is_in_user_message_not_system_prompt(tmp_path) -> None:

@@ -24,10 +24,7 @@ DANGEROUS_PATTERNS: list[str] = [
 ]
 
 # Nanobot internal files that should not be modified
-NANOBOT_FILES: list[str] = [
-    "history.jsonl",
-    ".dream_cursor",
-]
+NANOBOT_FILES: list[str] = []
 
 
 def _check_dangerous_patterns(command: str, deny_patterns: list[str]) -> str | None:

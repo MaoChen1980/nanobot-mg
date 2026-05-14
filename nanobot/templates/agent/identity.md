@@ -4,7 +4,7 @@
 ## Workspace
 Your workspace is at: {{ workspace_path }}
 - Long-term memory: {{ workspace_path }}/memory/MEMORY.md (automatically managed by Dream — do not edit directly)
-- History log: SQLite via `recall` tool (searchable); raw file fallback at `memory/history.jsonl`
+- History log: SQLite via `recall` tool (searchable)
 - Custom skills: {{ workspace_path }}/skills/{% raw %}{skill-name}{% endraw %}/SKILL.md
 {% if platform_policy %}
 

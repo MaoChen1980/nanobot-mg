@@ -31,7 +31,7 @@ class RecallTool(Tool):
 
     description = (
         "**用途**: 搜索历史记忆，用于回答关于过去事件的问题。"
-        "搜索范围：session 历史记录（SQLite 或 history.jsonl）+ MEMORY.md。"
+        "搜索范围：session 历史记录（SQLite）+ MEMORY.md。"
         "注意：只能搜历史会话记录，不能搜 goal/event 表。"
         "查询当前目标的进度请用 list_goals/list_events。\n\n"
         "**限制**:\n"
@@ -121,8 +121,6 @@ class RecallTool(Tool):
         **kwargs: Any,
     ) -> str:
         """Search memory and history for relevant content."""
-        import json
-
         start_dt = self._parse_date(start)
         end_dt = self._parse_date(end)
 
@@ -137,8 +135,7 @@ class RecallTool(Tool):
         if memory and self._match_keyword(memory, keyword):
             results.append(("", memory))
 
-        # Search history — use SQL if DB available, else scan file
-        history_file = self._store.history_file
+        # Search history via SQL
         if self._store._db is not None:
             db = self._store._db
             rows = db._conn.execute(
@@ -150,25 +147,6 @@ class RecallTool(Tool):
                 if not self._match_keyword(content, keyword):
                     continue
                 results.append((ts, content))
-        elif history_file.exists():
-            with open(history_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                        ts = entry.get("timestamp", "")
-                        content = entry.get("content", "")
-
-                        if not self._in_date_range(ts, content, start_dt, end_dt):
-                            continue
-                        if not self._match_keyword(content, keyword):
-                            continue
-
-                        results.append((ts, content))
-                    except json.JSONDecodeError:
-                        continue
 
         if not results:
             date_hint = ""

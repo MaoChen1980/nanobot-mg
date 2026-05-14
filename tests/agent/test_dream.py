@@ -1,12 +1,12 @@
 """Tests for the Dream class — two-phase memory consolidation via AgentRunner."""
 
 import asyncio
-import json
 
 import pytest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from nanobot.agent.db import NanobotDB
 from nanobot.agent.memory import Dream, MemoryStore
 from nanobot.agent.runner import AgentRunResult
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
@@ -15,7 +15,9 @@ from nanobot.utils.gitstore import LineAge
 
 @pytest.fixture
 def store(tmp_path):
-    s = MemoryStore(tmp_path)
+    db_path = tmp_path / "test.db"
+    db = NanobotDB(db_path, workspace=tmp_path)
+    s = MemoryStore(tmp_path, db=db)
     s.write_soul("# Soul\n- Helpful")
     s.write_user("# User\n- Developer")
     s.write_memory("# Memory\n- Project X active")
@@ -340,18 +342,11 @@ class TestDreamPromptCaps:
     async def test_phase1_caps_huge_history_entry(
         self, dream, mock_provider, mock_runner, store,
     ):
-        """A legacy oversized history entry (e.g. pre-#3412 raw_archive dump)
-        must not explode the Phase 1 prompt — each entry is capped in the
-        preview, even though the JSONL record itself stays full-size."""
-        # Bypass the append_history cap by writing directly, simulating a
-        # record that was written by an older nanobot build before any caps.
-        store.history_file.write_text(
-            json.dumps({
-                "cursor": 1,
-                "timestamp": "2026-04-01 10:00",
-                "content": "H" * (dream._HISTORY_ENTRY_PREVIEW_MAX_CHARS * 8),
-            }) + "\n",
-            encoding="utf-8",
+        """An oversized history entry must not explode the Phase 1 prompt —
+        each entry is capped in the preview."""
+        store._db.append_history(
+            "H" * (dream._HISTORY_ENTRY_PREVIEW_MAX_CHARS * 8),
+            timestamp="2026-04-01T10:00:00",
         )
         mock_provider.chat_with_retry.return_value = MagicMock(content="[SKIP]")
         mock_runner.run = AsyncMock(return_value=_make_run_result())

@@ -19,7 +19,7 @@ _STALE_THRESHOLD_DAYS = 14
 
 
 class Dream:
-    """Two-phase memory processor: analyze history.jsonl, then edit files via AgentRunner."""
+    """Two-phase memory processor: analyze conversation history, then edit files via AgentRunner."""
 
     _MEMORY_FILE_MAX_CHARS = 64_000
     _SOUL_FILE_MAX_CHARS = 32_000

@@ -162,14 +162,6 @@ class ExecTool(Tool):
             r">\s*/dev/sd",                  # write to disk
             r"\b(shutdown|reboot|poweroff)\b",  # system power
             r":\(\)\s*\{.*\};\s*:",          # fork bomb
-            # Block writes to nanobot internal state files (#2989).
-            # history.jsonl / .dream_cursor are managed by append_history();
-            # direct writes corrupt the cursor format and crash /dream.
-            r">>?\s*\S*(?:history\.jsonl|\.dream_cursor)",            # > / >> redirect
-            r"\btee\b[^|;&<>]*(?:history\.jsonl|\.dream_cursor)",     # tee / tee -a
-            r"\b(?:cp|mv)\b(?:\s+[^\s|;&<>]+)+\s+\S*(?:history\.jsonl|\.dream_cursor)",  # cp/mv target
-            r"\bdd\b[^|;&<>]*\bof=\S*(?:history\.jsonl|\.dream_cursor)",  # dd of=
-            r"\bsed\s+-i[^|;&<>]*(?:history\.jsonl|\.dream_cursor)",  # sed -i
         ]
         self.allow_patterns = allow_patterns or []
         self.restrict_to_workspace = restrict_to_workspace
@@ -192,8 +184,7 @@ class ExecTool(Tool):
             "- 危险命令自动拦截：rm -rf / rm -r --force / del /f /q / rmdir /s, "
             "shutdown / reboot / poweroff / Stop-Computer, "
             "format / fdisk / mkfs / diskpart, dd 写磁盘\n"
-            "- 可配置沙箱执行（由系统管理员设定，开启后命令在隔离环境中运行）\n"
-            "- 禁止直接写 history.jsonl / .dream_cursor\n\n"
+            "- 可配置沙箱执行（由系统管理员设定，开启后命令在隔离环境中运行）\n\n"
             "**错误应对**:\n"
             "- 命令不存在/失败 → 返回错误信息 + exit code\n"
             "- 超时 → 返回超时错误\n"

@@ -23,7 +23,7 @@ _HISTORY_ENTRY_HARD_CAP = 64_000
 
 
 class Consolidator:
-    """Lightweight consolidation: summarizes evicted messages into history.jsonl."""
+    """Lightweight consolidation: summarizes evicted messages into history store."""
 
     _MAX_CONSOLIDATION_ROUNDS = 5
     _SAFETY_BUFFER = 1024
