@@ -444,6 +444,20 @@ def _run_gateway(
 # ============================================================================
 
 
+async def _archive_session(agent_loop: Any, session_id: str) -> None:
+    """Archive all session messages to history store on shutdown."""
+    try:
+        session = agent_loop.sessions.get_or_create(session_id)
+        if session.messages:
+            if session.last_consolidated > 0:
+                agent_loop.context.memory.raw_archive(session.messages[:session.last_consolidated])
+            unconsolidated = session.messages[session.last_consolidated:]
+            if unconsolidated:
+                await agent_loop.consolidator.archive(unconsolidated)
+    except Exception:
+        logger.exception("Failed to archive session on shutdown")
+
+
 @app.command()
 def agent(
     message: str = typer.Option(None, "--message", "-m", help="Message to send to the agent"),
@@ -537,6 +551,7 @@ def agent(
                     render_markdown=markdown,
                     metadata=response.metadata if response else None,
                 )
+            await _archive_session(agent_loop, session_id)
             await agent_loop.close_mcp()
 
         asyncio.run(run_once())
@@ -723,6 +738,7 @@ def agent(
                 agent_loop.stop()
                 outbound_task.cancel()
                 await asyncio.gather(bus_task, outbound_task, return_exceptions=True)
+                await _archive_session(agent_loop, session_id)
                 await agent_loop.close_mcp()
 
         asyncio.run(run_interactive())

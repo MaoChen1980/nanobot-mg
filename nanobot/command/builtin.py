@@ -103,14 +103,20 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     msg = ctx.msg
     cancelled = await loop._cancel_active_tasks(ctx.key)
 
-    # Archive unconsolidated messages in background
+    # Archive ALL messages to DB before clearing
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
-    snapshot = session.messages[session.last_consolidated:]
+    if session.messages:
+        # Raw-archive already-consolidated messages (preserves raw text)
+        if session.last_consolidated > 0:
+            loop.context.memory.raw_archive(session.messages[:session.last_consolidated])
+        # Archive unconsolidated messages in background (LLM summarization)
+        unconsolidated = session.messages[session.last_consolidated:]
+        if unconsolidated:
+            loop._schedule_background(loop.consolidator.archive(unconsolidated))
+
     session.clear()
     loop.sessions.save(session)
     loop.sessions.invalidate(session.key)
-    if snapshot:
-        loop._schedule_background(loop.consolidator.archive(snapshot))
 
     stopped = f"Stopped {cancelled} running task(s)." if cancelled else "No running tasks."
     return OutboundMessage(

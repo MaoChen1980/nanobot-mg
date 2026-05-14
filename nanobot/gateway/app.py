@@ -728,6 +728,22 @@ class GatewayApplication:
         """Graceful shutdown of all services."""
         if self.agent is not None:
             await self.agent.close_mcp()
+            # Archive all sessions to history store before flush
+            if self.session_manager is not None:
+                for session_info in self.session_manager.list_sessions():
+                    key = session_info.get("key", "")
+                    try:
+                        session = self.session_manager.get_or_create(key)
+                        if session.messages:
+                            if session.last_consolidated > 0:
+                                self.agent.context.memory.raw_archive(
+                                    session.messages[:session.last_consolidated]
+                                )
+                            unconsolidated = session.messages[session.last_consolidated:]
+                            if unconsolidated:
+                                await self.agent.consolidator.archive(unconsolidated)
+                    except Exception:
+                        logger.exception("Failed to archive session {} on shutdown", key)
             self.agent.stop()
             flushed = self.agent.sessions.flush_all()
             if flushed:
