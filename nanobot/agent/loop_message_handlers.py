@@ -43,11 +43,13 @@ class SystemMessageHandler:
         self._loop._set_tool_context(effective_channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
+        max_keep = session.metadata.get("max_keep_rounds", 10) if session else 10
         cs = ContextState(
             session_summary=pending,
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
+            max_keep_rounds=max_keep,
         )
         messages = self._loop.context.build_messages(
             history=history,
@@ -111,7 +113,7 @@ class UserMessageHandler:
         self._maybe_start_message_tool()
 
         # Stage 4: build initial messages
-        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending)
+        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session)
 
         # Stage 4.5: context optimization (skip when waiting for ask_user answer)
         if not pending_ask_id and self._loop._session_observe["_observe_opt"].get(key, False):
@@ -122,7 +124,9 @@ class UserMessageHandler:
         on_retry_wait = self._make_retry_wait_callback(msg)
 
         # Stage 6: persist user message before loop runs
-        user_persisted_early = self._persist_user_message_early(session, msg, pending_ask_id)
+        user_persisted_early = False
+        if not msg.ephemeral:
+            user_persisted_early = self._persist_user_message_early(session, msg, pending_ask_id)
 
         # Stage 7: run agent loop
         final_content, _, all_msgs, stop_reason, had_injections = await self._loop._run_agent_loop(
@@ -141,7 +145,13 @@ class UserMessageHandler:
         )
 
         # Stage 8: finalize — save, file cap, recovery clear, background schedule
-        self._finalize_turn(session, all_msgs, history, user_persisted_early, final_content)
+        if msg.ephemeral:
+            # Ephemeral messages (e.g. heartbeat) skip history persistence,
+            # but still clear any runtime checkpoint the loop may have set.
+            self._loop._recovery.clear_runtime_checkpoint(session)
+            self._loop.sessions.save(session)
+        else:
+            self._finalize_turn(session, all_msgs, history, user_persisted_early, final_content)
 
         # Stage 9: build outbound response
         return self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)
@@ -177,10 +187,11 @@ class UserMessageHandler:
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
 
-    def _build_initial_messages(self, msg, history, pending):
+    def _build_initial_messages(self, msg, history, pending, session):
         """Build the initial message list for the agent loop."""
         from nanobot.agent.tools.ask import pending_ask_user_id, ask_user_tool_result_messages
         pending_ask_id = pending_ask_user_id(history)
+        max_keep = session.metadata.get("max_keep_rounds", 10) if session else 10
         if pending_ask_id:
             initial_messages = ask_user_tool_result_messages(
                 self._loop.context.build_system_prompt(channel=msg.channel),
@@ -194,6 +205,7 @@ class UserMessageHandler:
                 tool_definitions=self._loop.tools.get_definitions(),
                 current_iteration=self._loop._current_iteration,
                 max_iterations=self._loop.max_iterations,
+                max_keep_rounds=max_keep,
             )
             initial_messages = self._loop.context.build_messages(
                 history=history,

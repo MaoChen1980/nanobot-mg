@@ -36,6 +36,7 @@ class ContextState:
     current_iteration: int | None = None
     max_iterations: int | None = None
     session_summary: str | None = None
+    max_keep_rounds: int | None = None  # 0/None = keep all, no timeline
 
 
 class ContextBuilder:
@@ -44,7 +45,7 @@ class ContextBuilder:
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
     _SECTION_SEPARATOR = "\n\n" + "═" * 72 + "\n\n"
     _RUNTIME_CONTEXT_TAG = "## Runtime Context"
-    _MAX_RECENT_HISTORY = 50
+    _MAX_RECENT_HISTORY = 10
     _MAX_HISTORY_CHARS = 64_000  # hard cap on recent history section size
     _RUNTIME_CONTEXT_END = "## /Runtime Context"
 
@@ -227,6 +228,39 @@ class ContextBuilder:
         except Exception:
             logger.warning("Failed to convert timestamp '{}' to timezone '{}'", ts, timezone)
         return ts
+
+    @staticmethod
+    def _build_message_timeline(history: list[dict], timezone: str | None = None) -> str:
+        """Build a compact chronological index from user/assistant messages.
+
+        Extracts only user and assistant messages with timestamps — tool calls
+        and results are excluded. The timeline serves as a lightweight history
+        index so the LLM can perceive conversation flow before the retained
+        full-message window.
+        """
+        entries: list[str] = []
+        for msg in history:
+            role = msg.get("role", "")
+            if role not in ("user", "assistant"):
+                continue
+            ts = msg.get("timestamp", "") or ""
+            if ts and timezone:
+                ts = ContextBuilder._convert_timestamp(ts, timezone)
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                texts = [
+                    b.get("text", "") for b in content
+                    if isinstance(b, dict) and b.get("type") == "text"
+                ]
+                content = " ".join(texts)
+            if isinstance(content, str):
+                content = content.replace("\n", " ").strip()
+            ts_str = ts if ts else "?"
+            entries.append(f"- [{ts_str}] {role}: {content}")
+
+        if not entries:
+            return ""
+        return "## Message Timeline\n\n" + "\n".join(entries)
 
     def _build_state_section(self) -> str:
         """Build a merged Current State block from Goals + recent events.
@@ -451,6 +485,27 @@ class ContextBuilder:
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
         cs = context_state or ContextState()
+
+        # ── Timeline + history truncation ──
+        # Keep last N user-message rounds as full messages; put earlier
+        # rounds into a compact timeline in the system prompt.
+        # N = cs.max_keep_rounds (0/None = keep all, no timeline).
+        max_keep = cs.max_keep_rounds or 0
+        if max_keep > 0 and len(history) > 0:
+            user_count = 0
+            split_idx = 0
+            for i in range(len(history) - 1, -1, -1):
+                if history[i].get("role") == "user":
+                    user_count += 1
+                    if user_count >= max_keep:
+                        split_idx = i
+                        break
+            timeline_history = history[:split_idx]
+            retained_history = history[split_idx:]
+        else:
+            timeline_history: list[dict] = []
+            retained_history = history
+
         runtime_ctx = self._build_runtime_context(
             channel, chat_id, self.timezone, session_summary=cs.session_summary,
             current_iteration=cs.current_iteration,
@@ -480,9 +535,13 @@ class ContextBuilder:
                 user_content = f"{runtime_ctx}\n\n{user_content}"
             else:
                 user_content = [{"type": "text", "text": runtime_ctx}] + list(user_content)
+        sys_prompt = self.build_system_prompt(skill_names, channel=channel, tool_definitions=cs.tool_definitions)
+        if timeline_history:
+            timeline = self._build_message_timeline(timeline_history, self.timezone)
+            sys_prompt = f"{sys_prompt}\n\n{timeline}"
         messages = [
-            {"role": "system", "content": self.build_system_prompt(skill_names, channel=channel, tool_definitions=cs.tool_definitions)},
-            *history,
+            {"role": "system", "content": sys_prompt},
+            *retained_history,
         ]
         if messages[-1].get("role") == current_role:
             last = dict(messages[-1])

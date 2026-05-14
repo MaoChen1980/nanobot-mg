@@ -346,6 +346,7 @@ def build_help_text() -> str:
         "/think — Toggle LLM thinking blocks visibility",
         "/tool — Toggle tool call events visibility",
         "/opt — Toggle context optimizer",
+        "/rounds [N] — Show/set max conversation rounds kept as full messages (0 = all)",
         "/help — Show available commands",
     ]
     return "\n".join(lines)
@@ -585,6 +586,54 @@ async def cmd_list_goals(ctx: CommandContext) -> OutboundMessage:
     )
 
 
+async def cmd_rounds(ctx: CommandContext) -> OutboundMessage:
+    """Show or set the max conversation rounds kept as full messages.
+
+    Usage:
+        /rounds         — show current value
+        /rounds <N>     — keep last N rounds as full messages (0 = keep all, no timeline)
+    """
+    msg = ctx.msg
+    args = ctx.args.strip()
+    session = ctx.session
+
+    if not args:
+        current = session.metadata.get("max_keep_rounds", 10) if session else 10
+        desc = "all (no timeline)" if current == 0 else str(current)
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content=f"Current max_keep_rounds: {desc}",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    try:
+        n = int(args.split()[0])
+    except ValueError:
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content=f"Invalid number: {args}",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    if n < 0:
+        return OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content="max_keep_rounds must be >= 0 (0 = keep all)",
+            metadata=dict(msg.metadata or {}),
+        )
+
+    if session:
+        session.metadata["max_keep_rounds"] = n
+        ctx.loop.sessions.save(session)
+
+    desc = "all (no timeline)" if n == 0 else str(n)
+    return OutboundMessage(
+        channel=msg.channel, chat_id=msg.chat_id,
+        content=f"max_keep_rounds set to {desc}. {'Timeline will be disabled.' if n == 0 else ''}",
+        metadata=dict(msg.metadata or {}),
+    )
+
+
 def register_builtin_commands(router: CommandRouter) -> None:
     """Register the default set of slash commands."""
     # Observe toggles
@@ -607,6 +656,10 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.prefix("/dream-restore ", cmd_dream_restore)
     router.exact("/sub", cmd_sub)
     router.exact("/help", cmd_help)
+
+    # Rounds command
+    router.exact("/rounds", cmd_rounds)
+    router.prefix("/rounds ", cmd_rounds)
 
     async def cmd_unknown(ctx: CommandContext) -> OutboundMessage | None:
         raw = ctx.raw.strip()

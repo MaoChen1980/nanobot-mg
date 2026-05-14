@@ -108,6 +108,7 @@ class HeartbeatService:
                     "完成的就标记 completed。\n"
                 ),
                 media=[],
+                ephemeral=True,
             ),
             session_key_override="cli:direct",
         )
