@@ -70,24 +70,24 @@ class TestSessionGetHistory:
         ts = "2026-01-01T00:00:00Z"
         s.add_message("user", "hi", timestamp=ts)
         history = s.get_history(max_messages=10, include_timestamps=True)
-        assert history[0]["content"] == "[2026-01-01 00:00:00 UTC]\nhi"
-        assert history[0]["timestamp"] == ts
+        assert history[0]["content"] == "hi"
+        assert history[0]["timestamp"] == "2026-01-01 00:00:00 UTC"
 
     def test_timestamp_property_for_assistant(self):
         s = Session(key="ch:u")
         ts = "2026-01-01T00:00:00Z"
         s.add_message("assistant", "reply", timestamp=ts)
         history = s.get_history(max_messages=10, include_timestamps=True)
-        assert history[0]["content"] == "[2026-01-01 00:00:00 UTC]\nreply"
-        assert history[0]["timestamp"] == ts
+        assert history[0]["content"] == "reply"
+        assert history[0]["timestamp"] == "2026-01-01 00:00:00 UTC"
 
     def test_timestamp_property_channel_delivery(self):
         s = Session(key="ch:u")
         ts = "2026-01-01T00:00:00Z"
         s.add_message("assistant", "delivery", timestamp=ts, _channel_delivery=True)
         history = s.get_history(max_messages=10, include_timestamps=True)
-        assert history[0]["content"] == "[2026-01-01 00:00:00 UTC]\ndelivery"
-        assert history[0]["timestamp"] == ts
+        assert history[0]["content"] == "delivery"
+        assert history[0]["timestamp"] == "2026-01-01 00:00:00 UTC"
         # _channel_delivery is internal metadata, not exposed in history output
 
     def test_timestamp_property_included_by_default(self):
@@ -99,29 +99,25 @@ class TestSessionGetHistory:
         assert history[0]["content"] == "hi"
         assert history[0]["timestamp"] == ts
 
-    def test_annotate_message_time_formats_timestamp(self):
-        """_annotate_message_time prepends formatted timestamp to content."""
-        msg = {"role": "user", "content": "hello", "timestamp": "2026-01-01T00:00:00Z"}
-        result = Session._annotate_message_time(msg, "hello")
-        assert result == "[2026-01-01 00:00:00 UTC]\nhello"
+    def test_format_timestamp_utc(self):
+        """_format_timestamp returns formatted string in UTC."""
+        result = Session._format_timestamp("2026-01-01T00:00:00Z")
+        assert result == "2026-01-01 00:00:00 UTC"
 
-    def test_annotate_message_time_with_timezone(self):
-        """_annotate_message_time converts timezone when provided."""
-        msg = {"role": "user", "content": "hello", "timestamp": "2026-01-01T00:00:00Z"}
-        result = Session._annotate_message_time(msg, "hello", timezone="Asia/Shanghai")
-        assert result == "[2026-01-01 08:00:00 CST]\nhello"
+    def test_format_timestamp_with_timezone(self):
+        """_format_timestamp converts timezone when provided."""
+        result = Session._format_timestamp("2026-01-01T00:00:00Z", timezone="Asia/Shanghai")
+        assert result == "2026-01-01 08:00:00 CST"
 
-    def test_annotate_message_time_no_timestamp(self):
-        """_annotate_message_time returns content unchanged when no timestamp."""
-        msg = {"role": "user", "content": "hello"}
-        result = Session._annotate_message_time(msg, "hello")
-        assert result == "hello"
+    def test_format_timestamp_no_timestamp(self):
+        """_format_timestamp returns None when no timestamp."""
+        result = Session._format_timestamp("")
+        assert result is None
 
-    def test_annotate_message_time_non_string_content(self):
-        """_annotate_message_time returns non-string content unchanged."""
-        msg = {"role": "user", "content": "hello", "timestamp": "2026-01-01T00:00:00Z"}
-        result = Session._annotate_message_time(msg, ["list", "content"])
-        assert result == ["list", "content"]
+    def test_format_timestamp_none(self):
+        """_format_timestamp returns None when None."""
+        result = Session._format_timestamp(None)
+        assert result is None
 
     def test_media_breadcrumbs(self):
         s = Session(key="ch:u")
@@ -673,26 +669,23 @@ class TestFindLegalMessageStart:
 # ======================================================================
 
 
-class TestAnnotateMessageTimeEdgeCases:
-    """Covers lines 51, 55 of _annotate_message_time."""
+class TestFormatTimestampEdgeCases:
+    """Covers edge cases for _format_timestamp."""
 
-    def test_no_timestamp_returns_content(self):
+    def test_no_timestamp_returns_none(self):
         s = Session(key="ch:u")
-        msg = {"role": "user", "content": "hello"}  # no timestamp
-        result = Session._annotate_message_time(msg, "hello")
-        assert result == "hello"
+        result = Session._format_timestamp("")
+        assert result is None
 
-    def test_non_string_content_returns_as_is(self):
+    def test_invalid_timestamp_returns_none(self):
         s = Session(key="ch:u")
-        msg = {"role": "user", "content": 42, "timestamp": "2026-01-01T00:00:00Z"}
-        result = Session._annotate_message_time(msg, 42)
-        assert result == 42
+        result = Session._format_timestamp("not-a-date")
+        assert result is None
 
-    def test_unknown_role_no_annotation(self):
+    def test_none_timestamp_returns_none(self):
         s = Session(key="ch:u")
-        msg = {"role": "system", "timestamp": "2026-01-01T00:00:00Z"}
-        result = Session._annotate_message_time(msg, "system prompt")
-        assert "Message Time" not in result
+        result = Session._format_timestamp(None)
+        assert result is None
 
 
 class TestGetHistoryEdgeCases:

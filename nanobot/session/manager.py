@@ -37,28 +37,19 @@ class Session:
     last_consolidated: int = 0  # Number of messages already consolidated to files
 
     @staticmethod
-    def _annotate_message_time(message: dict[str, Any], content: Any, timezone: str | None = None) -> Any:
-        """Expose turn timestamps to the model for relative-date reasoning.
-
-        When *timezone* is provided, the stored timestamp (typically UTC) is
-        converted so that it is consistent with the ``Current Time`` shown in
-        the runtime context.
-        """
-        if not isinstance(content, str):
-            return content
-        ts = message.get("timestamp")
+    def _format_timestamp(ts: str, timezone: str | None = None) -> str | None:
+        """Convert ISO timestamp to human-readable string (or None if invalid)."""
         if not ts:
-            return content
+            return None
         try:
             dt = datetime.fromisoformat(ts)
             if timezone:
                 from zoneinfo import ZoneInfo
                 dt = dt.astimezone(ZoneInfo(timezone))
-            formatted = dt.strftime("%Y-%m-%d %H:%M:%S")
             tz_abbr = dt.strftime("%Z") or (timezone or "UTC")
-            return f"[{formatted} {tz_abbr}]\n{content}"
+            return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {tz_abbr}"
         except Exception:
-            return content
+            return None
 
     def add_message(self, role: str, content: str, timestamp: str | None = None, **kwargs: Any) -> None:
         """Add a message to the session. *timestamp* should be an ISO-format str if provided."""
@@ -121,12 +112,14 @@ class Session:
                     image_placeholder_text(p) for p in media if isinstance(p, str) and p
                 )
                 content = f"{content}\n{breadcrumbs}" if content else breadcrumbs
-            if include_timestamps:
-                content = self._annotate_message_time(message, content, timezone=timezone)
             entry: dict[str, Any] = {"role": message["role"], "content": content}
             for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "thinking_blocks", "timestamp"):
                 if key in message:
                     entry[key] = message[key]
+            if include_timestamps:
+                formatted_ts = self._format_timestamp(message.get("timestamp"), timezone=timezone)
+                if formatted_ts:
+                    entry["timestamp"] = formatted_ts
             out.append(entry)
 
         if max_tokens > 0 and out:

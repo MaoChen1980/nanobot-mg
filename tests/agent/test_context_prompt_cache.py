@@ -11,6 +11,18 @@ import datetime as datetime_module
 from nanobot.agent.context import ContextBuilder
 
 
+def _add_with_summary(memory, content: str) -> int:
+    """Append history entry and set its summary (simulating Dream processing)."""
+    cursor = memory.append_history(content)
+    entries = memory._read_entries()
+    for entry in reversed(entries):
+        if entry["cursor"] == cursor:
+            entry["summary"] = content
+            break
+    memory._write_entries(entries)
+    return cursor
+
+
 class _FakeDatetime(real_datetime):
     current = real_datetime(2026, 2, 24, 13, 59)
 
@@ -96,8 +108,8 @@ def test_unprocessed_history_injected_into_system_prompt(tmp_path) -> None:
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
-    builder.memory.append_history("User asked about weather in Tokyo")
-    builder.memory.append_history("Agent fetched forecast via web_search")
+    _add_with_summary(builder.memory, "User asked about weather in Tokyo")
+    _add_with_summary(builder.memory, "Agent fetched forecast via web_search")
 
     prompt = builder.build_system_prompt()
     assert "# Recent History" in prompt
@@ -112,7 +124,7 @@ def test_recent_history_capped_at_max(tmp_path) -> None:
     builder = ContextBuilder(workspace)
 
     for i in range(builder._MAX_RECENT_HISTORY + 20):
-        builder.memory.append_history(f"entry-{i}")
+        _add_with_summary(builder.memory, f"entry-{i}")
 
     prompt = builder.build_system_prompt()
     assert "entry-0" not in prompt
@@ -126,7 +138,7 @@ def test_recent_history_truncated_at_max_chars(tmp_path) -> None:
     builder = ContextBuilder(workspace)
 
     big_entry = "x" * (builder._MAX_HISTORY_CHARS + 5_000)
-    builder.memory.append_history(big_entry)
+    _add_with_summary(builder.memory, big_entry)
 
     prompt = builder.build_system_prompt()
     history_section = prompt.split("# Recent History\n\n", 1)
@@ -139,7 +151,7 @@ def test_no_recent_history_when_dream_has_processed_all(tmp_path) -> None:
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
-    cursor = builder.memory.append_history("already processed entry")
+    cursor = _add_with_summary(builder.memory, "already processed entry")
     builder.memory.set_last_dream_cursor(cursor)
 
     prompt = builder.build_system_prompt()
@@ -153,9 +165,9 @@ def test_partial_dream_processing_shows_only_remainder(tmp_path) -> None:
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
-    cursor = builder.memory.append_history("already processed entry")
+    cursor = _add_with_summary(builder.memory, "already processed entry")
     builder.memory.set_last_dream_cursor(cursor)
-    builder.memory.append_history("new user entry")
+    _add_with_summary(builder.memory, "new user entry")
 
     prompt = builder.build_system_prompt()
     assert "# Recent History" in prompt
@@ -163,10 +175,10 @@ def test_partial_dream_processing_shows_only_remainder(tmp_path) -> None:
     assert "already processed entry" not in prompt
     builder = ContextBuilder(workspace)
 
-    c1 = builder.memory.append_history("old conversation about Python")
-    c2 = builder.memory.append_history("old conversation about Rust")
-    builder.memory.append_history("recent question about Docker")
-    builder.memory.append_history("recent question about K8s")
+    c1 = _add_with_summary(builder.memory, "old conversation about Python")
+    c2 = _add_with_summary(builder.memory, "old conversation about Rust")
+    _add_with_summary(builder.memory, "recent question about Docker")
+    _add_with_summary(builder.memory, "recent question about K8s")
 
     builder.memory.set_last_dream_cursor(c2)
 

@@ -221,4 +221,32 @@ When something breaks or behaves unexpectedly, diagnose before restarting:
 
 ---
 
+## Quick Replies
+
+You can offer **one-click replies** by appending a ``---quick-replies`` block to
+your response.  Each line becomes a button — clicking it sends that exact text
+as a user message::
+
+    ---quick-replies
+    我确认目前代码修改完成，可以提交
+    我选择方案A——先提交代码再规划新功能
+
+**IMPORTANT: WYSIWYG — What You See Is What You Get.**  The button label IS
+the reply text.  Write natural, full-sentence text that reads exactly like what
+the user would type.  "言如其人，点什么就说什么"
+
+Do NOT abbreviate labels or use ``label || reply`` separators — the system
+ignores them and always sends the label text as the reply.  If a button says
+"确认提交", the user gets "确认提交", period.
+
+**Whenever you ask the user a yes/no question or a choice question, always
+include quick-reply buttons for the possible answers.**  The user should be
+able to respond with a single click, not by typing.  For example::
+
+    ---quick-replies
+    整理成设计文档
+    不用整理成设计文档，看过就可以了
+
+---
+
 *This file describes the LLM–Framework contract. Edit it when you discover new patterns or constraints that affect reasoning.*

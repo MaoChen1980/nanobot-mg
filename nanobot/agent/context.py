@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import mimetypes
 import platform
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ class ContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
 
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
+    _SECTION_SEPARATOR = "\n\n" + "═" * 72 + "\n\n"
     _RUNTIME_CONTEXT_TAG = "## Runtime Context"
     _MAX_RECENT_HISTORY = 50
     _MAX_HISTORY_CHARS = 64_000  # hard cap on recent history section size
@@ -106,24 +108,36 @@ class ContextBuilder:
         if skills_summary:
             parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
+        # ── DB-sourced context (previous sessions) ──
+        _db_started = False
+
         entries = self.memory.read_unprocessed_history(since_cursor=self.memory.get_last_dream_cursor())
         if entries:
-            capped = entries[-self._MAX_RECENT_HISTORY:]
-            history_text = "\n".join(
-                f"- [{self._convert_timestamp(e['timestamp'], self.timezone)}] {(e.get('summary') or e['content'])}" for e in capped
-            )
-            history_text = truncate_text(history_text, self._MAX_HISTORY_CHARS)
-            parts.append("# Recent History\n\n" + history_text)
+            # Only show entries with a Dream summary — skip RAW archives that
+            # contain full message dumps including tool calls and system text.
+            filtered = [e for e in entries if e.get("summary")]
+            if filtered:
+                capped = filtered[-self._MAX_RECENT_HISTORY:]
+                history_text = "\n".join(
+                    f"- [{self._convert_timestamp(e['timestamp'], self.timezone)}] {self._sanitize_md(e['summary'])}" for e in capped
+                )
+                history_text = truncate_text(history_text, self._MAX_HISTORY_CHARS)
+                _db_started = True
+                db_header = "# ── Historical Context (from previous sessions) ──\n"
+                parts.append(db_header)
+                parts.append("# Recent History\n\n" + history_text)
 
         # Current State — Goals + recent events from DB, near end for recency bias
         state_block = self._build_state_section()
         if state_block:
+            if not _db_started:
+                parts.append("# ── Historical Context (from previous sessions) ──\n")
             parts.append(f"# Current State\n\n{state_block}")
 
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 100:
             logger.info("build_system_prompt took {:.0f}ms", _elapsed)
-        return "\n\n---\n\n".join(parts)
+        return self._SECTION_SEPARATOR.join(parts)
 
     def _build_tools_section(self, tool_definitions: list[dict[str, Any]]) -> str:
         """Build the available tools section for the system prompt."""
@@ -148,8 +162,42 @@ class ContextBuilder:
                     desc = truncated[:last_break]
                 else:
                     desc = truncated + "..."
-            lines.append(f"- **{name}**: {desc}")
+            # Indent continuation lines for LLM-readable hierarchy
+            _desc_lines = desc.split("\n")
+            indented_desc = _desc_lines[0]
+            for _line in _desc_lines[1:]:
+                indented_desc += "\n  " + _line if _line.strip() else "\n"
+            lines.append(f"- **{name}**: {indented_desc}")
+            lines.append("")  # blank line between tools
         return "\n".join(lines)
+
+    @staticmethod
+    def _adjust_headings(text: str, offset: int = 1) -> str:
+        """Shift all markdown heading levels by *offset*.
+
+        Positive = demote (add #), negative = promote (remove #).
+        Clamps to valid range [1, 6].
+        """
+        def _replace(m: re.Match) -> str:
+            level = len(m.group(1))
+            new_level = max(1, min(6, level + offset))
+            return "#" * new_level + m.group(2)
+        return re.sub(r'^(#{1,6})(\s)', _replace, text, flags=re.MULTILINE)
+
+    @staticmethod
+    def _sanitize_md(text: str) -> str:
+        """Escape block-level markdown constructs in *text* for safe embedding.
+
+        Prevents injected DB content from creating headings, horizontal rules,
+        blockquotes, or code fences that would break the system prompt structure.
+        """
+        # Leading # (headings), ---/___/*** (horizontal rules), > (blockquotes),
+        # ``` (code fence)
+        text = re.sub(r'^#', r'\\#', text, flags=re.MULTILINE)
+        text = re.sub(r'^(-{3,}|_{3,}|\*{3,})\s*$', r'\\\1', text, flags=re.MULTILINE)
+        text = re.sub(r'^>', r'\\>', text, flags=re.MULTILINE)
+        text = re.sub(r'^```', r'\\`\\`\\`', text, flags=re.MULTILINE)
+        return text
 
     def _get_identity(self, channel: str | None = None) -> str:
         """Get the core identity section."""
@@ -212,14 +260,14 @@ class ContextBuilder:
         for g in goals:
             project = g.get("project", "")
             project_str = f" [{project}]" if project else ""
-            lines.append(f"- **{g['title']}**{project_str}")
+            lines.append(f"- **{self._sanitize_md(g['title'])}**{project_str}")
             if g.get("description"):
-                lines.append(f"  - {g['description']}")
+                lines.append(f"  - {self._sanitize_md(g['description'])}")
             data = g.get("data") or {}
             if data.get("subtasks"):
                 for st in data["subtasks"]:
                     status_icon = "✅" if st.get("status") == "done" else "⬜"
-                    lines.append(f"  {status_icon} {st.get('title', st.get('id', '?'))}")
+                    lines.append(f"  {status_icon} {self._sanitize_md(st.get('title', st.get('id', '?')))}")
         return "\n".join(lines)
 
     def _query_recent_events(self) -> str:
@@ -233,7 +281,7 @@ class ContextBuilder:
         for e in reversed(events):
             ts = self._convert_timestamp(e["timestamp"], self.timezone)
             ts = ts[:26] if ts else "?"
-            lines.append(f"### [{ts}] {e['content']}")
+            lines.append(f"### [{ts}] {self._sanitize_md(e['content'])}")
         return "\n".join(lines)
 
     # -- vector-indexed memory -------------------------------------------------
@@ -243,9 +291,16 @@ class ContextBuilder:
         parts: list[str] = []
 
         # 1. Always include MEMORY.md (if customized by user)
-        memory = self.memory.get_memory_context()
-        if memory and not self._is_template_content(self.memory.read_memory(), "memory/MEMORY.md"):
-            parts.append(f"# Memory\n\n{memory}")
+        long_term = self.memory.read_memory()
+        if long_term and not self._is_template_content(long_term, "memory/MEMORY.md"):
+            # Strip "# Memory" H1 (redundant — wrapper is already # Memory)
+            lines = long_term.split("\n")
+            if lines and lines[0].startswith("# "):
+                lines = lines[1:]
+            content = "\n".join(lines).strip()
+            # Bump remaining headings by +1: ## 命名约定 → ### 命名约定
+            content = self._adjust_headings(content, offset=1)
+            parts.append(f"# Memory\n\n## Long-term Memory\n{content}")
 
         # 2. Append FAISS vector search results for additional relevant context
         query_parts: list[str] = []
@@ -345,7 +400,7 @@ class ContextBuilder:
                     tpl = pkg_files("nanobot") / "templates" / filename
                     if tpl.is_file():
                         content = tpl.read_text(encoding="utf-8")
-                        parts.append(f"## {filename}\n\n{content}")
+                        parts.append(f"## {filename}\n\n{self._adjust_headings(content, offset=1)}")
                 except Exception as e:
                     logger.warning("Failed to load bundled template {}: {}", filename, e)
                 continue
@@ -361,7 +416,7 @@ class ContextBuilder:
                 self._bootstrap_cache[filename] = (mtime, content)
                 cached = (mtime, content)
 
-            parts.append(f"## {filename}\n\n{cached[1]}")
+            parts.append(f"## {filename}\n\n{self._adjust_headings(cached[1], offset=1)}")
 
         return "\n\n".join(parts) if parts else ""
 
@@ -433,8 +488,23 @@ class ContextBuilder:
             last = dict(messages[-1])
             last["content"] = self._merge_message_content(last.get("content"), user_content)
             messages[-1] = last
-            return messages
-        messages.append({"role": current_role, "content": user_content})
+        else:
+            messages.append({"role": current_role, "content": user_content})
+        import json as _json
+        prompt_file = self.workspace / ".prompt_dump.jsonl"
+        sys_prompt = messages[0]["content"] if messages else ""
+        with open(prompt_file, "a", encoding="utf-8") as _f:
+            _f.write("### SYSTEM PROMPT ###\n")
+            _f.write(sys_prompt)
+            _f.write("\n### END SYSTEM PROMPT ###\n")
+            for m in messages[-3:]:
+                c = m.get("content", "")
+                if isinstance(c, str):
+                    c = c[:2000]
+                elif isinstance(c, list):
+                    c = str(c)[:2000]
+                _f.write(_json.dumps({"role": m["role"], "content_snippet": c}, ensure_ascii=False) + "\n")
+            _f.write("---\n")
         return messages
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:

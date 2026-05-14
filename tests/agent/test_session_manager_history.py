@@ -213,13 +213,13 @@ def test_get_history_annotates_all_message_types_with_timestamps():
     assert history == [
         {
             "role": "user",
-            "content": "[2026-04-26 22:00:00 UTC]\n10 点提醒是昨天发生的",
-            "timestamp": "2026-04-26T22:00:00",
+            "content": "10 点提醒是昨天发生的",
+            "timestamp": "2026-04-26 22:00:00 UTC",
         },
         {
             "role": "assistant",
-            "content": "[2026-04-26 22:00:05 UTC]\n记下来了",
-            "timestamp": "2026-04-26T22:00:05",
+            "content": "记下来了",
+            "timestamp": "2026-04-26 22:00:05 UTC",
         },
     ]
 
@@ -248,13 +248,13 @@ def test_get_history_annotates_proactive_assistant_deliveries_with_timestamps():
     assert history == [
         {
             "role": "assistant",
-            "content": "[2026-04-26 15:00:00 UTC]\n记得喝水",
-            "timestamp": "2026-04-26T15:00:00",
+            "content": "记得喝水",
+            "timestamp": "2026-04-26 15:00:00 UTC",
         },
         {
             "role": "user",
-            "content": "[2026-04-26 18:00:00 UTC]\n好",
-            "timestamp": "2026-04-26T18:00:00",
+            "content": "好",
+            "timestamp": "2026-04-26 18:00:00 UTC",
         },
     ]
 
@@ -269,8 +269,8 @@ def test_get_history_annotates_tool_results_with_timestamps():
 
     tool_result = history[-1]
     assert tool_result["role"] == "tool"
-    assert tool_result["content"] == "[2026-04-26 22:00:10 UTC]\nok"
-    assert tool_result["timestamp"] == "2026-04-26T22:00:10"
+    assert tool_result["content"] == "ok"
+    assert tool_result["timestamp"] == "2026-04-26 22:00:10 UTC"
 
 
 # --- Window cuts mid-group: assistant present but some tool results orphaned ---
