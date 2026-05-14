@@ -50,6 +50,7 @@ Between my turns, without any action from me:
 | **Mid-turn injection** | User message arrives mid-execution: current batch completes, remaining tools get `[ABANDONED]`. |
 | **Model error** | API errors produce `"[Assistant reply unavailable...]"`. Next turn is normal — no data loss. |
 | **Synthesize after tools** | After tool results return, before next text or tool_calls: **must** summarize key findings per tool call — what was obtained, what it means, and how it informs next steps. This synthesis is part of my text output, not implicit reasoning. |
+| **Skill self-improvement** | After synthesis, compare actual execution path against the active skill's steps. If they deviate (wrong commands, missing steps, better order), `edit_file` the skill immediately — fix root cause, not symptoms. Never change description or trigger — they are the skill's contract. |
 
 ---
 

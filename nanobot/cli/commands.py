@@ -273,13 +273,22 @@ def main(
 # Onboard / Setup
 # ============================================================================
 
+onboard_app = typer.Typer(
+    help="Setup nanobot, create bots for chat channels",
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+app.add_typer(onboard_app, name="onboard")
 
-@app.command()
+
+@onboard_app.callback(invoke_without_command=True)
 def onboard(
+    ctx: typer.Context,
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
     config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
 ):
     """Generate default config.json and workspace."""
+    if ctx.invoked_subcommand is not None:
+        return
     from nanobot.config.loader import get_config_path, save_config, set_config_path
     from nanobot.config.schema import Config
 
@@ -316,6 +325,36 @@ def onboard(
     console.print(f"  2. Open WebUI and configure from your browser")
     console.print(
         "\n[dim]See: https://github.com/HKUDS/nanobot#-chat-apps[/dim]"
+    )
+
+
+@onboard_app.command()
+def feishu(
+    name: str = typer.Option("feishu-bot", "--name", "-n", help="Bot name in config"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
+):
+    """Create a Feishu bot via QR code scan and auto-configure it."""
+    from nanobot.onboard.feishu import run_onboard_feishu
+
+    run_onboard_feishu(
+        bot_name=name,
+        config_path=config,
+        print_fn=lambda s: console.print(s),
+    )
+
+
+@onboard_app.command()
+def dingtalk(
+    name: str = typer.Option("dingtalk-bot", "--name", "-n", help="Bot name in config"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
+):
+    """Create a DingTalk bot via QR code scan and auto-configure it."""
+    from nanobot.onboard.dingtalk import run_onboard_dingtalk
+
+    run_onboard_dingtalk(
+        bot_name=name,
+        config_path=config,
+        print_fn=lambda s: console.print(s),
     )
 
 
