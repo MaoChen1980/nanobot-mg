@@ -11,7 +11,7 @@ always: false
 1. **Identify the situation** from the categories below
 2. **Call the my tool** with the appropriate action
 3. **If set**, warn the user before changing impactful settings (model, iterations)
-4. **For detailed examples**, read [references/examples.md](references/examples.md)
+4. **For detailed examples**, read `{baseDir}/references/examples.md`
 
 ## When to check
 

@@ -60,14 +60,14 @@ Since you manage skills using your standard file tools, here's how each operatio
 1. **Create directory**: `mkdir -p workspace/skills/<name>/`
 2. **Write SKILL.md** with `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`
 3. **Verify trigger (finalizes contract)**: Read the skill's description from SKILL.md frontmatter, then check it appears correctly in the skills index: `exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`. Confirm the description is specific enough that you'd load this skill when a matching task arrives. If not, edit the description now — this is the last chance. After creation, description and trigger are frozen and owned by skill-manager.
-4. **Validate**: `exec(python nanobot/skills/skill-manager/scripts/quick_validate.py workspace/skills/<name>)`
+4. **Validate**: `exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)`
 5. Fix any validation errors
 
 ### Patch a skill (targeted fix)
 When a skill's instructions are wrong:
 1. `read_file(path="workspace/skills/<name>/SKILL.md")` — read current content
 2. `edit_file(old_string="<wrong text>", new_string="<corrected text>")` — fix the specific section. **Never change the skill's description or trigger** — those are owned by skill-manager.
-3. `exec(python nanobot/skills/skill-manager/scripts/quick_validate.py workspace/skills/<name>)` — validate
+3. `exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)` — validate
 
 ### Edit a skill (full rewrite)
 1. `read_file(path="workspace/skills/<name>/SKILL.md")` — read current content
@@ -138,7 +138,7 @@ See [API Reference](references/api.md) for full details.
 ## Validation
 
 ```bash
-python nanobot/skills/skill-manager/scripts/quick_validate.py workspace/skills/<name>
+python {baseDir}/scripts/quick_validate.py workspace/skills/<name>
 ```
 
 Checks: valid frontmatter, name matches directory, description is non-empty, only allowed subdirs.

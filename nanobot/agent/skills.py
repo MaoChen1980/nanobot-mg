@@ -128,6 +128,7 @@ class SkillsLoader:
                 try:
                     mtime = path.stat().st_mtime
                     content = path.read_text(encoding="utf-8")
+                    content = content.replace("{baseDir}", path.parent.as_posix())
                     self._skill_cache[name] = (mtime, str(path), content)
                     return content
                 except OSError as e:
