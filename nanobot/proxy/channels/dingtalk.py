@@ -129,11 +129,12 @@ class DingTalkProxyChannel(BaseProxyChannel):
     # ------------------------------------------------------------------
 
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to DingTalk chat."""
+        """Send push delivery from hub to DingTalk chat, blocking the
+        background reader so tool/think events arrive before the reply."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
-            await asyncio.to_thread(self._send_deliver, chat_id, content)
+            self._send_deliver(chat_id, content)
 
     def _send_deliver(self, chat_id: str, content: str) -> None:
         """Sync helper to send a push delivery message."""
