@@ -533,7 +533,11 @@ class OpenAICompatProvider(LLMProvider):
             # DashScope accepts none/minimum/low/medium/high/xhigh; "minimal" 400s.
             wire_effort = "minimum"
 
-        if wire_effort:
+        # Some providers (MiniMax) don't accept reasoning_effort as a
+        # top-level parameter — they use their own thinking mechanism
+        # (reasoning_split in extra_body) instead.
+        skip_reasoning_effort = bool(spec and spec.thinking_style == "reasoning_split")
+        if wire_effort and not skip_reasoning_effort:
             kwargs["reasoning_effort"] = wire_effort
 
         # Provider-specific thinking parameters.
@@ -581,16 +585,10 @@ class OpenAICompatProvider(LLMProvider):
                 and semantic_effort != "minimal")
         )
         if thinking_active:
-            is_minimax = spec and spec.name in ("minimax", "minimax_cn")
             for msg in kwargs["messages"]:
                 if msg.get("role") == "assistant":
                     if "reasoning_content" not in msg:
                         msg["reasoning_content"] = ""
-                    # MiniMax with reasoning_split=true expects original
-                    # reasoning_details array on all assistant messages.
-                    # Backfill empty array for old messages that never had it.
-                    if is_minimax and "reasoning_details" not in msg:
-                        msg["reasoning_details"] = []
 
         # GLM: preserved thinking across multi-turn (clear_thinking: False).
         # Without this, GLM clears historical reasoning each turn.
