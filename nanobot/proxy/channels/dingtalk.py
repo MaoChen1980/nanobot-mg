@@ -124,6 +124,55 @@ class DingTalkProxyChannel(BaseProxyChannel):
             logger.exception("Failed to get DingTalk access token")
         return None
 
+    # ------------------------------------------------------------------
+    # Push delivery from Hub (tool events, thinking, reminders, etc.)
+    # ------------------------------------------------------------------
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to DingTalk chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            await asyncio.to_thread(self._send_deliver, chat_id, content)
+
+    def _send_deliver(self, chat_id: str, content: str) -> None:
+        """Sync helper to send a push delivery message."""
+        is_group = chat_id.startswith("group:")
+        actual_chat_id = chat_id[len("group:"):] if is_group else chat_id
+        sender_id = actual_chat_id  # for O2O, chat_id is the sender_id
+
+        token = self._get_access_token()
+        if not token:
+            return
+
+        import httpx
+
+        if is_group:
+            url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
+            payload = {
+                "robotCode": self.config.get("clientId", ""),
+                "openConversationId": actual_chat_id,
+                "msgKey": "sampleMarkdown",
+                "msgParam": json.dumps({"text": content}, ensure_ascii=False),
+            }
+        else:
+            url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
+            payload = {
+                "robotCode": self.config.get("clientId", ""),
+                "userIds": [sender_id],
+                "msgKey": "sampleMarkdown",
+                "msgParam": json.dumps({"text": content}, ensure_ascii=False),
+            }
+
+        headers = {"x-acs-dingtalk-access-token": token}
+        try:
+            with httpx.Client(timeout=30) as client:
+                resp = client.post(url, json=payload, headers=headers)
+                if resp.status_code >= 400:
+                    logger.warning("DingTalk deliver failed: {} - {}", resp.status_code, resp.text[:200])
+        except Exception as e:
+            logger.error("DingTalk deliver error: {}", e)
+
     def start(self) -> None:
         """Run the DingTalk Stream connection in its own event loop."""
         import threading

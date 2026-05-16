@@ -22,6 +22,7 @@ class SlackProxyChannel(BaseProxyChannel):
         self._web_client: Any = None
         self._socket_client: Any = None
         self._bot_user_id: str | None = None
+        self._slack_loop: asyncio.AbstractEventLoop | None = None
 
     async def _on_socket_request(self, client: Any, req: Any) -> None:
         from slack_sdk.socket_mode.response import SocketModeResponse
@@ -94,6 +95,7 @@ class SlackProxyChannel(BaseProxyChannel):
         import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        self._slack_loop = loop
 
         self._web_client = AsyncWebClient(token=self.config.get("bot_token", ""))
         self._socket_client = SocketModeClient(
@@ -109,6 +111,16 @@ class SlackProxyChannel(BaseProxyChannel):
 
         loop.run_until_complete(self._socket_client.connect())
         loop.run_forever()
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to Slack channel."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content and self._web_client and self._slack_loop:
+            asyncio.run_coroutine_threadsafe(
+                self._web_client.chat_postMessage(channel=chat_id, text=content),
+                self._slack_loop,
+            )
 
 
 def main() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from typing import Any
 
@@ -27,6 +28,7 @@ class QQProxyChannel(BaseProxyChannel):
         self._chat_type_cache: dict[str, str] = {}
         self._client: Any = None
         self._msg_seq: int = 1
+        self._qq_loop: asyncio.AbstractEventLoop | None = None
 
     async def _on_message(self, data: Any, is_group: bool = False) -> None:
         try:
@@ -75,6 +77,7 @@ class QQProxyChannel(BaseProxyChannel):
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        self._qq_loop = loop
 
         intents = botpy.Intents(public_messages=True, direct_message=True)
 
@@ -103,6 +106,17 @@ class QQProxyChannel(BaseProxyChannel):
         while True:
             import time
             time.sleep(5)
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to QQ chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content and self._client and self._qq_loop:
+            is_group = self._chat_type_cache.get(chat_id) == "group"
+            asyncio.run_coroutine_threadsafe(
+                self._send_reply(chat_id, is_group, content),
+                self._qq_loop,
+            )
 
 
 def main() -> None:

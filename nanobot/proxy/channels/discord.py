@@ -58,6 +58,17 @@ class DiscordProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("Discord proxy message handler error: {}", e)
 
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to Discord channel."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content and self._client and self._bot_loop:
+            async def _send():
+                channel = self._client.get_channel(int(chat_id))
+                if channel:
+                    await channel.send(content)
+            asyncio.run_coroutine_threadsafe(_send(), self._bot_loop)
+
     def start(self) -> None:
         """Run the Discord bot connection."""
         import asyncio

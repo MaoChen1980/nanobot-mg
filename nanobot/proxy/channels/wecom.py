@@ -73,6 +73,15 @@ class WecomProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("WeCom reply error: {}", e)
 
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to WeCom chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            frame = self._chat_frames.get(chat_id)
+            if frame:
+                await asyncio.to_thread(self._send_reply, frame, content)
+
     @staticmethod
     def _generate_req_id(prefix: str) -> str:
         import uuid

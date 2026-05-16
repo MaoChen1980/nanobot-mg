@@ -58,6 +58,13 @@ class WhatsAppProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("WhatsApp bridge send error: {}", e)
 
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to WhatsApp chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            self._send_bridge_text(chat_id, content)
+
     def start(self) -> None:
         """Run the WhatsApp bridge WebSocket connection."""
         import websockets

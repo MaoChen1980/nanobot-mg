@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
 from typing import Any
@@ -20,6 +21,13 @@ class WeixinProxyChannel(BaseProxyChannel):
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
         self._send_reply_fn: Any = None
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to WeChat chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content and self._send_reply_fn:
+            await asyncio.to_thread(self._send_reply_fn, chat_id, content)
 
     def start(self) -> None:
         """Poll WeChat API and forward messages to Hub."""

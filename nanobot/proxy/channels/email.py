@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import email
 import html
 import imaplib
@@ -256,6 +257,13 @@ class EmailProxyChannel(BaseProxyChannel):
                     smtp.send_message(email_msg)
         except Exception as e:
             logger.error("Email SMTP send error: {}", e)
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub via email."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            await asyncio.to_thread(self._smtp_send, chat_id, content, None, None)
 
     def start(self) -> None:
         """Poll IMAP and forward messages to Hub."""

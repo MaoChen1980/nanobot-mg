@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -84,6 +85,13 @@ class MSTeamsProxyChannel(BaseProxyChannel):
                 )
         except Exception as e:
             logger.error("MSTeams reply error: {}", e)
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to MSTeams chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            await asyncio.to_thread(self._send_reply, chat_id, content)
 
     def start(self) -> None:
         """Run the MSTeams webhook server."""

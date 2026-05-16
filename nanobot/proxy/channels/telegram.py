@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
 from typing import Any
@@ -20,6 +21,7 @@ class TelegramProxyChannel(BaseProxyChannel):
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
         self._app: Any = None
+        self._telegram_loop: asyncio.AbstractEventLoop | None = None
 
     async def _handle_update(self, update: Any, context: Any) -> None:
         try:
@@ -56,6 +58,7 @@ class TelegramProxyChannel(BaseProxyChannel):
         import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        self._telegram_loop = loop
 
         self._app = Application.builder().token(token).loop(loop).build()
         self._app.add_handler(
@@ -63,6 +66,16 @@ class TelegramProxyChannel(BaseProxyChannel):
         )
 
         loop.run_until_complete(self._app.run_polling())
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to Telegram chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content and self._app and self._telegram_loop:
+            asyncio.run_coroutine_threadsafe(
+                self._app.bot.send_message(chat_id=chat_id, text=content),
+                self._telegram_loop,
+            )
 
 
 def main() -> None:

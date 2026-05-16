@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from typing import Any
 
@@ -19,6 +20,7 @@ class MatrixProxyChannel(BaseProxyChannel):
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
         self._client: Any = None
+        self._matrix_loop: asyncio.AbstractEventLoop | None = None
 
     async def _on_message(self, room: Any, event: Any) -> None:
         try:
@@ -67,12 +69,25 @@ class MatrixProxyChannel(BaseProxyChannel):
         import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        self._matrix_loop = loop
 
         async def login_and_sync():
             await self._client.login(password, device_id=device_id)
             await self._client.sync_forever()
 
         loop.run_until_complete(login_and_sync())
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Send push delivery from hub to Matrix room."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content and self._client and self._matrix_loop:
+            asyncio.run_coroutine_threadsafe(
+                self._client.room_send(chat_id, "m.room.message", {
+                    "msgtype": "m.text", "body": content,
+                }),
+                self._matrix_loop,
+            )
 
 
 def main() -> None:
