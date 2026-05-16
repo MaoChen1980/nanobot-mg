@@ -145,7 +145,10 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 "x-acs-dingtalk-access-token": token,
                 "Content-Type": "application/json",
             }
-            payload = {"downloadCode": download_code}
+            payload = {
+                "downloadCode": download_code,
+                "robotCode": self.config.get("clientId", ""),
+            }
 
             with httpx.Client(timeout=60) as client:
                 resp = client.post(url, json=payload, headers=headers)
