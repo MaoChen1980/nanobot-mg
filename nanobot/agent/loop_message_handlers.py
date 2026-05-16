@@ -43,7 +43,7 @@ class SystemMessageHandler:
         self._loop._set_tool_context(effective_channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
-        max_keep = session.metadata.get("max_keep_rounds", 10) if session else 10
+        max_keep = session.metadata.get("max_keep_rounds", 3) if session else 3
         cs = ContextState(
             session_summary=pending,
             tool_definitions=self._loop.tools.get_definitions(),
@@ -196,7 +196,7 @@ class UserMessageHandler:
         """Build the initial message list for the agent loop."""
         from nanobot.agent.tools.ask import pending_ask_user_id, ask_user_tool_result_messages
         pending_ask_id = pending_ask_user_id(history)
-        max_keep = session.metadata.get("max_keep_rounds", 10) if session else 10
+        max_keep = session.metadata.get("max_keep_rounds", 3) if session else 3
         if pending_ask_id:
             initial_messages = ask_user_tool_result_messages(
                 self._loop.context.build_system_prompt(channel=msg.channel),

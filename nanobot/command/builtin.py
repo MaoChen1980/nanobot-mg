@@ -387,7 +387,7 @@ async def cmd_rounds(ctx: CommandContext) -> OutboundMessage:
     session = ctx.session
 
     if not args:
-        current = session.metadata.get("max_keep_rounds", 10) if session else 10
+        current = session.metadata.get("max_keep_rounds", 3) if session else 3
         desc = "all (no timeline)" if current == 0 else str(current)
         return OutboundMessage(
             channel=msg.channel, chat_id=msg.chat_id,
