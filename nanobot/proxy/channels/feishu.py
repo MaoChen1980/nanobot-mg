@@ -249,9 +249,16 @@ class FeishuProxyChannel(BaseProxyChannel):
         """Enqueue push delivery from hub to Feishu chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
-        if chat_id and content:
-            self._enqueue_send({"chat_id": chat_id, "root_id": None, "content": content})
-            logger.info("Enqueued deliver to {}: content={}", chat_id, content[:60])
+        media = data.get("media", [])
+        if not chat_id or (not content and not media):
+            return
+        item: dict[str, Any] = {"chat_id": chat_id, "root_id": None}
+        if content:
+            item["content"] = content
+        if media:
+            item["media"] = media
+        self._enqueue_send(item)
+        logger.info("Enqueued deliver to {}: content={} media={}", chat_id, content[:60] if content else "", len(media))
 
     def _process_send(self, item: dict) -> None:
         """Send queued message to Feishu."""

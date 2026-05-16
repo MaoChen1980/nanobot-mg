@@ -429,13 +429,13 @@ class DingTalkProxyChannel(BaseProxyChannel):
             msg_data = self.build_message(sender_id, chat_id, content, msg_id, media=media)
             response = self.send_to_hub(msg_data)
 
-            if response and response.success and response.content:
-                self._send_reply(chat_id, sender_id, is_group, response.content)
+            if response and response.success and (response.content or response.media):
+                self._send_reply(chat_id, sender_id, is_group, response.content, media=response.media)
 
         except Exception as e:
             logger.error("DingTalk proxy message handler error: {}", e)
 
-    def _send_reply(self, chat_id: str, sender_id: str, is_group: bool, content: str) -> None:
+    def _send_reply(self, chat_id: str, sender_id: str, is_group: bool, content: str, media: list[str] | None = None) -> None:
         """Queue a reply for ordered delivery."""
         content = re.sub(
             r"^\*\*Nanobot Reply\*\*\s*\n+",
@@ -444,6 +444,16 @@ class DingTalkProxyChannel(BaseProxyChannel):
             count=1,
             flags=re.IGNORECASE,
         ).strip()
+        if media:
+            media_text = ""
+            for path in media:
+                ext = Path(path).suffix.lower()
+                if ext in IMAGE_EXTENSIONS:
+                    media_text += f"\n![image]({path})"
+                else:
+                    name = os.path.basename(path)
+                    media_text += f"\n[DINGTALK_FILE]{{\"path\": \"{path}\", \"name\": \"{name}\"}}[/DINGTALK_FILE]"
+            content = (content or "") + media_text
         actual_id = chat_id[len("group:"):] if is_group else chat_id
         self._enqueue_send({
             "chat_id": actual_id,
@@ -461,15 +471,30 @@ class DingTalkProxyChannel(BaseProxyChannel):
         responsive while the send worker preserves FIFO ordering."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
-        if chat_id and content:
-            is_group = chat_id.startswith("group:")
-            actual_id = chat_id[len("group:"):] if is_group else chat_id
-            self._enqueue_send({
-                "chat_id": actual_id,
-                "sender_id": actual_id if not is_group else "",
-                "is_group": is_group,
-                "content": content,
-            })
+        media = data.get("media", [])
+        if not chat_id or (not content and not media):
+            return
+        is_group = chat_id.startswith("group:")
+        actual_id = chat_id[len("group:"):] if is_group else chat_id
+        item: dict[str, Any] = {
+            "chat_id": actual_id,
+            "sender_id": actual_id if not is_group else "",
+            "is_group": is_group,
+        }
+        if content:
+            item["content"] = content
+        if media:
+            # Append media file paths to content so _detect_and_upload_media handles them
+            media_text = ""
+            for path in media:
+                ext = Path(path).suffix.lower()
+                if ext in IMAGE_EXTENSIONS:
+                    media_text += f"\n![image]({path})"
+                else:
+                    name = os.path.basename(path)
+                    media_text += f"\n[DINGTALK_FILE]{{\"path\": \"{path}\", \"name\": \"{name}\"}}[/DINGTALK_FILE]"
+            item["content"] = (content or "") + media_text
+        self._enqueue_send(item)
 
     def _get_access_token(self) -> str | None:
         """Get DingTalk access token."""

@@ -151,6 +151,39 @@ class HubTCPServer:
             session_key, msg.content[:50], session_key,
         )
 
+        # ── Outbound bridge ────────────────────────────────────────────
+        # The message tool sends via bus.publish_outbound.  Consume these
+        # during processing so they reach the proxy in real-time.
+        _outbound_bridge_task: asyncio.Task | None = None
+
+        async def _bridge_outbound() -> None:
+            bus = getattr(self._agent_loop, "bus", None)
+            if bus is None:
+                return
+            try:
+                while True:
+                    try:
+                        outbound = await asyncio.wait_for(
+                            bus.consume_outbound(), timeout=1.0,
+                        )
+                    except asyncio.TimeoutError:
+                        continue
+                    # Only forward messages for this proxy's channel
+                    if outbound.channel != msg.channel:
+                        continue
+                    payload: dict[str, Any] = {
+                        "type": "deliver",
+                        "chat_id": outbound.chat_id,
+                        "content": outbound.content,
+                    }
+                    if outbound.media:
+                        payload["media"] = outbound.media
+                    if outbound.buttons:
+                        payload["buttons"] = outbound.buttons
+                    await self._proxy_manager.deliver_to_proxy(proxy_key, payload)
+            except asyncio.CancelledError:
+                pass
+
         # Progress callback delivers /think and /tool observe events
         # to the proxy in real-time while the main request is processing.
         async def _on_progress(
@@ -211,6 +244,9 @@ class HubTCPServer:
                     on_progress=_on_progress,
                 )
 
+        # Start outbound bridge before processing
+        _outbound_bridge_task = asyncio.create_task(_bridge_outbound())
+
         try:
             response = await _process()
             if response is None:
@@ -220,6 +256,13 @@ class HubTCPServer:
         except Exception as e:
             logger.exception("Error processing proxy TCP message: {}", e)
             resp = HubResponse(success=False, error=str(e))
+        finally:
+            if _outbound_bridge_task is not None and not _outbound_bridge_task.done():
+                _outbound_bridge_task.cancel()
+                try:
+                    await _outbound_bridge_task
+                except asyncio.CancelledError:
+                    pass
 
         # Route response through proxy_manager so it reaches the CURRENT
         # TCP connection — the proxy may have reconnected during processing.
