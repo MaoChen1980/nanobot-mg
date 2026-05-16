@@ -120,6 +120,11 @@ class DingTalkProxyChannel(BaseProxyChannel):
     def _download_media(self, download_code: str, media_type: str = "image") -> str | None:
         """Download media from DingTalk using downloadCode.
 
+        The DingTalk Robot API ``/v1.0/robot/messageFiles/download`` returns a
+        JSON body with a ``downloadUrl`` pointing to the actual file content,
+        so this method does a two-step fetch: get the URL, then download the
+        binary.
+
         Args:
             download_code: The download code from the message
             media_type: 'image' or 'file'
@@ -128,12 +133,13 @@ class DingTalkProxyChannel(BaseProxyChannel):
             Local file path on success, None on failure
         """
         try:
+            import httpx
+
             token = self._get_access_token()
             if not token:
                 return None
 
-            import httpx
-
+            # Step 1: get download URL
             url = "https://api.dingtalk.com/v1.0/robot/messageFiles/download"
             headers = {
                 "x-acs-dingtalk-access-token": token,
@@ -144,22 +150,35 @@ class DingTalkProxyChannel(BaseProxyChannel):
             with httpx.Client(timeout=60) as client:
                 resp = client.post(url, json=payload, headers=headers)
 
-            if resp.status_code == 200:
-                # Determine file extension from Content-Type
-                content_type = resp.headers.get("Content-Type", "")
-                ext = self._guess_extension_from_mime(content_type)
+            if resp.status_code != 200:
+                logger.warning(f"Download URL request failed: {resp.status_code} - {resp.text[:200]}")
+                return None
 
-                # Save to temp directory
-                temp_dir = Path.home() / ".nanobot" / "media" / "incoming"
-                temp_dir.mkdir(parents=True, exist_ok=True)
-                filename = f"{uuid.uuid4().hex[:12]}{ext}"
-                dest = temp_dir / filename
-                dest.write_bytes(resp.content)
+            result = resp.json()
+            download_url = result.get("downloadUrl") or result.get("downloadUrl", "")
+            if not download_url:
+                logger.warning(f"Download URL missing in response: {result}")
+                return None
 
-                logger.info(f"Downloaded {media_type} to {dest}")
-                return str(dest)
-            else:
-                logger.warning(f"Download failed: {resp.status_code} - {resp.text[:200]}")
+            # Step 2: download the actual file content from the URL
+            with httpx.Client(timeout=120, follow_redirects=True) as client:
+                file_resp = client.get(download_url)
+                if file_resp.status_code != 200:
+                    logger.warning(f"File download failed: {file_resp.status_code} - {file_resp.text[:200]}")
+                    return None
+
+            # Determine extension from Content-Type header of the download
+            content_type = file_resp.headers.get("Content-Type", "")
+            ext = self._guess_extension_from_mime(content_type) or ".bin"
+
+            temp_dir = Path.home() / ".nanobot" / "media" / "incoming"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"{uuid.uuid4().hex[:12]}{ext}"
+            dest = temp_dir / filename
+            dest.write_bytes(file_resp.content)
+
+            logger.info(f"Downloaded {media_type} ({len(file_resp.content)} bytes) to {dest}")
+            return str(dest)
 
         except Exception as e:
             logger.exception(f"Failed to download media: {download_code}")
@@ -383,14 +402,31 @@ class DingTalkProxyChannel(BaseProxyChannel):
     # Inbound message handling
     # ------------------------------------------------------------------
 
+    def _get_content_field(self, data: dict) -> dict:
+        """Helper to get and parse the ``content`` field from DingTalk data.
+
+        In DingTalk Stream callbacks, the ``content`` field is a JSON string for
+        picture/file messages, or an already-parsed dict.  This helper returns a
+        dict regardless.
+        """
+        raw = data.get("content", {})
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                return {}
+        return raw if isinstance(raw, dict) else {}
+
     def on_message(self, data: Any) -> None:
         """Sync callback from DingTalk SDK - forward message to Hub."""
-        logger.info("DingTalk on_message called, msgType: {}", data.get("msgType", "unknown"))
         try:
             from dingtalk_stream.chatbot import ChatbotMessage
 
             chatbot_msg = ChatbotMessage.from_dict(data)
-            msg_type = data.get("msgType", "text")
+            # The SDK normalises ``msgtype`` → ``message_type``; the raw dict
+            # has ``msgtype`` (lowercase), NOT ``msgType``.
+            msg_type = chatbot_msg.message_type or data.get("msgtype", "text")
+            logger.info("DingTalk on_message called, msg_type={}", msg_type)
             content = ""
             media: list[str] = []
 
@@ -403,9 +439,15 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     content = text_data.get("content", "").strip() if isinstance(text_data, dict) else ""
 
             elif msg_type in ("picture", "image", "sampleImage"):
-                # Image message - download the image
-                pic_data = data.get("picture", {}) or data.get("image", {})
-                download_code = pic_data.get("downloadCode") if isinstance(pic_data, dict) else None
+                # Image message — use SDK-parsed image_content first
+                download_code = (
+                    chatbot_msg.image_content.download_code
+                    if chatbot_msg.image_content else None
+                )
+                if not download_code:
+                    # Fallback: parse data.content (JSON string or dict)
+                    content_data = self._get_content_field(data)
+                    download_code = content_data.get("downloadCode")
                 if download_code:
                     content = "[用户发送了图片]"
                     local_path = self._download_media(download_code, "image")
@@ -416,9 +458,10 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     content = "[收到图片消息]"
 
             elif msg_type in ("file", "sampleFile"):
-                # File message - download the file
-                file_data = data.get("file", {})
-                download_code = file_data.get("downloadCode") if isinstance(file_data, dict) else None
+                # File message — DingTalk SDK does not parse file content,
+                # so read downloadCode from ``data.content`` directly.
+                content_data = self._get_content_field(data)
+                download_code = content_data.get("downloadCode")
                 if download_code:
                     content = "[用户发送了文件]"
                     local_path = self._download_media(download_code, "file")
