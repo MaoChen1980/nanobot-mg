@@ -186,9 +186,11 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "The file path to edit"),
-        old_text=p("string", "The text to find and replace"),
-        new_text=p("string", "The text to replace with"),
+        path=p("string", "File path to edit — relative or absolute. Directories and special files are rejected."),
+        old_text=p("string", "Text to find and replace. Must match EXACTLY and be UNIQUE in the file — include surrounding lines for disambiguation, or set replace_all=true. "
+            "Leave empty (or omit) to prepend new_text at file beginning. Pair with first_line+last_line for line-range mode instead of text matching."),
+        new_text=p("string", "Replacement text for old_text. Pass empty string to delete old_text. "
+            "When used with first_line+last_line (no old_text), replaces the entire line range with this text."),
         replace_all=p("boolean",
             "Replace all occurrences (default false). "
             "When old_text appears multiple times and replace_all=false, "

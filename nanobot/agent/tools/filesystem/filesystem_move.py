@@ -10,8 +10,8 @@ from nanobot.agent.tools.schema import p
 
 
 @tool_parameters(properties={
-    "source": p("string", "The source file path"),
-    "dest": p("string", "The destination file path"),
+    "source": p("string", "Source file path — must be a file, not a directory."),
+    "dest": p("string", "Destination path — if an existing directory, file is moved inside with original name."),
 }, required=["source", "dest"])
 class MoveFileTool(_FsTool):
     """Move or rename a file. Workspace-guarded, single-file only."""

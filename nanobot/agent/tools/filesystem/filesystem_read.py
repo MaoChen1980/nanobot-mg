@@ -16,7 +16,7 @@ from nanobot.utils.media_decode import build_image_content_blocks, detect_image_
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "The file path to read"),
+        path=p("string", "File path to read — relative or absolute. Supports text files, PDFs (pages param), and images (rendered as Markdown)."),
         extract=p("string", "Optional regex — only lines matching this pattern are returned, with 1 line of context before/after each match. Use instead of grep+cat for filtering logs or code."),
         offset=p("integer", "Line number to start reading from (1-indexed, default 1)",
             minimum=1,

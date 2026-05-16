@@ -10,7 +10,7 @@ from nanobot.agent.tools.schema import p
 
 
 @tool_parameters(properties={
-    "path": p("string", "The file path to delete"),
+    "path": p("string", "File path to delete — workspace-guarded, rejects system paths."),
 }, required=["path"])
 class DeleteFileTool(_FsTool):
     """Delete a single file. Supports workspace-relative and absolute paths."""

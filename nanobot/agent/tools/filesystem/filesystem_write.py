@@ -13,8 +13,8 @@ from nanobot.agent.tools import file_state
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "The file path to write to"),
-        content=p("string", "The content to write"),
+        path=p("string", "File path to write — relative or absolute. OVERWRITES existing file, auto-creates parent directories."),
+        content=p("string", "Full file content to write. Replaces entire file — use edit_file for partial edits or substitutions."),
         then_exec=p("string",
             "If set to a shell command string, executes it automatically after writing "
             "and returns the command output. Useful for script-then-run workflows."
