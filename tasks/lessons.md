@@ -24,6 +24,16 @@ The nudge (suggesting tools for cat/grep/sed/curl in exec results) is still corr
 
 **How to apply**: For any proxy channel where `_handle_deliver` and `_send_reply` send to the same API, funnel all outbound messages through a single `queue.Queue` worker. Don't block the conn_loop with sync HTTP calls either — that's trading one problem for another.
 
+## 2026-05-17: Don't extract file content into user message — save to workspace silently
+
+**Context**: When a user sends a file (txt, pdf, image) via chat, the system was extracting the file content and injecting it into the user message as text. For images, it was base64-encoding them as vision input. This caused the LLM to treat file content as user instructions, hallucinating actions ("guess" behavior).
+
+**Correction**: The LLM should only know what files were received, not process their content automatically. All media files are saved to the workspace directory; the user message only contains a simple reference like `[用户发送了: aaa.txt]` — no content extraction, no vision encoding. The LLM only acts when the user gives explicit instructions, at which point it can use file tools to read from workspace.
+
+**Rule**: Never extract/inject file content into the user message for the LLM. File content should only be accessed via tool calls when the LLM has a specific reason (user instruction) to do so. Images should not be auto-encoded as vision input unless the user explicitly asks for visual processing. The message to the LLM should indicate WHAT was received, not WHAT the content says.
+
+**How to apply**: When handling inbound media, always: (1) save the file to workspace with deduplicated name, (2) only add a simple `[用户发送了: filename]` to the message content, (3) strip media from the message so downstream layers don't auto-process it. Don't use `extract_documents()` or `detect_image_mime()` for automatic processing — leave files for the LLM to discover on demand.
+
 ## 2026-05-16: Put send queue in BaseProxyChannel, not per-channel
 
 **Context**: After fixing DingTalk's ordering race with a per-channel `queue.Queue` + worker thread, the plan was to replicate the same pattern across 11 other channels.

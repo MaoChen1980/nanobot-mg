@@ -175,7 +175,8 @@ class DingTalkProxyChannel(BaseProxyChannel):
             content_type = file_resp.headers.get("Content-Type", "")
             ext = self._guess_extension_from_mime(content_type) or ".bin"
 
-            temp_dir = Path.home() / ".nanobot" / "media" / "incoming"
+            ws = self.config.get("_workspace_path") or str(Path.home() / ".nanobot" / "workspace")
+            temp_dir = Path(ws) / "incoming"
             temp_dir.mkdir(parents=True, exist_ok=True)
 
             # Try original filename from Content-Disposition header first,

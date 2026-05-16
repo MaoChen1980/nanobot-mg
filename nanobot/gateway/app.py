@@ -851,6 +851,8 @@ class GatewayApplication:
             for bot_item in bots:
                 bot_name, bot_config = self._merge_bot_config(section, bot_item)
                 if bot_name:
+                    bot_config = dict(bot_config) if isinstance(bot_config, dict) else {}
+                    bot_config["_workspace_path"] = str(self.config.workspace_path)
                     self.proxy_manager.spawn(name, bot_name, bot_config)
                     spawned += 1
                     spawned_channels.add(name)

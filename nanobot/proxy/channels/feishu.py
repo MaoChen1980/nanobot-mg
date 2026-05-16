@@ -343,7 +343,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                 return None
 
             ext = self._guess_ext_from_resp(resp, msg_type, file_key)
-            tmp_dir = pathlib.Path(tempfile.gettempdir()) / "feishu_media"
+            ws = self.config.get("_workspace_path") or str(pathlib.Path.home() / ".nanobot" / "workspace")
+            tmp_dir = pathlib.Path(ws) / "incoming"
             tmp_dir.mkdir(parents=True, exist_ok=True)
 
             original_name = getattr(resp, "file_name", None) or ""
