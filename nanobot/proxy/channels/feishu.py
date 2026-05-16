@@ -99,7 +99,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                 content_obj = json.loads(content)
                 text = content_obj.get("text", "") if isinstance(content_obj, dict) else str(content_obj)
                 if msg_type in ("image", "file", "audio", "video") and isinstance(content_obj, dict):
-                    file_key = content_obj.get("file_key") or content_obj.get("key") or content_obj.get("token") or content_obj.get("file_key")
+                    file_key = (content_obj.get("file_key") or content_obj.get("image_key")
+                                or content_obj.get("key") or content_obj.get("token"))
             except Exception:
                 text = content
 
@@ -289,27 +290,39 @@ class FeishuProxyChannel(BaseProxyChannel):
         """Download a media resource from Feishu and return the local file path.
 
         Args:
-            file_key: Feishu file key / token for the resource.
+            file_key: Feishu file key / image_key for the resource.
             msg_type: Feishu message type (image, file, audio, video).
 
         Returns:
             Local file path on success, ``None`` on failure.
         """
         try:
-            import tempfile, os, pathlib, time
+            import io, pathlib, tempfile, time
+            from lark_oapi.api.im.v1 import GetFileRequest, GetImageRequest
 
-            # Download the resource
-            resp = self._client.im.v1.message_resource.get(
-                file_key=file_key,
-                image_type=msg_type if msg_type == "image" else None,
-            )
-            # lark-oapi raises on non-2xx; the raw response body is in resp.data
-            data_bytes: bytes = resp.data
+            if msg_type == "image":
+                request = GetImageRequest.builder().image_key(file_key).build()
+                resp = self._client.im.v1.image.get(request)
+            else:
+                request = GetFileRequest.builder().file_key(file_key).build()
+                resp = self._client.im.v1.file.get(request)
+
+            if not resp.success():
+                logger.warning("Feishu media download failed: code={} msg={}", resp.code, resp.msg)
+                return None
+
+            file_obj = resp.file
+            if file_obj is None:
+                logger.warning("Feishu media download got empty response for key={}", file_key)
+                return None
+
+            data_bytes = file_obj.read() if isinstance(file_obj, io.IOBase) else file_obj
+            if isinstance(data_bytes, memoryview):
+                data_bytes = bytes(data_bytes)
             if not data_bytes:
                 logger.warning("Feishu media download got empty data for key={}", file_key)
                 return None
 
-            # Determine extension from Content-Disposition header if available
             ext = self._guess_ext_from_resp(resp, msg_type, file_key)
             tmp_dir = pathlib.Path(tempfile.gettempdir()) / "feishu_media"
             tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -324,19 +337,10 @@ class FeishuProxyChannel(BaseProxyChannel):
             return None
 
     def _guess_ext_from_resp(self, resp, msg_type: str, file_key: str) -> str:
-        """Extract file extension from HTTP response headers or msg_type."""
-        try:
-            headers = dict(resp.headers or {})
-            cd = headers.get("content-disposition", "") or headers.get("Content-Disposition", "")
-            import re
-            m = re.search(r"filename[^*]*\*?=['\"]?(?:UTF-8'')?(.+?)(?:;|$)", cd, re.IGNORECASE)
-            if m:
-                name = m.group(1)
-                if "." in name:
-                    return "." + name.rsplit(".", 1)[-1]
-        except Exception:
-            pass
-        # Fallback by type
+        """Extract file extension from lark response file_name or msg_type."""
+        file_name = getattr(resp, "file_name", None) or ""
+        if "." in file_name:
+            return "." + file_name.rsplit(".", 1)[-1]
         ext_map = {"image": ".jpg", "audio": ".m4a", "video": ".mp4", "file": ".bin"}
         return ext_map.get(msg_type, ".bin")
 
