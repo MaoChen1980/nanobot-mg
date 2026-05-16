@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import os
+import queue
 import sys
 import threading
 import time
@@ -53,6 +54,10 @@ class BaseProxyChannel:
         self._pending_response: asyncio.Future | None = None
         self._pending_request_type: str | None = None
         self._parent_pid: int = 0  # set after TCP connect
+        # FIFO send queue — linearizes outbound messages so push deliveries
+        # (tool/think events) always arrive before the reply.
+        self._send_queue: queue.Queue = queue.Queue()
+        threading.Thread(target=self._send_worker_loop, daemon=True).start()
         # msg_id -> timestamp for deduplication
         self._dedup: dict[str, float] = {}
         self._last_chat_id: str = ""  # last chat_id to send startup notification to
@@ -226,6 +231,32 @@ class BaseProxyChannel:
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         logger.info("Push delivery to {}: {}", chat_id, content[:80])
+
+    # ------------------------------------------------------------------
+    # FIFO send queue infrastructure
+    # ------------------------------------------------------------------
+
+    def _send_worker_loop(self) -> None:
+        """Daemon worker: dequeue items and dispatch to _process_send."""
+        while True:
+            item = self._send_queue.get()
+            if item is None:
+                break
+            try:
+                self._process_send(item)
+            except Exception as e:
+                logger.error("Send worker error in {}: {}", self.CHANNEL_NAME, e)
+
+    def _enqueue_send(self, item: dict) -> None:
+        """Enqueue a send item for FIFO processing. Thread-safe."""
+        self._send_queue.put(item)
+
+    def _process_send(self, item: dict) -> None:
+        """Process a single send item. Runs on the send worker thread.
+
+        Override in subclass to perform the actual outbound send.
+        """
+        raise NotImplementedError
 
     async def _reconnect_to_hub(self, max_retries: int = 3) -> bool:
         """Reconnect to Hub with exponential backoff. Runs on conn_loop."""

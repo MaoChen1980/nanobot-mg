@@ -39,10 +39,7 @@ class MatrixProxyChannel(BaseProxyChannel):
             response = await self.async_send_to_hub(msg_data)
 
             if response and response.success and response.content:
-                await self._client.room_send(chat_id, "m.room.message", {
-                    "msgtype": "m.text",
-                    "body": response.content,
-                })
+                self._enqueue_send({"chat_id": chat_id, "content": response.content})
 
         except Exception as e:
             logger.error("Matrix proxy message handler error: {}", e)
@@ -77,17 +74,29 @@ class MatrixProxyChannel(BaseProxyChannel):
 
         loop.run_until_complete(login_and_sync())
 
-    async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to Matrix room."""
-        chat_id = data.get("chat_id", "")
-        content = data.get("content", "")
-        if chat_id and content and self._client and self._matrix_loop:
-            asyncio.run_coroutine_threadsafe(
-                self._client.room_send(chat_id, "m.room.message", {
-                    "msgtype": "m.text", "body": content,
-                }),
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to Matrix via async bridge."""
+        if not self._client or not self._matrix_loop:
+            return
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self._client.room_send(
+                    item["chat_id"],
+                    "m.room.message",
+                    {"msgtype": "m.text", "body": item["content"]},
+                ),
                 self._matrix_loop,
             )
+            future.result(timeout=30)
+        except Exception as e:
+            logger.error("Matrix send error: {}", e)
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Enqueue push delivery from hub to Matrix room."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            self._enqueue_send({"chat_id": chat_id, "content": content})
 
 
 def main() -> None:

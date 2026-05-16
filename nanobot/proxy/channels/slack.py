@@ -82,10 +82,7 @@ class SlackProxyChannel(BaseProxyChannel):
         response = await self.async_send_to_hub(msg_data)
 
         if response and response.success and response.content:
-            await self._web_client.chat_postMessage(
-                channel=chat_id,
-                text=response.content,
-            )
+            self._enqueue_send({"chat_id": chat_id, "content": response.content})
 
     def start(self) -> None:
         """Run the Slack Socket Mode connection."""
@@ -112,15 +109,25 @@ class SlackProxyChannel(BaseProxyChannel):
         loop.run_until_complete(self._socket_client.connect())
         loop.run_forever()
 
-    async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to Slack channel."""
-        chat_id = data.get("chat_id", "")
-        content = data.get("content", "")
-        if chat_id and content and self._web_client and self._slack_loop:
-            asyncio.run_coroutine_threadsafe(
-                self._web_client.chat_postMessage(channel=chat_id, text=content),
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to Slack via async bridge."""
+        if not self._web_client or not self._slack_loop:
+            return
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self._web_client.chat_postMessage(channel=item["chat_id"], text=item["content"]),
                 self._slack_loop,
             )
+            future.result(timeout=30)
+        except Exception as e:
+            logger.error("Slack send error: {}", e)
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Enqueue push delivery from hub to Slack channel."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            self._enqueue_send({"chat_id": chat_id, "content": content})
 
 
 def main() -> None:

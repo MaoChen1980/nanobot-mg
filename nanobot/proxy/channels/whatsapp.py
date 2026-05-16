@@ -44,7 +44,7 @@ class WhatsAppProxyChannel(BaseProxyChannel):
             response = self.send_to_hub(msg_data)
 
             if response and response.success and response.content:
-                self._send_bridge_text(chat_id, response.content)
+                self._enqueue_send({"chat_id": chat_id, "content": response.content})
 
         except Exception as e:
             logger.error("WhatsApp proxy message handler error: {}", e)
@@ -58,12 +58,29 @@ class WhatsAppProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("WhatsApp bridge send error: {}", e)
 
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to WhatsApp via async bridge."""
+        if not self._ws or not self._bridge_loop:
+            return
+        try:
+            msg = json.dumps({
+                "type": "send",
+                "chat_id": item["chat_id"],
+                "content": item["content"],
+            })
+            future = asyncio.run_coroutine_threadsafe(
+                self._ws.send(msg), self._bridge_loop,
+            )
+            future.result(timeout=30)
+        except Exception as e:
+            logger.error("WhatsApp send error: {}", e)
+
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to WhatsApp chat."""
+        """Enqueue push delivery from hub to WhatsApp chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
-            self._send_bridge_text(chat_id, content)
+            self._enqueue_send({"chat_id": chat_id, "content": content})
 
     def start(self) -> None:
         """Run the WhatsApp bridge WebSocket connection."""

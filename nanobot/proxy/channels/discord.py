@@ -49,25 +49,36 @@ class DiscordProxyChannel(BaseProxyChannel):
             msg_data = self.build_message(sender_id, channel_id, content, msg_id)
             response = self.send_to_hub(msg_data)
 
-            if response and response.success and response.content and self._bot_loop:
-                asyncio.run_coroutine_threadsafe(
-                    message.channel.send(response.content),
-                    self._bot_loop,
-                )
+            if response and response.success and response.content:
+                self._enqueue_send({"chat_id": channel_id, "content": response.content})
 
         except Exception as e:
             logger.error("Discord proxy message handler error: {}", e)
 
-    async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to Discord channel."""
-        chat_id = data.get("chat_id", "")
-        content = data.get("content", "")
-        if chat_id and content and self._client and self._bot_loop:
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to Discord via async bridge."""
+        if not self._client or not self._bot_loop:
+            return
+        chat_id = item["chat_id"]
+        content = item.get("content", "")
+        if not content:
+            return
+        try:
             async def _send():
                 channel = self._client.get_channel(int(chat_id))
                 if channel:
                     await channel.send(content)
-            asyncio.run_coroutine_threadsafe(_send(), self._bot_loop)
+            future = asyncio.run_coroutine_threadsafe(_send(), self._bot_loop)
+            future.result(timeout=30)
+        except Exception as e:
+            logger.error("Discord send error: {}", e)
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Enqueue push delivery from hub to Discord channel."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            self._enqueue_send({"chat_id": chat_id, "content": content})
 
     def start(self) -> None:
         """Run the Discord bot connection."""

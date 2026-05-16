@@ -59,7 +59,7 @@ class WecomProxyChannel(BaseProxyChannel):
             response = self.send_to_hub(msg_data)
 
             if response and response.success and response.content:
-                self._send_reply(frame, response.content)
+                self._enqueue_send({"frame": frame, "content": response.content})
 
         except Exception as e:
             logger.error("WeCom proxy message handler error: {}", e)
@@ -73,14 +73,18 @@ class WecomProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("WeCom reply error: {}", e)
 
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to WeCom."""
+        self._send_reply(item["frame"], item["content"])
+
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to WeCom chat."""
+        """Enqueue push delivery from hub to WeCom chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
             frame = self._chat_frames.get(chat_id)
             if frame:
-                await asyncio.to_thread(self._send_reply, frame, content)
+                self._enqueue_send({"frame": frame, "content": content})
 
     @staticmethod
     def _generate_req_id(prefix: str) -> str:

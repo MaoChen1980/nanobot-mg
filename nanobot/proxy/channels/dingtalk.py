@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import queue
 import re
 import sys
 import threading
@@ -22,58 +21,44 @@ class DingTalkProxyChannel(BaseProxyChannel):
     CHANNEL_NAME = "DingTalk"
     REQUIRED_CONFIG_FIELDS = ["clientId", "clientSecret"]
 
-    def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
-        super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._send_queue: queue.Queue = queue.Queue()
-        threading.Thread(target=self._send_worker, daemon=True).start()
-
-    # ------------------------------------------------------------------
-    # Send queue — linearizes all outbound messages in FIFO order so
-    # tool/think events always arrive before the reply.
-    # ------------------------------------------------------------------
-
-    def _send_worker(self) -> None:
-        """Background worker that sends queued messages to DingTalk in order."""
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to DingTalk via HTTP."""
         import httpx
 
-        while True:
-            item = self._send_queue.get()
-            if item is None:
-                break
-            try:
-                token = self._get_access_token()
-                if not token:
-                    continue
+        try:
+            token = self._get_access_token()
+            if not token:
+                return
 
-                chat_id = item["chat_id"]
-                sender_id = item.get("sender_id", "")
-                is_group = item["is_group"]
-                content = item["content"]
+            chat_id = item["chat_id"]
+            sender_id = item.get("sender_id", "")
+            is_group = item["is_group"]
+            content = item["content"]
 
-                if is_group:
-                    url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
-                    payload = {
-                        "robotCode": self.config.get("clientId", ""),
-                        "openConversationId": chat_id,
-                        "msgKey": "sampleMarkdown",
-                        "msgParam": json.dumps({"text": content}, ensure_ascii=False),
-                    }
-                else:
-                    url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
-                    payload = {
-                        "robotCode": self.config.get("clientId", ""),
-                        "userIds": [sender_id],
-                        "msgKey": "sampleMarkdown",
-                        "msgParam": json.dumps({"text": content}, ensure_ascii=False),
-                    }
+            if is_group:
+                url = "https://api.dingtalk.com/v1.0/robot/groupMessages/send"
+                payload = {
+                    "robotCode": self.config.get("clientId", ""),
+                    "openConversationId": chat_id,
+                    "msgKey": "sampleMarkdown",
+                    "msgParam": json.dumps({"text": content}, ensure_ascii=False),
+                }
+            else:
+                url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
+                payload = {
+                    "robotCode": self.config.get("clientId", ""),
+                    "userIds": [sender_id],
+                    "msgKey": "sampleMarkdown",
+                    "msgParam": json.dumps({"text": content}, ensure_ascii=False),
+                }
 
-                headers = {"x-acs-dingtalk-access-token": token}
-                with httpx.Client(timeout=30) as client:
-                    resp = client.post(url, json=payload, headers=headers)
-                    if resp.status_code >= 400:
-                        logger.warning("DingTalk send failed: {} - {}", resp.status_code, resp.text[:200])
-            except Exception as e:
-                logger.error("DingTalk send error: {}", e)
+            headers = {"x-acs-dingtalk-access-token": token}
+            with httpx.Client(timeout=30) as client:
+                resp = client.post(url, json=payload, headers=headers)
+                if resp.status_code >= 400:
+                    logger.warning("DingTalk send failed: {} - {}", resp.status_code, resp.text[:200])
+        except Exception as e:
+            logger.error("DingTalk send error: {}", e)
 
     # ------------------------------------------------------------------
     # Inbound message handling
@@ -129,7 +114,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
             flags=re.IGNORECASE,
         ).strip()
         actual_id = chat_id[len("group:"):] if is_group else chat_id
-        self._send_queue.put({
+        self._enqueue_send({
             "chat_id": actual_id,
             "sender_id": sender_id,
             "is_group": is_group,
@@ -148,7 +133,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
         if chat_id and content:
             is_group = chat_id.startswith("group:")
             actual_id = chat_id[len("group:"):] if is_group else chat_id
-            self._send_queue.put({
+            self._enqueue_send({
                 "chat_id": actual_id,
                 "sender_id": actual_id if not is_group else "",
                 "is_group": is_group,

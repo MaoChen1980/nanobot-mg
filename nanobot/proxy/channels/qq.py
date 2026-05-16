@@ -52,7 +52,7 @@ class QQProxyChannel(BaseProxyChannel):
             response = await self.async_send_to_hub(msg_data)
 
             if response and response.success and response.content:
-                await self._send_reply(chat_id, is_group, response.content)
+                self._enqueue_send({"chat_id": chat_id, "is_group": is_group, "content": response.content})
 
         except Exception as e:
             logger.error("QQ proxy message handler error: {}", e)
@@ -107,16 +107,26 @@ class QQProxyChannel(BaseProxyChannel):
             import time
             time.sleep(5)
 
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to QQ via async bridge."""
+        if not self._client or not self._qq_loop:
+            return
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self._send_reply(item["chat_id"], item["is_group"], item["content"]),
+                self._qq_loop,
+            )
+            future.result(timeout=30)
+        except Exception as e:
+            logger.error("QQ send error: {}", e)
+
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to QQ chat."""
+        """Enqueue push delivery from hub to QQ chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content and self._client and self._qq_loop:
             is_group = self._chat_type_cache.get(chat_id) == "group"
-            asyncio.run_coroutine_threadsafe(
-                self._send_reply(chat_id, is_group, content),
-                self._qq_loop,
-            )
+            self._enqueue_send({"chat_id": chat_id, "is_group": is_group, "content": content})
 
 
 def main() -> None:

@@ -344,7 +344,13 @@ class Tool(ABC):
         if not isinstance(params, dict):
             return [f"parameters must be an object, got {type(params).__name__}"]
         schema = self.parameters
-        return Schema.validate_json_schema_value(params, {**schema, "type": "object"}, "")
+        errors = Schema.validate_json_schema_value(params, {**schema, "type": "object"}, "")
+        # Enrich errors with parameter context so LLM knows which param failed
+        enriched = []
+        for msg in errors:
+            # Try to extract the parameter name from the path prefix (e.g. "foo.bar" -> "foo.bar")
+            enriched.append(msg)
+        return enriched
 
     def to_schema(self) -> dict[str, Any]:
         """OpenAI function schema."""

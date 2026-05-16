@@ -33,6 +33,9 @@ def p(type: str, description: str = "", **kwargs: Any) -> dict[str, Any]:
     d: dict[str, Any] = {"type": type}
     if description:
         d["description"] = description
+    else:
+        # Always provide a non-empty description so LLM knows what this param is
+        d["description"] = f"Parameter of type {type}"
     d.update(kwargs)
     return d
 

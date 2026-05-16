@@ -258,12 +258,21 @@ class EmailProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("Email SMTP send error: {}", e)
 
+    def _process_send(self, item: dict) -> None:
+        """Send queued email via SMTP."""
+        self._smtp_send(
+            to_addr=item["to"],
+            content=item["content"],
+            subject=item.get("subject"),
+            in_reply_to=item.get("in_reply_to"),
+        )
+
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub via email."""
+        """Enqueue push delivery from hub via email."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
-            await asyncio.to_thread(self._smtp_send, chat_id, content, None, None)
+            self._enqueue_send({"to": chat_id, "content": content})
 
     def start(self) -> None:
         """Poll IMAP and forward messages to Hub."""
@@ -287,12 +296,12 @@ class EmailProxyChannel(BaseProxyChannel):
                     response = self.send_to_hub(msg_data)
 
                     if response and response.success and response.content:
-                        self._smtp_send(
-                            sender,
-                            response.content,
-                            subject=f"Re: {subject}" if subject else None,
-                            in_reply_to=message_id or None,
-                        )
+                        self._enqueue_send({
+                            "to": sender,
+                            "content": response.content,
+                            "subject": f"Re: {subject}" if subject else None,
+                            "in_reply_to": message_id or None,
+                        })
             except Exception as e:
                 logger.error("Email poll loop error: {}", e)
 

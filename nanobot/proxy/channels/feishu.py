@@ -122,8 +122,8 @@ class FeishuProxyChannel(BaseProxyChannel):
 
                     response = self.send_to_hub(msg_data)
                     if response and response.success and response.content:
-                        logger.info("Proxy sending response to Feishu: {}:{}", chat_id[:20], response.content[:60])
-                        self._send_text_reply(chat_id, message_id, response.content)
+                        logger.info("Feishu enqueue response: {}:{}", chat_id[:20], response.content[:60])
+                        self._enqueue_send({"chat_id": chat_id, "root_id": message_id, "content": response.content})
                     if response and response.success and response.metadata.get("done_emoji"):
                         self._add_reaction(message_id, response.metadata["done_emoji"])
                     elif response:
@@ -199,7 +199,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             msg_data = self.build_message(sender_id, chat_id, reply_text, f"card_{action_name}")
             result = self.send_to_hub(msg_data)
             if result and result.success and result.content:
-                self._send_text_reply(chat_id, None, result.content)
+                self._enqueue_send({"chat_id": chat_id, "root_id": None, "content": result.content})
         except Exception as e:
             logger.error("Failed to process card action: {}", e)
 
@@ -230,15 +230,20 @@ class FeishuProxyChannel(BaseProxyChannel):
     # ------------------------------------------------------------------
 
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Handle a push delivery from hub — send as a new message to the chat."""
+        """Enqueue push delivery from hub to Feishu chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
-            try:
-                await asyncio.to_thread(self._send_text_reply, chat_id, None, content)
-                logger.info("Delivered to {}: content={}", chat_id, content[:60])
-            except Exception as e:
-                logger.error("Failed to deliver to {}: {}", chat_id, e)
+            self._enqueue_send({"chat_id": chat_id, "root_id": None, "content": content})
+            logger.info("Enqueued deliver to {}: content={}", chat_id, content[:60])
+
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to Feishu."""
+        self._send_text_reply(
+            chat_id=item["chat_id"],
+            root_id=item.get("root_id"),
+            content=item["content"],
+        )
 
     # ------------------------------------------------------------------
     # Reply / reaction helpers

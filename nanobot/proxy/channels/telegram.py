@@ -41,7 +41,7 @@ class TelegramProxyChannel(BaseProxyChannel):
             response = await self.async_send_to_hub(msg_data)
 
             if response and response.success and response.content:
-                await msg.reply_text(response.content)
+                self._enqueue_send({"chat_id": chat_id, "content": response.content})
 
         except Exception as e:
             logger.error("Telegram proxy handler error: {}", e)
@@ -67,15 +67,25 @@ class TelegramProxyChannel(BaseProxyChannel):
 
         loop.run_until_complete(self._app.run_polling())
 
-    async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to Telegram chat."""
-        chat_id = data.get("chat_id", "")
-        content = data.get("content", "")
-        if chat_id and content and self._app and self._telegram_loop:
-            asyncio.run_coroutine_threadsafe(
-                self._app.bot.send_message(chat_id=chat_id, text=content),
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to Telegram via async bridge."""
+        if not self._app or not self._telegram_loop:
+            return
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self._app.bot.send_message(chat_id=item["chat_id"], text=item["content"]),
                 self._telegram_loop,
             )
+            future.result(timeout=30)
+        except Exception as e:
+            logger.error("Telegram send error: {}", e)
+
+    async def _handle_deliver(self, data: dict[str, Any]) -> None:
+        """Enqueue push delivery from hub to Telegram chat."""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if chat_id and content:
+            self._enqueue_send({"chat_id": chat_id, "content": content})
 
 
 def main() -> None:

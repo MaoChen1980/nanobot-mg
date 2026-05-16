@@ -18,16 +18,27 @@ class WeixinProxyChannel(BaseProxyChannel):
     CHANNEL_NAME = "WeChat"
     REQUIRED_CONFIG_FIELDS = []
 
-    def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
-        super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
-        self._send_reply_fn: Any = None
-
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to WeChat chat."""
+        """Enqueue push delivery from hub to WeChat chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
-        if chat_id and content and self._send_reply_fn:
-            await asyncio.to_thread(self._send_reply_fn, chat_id, content)
+        if chat_id and content:
+            self._enqueue_send({"chat_id": chat_id, "content": content})
+
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to WeChat via HTTP."""
+        import httpx
+        base_url = self.config.get("api_url", "https://ilinkai.weixin.qq.com")
+        token = self.config.get("token", "")
+        try:
+            with httpx.Client(timeout=30) as client:
+                client.post(
+                    f"{base_url}/cgi-bin/sendmessage",
+                    params={"token": token},
+                    json={"chat_id": item["chat_id"], "text": item["content"]},
+                )
+        except Exception as e:
+            logger.error("WeChat send error: {}", e)
 
     def start(self) -> None:
         """Poll WeChat API and forward messages to Hub."""
@@ -49,20 +60,6 @@ class WeixinProxyChannel(BaseProxyChannel):
                 logger.warning("WeChat getupdates error: {}", e)
             return None
 
-        def send_reply(chat_id: str, content: str) -> None:
-            try:
-                import httpx
-                with httpx.Client(timeout=30) as client:
-                    client.post(
-                        f"{base_url}/cgi-bin/sendmessage",
-                        params={"token": token},
-                        json={"chat_id": chat_id, "text": content},
-                    )
-            except Exception as e:
-                logger.error("WeChat reply error: {}", e)
-
-        self._send_reply_fn = send_reply
-
         while True:
             try:
                 data = fetch_updates()
@@ -81,7 +78,7 @@ class WeixinProxyChannel(BaseProxyChannel):
                         response = self.send_to_hub(msg_data)
 
                         if response and response.success and response.content:
-                            self._send_reply_fn(chat_id, response.content)
+                            self._enqueue_send({"chat_id": chat_id, "content": response.content})
             except Exception as e:
                 logger.warning("WeChat poll error: {}", e)
             time.sleep(3)

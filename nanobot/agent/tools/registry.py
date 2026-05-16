@@ -91,15 +91,30 @@ class ToolRegistry:
 
         tool = self._tools.get(name)
         if not tool:
+            available = self.tool_names
+            suggestion = ""
+            # Try to suggest a similar tool name
+            similar = [n for n in available if name.lower() in n.lower() or n.lower() in name.lower()]
+            if similar:
+                suggestion = f" Did you mean: {', '.join(similar)}?"
             return None, params, (
-                f"Error: Tool '{name}' not found. Available: {', '.join(self.tool_names)}"
+                f"Error: Tool '{name}' not found.{suggestion} "
+                f"Available tools ({len(available)}): {', '.join(available[:10])}"
+                + (" ..." if len(available) > 10 else "")
             )
 
         cast_params = tool.cast_params(params)
         errors = tool.validate_params(cast_params)
         if errors:
+            schema = tool.parameters
+            props = schema.get("properties", {})
+            # Build a hint showing expected param types
+            expected = ", ".join(
+                f"{k}({props[k].get('type', 'any')})" for k in (schema.get("required") or []) if k in props
+            )
+            hint = f" Required: {expected}." if expected else ""
             return tool, cast_params, (
-                f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors)
+                f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors) + hint
             )
         return tool, cast_params, None
 

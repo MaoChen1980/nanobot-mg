@@ -63,7 +63,12 @@ class MochatProxyChannel(BaseProxyChannel):
                 response = self.send_to_hub(msg_data)
 
                 if response and response.success and response.content:
-                    self._send_reply(target_id, content, message_id, group_id)
+                    self._enqueue_send({
+                        "target_id": target_id,
+                        "content": response.content,
+                        "reply_to": message_id,
+                        "group_id": group_id,
+                    })
 
         except Exception as e:
             logger.error("Mochat proxy event handler error: {}", e)
@@ -93,12 +98,26 @@ class MochatProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("Mochat reply error: {}", e)
 
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to Mochat."""
+        self._send_reply(
+            target_id=item["target_id"],
+            content=item["content"],
+            reply_to=item.get("reply_to", ""),
+            group_id=item.get("group_id", ""),
+        )
+
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to Mochat."""
+        """Enqueue push delivery from hub to Mochat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
-            await asyncio.to_thread(self._send_reply, chat_id, content, "", "")
+            self._enqueue_send({
+                "target_id": chat_id,
+                "content": content,
+                "reply_to": "",
+                "group_id": "",
+            })
 
     def start(self) -> None:
         """Run the Mochat Socket.IO connection."""

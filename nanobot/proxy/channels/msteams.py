@@ -62,7 +62,7 @@ class MSTeamsProxyChannel(BaseProxyChannel):
             response = self.send_to_hub(msg_data)
 
             if response and response.success and response.content:
-                self._send_reply(conversation_id, response.content)
+                self._enqueue_send({"chat_id": conversation_id, "content": response.content})
 
         except Exception as e:
             logger.error("MSTeams proxy handler error: {}", e)
@@ -86,12 +86,16 @@ class MSTeamsProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("MSTeams reply error: {}", e)
 
+    def _process_send(self, item: dict) -> None:
+        """Send queued message to MSTeams."""
+        self._send_reply(item["chat_id"], item["content"])
+
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Send push delivery from hub to MSTeams chat."""
+        """Enqueue push delivery from hub to MSTeams chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
-            await asyncio.to_thread(self._send_reply, chat_id, content)
+            self._enqueue_send({"chat_id": chat_id, "content": content})
 
     def start(self) -> None:
         """Run the MSTeams webhook server."""
