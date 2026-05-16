@@ -229,6 +229,20 @@ class ContextBuilder:
         return ts
 
     @staticmethod
+    def _extract_thinking(msg: dict, max_chars: int = 200) -> str:
+        """Extract thinking/reasoning text from an assistant message, truncated."""
+        blocks = msg.get("thinking_blocks")
+        if isinstance(blocks, list):
+            texts = [b["thinking"] for b in blocks if isinstance(b, dict) and b.get("thinking")]
+            if texts:
+                text = " ".join(texts)
+                return (text[:max_chars] + "...") if len(text) > max_chars else text
+        rc = msg.get("reasoning_content")
+        if isinstance(rc, str) and rc:
+            return (rc[:max_chars] + "...") if len(rc) > max_chars else rc
+        return ""
+
+    @staticmethod
     def _build_message_timeline(history: list[dict]) -> str:
         """Build a compact chronological index from user/assistant messages.
 
@@ -254,6 +268,12 @@ class ContextBuilder:
                 content = " ".join(texts)
             if isinstance(content, str):
                 content = content.replace("\n", " ").strip()
+
+            # When assistant content is empty (tool-call turn), use thinking/
+            # reasoning content as a lightweight summary of the LLM's intent.
+            if role == "assistant" and not content:
+                content = ContextBuilder._extract_thinking(msg, max_chars=200)
+
             ts_str = ts if ts else "?"
             entries.append(f"- [{ts_str}] {role}: {content}")
 
