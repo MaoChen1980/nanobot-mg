@@ -231,16 +231,30 @@ class ContextBuilder:
     @staticmethod
     def _extract_thinking(msg: dict, max_chars: int = 200) -> str:
         """Extract thinking/reasoning text from an assistant message, truncated."""
+        parts = []
+
         blocks = msg.get("thinking_blocks")
         if isinstance(blocks, list):
             texts = [b["thinking"] for b in blocks if isinstance(b, dict) and b.get("thinking")]
             if texts:
                 text = " ".join(texts)
-                return (text[:max_chars] + "...") if len(text) > max_chars else text
-        rc = msg.get("reasoning_content")
-        if isinstance(rc, str) and rc:
-            return (rc[:max_chars] + "...") if len(rc) > max_chars else rc
-        return ""
+                if len(text) > max_chars:
+                    text = text[:max_chars] + "..."
+                parts.append(text)
+
+        if not parts:
+            rc = msg.get("reasoning_content")
+            if isinstance(rc, str) and rc:
+                text = rc[:max_chars] + "..." if len(rc) > max_chars else rc
+                parts.append(text)
+
+        tcs = msg.get("tool_calls")
+        if isinstance(tcs, list) and tcs:
+            names = [tc.get("function", {}).get("name", "?") for tc in tcs if isinstance(tc, dict)]
+            if names:
+                parts.append(f"[tools: {', '.join(names)}]")
+
+        return " ".join(parts)
 
     @staticmethod
     def _build_message_timeline(history: list[dict]) -> str:
