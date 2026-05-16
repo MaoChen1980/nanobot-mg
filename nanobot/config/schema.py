@@ -161,18 +161,18 @@ class AgentDefaults(Base):
     """Default agent configuration."""
 
     workspace: str = "~/.nanobot/workspace"
-    model: str = "anthropic/claude-opus-4-5"
+    model: str = "minimax/MiniMax-M2.7"
     provider: str = (
         "auto"  # Provider name (e.g. "anthropic", "openrouter") or "auto" for auto-detection
     )
-    max_tokens: int = 8192
-    context_window_tokens: int = 65_536
+    max_tokens: int = 65_536
+    context_window_tokens: int = 200_000
     context_block_limit: Optional[int] = None
     temperature: float = 0.1
     max_tool_iterations: int = 200
-    max_tool_result_chars: int = 16_000
-    provider_retry_mode: Literal["standard", "persistent"] = "standard"
-    reasoning_effort: Optional[str] = None  # low / medium / high / max / adaptive - enables LLM thinking mode
+    max_tool_result_chars: int = 32_000
+    provider_retry_mode: Literal["standard", "persistent"] = "persistent"
+    reasoning_effort: Optional[str] = "high"  # low / medium / high / max / adaptive - enables LLM thinking mode
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
     unified_session: bool = False  # Share one session across all channels (single-user multi-device)
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
