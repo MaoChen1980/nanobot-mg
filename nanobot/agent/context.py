@@ -17,7 +17,7 @@ from loguru import logger
 
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
-from nanobot.utils.helpers import build_assistant_message, current_time_str, truncate_text
+from nanobot.utils.helpers import build_assistant_message, current_time_str
 from nanobot.utils.media_decode import detect_image_mime
 from nanobot.utils.prompt_templates import render_template
 
@@ -48,13 +48,10 @@ class ContextBuilder:
     _RUNTIME_CONTEXT_TAG = "## Runtime Context"
     _RUNTIME_CONTEXT_END = "## /Runtime Context"
 
-    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None,
-                 max_recent_history: int = 10, max_history_chars: int = 64_000):
+    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None):
         self.workspace = workspace
         self.timezone = timezone
         self.memory = MemoryStore(workspace, db=db)
-        self.max_recent_history = max_recent_history
-        self.max_history_chars = max_history_chars
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
         self._bootstrap_cache: dict[str, tuple[float, str]] = {}
 
@@ -82,7 +79,7 @@ class ContextBuilder:
         channel: str | None = None,
         tool_definitions: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Build the system prompt from identity, bootstrap files, memory, and skills."""
+        """Build the static portion of the system prompt (identity, tools, bootstrap, skills)."""
         _t0 = time.time()
         parts = [self._get_identity(channel=channel)]
 
@@ -91,11 +88,6 @@ class ContextBuilder:
             section = self._build_tools_section(tool_definitions)
             if section:
                 parts.append(section)
-
-        # Memory — try vector search, fall back to MEMORY.md
-        memory_section = self._build_memory_section()
-        if memory_section:
-            parts.append(memory_section)
 
         bootstrap = self._load_bootstrap_files()
         if bootstrap:
@@ -110,31 +102,6 @@ class ContextBuilder:
         skills_summary = self.skills.build_skills_summary(exclude=set(always_skills))
         if skills_summary:
             parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
-
-        # ── DB-sourced context (previous sessions) ──
-        _db_started = False
-
-        cursor = self.memory.get_last_extractor_cursor()
-        entries = self.memory.read_unprocessed_history(since_cursor=cursor)
-        if entries:
-            filtered = [e for e in entries if e.get("summary")]
-            if filtered:
-                capped = filtered[-self.max_recent_history:]
-                history_text = "\n".join(
-                    f"- [{self._convert_timestamp(e['timestamp'], self.timezone)}] {self._sanitize_md(e['summary'])}" for e in capped
-                )
-                history_text = truncate_text(history_text, self.max_history_chars)
-                _db_started = True
-                db_header = "# ── Historical Context (from previous sessions) ──\n"
-                parts.append(db_header)
-                parts.append("# Recent History\n\n" + history_text)
-
-        # Current State — Goals + recent events from DB, near end for recency bias
-        state_block = self._build_state_section()
-        if state_block:
-            if not _db_started:
-                parts.append("# ── Historical Context (from previous sessions) ──\n")
-            parts.append(f"# Current State\n\n{state_block}")
 
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 100:
@@ -579,14 +546,26 @@ class ContextBuilder:
                 user_content = f"{runtime_ctx}\n\n{user_content}"
             else:
                 user_content = [{"type": "text", "text": runtime_ctx}] + list(user_content)
-        sys_prompt = self.build_system_prompt(skill_names, channel=channel, tool_definitions=cs.tool_definitions)
+        sys_static = self.build_system_prompt(skill_names, channel=channel, tool_definitions=cs.tool_definitions)
+
+        # system[1]: dynamic per-request content (memory, state, timeline)
+        sys_dynamic_parts: list[str] = []
+        memory_section = self._build_memory_section()
+        if memory_section:
+            sys_dynamic_parts.append(memory_section)
+        state_block = self._build_state_section()
+        if state_block:
+            sys_dynamic_parts.append(f"# Current State\n\n{state_block}")
         if timeline_history:
             timeline = self._build_message_timeline(timeline_history)
-            sys_prompt = f"{sys_prompt}\n\n{timeline}"
-        messages = [
-            {"role": "system", "content": sys_prompt},
-            *retained_history,
+            sys_dynamic_parts.append(timeline)
+
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": sys_static},
         ]
+        if sys_dynamic_parts:
+            messages.append({"role": "system", "content": "\n\n".join(sys_dynamic_parts)})
+        messages.extend(retained_history)
         if messages[-1].get("role") == current_role:
             last = dict(messages[-1])
             last["content"] = self._merge_message_content(last.get("content"), user_content)

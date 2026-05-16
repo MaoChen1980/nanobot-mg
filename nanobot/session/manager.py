@@ -77,7 +77,7 @@ class Session:
         converted to that timezone so they stay consistent with the runtime
         context's ``Current Time``.
         """
-        unconsolidated = self.messages
+        unconsolidated = [m for m in self.messages if m.get("status") != "excluded"]
         sliced = unconsolidated[-max_messages:]
 
         # Avoid starting mid-turn when possible, except for proactive

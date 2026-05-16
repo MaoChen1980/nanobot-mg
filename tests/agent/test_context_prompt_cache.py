@@ -2,23 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime as real_datetime
 from importlib.resources import files as pkg_files
 from pathlib import Path
 import datetime as datetime_module
 
 from nanobot.agent.context import ContextBuilder
-
-
-def _add_with_summary(memory, content: str) -> int:
-    """Append history entry and set its summary (simulating Dream processing)."""
-    if memory._db is None:
-        from nanobot.agent.db import NanobotDB
-        memory._db = NanobotDB(memory.workspace / "test.db", workspace=memory.workspace)
-    cursor = memory.append_history(content)
-    memory.update_summary(cursor, content)
-    return cursor
 
 
 class _FakeDatetime(real_datetime):
@@ -97,92 +86,6 @@ def test_runtime_context_is_in_user_message_not_system_prompt(tmp_path) -> None:
     assert "Return exactly: OK" in user_content
     assert user_content.index(ContextBuilder._RUNTIME_CONTEXT_TAG) < user_content.index("Return exactly: OK")
 
-
-def test_unprocessed_history_injected_into_system_prompt(tmp_path) -> None:
-    """Entries in history.jsonl not yet consumed by Extractor appear with timestamps."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    _add_with_summary(builder.memory, "User asked about weather in Tokyo")
-    _add_with_summary(builder.memory, "Agent fetched forecast via web_search")
-
-    prompt = builder.build_system_prompt()
-    assert "# Recent History" in prompt
-    assert "User asked about weather in Tokyo" in prompt
-    assert "Agent fetched forecast via web_search" in prompt
-    assert re.search(r"\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", prompt)
-
-
-def test_recent_history_capped_at_max(tmp_path) -> None:
-    """Only the most recent max_recent_history entries are injected."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    for i in range(builder.max_recent_history + 20):
-        _add_with_summary(builder.memory, f"entry-{i}")
-
-    prompt = builder.build_system_prompt()
-    assert "entry-0" not in prompt
-    assert "entry-19" not in prompt
-    assert f"entry-{builder.max_recent_history + 19}" in prompt
-
-
-def test_recent_history_truncated_at_max_chars(tmp_path) -> None:
-    """Recent History section must be truncated at max_history_chars."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    big_entry = "x" * (builder.max_history_chars + 5_000)
-    _add_with_summary(builder.memory, big_entry)
-
-    prompt = builder.build_system_prompt()
-    history_section = prompt.split("# Recent History\n\n", 1)
-    assert len(history_section) == 2
-    assert len(history_section[1]) < builder.max_history_chars + 200
-
-
-def test_no_recent_history_when_extractor_has_processed_all(tmp_path) -> None:
-    """If Extractor has consumed everything, no Recent History section should appear."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    cursor = _add_with_summary(builder.memory, "already processed entry")
-    builder.memory.set_last_extractor_cursor(cursor)
-
-    prompt = builder.build_system_prompt()
-    # The dynamic # Recent History section header should not appear;
-    # the word may still appear in bootstrap file descriptions (e.g. AGENTS.md table).
-    assert "# Recent History\n\n" not in prompt
-
-
-def test_partial_extractor_processing_shows_only_remainder(tmp_path) -> None:
-    """When Extractor has processed some entries, only the unprocessed ones appear."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    cursor = _add_with_summary(builder.memory, "already processed entry")
-    builder.memory.set_last_extractor_cursor(cursor)
-    _add_with_summary(builder.memory, "new user entry")
-
-    prompt = builder.build_system_prompt()
-    assert "# Recent History" in prompt
-    assert "new user entry" in prompt
-    assert "already processed entry" not in prompt
-    builder = ContextBuilder(workspace)
-
-    c1 = _add_with_summary(builder.memory, "old conversation about Python")
-    c2 = _add_with_summary(builder.memory, "old conversation about Rust")
-    _add_with_summary(builder.memory, "recent question about Docker")
-    _add_with_summary(builder.memory, "recent question about K8s")
-
-    builder.memory.set_last_extractor_cursor(c2)
-
-    prompt = builder.build_system_prompt()
-    assert "# Recent History" in prompt
-    assert "old conversation about Python" not in prompt
-    assert "old conversation about Rust" not in prompt
-    assert "recent question about Docker" in prompt
-    assert "recent question about K8s" in prompt
 
 
 def test_execution_rules_in_system_prompt(tmp_path) -> None:
@@ -334,18 +237,16 @@ def test_template_memory_md_is_skipped(tmp_path) -> None:
     sync_workspace_templates(workspace, silent=True)
 
     builder = ContextBuilder(workspace)
-    prompt = builder.build_system_prompt()
+    messages = builder.build_messages(history=[], current_message="hi")
 
-    # The "=== Memory ===\n## Long-term Memory" block is produced only by
-    # build_system_prompt() when MEMORY.md is injected.  The memory skill
-    # also contains "# Memory" but is followed by "## Structure", not
-    # "## Long-term Memory".
-    assert "=== Memory ===\n## Long-term Memory" not in prompt
-    assert "This file is automatically updated by nanobot" not in prompt
+    dynamic = messages[1]["content"] if len(messages) > 1 else ""
+    # Default template MEMORY.md should not inject a memory section.
+    assert "=== Memory ===" not in dynamic
+    assert "This file is automatically updated by nanobot" not in dynamic
 
 
 def test_customized_memory_md_is_injected(tmp_path) -> None:
-    """A Dream-populated MEMORY.md should be injected normally."""
+    """A Dream-populated MEMORY.md should be injected in the dynamic system message."""
     workspace = _make_workspace(tmp_path)
     from nanobot.utils.gitstore import sync_workspace_templates
     sync_workspace_templates(workspace, silent=True)
@@ -355,6 +256,10 @@ def test_customized_memory_md_is_injected(tmp_path) -> None:
     )
 
     builder = ContextBuilder(workspace)
-    prompt = builder.build_system_prompt()
+    messages = builder.build_messages(history=[], current_message="hi")
 
-    assert "User prefers dark mode" in prompt
+    static = messages[0]["content"]
+    dynamic = messages[1]["content"] if len(messages) > 1 else ""
+
+    assert "User prefers dark mode" not in static
+    assert "User prefers dark mode" in dynamic

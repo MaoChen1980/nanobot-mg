@@ -16,13 +16,14 @@ def _row_to_session_dict(row: tuple, cols: list[str]) -> dict:
 
 @tool_parameters(
     tool_parameters_schema(
+        query=p("string", "Describe what you're looking for — searches all session history (recommended)"),
+        keyword=p("string", "Exact substring match, case-insensitive"),
         start=p("string", "Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive"),
         end=p("string", "End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive"),
-        keyword=p("string", "Optional keyword to filter memories"),
     )
 )
 class RecallTool(Tool):
-    """Tool to search and retrieve relevant memories for enriching context."""
+    """Cross-session search: retrieve information from past conversations."""
 
     def __init__(self, store: MemoryStore):
         self._store = store
@@ -30,23 +31,16 @@ class RecallTool(Tool):
     name = "recall"
 
     description = (
-        "**用途**: 搜索历史记忆，用于回答关于过去事件的问题。"
-        "搜索范围：session 历史记录（SQLite）+ MEMORY.md。"
-        "注意：只能搜历史会话记录，不能搜 goal/event 表。"
-        "查询当前目标的进度请用 list_goals/list_events。\n\n"
-        "**限制**:\n"
-        "- 最多返回 50 条结果\n"
-        "- keyword 不区分大小写，多个关键词用空格分隔（OR 逻辑）\n"
-        "- MEMORY.md 内容无时间戳，只要 keyword 匹配就返回\n\n"
-        "**错误应对**:\n"
-        "- 无结果 → 返回 \"No memories found\" + 日期范围提示\n"
-        "- 日期格式无法解析 → 尝试多种格式（ISO 8601、YYYY-MM-DD HH:MM、YYYY-MM-DD）\n\n"
-        "**边界条件**:\n"
-        "- 只需要当前会话内容 → 不用 recall，检查历史即可\n"
-        "- 时间范围默认 inclusive（end 自动延至 23:59:59）\n"
-        "- 无 keyword → 返回时间范围内的所有记忆\n\n"
-        "**极简案例**: recall(keyword='openclaw')\n"
-        "→ 搜索包含 'openclaw' 的所有记忆"
+        "回忆：从你之前的对话中查找相关信息。\n\n"
+        "**什么时候用**:\n"
+        '- 用户说「之前讨论过」「上次说过」「以前做过」→ 先回忆一下再回答\n'
+        "- 你感觉之前见过某个信息但记不清了 → 搜一下\n"
+        "- 不确定答案想确认 → 先查查历史，不要猜\n\n"
+        "**参数**:\n"
+        "- query: 描述你想找什么（推荐），会搜索所有历史对话内容\n"
+        "- keyword: 精确关键词（可选）\n"
+        "- start/end: 限定时间范围（可选）\n\n"
+        "**注意**: 不搜索 goal/event 表（查询目标进度用 list_goals）"
     )
 
     read_only = True
@@ -100,24 +94,19 @@ class RecallTool(Tool):
                     return True
         return False
 
-    def _match_keyword(self, content: str, keyword: str | None) -> bool:
-        """Check if content matches keyword (case-insensitive).
-
-        Supports multiple keywords separated by spaces.
-        Uses OR logic: content matches if ANY keyword is found.
-        """
-        if not keyword:
+    @staticmethod
+    def _match_text(content: str, text: str | None) -> bool:
+        """Case-insensitive substring match."""
+        if not text:
             return True
-        content_lower = content.lower()
-        # Split by whitespace and match if ANY keyword is found
-        keywords = keyword.lower().split()
-        return any(kw in content_lower for kw in keywords)
+        return text.lower() in content.lower()
 
     async def execute(
         self,
+        query: str | None = None,
+        keyword: str | None = None,
         start: str | None = None,
         end: str | None = None,
-        keyword: str | None = None,
         **kwargs: Any,
     ) -> str:
         """Search memory and history for relevant content."""
@@ -125,14 +114,19 @@ class RecallTool(Tool):
         end_dt = self._parse_date(end)
 
         if end_dt:
-            # Make end inclusive (end of day)
             end_dt = end_dt.replace(hour=23, minute=59, second=59)
 
-        results: list[tuple[str, str]] = []  # (timestamp, content)
+        results: list[tuple[str, str]] = []
 
-        # Search MEMORY.md (no timestamp - always included if keyword matches)
+        # Combine query and keyword: both must match when both provided (AND)
+        search_texts = [t for t in (query, keyword) if t]
+
+        def matches(content: str) -> bool:
+            return all(self._match_text(content, t) for t in search_texts)
+
+        # Search MEMORY.md (no timestamp - always included if text matches)
         memory = self._store.read_memory()
-        if memory and self._match_keyword(memory, keyword):
+        if memory and matches(memory):
             results.append(("", memory))
 
         # Search history via SQL
@@ -144,7 +138,7 @@ class RecallTool(Tool):
             for ts, content in rows:
                 if not self._in_date_range(ts, content, start_dt, end_dt):
                     continue
-                if not self._match_keyword(content, keyword):
+                if not matches(content):
                     continue
                 results.append((ts, content))
 

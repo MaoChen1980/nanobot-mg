@@ -114,14 +114,14 @@ class TestConvertMessages:
         assert len(items) == 1
         assert items[0]["role"] == "user"
 
-    def test_multiple_system_messages_last_wins(self):
+    def test_multiple_system_messages_are_concatenated(self):
         msgs = [
             {"role": "system", "content": "first"},
             {"role": "system", "content": "second"},
             {"role": "user", "content": "x"},
         ]
         instructions, _ = convert_messages(msgs)
-        assert instructions == "second"
+        assert instructions == "first\n\nsecond"
 
     def test_user_message_converted(self):
         _, items = convert_messages([{"role": "user", "content": "hello"}])

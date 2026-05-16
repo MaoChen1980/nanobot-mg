@@ -21,7 +21,8 @@ def convert_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str
         content = msg.get("content")
 
         if role == "system":
-            system_prompt = content if isinstance(content, str) else ""
+            text = content if isinstance(content, str) else ""
+            system_prompt = (system_prompt + "\n\n" + text) if system_prompt else text
             continue
 
         if role == "user":

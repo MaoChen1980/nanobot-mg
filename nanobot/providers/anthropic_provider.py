@@ -136,7 +136,8 @@ class AnthropicProvider(LLMProvider):
             content = msg.get("content")
 
             if role == "system":
-                system = content if isinstance(content, (str, list)) else str(content or "")
+                text = content if isinstance(content, str) else str(content or "")
+                system = (system + "\n\n" + text) if system else text
                 continue
 
             if role == "tool":

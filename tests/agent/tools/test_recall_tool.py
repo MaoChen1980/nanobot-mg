@@ -41,16 +41,16 @@ class TestRecallToolBasic:
 
     def test_tool_description(self, tmp_path: Path):
         tool = _make_tool(_make_store(tmp_path))
-        assert "memories" in tool.description.lower()
-        assert "SQLite" in tool.description or "MEMORY" in tool.description
+        assert "回忆" in tool.description
 
     def test_tool_is_read_only(self, tmp_path: Path):
         tool = _make_tool(_make_store(tmp_path))
         assert tool.read_only is True
 
-    def test_parameters_has_start_end_keyword(self, tmp_path: Path):
+    def test_parameters_has_query_start_end_keyword(self, tmp_path: Path):
         tool = _make_tool(_make_store(tmp_path))
         params = tool.parameters
+        assert "query" in params["properties"]
         assert "start" in params["properties"]
         assert "end" in params["properties"]
         assert "keyword" in params["properties"]
