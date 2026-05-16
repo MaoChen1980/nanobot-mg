@@ -45,7 +45,6 @@ class SystemMessageHandler:
         current_role = "assistant" if is_subagent else "user"
         max_keep = session.metadata.get("max_keep_rounds", 3) if session else 3
         cs = ContextState(
-            session_summary=pending,
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
@@ -206,7 +205,6 @@ class UserMessageHandler:
             )
         else:
             cs = ContextState(
-                session_summary=pending,
                 tool_definitions=self._loop.tools.get_definitions(),
                 current_iteration=self._loop._current_iteration,
                 max_iterations=self._loop.max_iterations,

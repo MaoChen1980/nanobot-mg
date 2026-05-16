@@ -32,7 +32,6 @@ class Session:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = field(default_factory=dict)
-    last_consolidated: int = 0  # Number of messages already consolidated to files
 
     @staticmethod
     def _format_timestamp(ts: str, timezone: str | None = None) -> str | None:
@@ -78,7 +77,7 @@ class Session:
         converted to that timezone so they stay consistent with the runtime
         context's ``Current Time``.
         """
-        unconsolidated = self.messages[self.last_consolidated:]
+        unconsolidated = self.messages
         sliced = unconsolidated[-max_messages:]
 
         # Avoid starting mid-turn when possible, except for proactive
@@ -156,7 +155,6 @@ class Session:
     def clear(self) -> None:
         """Clear all messages and reset session to initial state."""
         self.messages = []
-        self.last_consolidated = 0
         self.updated_at = datetime.now(timezone.utc)
 
     def retain_recent_legal_suffix(self, max_messages: int) -> None:
@@ -189,9 +187,7 @@ class Session:
         if start:
             retained = retained[start:]
 
-        dropped = len(self.messages) - len(retained)
         self.messages = retained
-        self.last_consolidated = max(0, self.last_consolidated - dropped)
         self.updated_at = datetime.now(timezone.utc)
 
     def enforce_file_cap(
@@ -203,24 +199,16 @@ class Session:
         if limit <= 0 or len(self.messages) <= limit:
             return
 
-        before = list(self.messages)
-        before_last_consolidated = self.last_consolidated
-        before_count = len(before)
+        before_count = len(self.messages)
         self.retain_recent_legal_suffix(limit)
         dropped_count = before_count - len(self.messages)
         if dropped_count <= 0:
             return
 
-        dropped = before[:dropped_count]
-        already_consolidated = min(before_last_consolidated, dropped_count)
-        archive_chunk = dropped[already_consolidated:]
-        if archive_chunk and on_archive:
-            on_archive(archive_chunk)
         logger.info(
-            "Session file cap hit for {}: dropped {}, raw-archived {}, kept {}",
+            "Session file cap hit for {}: dropped {}, kept {}",
             self.key,
             dropped_count,
-            len(archive_chunk),
             len(self.messages),
         )
 
@@ -249,18 +237,14 @@ class Session:
 
         trim_msg_count = sum(len(t) for t in trim_turns)
         keep_msg_count = sum(len(t) for t in keep)
-        before_consolidated = self.last_consolidated
 
         self.messages = [m for turn in keep for m in turn]
-        self.last_consolidated = max(0, self.last_consolidated - trim_msg_count)
         self.updated_at = datetime.now(timezone.utc)
 
         logger.info(
-            "Session {} turn-trim: archiving {} turns ({} msgs), keeping {} turns ({} msgs), "
-            "last_consolidated {} -> {}",
+            "Session {} turn-trim: archiving {} turns ({} msgs), keeping {} turns ({} msgs)",
             self.key, trim_count, trim_msg_count,
             len(keep), keep_msg_count,
-            before_consolidated, self.last_consolidated,
         )
 
         return [m for turn in trim_turns for m in turn]
@@ -387,7 +371,6 @@ class SessionManager:
                         metadata = data.get("metadata", {})
                         created_at = datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None
                         updated_at = datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None
-                        last_consolidated = data.get("last_consolidated", 0)
                     else:
                         messages.append(data)
 
@@ -400,7 +383,6 @@ class SessionManager:
                 created_at=created_at or datetime.now(timezone.utc),
                 updated_at=updated_at or datetime.now(timezone.utc),
                 metadata=metadata,
-                last_consolidated=last_consolidated
             )
         except Exception as e:
             logger.warning("Failed to load session {}: {}", key, e)
@@ -446,7 +428,6 @@ class SessionManager:
                                 updated_at = datetime.fromisoformat(data["updated_at"])
                             except (ValueError, TypeError):
                                 pass
-                        last_consolidated = data.get("last_consolidated", 0)
                     else:
                         messages.append(data)
 
@@ -465,7 +446,6 @@ class SessionManager:
                 created_at=created_at or datetime.now(timezone.utc),
                 updated_at=updated_at or datetime.now(timezone.utc),
                 metadata=metadata,
-                last_consolidated=last_consolidated
             )
         except Exception as e:
             logger.warning("Repair failed for session {}: {}", key, e)
@@ -479,7 +459,6 @@ class SessionManager:
             "updated_at": session.updated_at.isoformat(),
             "metadata": session.metadata,
             "messages": session.messages,
-            "last_consolidated": session.last_consolidated,
         }
 
     def save(self, session: Session, *, fsync: bool = False) -> None:
@@ -510,7 +489,6 @@ class SessionManager:
                     "created_at": session.created_at.isoformat(),
                     "updated_at": session.updated_at.isoformat(),
                     "metadata": session.metadata,
-                    "last_consolidated": session.last_consolidated
                 }
                 f.write(json.dumps(metadata_line, ensure_ascii=False) + "\n")
                 for msg in session.messages:
@@ -589,55 +567,10 @@ class SessionManager:
 
     def read_session_file(self, key: str) -> dict[str, Any] | None:
         """Load a session from disk/DB without caching; intended for read-only HTTP endpoints."""
-        if self._db is not None:
-            session = self._db.load_session(key)
-            if session is None:
-                return None
-            return self._session_payload(session)
-        return self._read_session_file_from_file(key)
-
-    def _read_session_file_from_file(self, key: str) -> dict[str, Any] | None:
-        """Load a session from the JSONL file without caching."""
-        path = self._get_session_path(key)
-        if not path.exists():
+        session = self._load(key)
+        if session is None:
             return None
-        try:
-            messages: list[dict[str, Any]] = []
-            metadata: dict[str, Any] = {}
-            created_at: str | None = None
-            updated_at: str | None = None
-            stored_key: str | None = None
-            last_consolidated: int = 0
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    data = json.loads(line)
-                    if data.get("_type") == "metadata":
-                        metadata = data.get("metadata", {})
-                        created_at = data.get("created_at")
-                        updated_at = data.get("updated_at")
-                        stored_key = data.get("key")
-                        last_consolidated = data.get("last_consolidated", 0)
-                    else:
-                        messages.append(data)
-            messages = self._fix_tool_protocol_violations(messages)
-            return {
-                "key": stored_key or key,
-                "created_at": created_at,
-                "updated_at": updated_at,
-                "metadata": metadata,
-                "messages": messages,
-                "last_consolidated": last_consolidated,
-            }
-        except Exception as e:
-            logger.warning("Failed to read session {}: {}", key, e)
-            repaired = self._repair(key)
-            if repaired is not None:
-                logger.info("Recovered read-only session view {} from corrupt file", key)
-                return self._session_payload(repaired)
-            return None
+        return self._session_payload(session)
 
     def list_sessions(self) -> list[dict[str, Any]]:
         """List all sessions."""

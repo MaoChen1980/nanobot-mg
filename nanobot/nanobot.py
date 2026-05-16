@@ -85,6 +85,7 @@ class Nanobot:
             disabled_skills=defaults.disabled_skills,
             session_ttl_minutes=defaults.session_ttl_minutes,
             tools_config=config.tools,
+            pt_save_interval=defaults.extractor.save_interval,
         )
         return cls(loop)
 

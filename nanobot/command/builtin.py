@@ -109,6 +109,7 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     session.clear()
     loop.sessions.save(session)
     loop.sessions.invalidate(session.key)
+    loop._pt_counters[ctx.key] = 0
 
     stopped = f"Stopped {cancelled} running task(s)." if cancelled else "No running tasks."
     return OutboundMessage(
@@ -186,27 +187,6 @@ async def cmd_sub(ctx: CommandContext) -> OutboundMessage:
         content=content,
         metadata={**dict(ctx.msg.metadata or {}), "render_as": "text"},
     )
-
-
-def _format_subagent_status(statuses: dict[str, "SubagentStatus"], running: dict[str, asyncio.Task[None]]) -> str:
-    """Format running subagent statuses."""
-    if not statuses:
-        return "No active subagent."
-    lines = []
-    for task_id, status in sorted(statuses.items(), key=lambda x: x[1].started_at):
-        is_running = task_id in running and not running[task_id].done()
-        phase_emoji = {"initializing": "🔄", "awaiting_tools": "⏳", "tools_completed": "🔧", "final_response": "🧠", "done": "✅", "error": "❌"}.get(status.phase, "❓")
-        elapsed = time.monotonic() - status.started_at
-        lines.append(f"{phase_emoji} [{task_id}] {status.label}")
-        lines.append(f"   phase={status.phase}, iter={status.iteration}, elapsed={elapsed:.0f}s")
-        if status.tool_events:
-            completed = len([e for e in status.tool_events if e.get("status") == "ok"])
-            lines.append(f"   tools: {completed} completed / {len(status.tool_events)} total")
-        if status.error:
-            lines.append(f"   error: {status.error[:80]}")
-        if not is_running:
-            lines.append(f"   ⚠️ task not in running dict (may be done)")
-    return "\n".join(lines)
 
 
 async def cmd_goal(ctx: CommandContext) -> OutboundMessage:
@@ -445,7 +425,6 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.exact("/new", cmd_new)
     router.exact("/clear", cmd_new)
     router.exact("/reset", cmd_new)
-    router.exact("/status", cmd_status)
     router.exact("/sub", cmd_sub)
     router.exact("/help", cmd_help)
 

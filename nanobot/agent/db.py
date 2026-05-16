@@ -223,44 +223,43 @@ class NanobotDB:
     # --------------------------------------------------------------------------
 
     def save_session(self, session: Session) -> None:
-        self._conn.execute(
-            """INSERT OR REPLACE INTO sessions
-               (key, created_at, updated_at, metadata, last_consolidated)
-               VALUES (?, ?, ?, ?, ?)""",
-            (
-                session.key,
-                session.created_at.isoformat(),
-                session.updated_at.isoformat(),
-                json.dumps(session.metadata),
-                session.last_consolidated,
-            ),
-        )
-        self._conn.execute("DELETE FROM messages WHERE session_key = ?", (session.key,))
-        for msg in session.messages:
-            extra = {k: v for k, v in msg.items() if k not in ("role", "content", "timestamp")}
+        with self._conn:
             self._conn.execute(
-                "INSERT INTO messages (session_key, role, content, timestamp, extra) VALUES (?, ?, ?, ?, ?)",
+                """INSERT OR REPLACE INTO sessions
+                   (key, created_at, updated_at, metadata)
+                   VALUES (?, ?, ?, ?)""",
                 (
                     session.key,
-                    msg["role"],
-                    msg["content"],
-                    msg["timestamp"],
-                    json.dumps(extra) if extra else None,
+                    session.created_at.isoformat(),
+                    session.updated_at.isoformat(),
+                    json.dumps(session.metadata),
                 ),
             )
-        self._conn.commit()
+            self._conn.execute("DELETE FROM messages WHERE session_key = ?", (session.key,))
+            for msg in session.messages:
+                extra = {k: v for k, v in msg.items() if k not in ("role", "content", "timestamp")}
+                self._conn.execute(
+                    "INSERT INTO messages (session_key, role, content, timestamp, extra) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        session.key,
+                        msg["role"],
+                        msg["content"],
+                        msg["timestamp"],
+                        json.dumps(extra) if extra else None,
+                    ),
+                )
 
     def load_session(self, key: str) -> Session | None:
         from dataclasses import replace
         from nanobot.session.manager import Session
 
         row = self._conn.execute(
-            "SELECT created_at, updated_at, metadata, last_consolidated FROM sessions WHERE key = ?",
+            "SELECT created_at, updated_at, metadata FROM sessions WHERE key = ?",
             (key,),
         ).fetchone()
         if row is None:
             return None
-        created_at, updated_at, metadata_json, last_consolidated = row
+        created_at, updated_at, metadata_json = row
         metadata = json.loads(metadata_json)
         msg_rows = self._conn.execute(
             "SELECT role, content, timestamp, extra FROM messages WHERE session_key = ? ORDER BY id",
@@ -278,7 +277,6 @@ class NanobotDB:
             created_at=datetime.fromisoformat(created_at),
             updated_at=datetime.fromisoformat(updated_at),
             metadata=metadata,
-            last_consolidated=last_consolidated,
         )
 
     def list_sessions(self) -> list[dict[str, Any]]:

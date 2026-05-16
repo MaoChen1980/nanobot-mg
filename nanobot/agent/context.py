@@ -23,6 +23,7 @@ from nanobot.utils.prompt_templates import render_template
 
 # Module-level cache for template file contents (path -> (mtime, content))
 _template_content_cache: dict[str, tuple[float, str]] = {}
+_MAX_TEMPLATE_CACHE_SIZE = 20
 
 
 @dataclass
@@ -35,7 +36,6 @@ class ContextState:
     tool_definitions: list[dict[str, Any]] | None = None
     current_iteration: int | None = None
     max_iterations: int | None = None
-    session_summary: str | None = None
     max_keep_rounds: int | None = None  # 0/None = keep all, no timeline
 
 
@@ -45,14 +45,15 @@ class ContextBuilder:
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
     _SECTION_SEPARATOR = "\n\n" + "═" * 72 + "\n\n"
     _RUNTIME_CONTEXT_TAG = "## Runtime Context"
-    _MAX_RECENT_HISTORY = 10
-    _MAX_HISTORY_CHARS = 64_000  # hard cap on recent history section size
     _RUNTIME_CONTEXT_END = "## /Runtime Context"
 
-    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None):
+    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None,
+                 max_recent_history: int = 10, max_history_chars: int = 64_000):
         self.workspace = workspace
         self.timezone = timezone
         self.memory = MemoryStore(workspace, db=db)
+        self.max_recent_history = max_recent_history
+        self.max_history_chars = max_history_chars
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
         self._bootstrap_cache: dict[str, tuple[float, str]] = {}
 
@@ -117,11 +118,11 @@ class ContextBuilder:
         if entries:
             filtered = [e for e in entries if e.get("summary")]
             if filtered:
-                capped = filtered[-self._MAX_RECENT_HISTORY:]
+                capped = filtered[-self.max_recent_history:]
                 history_text = "\n".join(
                     f"- [{self._convert_timestamp(e['timestamp'], self.timezone)}] {self._sanitize_md(e['summary'])}" for e in capped
                 )
-                history_text = truncate_text(history_text, self._MAX_HISTORY_CHARS)
+                history_text = truncate_text(history_text, self.max_history_chars)
                 _db_started = True
                 db_header = "# ── Historical Context (from previous sessions) ──\n"
                 parts.append(db_header)
@@ -414,7 +415,6 @@ class ContextBuilder:
     @staticmethod
     def _build_runtime_context(
         channel: str | None, chat_id: str | None, timezone: str | None = None,
-        session_summary: str | None = None,
         current_iteration: int | None = None,
         max_iterations: int | None = None,
         message_time: str | None = None,
@@ -428,8 +428,6 @@ class ContextBuilder:
             lines += [f"Channel: {channel}", f"Chat ID: {chat_id}"]
         if current_iteration is not None and max_iterations is not None:
             lines.append(f"Iteration: {current_iteration}/{max_iterations}")
-        if session_summary:
-            lines += ["", "[Resumed Session]", session_summary]
         return (
             ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" +
             "\n".join(lines) + "\n" +
@@ -497,6 +495,8 @@ class ContextBuilder:
             mtime = tpl.stat().st_mtime
             cached = _template_content_cache.get(template_path)
             if cached is None or cached[0] != mtime:
+                if len(_template_content_cache) >= _MAX_TEMPLATE_CACHE_SIZE:
+                    _template_content_cache.clear()
                 _template_content_cache[template_path] = (mtime, tpl.read_text(encoding="utf-8"))
                 cached = _template_content_cache[template_path]
             return content.strip() == cached[1].strip()
@@ -540,7 +540,7 @@ class ContextBuilder:
             retained_history = history
 
         runtime_ctx = self._build_runtime_context(
-            channel, chat_id, self.timezone, session_summary=cs.session_summary,
+            channel, chat_id, self.timezone,
             current_iteration=cs.current_iteration,
             max_iterations=cs.max_iterations,
             message_time=message_timestamp,

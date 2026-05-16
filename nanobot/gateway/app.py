@@ -163,6 +163,7 @@ class GatewayApplication:
             disabled_skills=self.config.agents.defaults.disabled_skills,
             session_ttl_minutes=self.config.agents.defaults.session_ttl_minutes,
             tools_config=self.config.tools,
+            pt_save_interval=self.config.agents.defaults.extractor.save_interval,
             provider_snapshot_loader=load_provider_snapshot,
             provider_signature=self.provider_snapshot.signature,
             db=self.nanobot_db,
@@ -436,8 +437,6 @@ class GatewayApplication:
         extractor_cfg = self.config.agents.defaults.extractor
         if extractor_cfg.model_override:
             self.agent.extractor.model = extractor_cfg.model_override
-        self.agent._pt_save_interval = extractor_cfg.save_interval
-
         self.cron.register_system_job(
             CronJob(
                 id="extractor",

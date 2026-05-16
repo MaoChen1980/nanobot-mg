@@ -148,6 +148,7 @@ class AgentLoop:
         provider_snapshot_loader: Callable[[], ProviderSnapshot] | None = None,
         provider_signature: tuple[object, ...] | None = None,
         db=None,
+        pt_save_interval: int = 30,
     ):
         from nanobot.config.schema import ExecToolConfig, ToolsConfig, WebToolsConfig
 
@@ -234,7 +235,7 @@ class AgentLoop:
         from nanobot.utils.helpers import ensure_dir
         self.prompts_dir = ensure_dir(workspace / "prompts")
         self._pt_counters: dict[str, int] = {}
-        self._pt_save_interval = 100  # default M, overridden via config
+        self._pt_save_interval = pt_save_interval
         self.extractor = MemoryExtractor(
             store=self.context.memory,
             provider=provider,
