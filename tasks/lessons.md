@@ -1,5 +1,17 @@
 # Lessons Learned
 
+## 2026-05-17: MiniMax 2013 = multiple system messages
+
+**Context**: MiniMax returned 2013 "invalid chat setting" for every request after a session had accumulated error messages. I spent a long time debugging thinking/reasoning parameters, message content, and API call format.
+
+**Root cause**: The context assembler in `context.py` was emitting TWO messages with `role: "system"` — the main system prompt (`sys_static`) and a dynamic section (memory + timeline + state). MiniMax rejects requests with multiple system messages.
+
+**Fix**: Merge dynamic parts into the first system message instead of appending a second one. Always safe — semantically equivalent.
+
+**Rule**: When debugging API errors, think about what's UNIQUE about this provider's requirements, not just the error message. MiniMax is a Chinese LLM with its own API conventions. Test the simplest possible request first, then add complexity until it breaks.
+
+**How to apply**: When a new provider returns a cryptic validation error (like "invalid chat setting (2013)"), narrow down by testing: (1) baseline simple request, (2) add one feature at a time. Consider "multiple system messages" as a likely cause for any non-OpenAI provider.
+
 ## 2026-05-13: exec is not "last resort"
 
 **Context**: I was optimizing tool descriptions and system prompts to make LLMs use workspace tools instead of exec. I framed exec as "LAST RESORT — only use when no other tool can do the job."

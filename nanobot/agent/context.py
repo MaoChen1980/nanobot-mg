@@ -564,7 +564,9 @@ class ContextBuilder:
             {"role": "system", "content": sys_static},
         ]
         if sys_dynamic_parts:
-            messages.append({"role": "system", "content": "\n\n".join(sys_dynamic_parts)})
+            # Merge dynamic parts into a single system message.
+            # Some providers (e.g. MiniMax) reject multiple system messages.
+            messages[0]["content"] += "\n\n" + "\n\n".join(sys_dynamic_parts)
         messages.extend(retained_history)
         if messages[-1].get("role") == current_role:
             last = dict(messages[-1])
