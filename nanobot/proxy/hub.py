@@ -274,6 +274,10 @@ class HubTCPServer:
         # TCP connection — the proxy may have reconnected during processing.
         proxy_key = f"{msg.channel}:{msg.bot}"
         resp_dict = resp.to_dict()
+        # Tag as deliver so proxy routes it to the user even when
+        # _pending_response has been cleared (e.g. after reconnect).
+        resp_dict["type"] = "deliver"
+        resp_dict["chat_id"] = msg.chat_id
         delivered = await self._proxy_manager.deliver_to_proxy(
             proxy_key, resp_dict,
         )
