@@ -42,7 +42,12 @@ class SystemMessageHandler:
         # For all other channels (cron, proxy, direct), use msg.channel directly.
         effective_channel = channel if msg.channel == "system" else msg.channel
         self._loop._set_tool_context(effective_channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
-        history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True, timezone=self._loop.context.timezone)
+        from nanobot.utils.helpers import estimate_message_tokens
+        raw_budget = self._loop._replay_token_budget()
+        tool_defs = self._loop.tools.get_definitions()
+        sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
+        sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
+        history = session.get_history(max_tokens=max(128, raw_budget - sys_tokens), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
@@ -192,7 +197,12 @@ class UserMessageHandler:
         self._loop._recovery.restore_runtime_checkpoint(session)
         self._loop._recovery.restore_pending_user_turn(session)
         pending = None
-        history = session.get_history(max_tokens=self._loop._replay_token_budget(), include_timestamps=True, timezone=self._loop.context.timezone)
+        from nanobot.utils.helpers import estimate_message_tokens
+        raw_budget = self._loop._replay_token_budget()
+        tool_defs = self._loop.tools.get_definitions()
+        sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
+        sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
+        history = session.get_history(max_tokens=max(128, raw_budget - sys_tokens), include_timestamps=True, timezone=self._loop.context.timezone)
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key
 
