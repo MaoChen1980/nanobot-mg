@@ -208,7 +208,7 @@ def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
     prompt = builder.build_system_prompt()
 
     # Skills should appear in the summary index
-    assert "=== Skills ===" in prompt
+    assert "## Available Skills" in prompt
     # Verify "my" skill is listed in the index (always: false)
     assert "**my**" in prompt
 
@@ -220,7 +220,7 @@ def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
         for skill_name in always_skills:
             assert f"### Skill: {skill_name}" in prompt
         # but NOT in the skills index below
-        skills_section = prompt.split("=== Skills ===\n", 1)
+        skills_section = prompt.split("## Available Skills\n", 1)
         if len(skills_section) > 1:
             index_text = skills_section[1].split("\n\n---")[0]
             for skill_name in always_skills:

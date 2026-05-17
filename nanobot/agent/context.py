@@ -324,7 +324,13 @@ class ContextBuilder:
             content = "\n".join(lines).strip()
             # Bump remaining headings by +1: ## 命名约定 → ### 命名约定
             content = self._adjust_headings(content, offset=1)
-            parts.append(f"# Memory\n\n## Long-term Memory\n{content}")
+            parts.append(
+                "# Memory\n\n"
+                "## Long-term Memory\n\n"
+                "This is your persistent memory — facts, conventions, and patterns "
+                "learned from past work. Follow these guidelines in your responses.\n\n"
+                + content
+            )
 
         # 2. Append FAISS vector search results for additional relevant context
         query_parts: list[str] = []
@@ -341,7 +347,12 @@ class ContextBuilder:
         if query:
             vector_results = self.memory.vector_index.search(query, k=5)
             if vector_results:
-                parts.append("# Memory (retrieved)\n\n" + self._format_vector_results(vector_results))
+                parts.append(
+                    "# Memory (retrieved)\n\n"
+                    "Relevant knowledge retrieved from past sessions. "
+                    "Use this for context on recurring patterns and past decisions.\n\n"
+                    + self._format_vector_results(vector_results)
+                )
 
         return "\n\n---\n\n".join(parts) if parts else ""
 
