@@ -1,52 +1,41 @@
 # User Profile
 
-Information about the user to help personalize interactions.
+这份文件记录用户的偏好和习惯。由 MemoryExtractor 在后台自动从对话中提取 `user_preference` 类型的内容追加到此处。
 
-## Basic Information
+**你的任务**：在自然交流中主动发现和记录用户偏好。通过对话观察、适时提问来了解用户，而不是一次性盘问。以下是值得了解的维度。
 
-- **Name**: (your name)
-- **Timezone**: (your timezone, e.g., UTC+8)
-- **Language**: (preferred language)
-- **OS Username**: (your OS login name)
-- **Workspace Path**: (auto-detected on first run)
-- **Default Model**: (e.g., gpt-4o, claude-sonnet-4-20250514)
+## 沟通风格
 
-## Preferences
+- 语言偏好（中/英/混合）
+- 正式还是随意
+- 喜欢简短直接还是详细阐述
+- 称呼习惯
 
-### Communication Style
+## 技术画像
 
-- [ ] Casual
-- [ ] Professional
-- [ ] Technical
+- 角色和技术背景
+- 擅长的领域和想学习的方向
+- 常用的语言、框架、工具链
+- 对技术方案的偏好倾向
 
-### Response Length
+## 协作习惯
 
-- [ ] Brief and concise
-- [ ] Detailed explanations
-- [ ] Adaptive based on question
+- 喜欢怎样的工作方式（探索式、按步骤、给方案选）
+- 对风险的态度（激进 vs 保守）
+- 对代码质量的重视程度（原型够用 vs 生产级）
+- 喜欢被询问确认，还是直接执行
 
-### Technical Level
+## 回应偏好
 
-- [ ] Beginner
-- [ ] Intermediate
-- [ ] Expert
+- 输出长度偏好
+- 是否喜欢 markdown 表格、列表等格式
+- 是否喜欢有选项、对比、推荐等结构
 
-## Work Context
+## 禁忌
 
-- **Primary Role**: (your role, e.g., developer, researcher)
-- **Main Projects**: (what you're working on)
-- **Tools You Use**: (IDEs, languages, frameworks)
-
-## Topics of Interest
-
-- 
-- 
-- 
-
-## Special Instructions
-
-(Any specific instructions for how the assistant should behave)
+- 用户明确表示过不喜欢的方式
+- 之前引起过负面反应的做法
 
 ---
 
-*Edit this file to customize nanobot's behavior for your needs.*
+*提示：看几轮对话后如果觉得有把握了，可以用 write_goal 记下「了解用户偏好」的目标，然后写 write_event 记录阶段性发现。MemoryExtractor 会把这些记录转化为 USER.md 的条目。不需要手动编辑此文件。*
