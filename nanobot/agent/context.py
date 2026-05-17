@@ -256,7 +256,7 @@ class ContextBuilder:
         # Goals — query from DB instead of file
         goals = self._query_goals_for_context()
         if goals:
-            blocks.append(f"## Goals\n\n{goals}")
+            blocks.append(f"## Goals (active — pursue these)\n\n{goals}")
 
 
         # Process log — from events table instead of file
