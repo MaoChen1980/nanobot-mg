@@ -15,8 +15,8 @@ from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
     tool_parameters_schema(
         error=p("string", "Error message, keyword, or code to investigate"),
         path=p("string", "Optional file or directory to narrow the search scope — file or directory. Relative to workspace root. Absolute paths also accepted."),
-        max_results=p("integer", "Max grep results to show (default 20)", minimum=1, maximum=50),
-        days=p("integer", "Days of git history to check (default 7)", minimum=1, maximum=90),
+        max_results=p("integer", "Max grep results to show (default 20)", minimum=1, maximum=50, default=20),
+        days=p("integer", "Days of git history to check (default 7)", minimum=1, maximum=90, default=7),
     ),
     required=["error"],
 )

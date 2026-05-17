@@ -20,8 +20,8 @@ _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv"
         pattern=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py' (legacy alias: glob)"),
         grep=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context)"),
         path=p("string", "Directory to search from — directory. Relative to workspace root (e.g. 'nanobot/agent'). Absolute paths also accepted (default '.')."),
-        max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50),
-        max_lines=p("integer", "Maximum lines per file (default 100)", minimum=1, maximum=500),
+        max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50, default=10),
+        max_lines=p("integer", "Maximum lines per file (default 100)", minimum=1, maximum=500, default=100),
     ),
     required=["pattern"],
 )

@@ -97,7 +97,7 @@ def _format_results(query: str, items: list[dict[str, Any]], n: int) -> str:
 @tool_parameters(
     tool_parameters_schema(
         query=p("string", "Search query — natural language question or keywords."),
-        count=p("integer", "Results to return (1-10, default 5)", minimum=1, maximum=10),
+        count=p("integer", "Results to return (1-10, default 5)", minimum=1, maximum=10, default=5),
         required=["query"],
     )
 )
@@ -322,8 +322,8 @@ class WebSearchTool(WebToolBase, Tool):
             "default": "markdown",
             "description": "Output format: 'markdown' (default) — clean structured text preserving tables and code blocks; 'text' — raw text extraction with minimal formatting",
         },
-        maxChars=p("integer", "Max characters to extract (default 3000, minimum 100). Pages exceeding this limit are truncated.",
-            minimum=100,
+        maxChars=p("integer", "Max characters to extract (minimum 100, default 3000). Pages exceeding this limit are truncated.",
+            minimum=100, default=3000,
         ),
         extract=p("string", "Optional regex — only lines matching this pattern are returned from the fetched text, with 1 line context before/after"),
         required=["url"],

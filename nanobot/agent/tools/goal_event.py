@@ -140,7 +140,7 @@ class WriteGoal(Tool):
     "project": p("string", "Filter by project"),
     "scope": p("string", "Filter by scope (e.g. 'memory', 'agent/loop')"),
     "bot": p("string", "Filter by bot name"),
-    "limit": p("number", "Max results (integer)", minimum=1, maximum=100),
+    "limit": p("number", "Max results (integer, default 20)", minimum=1, maximum=100, default=20),
 })
 class ListGoals(Tool):
     """List goals from structured DB."""
@@ -263,7 +263,7 @@ _LIST_EVENTS_SCHEMA: dict[str, Any] = {
             "Event type",
             enum=["progress", "milestone", "decision", "blocker"],
         ),
-        "limit": p("number", "Max results (integer)", minimum=1, maximum=100),
+        "limit": p("number", "Max results (integer, default 10)", minimum=1, maximum=100, default=10),
     },
 }
 

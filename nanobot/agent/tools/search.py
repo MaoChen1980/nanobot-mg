@@ -185,18 +185,21 @@ class GlobTool(_SearchTool):
                 },
                 "head_limit": {
                     "type": "integer",
+                    "default": 250,
                     "description": "Maximum number of matches to return (default 250)",
                     "minimum": 0,
                     "maximum": 1000,
                 },
                 "offset": {
                     "type": "integer",
+                    "default": 0,
                     "description": "Skip the first N matching entries before returning results",
                     "minimum": 0,
                     "maximum": 100000,
                 },
                 "entry_type": {
                     "type": "string",
+                    "default": "files",
                     "enum": ["files", "dirs", "both"],
                     "description": "Whether to match files, directories, or both (default files)",
                 },
@@ -320,30 +323,34 @@ class GrepTool(_SearchTool):
                 },
                 "case_insensitive": {
                     "type": "boolean",
+                    "default": false,
                     "description": "Case-insensitive search (default false)",
                 },
                 "fixed_strings": {
                     "type": "boolean",
+                    "default": false,
                     "description": "Treat pattern as plain text instead of regex (default false)",
                 },
                 "output_mode": {
                     "type": "string",
                     "enum": ["content", "files_with_matches", "count"],
+                    "default": "files_with_matches",
                     "description": (
                         "content: matching lines with optional context; "
                         "files_with_matches: only matching file paths; "
                         "count: matching line counts per file. "
-                        "Default: files_with_matches"
                     ),
                 },
                 "context_before": {
                     "type": "integer",
+                    "default": 0,
                     "description": "Number of lines of context before each match (only applies when output_mode='content')",
                     "minimum": 0,
                     "maximum": 20,
                 },
                 "context_after": {
                     "type": "integer",
+                    "default": 0,
                     "description": "Number of lines of context after each match (only applies when output_mode='content')",
                     "minimum": 0,
                     "maximum": 20,
@@ -366,11 +373,8 @@ class GrepTool(_SearchTool):
                 },
                 "head_limit": {
                     "type": "integer",
-                    "description": (
-                        "Maximum number of results to return. In content mode this limits "
-                        "matching line blocks; in other modes it limits file entries. "
-                        "Default 250"
-                    ),
+                    "default": 250,
+                    "description": "Maximum number of results to return. In content mode this limits matching line blocks; in other modes it limits file entries.",
                     "minimum": 0,
                     "maximum": 1000,
                 },

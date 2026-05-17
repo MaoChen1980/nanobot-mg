@@ -91,12 +91,9 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
     tool_parameters_schema(
         command=p("string", "The shell command to execute. Not needed when from_cache is set."),
         working_dir=p("string", "Working directory for the command — directory. Relative to workspace root. Absolute paths also accepted (default: workspace root)."),
-        timeout=p("integer", (
-                "Timeout in seconds. Increase for long-running commands "
-                "like compilation or installation (default 60, max 600)."
-            ),
-            minimum=1,
-            maximum=600,
+        timeout=p("integer",
+            "Timeout in seconds. Increase for long-running commands like compilation or installation.",
+            minimum=1, maximum=600, default=60,
         ),
         capture_file=p("string",
             "If set, write command output to this file path (relative to workspace root; absolute paths also accepted) "

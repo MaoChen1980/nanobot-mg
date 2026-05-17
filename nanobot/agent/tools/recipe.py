@@ -15,7 +15,7 @@ from nanobot.agent.tools.schema import p, tool_parameters_schema
         recipe=p("string", "Recipe name: find_and_read, audit_todos, trace_function"),
         pattern=p("string", "Search pattern. Required for: find_and_read, trace_function. Ignored by: audit_todos."),
         path=p("string", "File or directory path — file or directory. Relative to workspace root. Absolute paths also accepted."),
-        max_files=p("integer", "Max files to read (for find_and_read)", minimum=1, maximum=50),
+        max_files=p("integer", "Max files to read (for find_and_read, default 10)", minimum=1, maximum=50, default=10),
     ),
     required=["recipe"],
 )

@@ -14,10 +14,10 @@ from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "File or directory path to filter commits by — file or directory. Relative to workspace root. Absolute paths also accepted."),
+        path=p("string", "File or directory path to filter commits by — relative to repository root (e.g. 'src/main.py'), NOT an absolute filesystem path. Git pathspec only, use forward slashes."),
         since=p("string", "Time range, e.g. '7 days ago', '2024-01-01', '1 month'"),
         commit=p("string", "Specific commit SHA to inspect in detail"),
-        max_commits=p("integer", "Maximum commits in log view (default 10, max 50)", minimum=1, maximum=50),
+        max_commits=p("integer", "Maximum commits in log view (default 10, max 50)", minimum=1, maximum=50, default=10),
     ),
     required=[],
 )
@@ -59,6 +59,13 @@ class GitInspectTool(_FsTool):
             git_dir = self._find_git_root(workspace)
             if not git_dir:
                 return "Error: Not a git repository (or any parent directory)"
+
+            if path and (path.startswith("/") or re.match(r"[A-Za-z]:[\\/]", path)):
+                return (
+                    f"Error: path must be a git pathspec relative to repository root "
+                    f"(e.g. 'src/main.py'), got absolute path: {path!r}. "
+                    f"Do NOT pass absolute filesystem paths — use repo-relative paths with forward slashes."
+                )
 
             if commit:
                 return self._show_commit(git_dir, commit)

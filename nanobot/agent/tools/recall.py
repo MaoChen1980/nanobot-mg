@@ -39,13 +39,13 @@ def _find_line_range(full_text: str, chunk_text: str) -> tuple[int, int]:
             "Search mode:\n"
             "  'history' — 搜索对话/执行细节。支持 keyword（精确关键词）和 start/end（时间范围）。\n"
             "  'knowledge' — 搜索经验/知识。语义搜索 memory/ 目录下的 .md 文件。",
-            enum=["history", "knowledge"],
+            enum=["history", "knowledge"], default="history",
         ),
         keyword=p("string", "Exact substring match, case-insensitive (history mode only)"),
         start=p("string", "Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive (history mode only)"),
         end=p("string", "End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive (history mode only)"),
         k=p("integer", "Number of results to return (knowledge mode only, default 5, max 20)",
-            minimum=1, maximum=20),
+            minimum=1, maximum=20, default=5),
     ),
     required=["query", "mode"],
 )
