@@ -150,11 +150,6 @@ def build_help_text() -> str:
 - **/resume_goal <id>** — Resume a blocked or paused goal
 - **/sub** — Show subagent status
 
-## Observe Toggles
-- **/think** — Toggle LLM thinking blocks visibility
-- **/tool** — Toggle tool call events visibility
-- **/rounds [N]** — Show/set max conversation rounds (0 = all)
-
 ## Info
 - **/help** — Show this message"""
 
