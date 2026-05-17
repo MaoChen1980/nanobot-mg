@@ -198,14 +198,15 @@ class BaseProxyChannel:
                     break
                 data = json.loads(line.decode())
                 if data.get("type") == "deliver":
-                    logger.debug("Background reader: deliver msg to chat={}", data.get("chat_id", "")[:20])
-                    await self._handle_deliver(data)
-                    # Also fulfill pending response when the deliver IS the
-                    # final reply (hub now tags HubResponse as type=deliver).
-                    # Only when data has "success" key — progress deliver
-                    # messages (tool events, think text) lack it.
+                    # Fulfill pending response for final replies (have "success" key).
+                    # Skip _handle_deliver here — the caller (on_message._process)
+                    # will enqueue the response. Progress deliveries (tool events,
+                    # think text) lack "success" and still go through _handle_deliver.
                     if "success" in data and self._pending_response is not None and not self._pending_response.done():
                         self._pending_response.set_result(data)
+                    else:
+                        logger.debug("Background reader: deliver msg to chat={}", data.get("chat_id", "")[:20])
+                        await self._handle_deliver(data)
                 elif self._pending_response is not None and not self._pending_response.done():
                     # Only fulfill if the response type matches expectation.
                     # Prevents async route_message responses from resolving heartbeat ping futures.
