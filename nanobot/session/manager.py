@@ -34,6 +34,22 @@ class Session:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
+    def _split_turns_by_assistant(messages: list[dict]) -> list[list[dict]]:
+        """Split messages into turns, each turn starts with an assistant message."""
+        turns: list[list[dict]] = []
+        current: list[dict] = []
+        for msg in messages:
+            if msg.get("role") == "assistant":
+                if current:
+                    turns.append(current)
+                current = [msg]
+            else:
+                current.append(msg)
+        if current:
+            turns.append(current)
+        return turns
+
+    @staticmethod
     def _format_timestamp(ts: str, timezone: str | None = None) -> str | None:
         """Convert ISO timestamp to human-readable string (or None if invalid)."""
         if not ts:
@@ -64,13 +80,15 @@ class Session:
         max_messages: int = HISTORY_MAX_MESSAGES,
         *,
         max_tokens: int = 0,
+        max_turns: int = 0,
         include_timestamps: bool = False,
         timezone: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return unconsolidated messages for LLM input.
 
-        History is sliced by message count first (``max_messages``), then by
-        token budget from the tail (``max_tokens``) when provided.
+        History is sliced by turn count (``max_turns``, each turn starts with an
+        assistant message) or message count (``max_messages``), then by token
+        budget from the tail (``max_tokens``) when provided.
 
         When *timezone* (e.g. ``"Asia/Shanghai"``) is given together with
         ``include_timestamps=True``, the ``[Message Time]`` annotations are
@@ -78,7 +96,12 @@ class Session:
         context's ``Current Time``.
         """
         unconsolidated = [m for m in self.messages if m.get("status") != "excluded"]
-        sliced = unconsolidated[-max_messages:]
+        if max_turns > 0:
+            turns = self._split_turns_by_assistant(unconsolidated)
+            keep = turns[-max_turns:] if len(turns) > max_turns else turns
+            sliced = [m for turn in keep for m in turn]
+        else:
+            sliced = unconsolidated[-max_messages:]
 
         # Avoid starting mid-turn when possible, except for proactive
         # assistant deliveries that the user may be replying to.
@@ -212,21 +235,13 @@ class Session:
             len(self.messages),
         )
 
-    def trim_old_turns(self, max_turns: int = 100, trim_batch: int = 20) -> list[dict]:
+    def trim_old_turns(self, max_turns: int = 200, trim_batch: int = 50) -> list[dict]:
         """When total turn count exceeds *max_turns*, remove oldest *trim_batch* turns.
 
         Returns the removed messages (flat) for the caller to archive to history.
+        Each turn starts with an assistant message.
         """
-        # Split messages into turns
-        turns: list[list[dict]] = []
-        current: list[dict] = []
-        for msg in self.messages:
-            if msg.get("role") == "user" and current:
-                turns.append(current)
-                current = []
-            current.append(msg)
-        if current:
-            turns.append(current)
+        turns = self._split_turns_by_assistant(self.messages)
 
         if len(turns) <= max_turns:
             return []

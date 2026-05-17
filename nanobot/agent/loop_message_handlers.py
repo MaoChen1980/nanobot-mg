@@ -49,10 +49,8 @@ class SystemMessageHandler:
         sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
         adjusted = raw_budget - sys_tokens
         if adjusted < 1024:
-            # raw_budget is likely broken (e.g. max_tokens = 160K) — don't
-            # make things worse by subtracting sys_prompt from a tiny budget.
             adjusted = raw_budget
-        history = session.get_history(max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        history = session.get_history(max_turns=200, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
@@ -209,10 +207,8 @@ class UserMessageHandler:
         sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
         adjusted = raw_budget - sys_tokens
         if adjusted < 1024:
-            # raw_budget is likely broken (e.g. max_tokens = 160K) — don't
-            # make things worse by subtracting sys_prompt from a tiny budget.
             adjusted = raw_budget
-        history = session.get_history(max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        history = session.get_history(max_turns=200, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key
 
@@ -301,8 +297,8 @@ class UserMessageHandler:
         self._loop._record_turn(session, all_msgs, save_skip)
 
         # Turn-based archive: when session exceeds N turns, archive oldest M turns to history
-        max_turns = session.metadata.get("max_turns", 100)
-        trim_batch = session.metadata.get("trim_batch", 20)
+        max_turns = session.metadata.get("max_turns", 200)
+        trim_batch = session.metadata.get("trim_batch", 50)
         trimmed = session.trim_old_turns(max_turns, trim_batch)
         if trimmed:
             archived = self._loop.context.memory.archive_session(trimmed)
