@@ -300,11 +300,10 @@ class UserMessageHandler:
         self._loop._recovery.clear_runtime_checkpoint(session)
         self._loop.sessions.save(session)
 
-        # .pt save: every N turns, save a snapshot of the current messages
+        # .pt save: every N turns (50, 100, 150…), save a snapshot
         turn_count = self._loop._pt_counters.get(session.key, 0) + 1
         self._loop._pt_counters[session.key] = turn_count
-        if turn_count >= self._loop._pt_save_interval:
-            self._loop._pt_counters[session.key] = 0
+        if turn_count % self._loop._pt_save_interval == 0:
             MemoryExtractor.save_pt(all_msgs, self._loop.prompts_dir, session.key)
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
