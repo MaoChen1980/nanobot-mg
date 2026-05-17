@@ -47,7 +47,12 @@ class SystemMessageHandler:
         tool_defs = self._loop.tools.get_definitions()
         sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
         sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
-        history = session.get_history(max_tokens=max(128, raw_budget - sys_tokens), include_timestamps=True, timezone=self._loop.context.timezone)
+        adjusted = raw_budget - sys_tokens
+        if adjusted < 1024:
+            # raw_budget is likely broken (e.g. max_tokens = 160K) — don't
+            # make things worse by subtracting sys_prompt from a tiny budget.
+            adjusted = raw_budget
+        history = session.get_history(max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
@@ -202,7 +207,12 @@ class UserMessageHandler:
         tool_defs = self._loop.tools.get_definitions()
         sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
         sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
-        history = session.get_history(max_tokens=max(128, raw_budget - sys_tokens), include_timestamps=True, timezone=self._loop.context.timezone)
+        adjusted = raw_budget - sys_tokens
+        if adjusted < 1024:
+            # raw_budget is likely broken (e.g. max_tokens = 160K) — don't
+            # make things worse by subtracting sys_prompt from a tiny budget.
+            adjusted = raw_budget
+        history = session.get_history(max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key
 
