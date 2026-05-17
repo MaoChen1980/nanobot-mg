@@ -502,7 +502,10 @@ class AgentLoop:
             reserved_output = int(max_output)
         except (TypeError, ValueError):
             reserved_output = 4096
-        budget = self.context_window_tokens - max(1, reserved_output) - 1024
+        # Cap reserved output at 16K — max_tokens in config may be set to
+        # the model's total context window (e.g. 160K) which would leave
+        # almost nothing for history replay.
+        budget = self.context_window_tokens - min(max(1, reserved_output), 16384) - 1024
         return budget if budget > 0 else max(128, self.context_window_tokens // 2)
 
     async def _run_agent_loop(
