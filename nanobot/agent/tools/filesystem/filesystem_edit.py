@@ -196,7 +196,8 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
             "When old_text appears multiple times and replace_all=false, "
             "the tool returns a warning listing the line numbers of each match. "
             "If you only want to replace one specific occurrence, add more surrounding "
-            "context to old_text to make it unique."
+            "context to old_text to make it unique.",
+            default=False,
         ),
         first_line=p("integer", "Line number to start replacing from (1-indexed). When set with last_line, replaces that line range with new_text directly — no fuzzy matching needed.",
             minimum=1,

@@ -323,12 +323,12 @@ class GrepTool(_SearchTool):
                 },
                 "case_insensitive": {
                     "type": "boolean",
-                    "default": false,
+                    "default": False,
                     "description": "Case-insensitive search (default false)",
                 },
                 "fixed_strings": {
                     "type": "boolean",
-                    "default": false,
+                    "default": False,
                     "description": "Treat pattern as plain text instead of regex (default false)",
                 },
                 "output_mode": {
