@@ -256,13 +256,20 @@ class ContextBuilder:
         # Goals — query from DB instead of file
         goals = self._query_goals_for_context()
         if goals:
-            blocks.append(f"## Goals (active — pursue these)\n\n{goals}")
-
+            blocks.append(
+                "## Active Goals\n\n"
+                "These are your active objectives. Work toward them proactively "
+                "in your responses — suggest next steps, track progress, and "
+                "drive them forward.\n\n" + goals
+            )
 
         # Process log — from events table instead of file
         events = self._query_recent_events()
         if events:
-            blocks.append("## Recent Progress\n\n" + events)
+            blocks.append(
+                "## Recent Activity\n\n"
+                "Timeline of recent events for context on what just happened.\n\n" + events
+            )
 
         return "\n\n".join(blocks) if blocks else ""
 
@@ -518,7 +525,7 @@ class ContextBuilder:
             sys_dynamic_parts.append(memory_section)
         state_block = self._build_state_section()
         if state_block:
-            sys_dynamic_parts.append(f"# Current State\n\n{state_block}")
+            sys_dynamic_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": sys_static},
