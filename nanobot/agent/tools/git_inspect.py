@@ -52,12 +52,18 @@ class GitInspectTool(_FsTool):
             if not git_dir:
                 return "Error: Not a git repository (or any parent directory)"
 
-            if path and (path.startswith("/") or re.match(r"[A-Za-z]:[\\/]", path)):
-                return (
-                    f"Error: path must be a git pathspec relative to repository root "
-                    f"(e.g. 'src/main.py'), got absolute path: {path!r}. "
-                    f"Do NOT pass absolute filesystem paths — use repo-relative paths with forward slashes."
-                )
+            if path:
+                path = path.replace("\\", "/")
+                if path.startswith("/") or re.match(r"[A-Za-z]:", path):
+                    abs_path = Path(path).resolve()
+                    try:
+                        rel = abs_path.relative_to(git_dir.resolve())
+                        path = rel.as_posix()
+                    except ValueError:
+                        return (
+                            f"Error: path {path!r} is outside the git repository ({git_dir}). "
+                            f"Use a repo-relative path (e.g. 'src/main.py')."
+                        )
 
             if commit:
                 return self._show_commit(git_dir, commit)
