@@ -17,11 +17,11 @@ from nanobot.utils.media_decode import build_image_content_blocks, detect_image_
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "File path to read — relative or absolute. Supports text files, PDFs (pages param), and images (rendered as Markdown)."),
-        mode=p("string", "Reading mode: 'full' (default, output lines) or 'overview' (preview structure via headings/sections without reading the whole file). Use overview when unsure what a file contains.",
+        path=p("string", "File path to read — file. Relative to workspace root (e.g. 'nanobot/agent/context.py'). Absolute paths also accepted. Supports text files, PDFs (pages param), and images (rendered as Markdown)."),
+        mode=p("string", "Reading mode. Defaults to 'full' (outputs numbered lines). 'overview' previews structure via headings/sections without reading the whole file — use when unsure what a file contains.",
             enum=["full", "overview"],
         ),
-        extract=p("string", "Optional regex — only lines matching this pattern are returned, with 1 line of context before/after each match. Use instead of grep+cat for filtering logs or code."),
+        extract=p("string", "Optional Python regex (re.compile). Applied after offset/limit — only matching lines are returned, with 1 line of context before/after each match. Use instead of grep+cat for filtering logs or code. Example: 'Error.*timeout'."),
         offset=p("integer", "Line number to start reading from (1-indexed, default 1)",
             minimum=1,
         ),

@@ -14,7 +14,7 @@ from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "File or directory path to filter commits by"),
+        path=p("string", "File or directory path to filter commits by — file or directory. Relative to workspace root. Absolute paths also accepted."),
         since=p("string", "Time range, e.g. '7 days ago', '2024-01-01', '1 month'"),
         commit=p("string", "Specific commit SHA to inspect in detail"),
         max_commits=p("integer", "Maximum commits in log view (default 10, max 50)", minimum=1, maximum=50),

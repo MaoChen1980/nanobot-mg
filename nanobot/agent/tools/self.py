@@ -144,7 +144,7 @@ class MyTool(Tool):
                 "action": {
                     "type": "string",
                     "enum": ["check", "set"],
-                    "description": "Action to perform",
+                    "description": "Action: 'check' (view config) or 'set' (modify config or store scratchpad notes)",
                 },
                 "key": {
                     "type": "string",

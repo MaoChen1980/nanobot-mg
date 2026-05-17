@@ -18,7 +18,7 @@ if TYPE_CHECKING:
             "action": {
                 "type": "string",
                 "enum": ["list", "compress"],
-                "description": "What action to perform",
+                "description": "Action: 'list' (show all messages with sizes) or 'compress' (replace a message's content with a summary)",
             },
             "message_id": {
                 "type": "string",

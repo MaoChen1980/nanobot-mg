@@ -291,7 +291,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 if media_id:
                     media_items.append((media_id, "image", "", os.path.basename(path)))
                     return f"![image]({media_id})"
-            elif ext:
+            elif ext in FILE_EXTENSIONS:
                 media_id = self._upload_media(path, "file")
                 if media_id:
                     media_items.append((media_id, "file", ext, os.path.basename(path)))

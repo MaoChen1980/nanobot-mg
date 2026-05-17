@@ -186,7 +186,7 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "File path to edit — relative or absolute. Directories and special files are rejected."),
+        path=p("string", "File path to edit — file. Relative to workspace root (e.g. 'nanobot/agent/context.py'). Absolute paths also accepted. Directories and special files are rejected."),
         old_text=p("string", "Text to find and replace. Must match EXACTLY and be UNIQUE in the file — include surrounding lines for disambiguation, or set replace_all=true. "
             "Leave empty (or omit) to prepend new_text at file beginning. Pair with first_line+last_line for line-range mode instead of text matching."),
         new_text=p("string", "Replacement text for old_text. Pass empty string to delete old_text. "
@@ -205,8 +205,9 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
             minimum=1,
         ),
         then_grep=p("string",
-            "If set, greps the edited file for this pattern after saving and "
-            "returns matching lines. Helps verify the edit landed correctly."
+            "If set, searches the edited file for this exact substring (not a regex) after saving, "
+            "and returns matching line numbers and content. "
+            "Helps verify the edit landed correctly."
         ),
         required=["path", "new_text"],
     )

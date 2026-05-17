@@ -175,7 +175,7 @@ class GlobTool(_SearchTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "Directory to search from (default '.')",
+                    "description": "Directory path relative to workspace root, e.g. 'nanobot/proxy/channels' (default '.')",
                 },
                 "max_results": {
                     "type": "integer",
@@ -217,7 +217,7 @@ class GlobTool(_SearchTool):
         try:
             root = self._resolve(path or ".")
             if not root.exists():
-                return f"Error: Path not found: {path}"
+                return f"Error: Path not found: {path} — use glob to locate it first"
             if not root.is_dir():
                 return f"Error: Not a directory: {path}"
 
@@ -303,12 +303,12 @@ class GrepTool(_SearchTool):
             "properties": {
                 "pattern": {
                     "type": "string",
-                    "description": "Regex or plain text pattern to search for",
+                    "description": "Regex pattern to search for (default). Set fixed_strings=true to treat as plain text instead.",
                     "minLength": 1,
                 },
                 "path": {
                     "type": "string",
-                    "description": "File or directory to search in (default '.')",
+                    "description": "File or directory path relative to workspace root, e.g. 'nanobot/proxy/channels/dingtalk.py' (default '.')",
                 },
                 "glob": {
                     "type": "string",
@@ -316,7 +316,7 @@ class GrepTool(_SearchTool):
                 },
                 "file_type": {
                     "type": "string",
-                    "description": "Optional file type shorthand, e.g. 'py', 'ts', 'md', 'json' (legacy alias: type)",
+                    "description": "Optional file type shorthand (legacy alias: type). Values: py/python, js, ts, tsx, jsx, json, md/markdown, go, rs/rust, java, sh, yaml/yml, toml, sql, html, css",
                 },
                 "case_insensitive": {
                     "type": "boolean",
@@ -338,13 +338,13 @@ class GrepTool(_SearchTool):
                 },
                 "context_before": {
                     "type": "integer",
-                    "description": "Number of lines of context before each match",
+                    "description": "Number of lines of context before each match (only applies when output_mode='content')",
                     "minimum": 0,
                     "maximum": 20,
                 },
                 "context_after": {
                     "type": "integer",
-                    "description": "Number of lines of context after each match",
+                    "description": "Number of lines of context after each match (only applies when output_mode='content')",
                     "minimum": 0,
                     "maximum": 20,
                 },
@@ -423,7 +423,7 @@ class GrepTool(_SearchTool):
         try:
             target = self._resolve(path or ".")
             if not target.exists():
-                return f"Error: Path not found: {path}"
+                return f"Error: Path not found: {path} — use glob to locate it first"
             if not (target.is_dir() or target.is_file()):
                 return f"Error: Unsupported path: {path}"
 

@@ -18,9 +18,9 @@ _MAX_TEXT_BYTES = 5 * 1024 * 1024
 @tool_parameters(
     tool_parameters_schema(
         text=p("string", "Text content to inspect (max 5 MB). Provide this or path."),
-        path=p("string", "File path to inspect. Provide this or text."),
-        max_sections=p("integer", "Maximum number of sections to return", minimum=1, maximum=20),
-        mode=p("string", "Detection mode: auto (structure→semantic fallback), semantic (embedding segments), structure (headings/separators only)", enum=["auto", "semantic", "structure"]),
+        path=p("string", "File path to inspect — file. Relative to workspace root. Absolute paths also accepted. Provide this or text."),
+        max_sections=p("integer", "Maximum number of sections to return (default 10)", minimum=1, maximum=20),
+        mode=p("string", "Detection mode: 'auto' (default, structure first → semantic fallback), 'semantic' (embedding-based segmentation), 'structure' (headings/separators only)", enum=["auto", "semantic", "structure"]),
     ),
     required=[],
 )

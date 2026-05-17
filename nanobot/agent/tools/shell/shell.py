@@ -90,7 +90,7 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
 @tool_parameters(
     tool_parameters_schema(
         command=p("string", "The shell command to execute. Not needed when from_cache is set."),
-        working_dir=p("string", "Optional working directory for the command"),
+        working_dir=p("string", "Working directory for the command — directory. Relative to workspace root. Absolute paths also accepted (default: workspace root)."),
         timeout=p("integer", (
                 "Timeout in seconds. Increase for long-running commands "
                 "like compilation or installation (default 60, max 600)."
@@ -99,7 +99,8 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
             maximum=600,
         ),
         capture_file=p("string",
-            "If set, write command output to this file path in real-time as it runs. "
+            "If set, write command output to this file path (relative to workspace root; absolute paths also accepted) "
+            "in real-time as it runs. "
             "You can use read_file on this path mid-execution to see partial progress "
             "before the command finishes. "
             "Useful for long commands like npm install or compilation."
@@ -110,8 +111,9 @@ _EXES_WITH_SCRIPT_FLAGS: set[str] = {
             "Combine with from_cache to re-examine previous output without re-executing."
         ),
         extract=p("string",
-            "If set, run this command against the cached output file. "
+            "If set, run this command against the cached output .txt file. "
             "Use {cache} as placeholder for the cache file path. "
+            "Runs with a 30-second timeout. "
             "Example: extract=\"python -c \\\"import sys; d=open('{cache}').read(); print(d.count('FAILED'))\\\"\""
         ),
         from_cache=p("string",

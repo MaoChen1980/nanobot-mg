@@ -70,7 +70,7 @@ _FALLBACK_PATTERNS: list[tuple[str, str]] = [
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "File or directory path to explore"),
+        path=p("string", "File or directory path to explore — file or directory. Relative to workspace root (e.g. 'nanobot/agent/tools'). Absolute paths also accepted."),
         max_level=p("integer", "Maximum depth for directory listing (default 2, max 5)", minimum=1, maximum=5),
         show_refs=p("boolean", "Show a sample of internal references for each symbol (default true)"),
     ),

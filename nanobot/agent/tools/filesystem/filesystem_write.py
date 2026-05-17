@@ -13,11 +13,12 @@ from nanobot.agent.tools import file_state
 
 @tool_parameters(
     tool_parameters_schema(
-        path=p("string", "File path to write — relative or absolute. OVERWRITES existing file, auto-creates parent directories."),
+        path=p("string", "File path to write — file. Relative to workspace root (e.g. 'logs/output.txt'). Absolute paths also accepted. OVERWRITES existing file, auto-creates parent directories."),
         content=p("string", "Full file content to write. Replaces entire file — use edit_file for partial edits or substitutions."),
         then_exec=p("string",
-            "If set to a shell command string, executes it automatically after writing "
-            "and returns the command output. Useful for script-then-run workflows."
+            "If set to a shell command string, executes it after writing (and after then_check if set) "
+            "and returns the command output. Working directory is the written file's parent. "
+            "Example: 'python main.py'. Useful for script-then-run workflows."
         ),
         then_check=p("string",
             "If set, type-checks the file after writing before executing then_exec. "
@@ -26,9 +27,9 @@ from nanobot.agent.tools import file_state
             "Works with then_exec: write → check → exec."
         ),
         then_grep=p("string",
-            "If set, greps the written file for this pattern and returns matching "
-            "line numbers and content. Helps verify the write landed correctly "
-            "without re-reading the entire file."
+            "If set, searches the written file for this exact substring (not a regex) after saving, "
+            "and returns matching line numbers and content. "
+            "Helps verify the write landed correctly without re-reading the entire file."
         ),
         required=["path", "content"],
     )

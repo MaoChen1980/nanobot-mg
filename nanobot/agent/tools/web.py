@@ -320,7 +320,7 @@ class WebSearchTool(WebToolBase, Tool):
             "type": "string",
             "enum": ["markdown", "text"],
             "default": "markdown",
-            "description": "markdown (default) — clean structured text with tables/code; text — raw text extraction",
+            "description": "Output format: 'markdown' (default) — clean structured text preserving tables and code blocks; 'text' — raw text extraction with minimal formatting",
         },
         maxChars=p("integer", "Max characters to extract (default 3000, minimum 100). Pages exceeding this limit are truncated.",
             minimum=100,
