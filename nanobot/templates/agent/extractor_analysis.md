@@ -11,6 +11,7 @@ Identify **NEW** information — facts, preferences, rules, decisions, or patter
 - Do NOT extract things already present in the memory snapshot.
 - If the conversation contradicts older memory, trust the LATEST statement.
 - If the conversation was truncated (missing the beginning), focus on what remains — even partial context can yield valid findings.
+- **CRITICAL for `reusable_pattern` (skills)**: Only extract patterns that were **actually executed** — where the assistant performed tool calls (wrote files, ran commands, made API calls, etc.) and produced results. NEVER extract a workflow that was only **discussed or described in text**, no matter how detailed or accurate the description. A pattern does not exist until nanobot has run it.
 
 Ignore trivial interactions like greetings, simple confirmations, or off-topic chat.
 
@@ -72,5 +73,5 @@ Respond ONLY with a JSON object matching this schema:
 | `soul_rule` | A behavior rule for the agent | content, condition, action, confidence |
 | `knowledge` | Technical knowledge, architecture facts | content, topic, tags, confidence |
 | `decision` | An architectural or design decision | content, topic, tags, rationale, confidence |
-| `reusable_pattern` | A multi-step workflow worth making a skill | content, name, steps, confidence |
+| `reusable_pattern` | An executed multi-step workflow — must include tool calls with results, not just discussion | content, name, steps, confidence |
 | `skip` | Nothing useful found | content (brief reason) |
