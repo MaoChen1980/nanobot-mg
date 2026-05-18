@@ -506,6 +506,21 @@ class ContextBuilder:
             messages[-1] = last
         else:
             messages.append({"role": current_role, "content": user_content})
+
+        # Inject Message Time into non-last tool/user messages
+        header = format_message_header()
+        for i in range(len(messages) - 1):
+            role = messages[i].get("role")
+            if role not in ("tool", "user"):
+                continue
+            content = messages[i].get("content", "")
+            if not content:
+                continue
+            if isinstance(content, str):
+                messages[i]["content"] = f"{header}\n{content}"
+            elif isinstance(content, list):
+                messages[i]["content"] = [{"type": "text", "text": header}] + list(content)
+
         return self._fill_thinking_into_content(messages)
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:
