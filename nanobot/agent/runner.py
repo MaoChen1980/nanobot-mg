@@ -63,6 +63,16 @@ from .runner_llm import (
 )
 from .runner_execution import execute_tools
 
+# Tools that fetch external information (vs. computation/action).
+# Results from these get a [Source:] prefix so the LLM can distinguish
+# "I read this from a file" from "I inferred this."
+_SOURCE_TOOLS = frozenset({
+    "read_file", "read_files", "list_dir", "glob", "grep",
+    "web_search", "web_fetch", "git_inspect",
+    "recall", "search_text", "explore_module", "analyze",
+    "diagnose", "run_recipe",
+})
+
 
 @dataclass(slots=True)
 class AgentRunSpec:
@@ -185,6 +195,7 @@ class AgentRunner:
         external_lookup_counts: dict[str, int] = {}
         empty_content_retries = 0
         length_recovery_count = 0
+        verification_injected = False
         had_injections = False
         injection_cycles = 0
 
@@ -438,6 +449,26 @@ class AgentRunner:
             if should_continue:
                 had_injections = True
 
+            # Verification gate: before finalizing, prompt the agent to confirm
+            # it has gathered sufficient verified information rather than relying
+            # on unverified assumptions.  Only fires once per turn, and only
+            # after the agent has had at least one iteration to gather info.
+            if not should_continue and not verification_injected and iteration > 0:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "[Verification Gate]\n"
+                        "Before finalizing, confirm:\n"
+                        "1. Did you read the relevant files? (list them)\n"
+                        "2. What assumptions are you making that you haven't verified?\n"
+                        "3. Is any critical information still missing?\n\n"
+                        "If confident, produce your final answer. "
+                        "Otherwise, gather what's missing first."
+                    )
+                })
+                verification_injected = True
+                should_continue = True
+
             await hook.on_stream_end(context, resuming=should_continue)
 
             if should_continue:
@@ -569,12 +600,19 @@ class AgentRunner:
 
     @staticmethod
     def _fmt_tool_metadata(tool_name: str, result: str, timestamp: str = "") -> str:
-        """Prefix tool result with searchable metadata: tool name, size, time."""
+        """Prefix tool result with searchable metadata: tool name, size, time.
+
+        Info-gathering tools (read_file, grep, etc.) get a ``[Source: ...]``
+        label so the LLM can distinguish external facts from its own inferences.
+        """
         from nanobot.utils.helpers import format_message_header
         header = format_message_header()
         size = len(result) if isinstance(result, str) else 0
         ts = timestamp[:16].replace("T", " ") if timestamp else ""
-        meta = f"[Tool: {tool_name}"
+        if tool_name in _SOURCE_TOOLS:
+            meta = f"[Source: {tool_name}"
+        else:
+            meta = f"[Tool: {tool_name}"
         if ts:
             meta += f" | {ts}"
         meta += f" | {size} chars]"
