@@ -6,6 +6,7 @@ and register it in _BACKENDS below.
 """
 
 import shlex
+import sys
 from pathlib import Path
 
 from nanobot.config.paths import get_media_dir

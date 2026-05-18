@@ -118,7 +118,6 @@ class FileStateManager:
 
 
 # Module-level functions for backward compatibility
-_state: dict[str, ReadState] = {}
 
 
 def _hash_file(p: str) -> str | None:

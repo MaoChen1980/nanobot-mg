@@ -26,7 +26,7 @@ def _environment() -> Environment:
 
 
 def render_template(name: str, *, strip: bool = False, **kwargs: Any) -> str:
-    """Render ``name`` (e.g. ``agent/identity.md``, ``agent/platform_policy.md``) under ``templates/``.
+    """Render ``name`` (e.g. ``agent/identity.md``, ``agent/verify_result.md``) under ``templates/``.
 
     Use ``strip=True`` for single-line user-facing strings when the file ends
     with a trailing newline you do not want preserved.

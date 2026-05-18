@@ -222,6 +222,11 @@ class NanobotDB:
     def set_extractor_cursor(self, cursor: int) -> None:
         self.set_metadata("extractor_cursor", str(cursor))
 
+    @staticmethod
+    def _row_to_dict(row: tuple, cols: list[str]) -> dict[str, Any]:
+        """Convert a SQLite row tuple to a dict by column names."""
+        return dict(zip(cols, row))
+
     def read_entries(self) -> list[dict[str, Any]]:
         cols = ["cursor", "timestamp", "content", "summary"]
         rows = self._conn.execute(
