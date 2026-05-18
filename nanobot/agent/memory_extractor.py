@@ -26,7 +26,6 @@ _SESSION_KEY_RE = re.compile(r"[^a-zA-Z0-9_.-]")
 _SANITIZE_MAX_LEN = 64
 
 _ANALYSIS_MAX_CHARS = 200_000  # Max chars of .pt content sent to analysis LLM
-_TOPIC_MAP_FILE = "topic-map.json"
 
 
 class MemoryExtractor:
@@ -213,8 +212,6 @@ class MemoryExtractor:
 
     async def _write_and_cleanup(self, findings: list[dict[str, Any]]) -> None:
         """Write all findings to target files, then cleanup-check SOUL.md/USER.md, then commit and rebuild FAISS."""
-        topic_map = self._load_topic_map()
-
         topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
         skills_to_create: list[dict[str, Any]] = []
 
@@ -240,18 +237,11 @@ class MemoryExtractor:
                 topic_files.setdefault("user.md", []).append(f"- {content}")
 
             elif ftype in ("knowledge", "decision"):
-                topic = (finding.get("topic") or "").strip()
-                tags = finding.get("tags") or []
-                if not topic:
-                    continue
-                dir_name = self._resolve_topic_dir(topic_map, topic, tags)
-                # Consolidate: write to category file (user.md) instead of
-                # topic file (user/editor.md) to avoid many tiny files
-                rel_path = f"{dir_name}.md"
                 paragraph = content
                 if ftype == "decision" and finding.get("rationale"):
                     paragraph += f"\n  > 理由：{finding['rationale']}"
-                topic_files.setdefault(rel_path, []).append(paragraph)
+                # All knowledge/decisions go into one knowledge.md
+                topic_files.setdefault("knowledge.md", []).append(paragraph)
 
             elif ftype == "reusable_pattern":
                 skills_to_create.append(finding)
@@ -283,8 +273,6 @@ class MemoryExtractor:
         if skills_to_create:
             await self._create_skills(skills_to_create)
 
-        self._save_topic_map(topic_map)
-
         if not changed:
             logger.info("MemoryExtractor: no actionable findings to write")
             return
@@ -306,39 +294,6 @@ class MemoryExtractor:
         # ── FAISS rebuild ──
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self.store.build_vector_index)
-
-    # ------------------------------------------------------------------
-    # Topic map management
-    # ------------------------------------------------------------------
-
-    def _load_topic_map(self) -> dict[str, str]:
-        path = self.store.memory_dir / _TOPIC_MAP_FILE
-        if not path.exists():
-            return {}
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            logger.warning(
-                "MemoryExtractor: corrupt topic-map.json, starting fresh"
-            )
-            return {}
-
-    def _save_topic_map(self, topic_map: dict[str, str]) -> None:
-        path = self.store.memory_dir / _TOPIC_MAP_FILE
-        path.write_text(
-            json.dumps(topic_map, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-    def _resolve_topic_dir(
-        self, topic_map: dict[str, str], topic: str, tags: list[str]
-    ) -> str:
-        existing = topic_map.get(topic)
-        if existing:
-            return existing
-        dir_name = tags[0] if tags else "uncategorized"
-        topic_map[topic] = dir_name
-        return dir_name
 
     # ------------------------------------------------------------------
     # Skill creation
@@ -413,7 +368,7 @@ class MemoryExtractor:
 
     def _generate_memory_index(self) -> None:
         """Scan memory/ directory and generate MEMORY.md index."""
-        exclude_names = {"MEMORY.md", _TOPIC_MAP_FILE}
+        exclude_names = {"MEMORY.md", "topic-map.json"}
 
         files = sorted(
             p.relative_to(self.store.memory_dir)
