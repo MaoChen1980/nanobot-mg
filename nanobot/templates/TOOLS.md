@@ -16,8 +16,9 @@
 
 ## Known Failures — Don't Repeat
 
-> ⚠ This section is a template. Every time you discover a dead-end approach, document it here to prevent the agent from retrying it across sessions.
-
+> ⚠ This section is a template. Every time you discover a dead-end approach, document it here to prevent the agent from retrying it across sessions. **The table rows below are template examples — replace them with real failures. Do not avoid these commands unless you've actually hit these errors.**
+>
+> <!-- Template examples — replace with actual project-specific failures -->
 | Date | What | Why failed | Verdict |
 |------|------|-----------|---------|
 | (date) | `corepack enable` | EPERM — needs admin | ❌ |

@@ -55,6 +55,12 @@ class VerifierAgent:
         self._max_tool_result_chars = max_tool_result_chars
         self._runner = AgentRunner(provider)
 
+    def set_provider(self, provider: LLMProvider, model: str) -> None:
+        """Hot-swap the provider — recreates runner so new provider state is used."""
+        self._provider = provider
+        self._model = model
+        self._runner = AgentRunner(provider)
+
     def _build_readonly_registry(self) -> ToolRegistry:
         """Build a ToolRegistry with only read-only tools."""
         reg = ToolRegistry()

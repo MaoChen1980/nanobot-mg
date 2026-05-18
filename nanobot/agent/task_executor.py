@@ -79,6 +79,13 @@ class TaskExecutor:
             model=model,
         )
 
+    def set_provider(self, provider: LLMProvider, model: str) -> None:
+        """Hot-swap the provider — recreates runners so new provider state (sessions, auth) is used."""
+        self.provider = provider
+        self._model = model
+        self._runner = AgentRunner(provider, db=self._db)
+        self._verifier.set_provider(provider, model)
+
     async def execute_goal(
         self,
         goal_id: str,
@@ -115,6 +122,12 @@ class TaskExecutor:
                     status="blocked",
                     message="Hypothesis verification failed. Use /resume_goal to re-verify after adjusting approach.",
                 )
+
+        # === Phase 1b: Dependency check ===
+        dep_blocker = self._check_dependencies_blocked(goal_id)
+        if dep_blocker:
+            self._update_goal_status(goal_id, "blocked")
+            return GoalExecutionResult(status="blocked", message=dep_blocker)
 
         # === Phase 2: subtask_0 enforcement ===
         blocker = self._enforce_subtask_0(goal_id, goal)
@@ -191,8 +204,9 @@ class TaskExecutor:
             if refreshed:
                 goal = refreshed
 
-        # === Phase 4: Complete ===
+        # === Phase 4: Complete with closure hooks ===
         self._update_goal_status(goal_id, "completed")
+        await self._generate_goal_summary(goal_id, goal)
         return self._build_result(goal_id, status="completed", goal=goal)
 
     def _enforce_subtask_0(self, goal_id: str, goal: dict[str, Any]) -> str | None:
@@ -442,18 +456,38 @@ class TaskExecutor:
         """Run result verification for a completed subtask.
 
         Only runs when the goal has success_criteria defined.
+        Persists the result as an event in the DB.
         Returns None if no criteria or verifier not available.
         """
         scope = goal.get("scope", {})
         constraints = scope.get("structural_constraints", {})
         if not constraints.get("success_criteria"):
             return None
-        return await self._verifier.verify(
+        vr = await self._verifier.verify(
             goal=goal,
             subtask=subtask,
             final_content=result.final_content,
             tools_used=result.tools_used,
         )
+
+        # Persist verification result as event
+        if self._db is not None and vr is not None:
+            import json
+            goal_id = goal.get("id", "")
+            self._db.insert_event(
+                event_type="verification",
+                content=json.dumps({
+                    "subtask_id": subtask.get("id"),
+                    "subtask_title": subtask.get("title"),
+                    "passed": vr.passed,
+                    "details": vr.details,
+                    "success_criteria": constraints.get("success_criteria"),
+                }, ensure_ascii=False),
+                goal_id=goal_id,
+                tags=["verification", "passed" if vr.passed else "failed"],
+            )
+
+        return vr
 
     def _get_latest_hypothesis_verification(self, goal_id: str) -> dict[str, Any] | None:
         """Get latest hypothesis verification from goal data."""
@@ -474,6 +508,185 @@ class TaskExecutor:
         if self._db is None:
             return None
         return self._db.get_goal(goal_id)
+
+    def _check_dependencies_blocked(self, goal_id: str) -> str | None:
+        """Check if any dependencies are not yet completed.
+
+        Returns None if all dependencies are met, or a blocker message if blocked.
+        """
+        if self._db is None:
+            return None
+        deps = self._db.list_dependencies(goal_id)
+        if not deps:
+            return None
+        for dep in deps:
+            depended = self._db.get_goal(dep["depends_on"])
+            if depended and depended.get("status") != "completed":
+                return (
+                    f"⚠️ 依赖未完成：goal '{depended['title']}' ({dep['depends_on']}) "
+                    f"状态为 '{depended.get('status')}'，需先完成该依赖"
+                )
+        return None
+
+    async def _generate_goal_summary(self, goal_id: str, goal: dict[str, Any]) -> None:
+        """Generate a completion summary event for a completed goal."""
+        if self._db is None:
+            return
+        title = goal.get("title", "")
+        subtasks = goal.get("data", {}).get("subtasks", [])
+        done_count = sum(1 for s in subtasks if s.get("status") == "done")
+        total_count = len(subtasks)
+
+        summary = (
+            f"Goal completed: {title}\n"
+            f"Subtasks: {done_count}/{total_count} done\n"
+            f"Status: completed"
+        )
+        self._db.insert_event(
+            event_type="goal_completed",
+            content=summary,
+            goal_id=goal_id,
+        )
+        logger.info("Goal {} ({}) completed. {}/{} subtasks done.", goal_id, title, done_count, total_count)
+
+        # Extract lessons if there were subtasks
+        if total_count > 0:
+            await self._extract_lessons(goal_id, goal)
+
+    async def _extract_lessons(self, goal_id: str, goal: dict[str, Any]) -> None:
+        """Extract lessons from a completed goal via compact LLM call."""
+        from nanobot.utils.prompt_templates import render_template
+
+        if self._db is None:
+            return
+
+        subtasks = goal.get("data", {}).get("subtasks", [])
+        subtask_summary = ", ".join(
+            f"{s.get('id')}: {s.get('title')} ({s.get('status')})" for s in subtasks
+        )
+
+        events = self._db.list_events(goal_id=goal_id, limit=20)
+        verification_lines = []
+        for ev in events:
+            if ev.get("event_type") == "verification":
+                tags = ev.get("tags", [])
+                content = ev.get("content", "")[:200]
+                verification_lines.append(f"[{tags}]: {content}")
+        verification_summary = "\n".join(verification_lines) or "(none)"
+
+        try:
+            prompt = render_template(
+                "agent/extract_lessons.md",
+                title=goal.get("title", ""),
+                description=goal.get("description", ""),
+                subtask_summary=subtask_summary,
+                verification_summary=verification_summary,
+                events=events[:15],
+                compact_mode=True,
+            )
+            response = await self.provider.chat(
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"Extract lessons from the completed goal '{goal.get('title')}'."},
+                ],
+                model=self._model,
+                max_tokens=1024,
+                temperature=0.3,
+            )
+            if response and response.content:
+                self._save_lessons(goal_id, goal, response.content)
+        except Exception as e:
+            logger.warning("Failed to extract lessons for goal {}: {}", goal_id, e)
+
+    def _save_lessons(self, goal_id: str, goal: dict[str, Any], lessons_text: str) -> None:
+        """Parse and persist extracted lessons to DB and tasks/lessons.md."""
+        if self._db is None:
+            return
+
+        lessons = self._parse_lessons_yaml(lessons_text)
+        if not lessons:
+            return
+
+        for lesson in lessons:
+            self._db.insert_lesson(
+                goal_id=goal_id,
+                lesson_type=lesson.get("type", "optimization"),
+                summary=lesson.get("summary", ""),
+                detail=lesson.get("detail", ""),
+                tags=lesson.get("tags", []),
+            )
+
+        # Append to tasks/lessons.md
+        if self._workspace:
+            lessons_path = self._workspace / "tasks" / "lessons.md"
+            try:
+                lessons_path.parent.mkdir(parents=True, exist_ok=True)
+                with lessons_path.open("a", encoding="utf-8") as f:
+                    f.write(f"\n## {goal.get('title', goal_id)} ({goal.get('status', 'completed')})\n\n")
+                    for l in lessons:
+                        f.write(f"- **{l.get('type')}**: {l.get('summary')}\n")
+                        if l.get("detail"):
+                            f.write(f"  - {l.get('detail')}\n")
+                        if l.get("tags"):
+                            f.write(f"  - tags: {l.get('tags')}\n")
+                        f.write("\n")
+                logger.info("Lessons appended to {} for goal {}", lessons_path, goal_id)
+            except Exception as e:
+                logger.warning("Failed to append lessons to {}: {}", lessons_path, e)
+
+    @staticmethod
+    def _parse_lessons_yaml(text: str) -> list[dict[str, Any]]:
+        """Parse structured lessons from LLM output.
+
+        Handles multiple formats:
+        - YAML code blocks (```yaml ... ```)
+        - Inline YAML list items (- type: ...)
+        - Plain text fallback (creates one generic lesson)
+        """
+        import re
+        lessons: list[dict[str, Any]] = []
+
+        # Step 1: extract yaml code blocks
+        blocks = re.findall(r'```(?:yaml)?\s*\n?(.*?)```', text, re.DOTALL)
+        if not blocks:
+            blocks = [text]
+
+        for block in blocks:
+            current: dict[str, Any] = {}
+            for line in block.strip().split("\n"):
+                line_stripped = line.strip()
+                # Detect new lesson entry: "- type:" or "type:" at start
+                m = re.match(r'^-?\s*type\s*:\s*(.+)$', line_stripped)
+                if m:
+                    if current and current.get("type"):
+                        lessons.append(current)
+                    current = {"type": m.group(1).strip().strip('"\'')}
+                    continue
+                # key: value pairs (indented or not)
+                for key in ("summary", "detail", "tags"):
+                    m = re.match(rf'^-?\s*{key}\s*:\s*(.+)$', line_stripped)
+                    if m:
+                        val = m.group(1).strip()
+                        if key == "tags":
+                            val_clean = re.sub(r'^\[|\]$', '', val)
+                            current[key] = [t.strip().strip('"\'') for t in val_clean.split(",") if t.strip()]
+                        else:
+                            current[key] = val
+            if current and current.get("type"):
+                lessons.append(current)
+
+        # Step 2: if no structured lessons found, create fallback
+        if not lessons:
+            lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
+            summary = next((l for l in lines if len(l) > 10 and not l.startswith("```")), text[:120])
+            lessons.append({
+                "type": "optimization",
+                "summary": summary[:200],
+                "detail": text[:500],
+                "tags": [],
+            })
+
+        return lessons
 
     def _update_goal_status(self, goal_id: str, status: str) -> None:
         """Update goal status in DB."""

@@ -126,10 +126,17 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 |------|------|
 | `recall` | 搜索历史对话（history 模式）或知识记忆（knowledge 模式） |
 | `tool_call_log` | 查询工具调用执行日志 |
-| `write_goal` | 创建/更新目标 |
+| `write_goal` | 创建/更新目标（含 priority、deadline、tags、subtasks） |
 | `list_goals` | 查看目标列表 |
 | `write_event` | 记录进度事件 |
 | `list_events` | 查看事件 |
+| `declare_checkpoint` | 声明 subtask 完成，保存检查点 |
+| `declare_assumption` | 声明关键假设（s0 必用） |
+| `verify_assumption` | 验证假设 |
+| `set_goal_priority` | 调整目标优先级 0-10 |
+| `set_goal_deadline` | 设置/更新截止日期 |
+| `add_goal_dependency` | 声明目标间依赖关系 |
+| `escalate_blocker` | 上报阻塞，附已尝试方案 |
 
 ### 子代理
 | 工具 | 用途 |

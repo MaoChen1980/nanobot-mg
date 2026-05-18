@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from nanobot.bus.events import InboundMessage, OutboundMessage
 
 from nanobot.agent.context import ContextState
-from nanobot.agent.memory import MemoryExtractor
 from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.tools.message import MessageTool

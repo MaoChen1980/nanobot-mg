@@ -16,10 +16,6 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _row_to_dict(row: tuple, cols: list[str]) -> dict[str, Any]:
-    return dict(zip(cols, row, strict=False))
-
-
 class NanobotDB:
     """SQLite-backed store for history, metadata, sessions, and messages."""
 
@@ -54,8 +50,34 @@ class NanobotDB:
                 description TEXT DEFAULT '',
                 data TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 0,
+                deadline TEXT,
+                parent_id TEXT,
+                tags TEXT NOT NULL DEFAULT '[]',
+                source TEXT NOT NULL DEFAULT ''
             );
+            CREATE TABLE IF NOT EXISTS task_dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+                depends_on TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+                dep_type TEXT NOT NULL DEFAULT 'blocks',
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_deps_goal ON task_dependencies(goal_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_depends ON task_dependencies(depends_on);
+            CREATE TABLE IF NOT EXISTS task_lessons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
+                lesson_type TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                detail TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                applied_count INTEGER DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_lessons_type ON task_lessons(lesson_type);
+            CREATE INDEX IF NOT EXISTS idx_lessons_goal ON task_lessons(goal_id);
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_key TEXT,
@@ -81,6 +103,14 @@ class NanobotDB:
             );
             CREATE INDEX IF NOT EXISTS idx_facts_tags ON facts(tags);
             CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_unique ON facts(fact);
+            CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+            CREATE INDEX IF NOT EXISTS idx_goals_project ON goals(project);
+            CREATE INDEX IF NOT EXISTS idx_goals_bot ON goals(bot);
+            CREATE INDEX IF NOT EXISTS idx_goals_updated ON goals(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_goals_priority ON goals(priority);
+            CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+            CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
             CREATE TABLE IF NOT EXISTS tool_calls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_key TEXT NOT NULL,
@@ -120,6 +150,22 @@ class NanobotDB:
             );
             CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_key);
         """)
+        self._conn.commit()
+        self._migrate_schema()
+
+    def _migrate_schema(self) -> None:
+        """Apply backward-compatible schema migrations for existing databases."""
+        for col, ddl in [
+            ("priority", "ALTER TABLE goals ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"),
+            ("deadline", "ALTER TABLE goals ADD COLUMN deadline TEXT"),
+            ("parent_id", "ALTER TABLE goals ADD COLUMN parent_id TEXT"),
+            ("tags", "ALTER TABLE goals ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'"),
+            ("source", "ALTER TABLE goals ADD COLUMN source TEXT NOT NULL DEFAULT ''"),
+        ]:
+            try:
+                self._conn.execute(ddl)
+            except sqlite3.OperationalError:
+                pass  # column already exists
         self._conn.commit()
 
     @property
@@ -320,33 +366,91 @@ class NanobotDB:
         owner: str = "llm",
         description: str = "",
         data: dict[str, Any] | None = None,
+        priority: int = 0,
+        deadline: str | None = None,
+        parent_id: str | None = None,
+        tags: list[str] | None = None,
+        source: str = "",
         created_at: str | None = None,
         updated_at: str | None = None,
     ) -> None:
         ts = updated_at or _utc_now_iso()
         created = created_at or ts
-        self._conn.execute(
-            """INSERT OR REPLACE INTO goals (id, title, status, project, bot, owner, description, data, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (id, title, status, project, bot, owner, description, json.dumps(data or {}), created, ts),
-        )
+
+        existing = self.get_goal(id)
+        if existing:
+            # Merge: provided values override existing, preserving unset fields
+            # (default param values = "not explicitly provided" signal)
+            merged = {
+                "title": title or existing["title"],
+                "status": status if status != "pending" else existing.get("status", "pending"),
+                "project": project if project is not None else existing.get("project"),
+                "bot": bot if bot is not None else existing.get("bot"),
+                "owner": owner if owner else existing.get("owner", "llm"),
+                "description": description if description else existing.get("description", ""),
+                "data": json.dumps({**existing.get("data", {}), **(data or {})}),
+                "priority": priority if priority != 0 else existing.get("priority", 0),
+                "deadline": deadline if deadline is not None else existing.get("deadline"),
+                "parent_id": parent_id if parent_id is not None else existing.get("parent_id"),
+                "tags": json.dumps(tags if tags is not None else existing.get("tags", [])),
+                "source": source if source else existing.get("source", ""),
+                "created_at": existing["created_at"],  # preserve original
+            }
+            self._conn.execute(
+                """UPDATE goals SET title=:title, status=:status, project=:project,
+                   bot=:bot, owner=:owner, description=:description, data=:data,
+                   updated_at=:updated_at, priority=:priority, deadline=:deadline,
+                   parent_id=:parent_id, tags=:tags, source=:source
+                   WHERE id=:id""",
+                {"id": id, "updated_at": ts, **merged},
+            )
+        else:
+            merged_tags = json.dumps(tags or [])
+            self._conn.execute(
+                """INSERT INTO goals
+                   (id, title, status, project, bot, owner, description, data,
+                    created_at, updated_at, priority, deadline, parent_id, tags, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (id, title, status, project, bot, owner, description, json.dumps(data or {}),
+                 created, ts, priority, deadline, parent_id, merged_tags, source),
+            )
         self._conn.commit()
+
+    _GOAL_COLS = (
+        "id, title, status, project, bot, owner, description, data, "
+        "created_at, updated_at, priority, deadline, parent_id, tags, source"
+    )
 
     def get_goal(self, id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
-            "SELECT id, title, status, project, bot, owner, description, data, created_at, updated_at FROM goals WHERE id = ?",
+            f"SELECT {self._GOAL_COLS} FROM goals WHERE id = ?",
             (id,),
         ).fetchone()
         if not row:
             return None
+        return self._row_to_goal(row)
+
+    def _row_to_goal(self, row: tuple) -> dict[str, Any]:
         return {
             "id": row[0], "title": row[1], "status": row[2], "project": row[3],
             "bot": row[4], "owner": row[5], "description": row[6], "data": json.loads(row[7]),
             "created_at": row[8], "updated_at": row[9],
+            "priority": row[10], "deadline": row[11], "parent_id": row[12],
+            "tags": json.loads(row[13]) if row[13] else [],
+            "source": row[14] or "",
         }
 
-    def list_goals(self, status: str | None = None, project: str | None = None, scope: str | None = None, bot: str | None = None) -> list[dict[str, Any]]:
-        query = "SELECT id, title, status, project, bot, owner, description, data, created_at, updated_at FROM goals WHERE 1=1"
+    def list_goals(
+        self,
+        status: str | None = None,
+        project: str | None = None,
+        scope: str | None = None,
+        bot: str | None = None,
+        *,
+        sort_by: str = "updated_at",
+        sort_desc: bool = True,
+    ) -> list[dict[str, Any]]:
+        query = f"SELECT {self._GOAL_COLS} FROM goals WHERE 1=1"
         params: list[Any] = []
         if status:
             query += " AND status = ?"
@@ -357,16 +461,13 @@ class NanobotDB:
         if bot:
             query += " AND bot = ?"
             params.append(bot)
-        query += " ORDER BY updated_at DESC"
+        if sort_by in ("updated_at", "priority", "created_at", "deadline"):
+            query += f" ORDER BY {sort_by} {'DESC' if sort_desc else 'ASC'}"
+        else:
+            query += " ORDER BY updated_at DESC"
+        query += " LIMIT 500"
         rows = self._conn.execute(query, params).fetchall()
-        goals = [
-            {
-                "id": r[0], "title": r[1], "status": r[2], "project": r[3],
-                "bot": r[4], "owner": r[5], "description": r[6], "data": json.loads(r[7]),
-                "created_at": r[8], "updated_at": r[9],
-            }
-            for r in rows
-        ]
+        goals = [self._row_to_goal(r) for r in rows]
         # Filter by scope if specified (from data.scopes array)
         if scope:
             goals = [g for g in goals if scope in g.get("data", {}).get("scopes", [])]
@@ -483,6 +584,138 @@ class NanobotDB:
         ]
 
     # --------------------------------------------------------------------------
+    # Retention / pruning
+    # --------------------------------------------------------------------------
+
+    def prune_events(self, keep_days: int = 90) -> int:
+        """Delete events older than keep_days. Returns count deleted."""
+        self._conn.execute("PRAGMA foreign_keys = OFF")
+        cursor = self._conn.execute(
+            "DELETE FROM events WHERE timestamp < datetime('now', ?)",
+            (f"-{keep_days} days",),
+        )
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        self._conn.commit()
+        return cursor.rowcount
+
+    def prune_tool_calls(self, keep_days: int = 90) -> int:
+        self._conn.execute("PRAGMA foreign_keys = OFF")
+        cursor = self._conn.execute(
+            "DELETE FROM tool_calls WHERE timestamp < datetime('now', ?)",
+            (f"-{keep_days} days",),
+        )
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        self._conn.commit()
+        return cursor.rowcount
+
+    # --------------------------------------------------------------------------
+    # Task Dependencies
+    # --------------------------------------------------------------------------
+
+    def insert_dependency(self, goal_id: str, depends_on: str, dep_type: str = "blocks") -> int:
+        cursor = self._conn.execute(
+            """INSERT INTO task_dependencies (goal_id, depends_on, dep_type, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (goal_id, depends_on, dep_type, _utc_now_iso()),
+        )
+        self._conn.commit()
+        return cursor.lastrowid or 0
+
+    def list_dependencies(self, goal_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT id, goal_id, depends_on, dep_type, created_at FROM task_dependencies WHERE goal_id = ?",
+            (goal_id,),
+        ).fetchall()
+        return [
+            {"id": r[0], "goal_id": r[1], "depends_on": r[2], "dep_type": r[3], "created_at": r[4]}
+            for r in rows
+        ]
+
+    def list_dependents(self, goal_id: str) -> list[dict[str, Any]]:
+        """List goals that depend on this goal."""
+        rows = self._conn.execute(
+            "SELECT id, goal_id, depends_on, dep_type, created_at FROM task_dependencies WHERE depends_on = ?",
+            (goal_id,),
+        ).fetchall()
+        return [
+            {"id": r[0], "goal_id": r[1], "depends_on": r[2], "dep_type": r[3], "created_at": r[4]}
+            for r in rows
+        ]
+
+    def delete_dependency(self, id: int) -> None:
+        self._conn.execute("DELETE FROM task_dependencies WHERE id = ?", (id,))
+        self._conn.commit()
+
+    def list_blocked_goals(self) -> list[dict[str, Any]]:
+        """List goals whose dependencies are not yet met (depends_on goal not completed)."""
+        rows = self._conn.execute(
+            """SELECT DISTINCT g.id, g.title, g.status
+               FROM goals g
+               JOIN task_dependencies d ON d.goal_id = g.id
+               JOIN goals dep ON dep.id = d.depends_on
+               WHERE dep.status != 'completed'
+               AND g.status != 'completed'
+               AND g.status != 'archived'
+               ORDER BY g.priority DESC"""
+        ).fetchall()
+        return [{"id": r[0], "title": r[1], "status": r[2]} for r in rows]
+
+    # --------------------------------------------------------------------------
+    # Task Lessons
+    # --------------------------------------------------------------------------
+
+    def insert_lesson(
+        self,
+        lesson_type: str,
+        summary: str,
+        *,
+        goal_id: str | None = None,
+        detail: str = "",
+        tags: list[str] | None = None,
+    ) -> int:
+        cursor = self._conn.execute(
+            """INSERT INTO task_lessons (goal_id, lesson_type, summary, detail, tags, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (goal_id, lesson_type, summary, detail, json.dumps(tags or []), _utc_now_iso()),
+        )
+        self._conn.commit()
+        return cursor.lastrowid or 0
+
+    def list_lessons(
+        self,
+        *,
+        lesson_type: str | None = None,
+        goal_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        query = "SELECT id, goal_id, lesson_type, summary, detail, tags, created_at, applied_count FROM task_lessons WHERE 1=1"
+        params: list[Any] = []
+        if lesson_type:
+            query += " AND lesson_type = ?"
+            params.append(lesson_type)
+        if goal_id:
+            query += " AND goal_id = ?"
+            params.append(goal_id)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(query, params).fetchall()
+        return [
+            {
+                "id": r[0], "goal_id": r[1], "lesson_type": r[2], "summary": r[3],
+                "detail": r[4], "tags": json.loads(r[5]) if r[5] else [],
+                "created_at": r[6], "applied_count": r[7],
+            }
+            for r in rows
+        ]
+
+    def increment_lesson_applied(self, lesson_id: int) -> None:
+        self._conn.execute(
+            "UPDATE task_lessons SET applied_count = applied_count + 1 WHERE id = ?",
+            (lesson_id,),
+        )
+        self._conn.commit()
+
+    # --------------------------------------------------------------------------
     # Facts
     # --------------------------------------------------------------------------
 
@@ -497,12 +730,24 @@ class NanobotDB:
     ) -> int:
         ts = _utc_now_iso()
         cursor = self._conn.execute(
-            """INSERT INTO facts (fact, tags, source, project, confidence, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (fact, json.dumps(tags or []), source, project, confidence, ts),
+            """INSERT OR REPLACE INTO facts (fact, tags, source, project, confidence, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (fact, json.dumps(tags or []), source, project, confidence, ts, ts),
         )
         self._conn.commit()
         return cursor.lastrowid or 0
+
+    def delete_fact(self, fact_id: int) -> None:
+        self._conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
+        self._conn.commit()
+
+    def delete_lesson(self, lesson_id: int) -> None:
+        self._conn.execute("DELETE FROM task_lessons WHERE id = ?", (lesson_id,))
+        self._conn.commit()
+
+    def delete_event(self, event_id: int) -> None:
+        self._conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        self._conn.commit()
 
     def list_facts(
         self,
@@ -517,8 +762,8 @@ class NanobotDB:
             query += " AND project = ?"
             params.append(project)
         if tag:
-            query += " AND tags LIKE ?"
-            params.append(f'%"{tag}"%')
+            query += " AND EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)"
+            params.append(tag)
         query += " ORDER BY created_at DESC LIMIT ?"
         params.append(limit)
         rows = self._conn.execute(query, params).fetchall()

@@ -92,6 +92,10 @@ class ContextBuilder:
         if bootstrap:
             parts.append(bootstrap)
 
+        lessons = self._load_lessons()
+        if lessons:
+            parts.append(lessons)
+
         always_skills = self.skills.get_always_skills()
         if always_skills:
             always_content = self.skills.load_skills_for_context(always_skills)
@@ -285,6 +289,15 @@ class ContextBuilder:
             project = g.get("project", "")
             project_str = f" [{project}]" if project else ""
             lines.append(f"- **{self._sanitize_md(g['title'])}**{project_str}")
+            meta_parts = []
+            priority = g.get("priority", 0)
+            if priority:
+                meta_parts.append(f"P{priority}")
+            deadline = g.get("deadline")
+            if deadline:
+                meta_parts.append(f"due {deadline[:10]}")
+            if meta_parts:
+                lines[-1] += f" ({', '.join(meta_parts)})"
             if g.get("description"):
                 lines.append(f"  - {self._sanitize_md(g['description'])}")
             data = g.get("data") or {}
@@ -432,6 +445,20 @@ class ContextBuilder:
             parts.append(f"## {filename}\n\n{self._adjust_headings(cached[1], offset=1)}")
 
         return "\n\n".join(parts) if parts else ""
+
+    def _load_lessons(self) -> str:
+        """Load past lessons from tasks/lessons.md into the system prompt."""
+        lessons_path = self.workspace / "tasks" / "lessons.md"
+        if not lessons_path.exists():
+            return ""
+        try:
+            content = lessons_path.read_text(encoding="utf-8").strip()
+            if not content:
+                return ""
+            return f"## Past Lessons\n\n{self._adjust_headings(content, offset=1)}"
+        except Exception as e:
+            logger.warning("Failed to load lessons: {}", e)
+            return ""
 
     @staticmethod
     def _is_template_content(content: str, template_path: str) -> bool:

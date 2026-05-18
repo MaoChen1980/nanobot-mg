@@ -77,20 +77,28 @@ class HeartbeatService:
         from nanobot.utils.helpers import current_time_str
         now_ts = current_time_str(self.agent_loop.context.timezone)
 
-        # Read active goals from DB
-        goals = self.agent_loop._db.list_goals(status="in_progress")
+        # Read active goals from DB, ordered by priority
+        db = getattr(self.agent_loop, "_db", None)
+        if db is None:
+            logger.warning("Heartbeat: no DB available, skipping goal check")
+            return
+        goals = db.list_goals(
+            status="in_progress",
+            sort_by="priority",
+            sort_desc=True,
+        )
 
         # Build message with goal list
         if goals:
             lines = ["## Active Tasks\n"]
             for g in goals:
                 subtasks_str = ""
-                if g.get("subtasks"):
-                    todo = [s for s in g["subtasks"] if s.get("status") == "todo"]
-                    done = [s for s in g["subtasks"] if s.get("status") == "done"]
-                    if todo:
-                        subtasks_str = f" [{len(done)}/{len(todo) + len(done)} done]"
-                lines.append(f"- **{g['title']}**{subtasks_str} [{g.get('status', 'in_progress')}] [{g.get('id', '')}]")
+                subtasks = g.get("data", {}).get("subtasks", [])
+                if subtasks:
+                    done = [s for s in subtasks if s.get("status") == "done"]
+                    subtasks_str = f" [{len(done)}/{len(subtasks)} done]"
+                priority = g.get("priority", 0)
+                lines.append(f"- **{g['title']}**{subtasks_str} [P{priority}] [{g.get('status', 'in_progress')}] [{g.get('id', '')}]")
             goal_block = "\n".join(lines)
         else:
             goal_block = "*(none — no active goals)*"

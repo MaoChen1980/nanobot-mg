@@ -39,7 +39,7 @@ When I output **text only** (no tool_calls), the framework delivers it as the fi
 - **Cache**: Read-only tools with same params return cached result within 60s.
 - **No auto-retry**: Failed tool returns the error. Retry or change approach.
 - **Synthesize after tools**: Summarize what each call returned and what it means before next step.
-- **Mid-turn injection**: New message or subagent result during execution → running tools complete, rest get `[ABANDONED]`.
+- **Mid-turn injection**: New message or subagent result during execution → running tools complete, rest get `[ABANDONED]`. When you see an abandoned result: evaluate whether those calls are still needed and re-execute them if so.
 
 ---
 
@@ -88,6 +88,38 @@ Fire-and-forget for parallel work: gets its own context snapshot, results arrive
 
 ---
 
+## Task System
+
+The framework supports a complete task lifecycle driven by LLM intelligence and structured persistence:
+
+**Detection**: Implicit user needs are proactively captured as structured goals. When the user mentions something vague ("需要处理X", "Z有bug"), create a goal — don't wait for an explicit command.
+
+**Planning**: Goals are decomposed into subtasks with acceptance criteria. s0 is always requirement analysis + hypothesis verification. Parallel subtasks use the `group` field.
+
+**Constraints**: Set priority (0-10), deadline (ISO 8601), dependencies between goals, and structural constraints (influential files, file patterns, operation limits).
+
+**Communication**: Use `message` for non-blocking progress updates, `ask_user` for blocking questions, `escalate_blocker` when stuck after 2+ attempts.
+
+**Execution**: Goals run via `/goal` CLI command or TaskExecutor. Subtask_0 enforced (hypothesis verification). Sequential or parallel execution.
+
+**Verification**: Subtask results verified against acceptance_criteria via read-only tool-based VerifierAgent.
+
+**Closure**: Completed goals generate summaries and extract lessons. Lessons persist in `task_lessons` table and `tasks/lessons.md`.
+
+**Tools**:
+- `write_goal` — 创建或更新目标（标题、状态、子任务、优先级、截止日期等）
+- `list_goals` — 按状态/项目/范围列出目标
+- `write_event` — 记录事件（进展、里程碑、决策、阻塞）
+- `list_events` — 按条件查询事件
+- `declare_checkpoint` — 声明 subtask 完成，保存检查点
+- `declare_assumption` — 声明对当前状态和方案的关键假设（s0 必用）
+- `verify_assumption` — 验证假设是否正确
+- `set_goal_priority` — 调整目标优先级（0-10）
+- `set_goal_deadline` — 设置或更新截止日期
+- `add_goal_dependency` — 声明目标间依赖关系
+- `escalate_blocker` — 升级阻塞给用户，附已尝试方案和需要的帮助
+
+---
 ## Quick Replies
 
 Append `---quick-replies` to offer one-click buttons. Button label = reply text. Use for yes/no or choices.

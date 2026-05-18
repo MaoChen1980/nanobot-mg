@@ -321,6 +321,8 @@ class AgentLoop:
         self.runner.provider = provider
         self.subagents.set_provider(provider, model)
         self.extractor.set_provider(provider, model)
+        if self._task_executor:
+            self._task_executor.set_provider(provider, model)
         self._provider_signature = snapshot.signature
         logger.info("Runtime model switched for next turn: {} -> {}", old_model, model)
 
@@ -731,7 +733,11 @@ class AgentLoop:
         # Register a pending queue so follow-up messages for this session are
         # routed here (mid-turn injection) instead of spawning a new task.
         pending = asyncio.Queue(maxsize=20)
-        self._session_dispatch[session_key] = _SessionDispatchState(tasks=[], pending=pending)
+        # Don't overwrite existing state (created by run()) — reuse existing queue
+        if session_key not in self._session_dispatch:
+            self._session_dispatch[session_key] = _SessionDispatchState(tasks=[], pending=pending)
+        else:
+            pending = self._session_dispatch[session_key].pending
 
         async with lock:
             await self._dispatch_manager.run_dispatch(msg, session_key, pending)
@@ -744,7 +750,13 @@ class AgentLoop:
         """Schedule a coroutine as a tracked background task (drained on shutdown)."""
         task = asyncio.create_task(coro)
         self._background_tasks.append(task)
-        task.add_done_callback(self._background_tasks.remove)
+        task.add_done_callback(
+            lambda t: (
+                self._background_tasks.remove(t)
+                if t in self._background_tasks
+                else None
+            )
+        )
 
     def stop(self) -> None:
         """Stop the agent loop."""
@@ -1018,33 +1030,3 @@ class AgentLoop:
             on_stream=on_stream,
             on_stream_end=on_stream_end,
         )
-
-    def inject_to_pending_queue(
-        self,
-        session_key: str,
-        content: str,
-        channel: str = "cli",
-        chat_id: str = "direct",
-    ) -> bool:
-        """Inject a message into the pending queue of an active session.
-
-        Returns True if the session is active (message queued), False if idle
-        (no active task — message will be picked up as a new inbound message
-        when the bus processes it).
-        """
-        state = self._session_dispatch.get(session_key)
-        if state is None:
-            return False
-        msg = InboundMessage(
-            channel=channel, sender_id="heartbeat",
-            chat_id=chat_id, content=content, media=[],
-        )
-        pending_msg = dataclasses.replace(
-            msg, session_key_override=session_key,
-        )
-        try:
-            state.pending.put_nowait(pending_msg)
-            return True
-        except asyncio.QueueFull:
-            logger.warning("Heartbeat: pending queue full for {}", session_key)
-            return False

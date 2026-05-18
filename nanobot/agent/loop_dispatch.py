@@ -49,10 +49,19 @@ class DispatchManager:
                 except asyncio.CancelledError:
                     await self._handle_cancellation(msg, session_key)
                     raise
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "Error processing message for session {}", session_key,
                     )
+                    # Clean up checkpoint so next turn starts fresh
+                    try:
+                        key = self._effective_session_key(msg)
+                        session = self._loop.sessions.get_or_create(key)
+                        cleared = self._loop._recovery.clear_pending_user_turn(session)
+                        if cleared:
+                            self._loop.sessions.save(session)
+                    except Exception as inner:
+                        logger.debug("Checkpoint cleanup failed: {}", inner)
                     await self._loop.bus.publish_outbound(OutboundMessage(
                         channel=msg.channel, chat_id=msg.chat_id,
                         content="Sorry, I encountered an error.",

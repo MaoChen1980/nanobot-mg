@@ -281,6 +281,10 @@ class SessionManager:
         self._db = db
         self.sessions_dir = ensure_dir(self.workspace / "sessions")
         self._cache: dict[str, Session] = {}
+        # threading.Lock is safe here: no await points in this file, so no
+        # async deadlock risk. Per-session dispatch (asyncio.Lock in loop.py
+        # _dispatch) also serializes async access per session. threading.Lock
+        # additionally protects against HTTP gateway sync access from other threads.
         self._cache_lock = threading.Lock()
 
     @staticmethod

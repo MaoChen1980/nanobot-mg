@@ -202,7 +202,12 @@ class AgentRunner:
                     "Tool result persist failed for {} in {}: {}; using raw result",
                     tc_id, spec.session_key or "default", exc,
                 )
-                content = result
+                if isinstance(result, dict):
+                    content = json.dumps(result, ensure_ascii=False)
+                elif not isinstance(result, str):
+                    content = str(result)
+                else:
+                    content = result
             if isinstance(content, str) and len(content) > spec.max_tool_result_chars:
                 return truncate_text(content, spec.max_tool_result_chars)
             return content

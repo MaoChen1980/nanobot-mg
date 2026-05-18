@@ -45,6 +45,10 @@ from nanobot.agent.tools.schema import p
     ),
     "notes": p("array", "Additional notes", items=p("string", "")),
     "blockers": p("array", "Blocking issues — free text descriptions of what's blocking this goal", items=p("string", "")),
+    "priority": p("integer", "Priority 0-10 (higher = more urgent), default 0", minimum=0, maximum=10),
+    "deadline": p("string", "Deadline in ISO 8601 format, e.g. '2026-06-01T18:00:00'"),
+    "tags": p("array", "Tags for filtering and categorization", items=p("string", "")),
+    "source": p("string", "Source of this goal: 'user', 'heartbeat', 'extractor', 'decomposition', 'error_recovery'"),
 }, required=["id", "title", "action"])
 class WriteGoal(Tool):
     """Create or update a goal in structured DB.
@@ -80,6 +84,10 @@ class WriteGoal(Tool):
         scopes: list[str] | None = None,
         notes: list[str] | None = None,
         blockers: list[str] | None = None,
+        priority: int = 0,
+        deadline: str | None = None,
+        tags: list[str] | None = None,
+        source: str = "",
     ) -> str:
         if action == "delete":
             if self._memory._db is not None:
@@ -111,10 +119,22 @@ class WriteGoal(Tool):
                 bot=bot,
                 description=description,
                 data=data,
+                priority=priority,
+                deadline=deadline,
+                tags=tags or [],
+                source=source,
                 updated_at=ts,
             )
             inherited_msg = f" (inherited project={project})" if project else ""
-            return f"Goal '{id}' upserted: {title}{inherited_msg}"
+            details = []
+            if priority:
+                details.append(f"priority={priority}")
+            if deadline:
+                details.append(f"deadline={deadline}")
+            if tags:
+                details.append(f"tags={tags}")
+            extra = f" [{', '.join(details)}]" if details else ""
+            return f"Goal '{id}' upserted: {title}{inherited_msg}{extra}"
         return f"DB not available, cannot upsert goal '{id}'"
 
     def _get_parent_goal_id(self, goal_id: str) -> str | None:
@@ -244,8 +264,10 @@ _LIST_EVENTS_SCHEMA: dict[str, Any] = {
     "properties": {
         "goal_id": p("string", "Filter by goal"),
         "event_type": p("string",
-            "Event type",
-            enum=["progress", "milestone", "decision", "blocker"],
+            "Event type — user types: progress, milestone, decision, blocker. "
+            "System types (written automatically): checkpoint, verification, blocker_escalated, goal_completed",
+            enum=["progress", "milestone", "decision", "blocker",
+                  "checkpoint", "verification", "blocker_escalated", "goal_completed"],
         ),
         "limit": p("number", "Max results (integer, default 10)", minimum=1, maximum=100, default=10),
     },
@@ -603,6 +625,194 @@ class DeclareCheckpoint(Tool):
         return msg
 
 
+# ---------------------------------------------------------------------------
+# SetGoalPriority
+# ---------------------------------------------------------------------------
+
+@tool_parameters(properties={
+    "goal_id": p("string", "Goal ID to update"),
+    "priority": p("integer", "Priority 0-10 (higher = more urgent)", minimum=0, maximum=10),
+})
+class SetGoalPriority(Tool):
+    """Set a goal's priority level."""
+
+    name = "set_goal_priority"
+    description = (
+        "**用途**: 调整目标的优先级。\n\n"
+        "**什么时候用**:\n"
+        "- 需要提高或降低某个目标的优先级\n"
+        "- 新目标比现有目标更紧急时\n\n"
+        "**什么时候不用**:\n"
+        "- 创建新目标 → 用 write_goal（可以直接设 priority）\n"
+    )
+
+    def __init__(self, memory: MemoryStore):
+        super().__init__()
+        self._memory = memory
+
+    async def execute(self, goal_id: str, priority: int) -> str:
+        if self._memory._db is None:
+            return "DB not available"
+        goal = self._memory._db.get_goal(goal_id)
+        if not goal:
+            return f"Goal '{goal_id}' not found"
+        self._memory._db.upsert_goal(
+            id=goal_id, title=goal["title"],
+            status=goal["status"], priority=priority,
+            data=goal.get("data", {}),
+        )
+        return f"Goal '{goal_id}' priority set to {priority}"
+
+
+# ---------------------------------------------------------------------------
+# SetGoalDeadline
+# ---------------------------------------------------------------------------
+
+@tool_parameters(properties={
+    "goal_id": p("string", "Goal ID to update"),
+    "deadline": p("string", "Deadline in ISO 8601 format, e.g. '2026-06-01T18:00:00'"),
+})
+class SetGoalDeadline(Tool):
+    """Set or update a goal's deadline."""
+
+    name = "set_goal_deadline"
+    description = (
+        "**用途**: 设置或更新目标的截止日期。\n\n"
+        "**什么时候用**:\n"
+        "- 需要为某个目标设定完成期限\n"
+        "- 截止日期发生变化时更新\n\n"
+        "**什么时候不用**:\n"
+        "- 创建新目标时已经在 write_goal 中设了 deadline → 不需要再调\n"
+    )
+
+    def __init__(self, memory: MemoryStore):
+        super().__init__()
+        self._memory = memory
+
+    async def execute(self, goal_id: str, deadline: str) -> str:
+        if self._memory._db is None:
+            return "DB not available"
+        goal = self._memory._db.get_goal(goal_id)
+        if not goal:
+            return f"Goal '{goal_id}' not found"
+        self._memory._db.upsert_goal(
+            id=goal_id, title=goal["title"],
+            status=goal["status"], deadline=deadline,
+            data=goal.get("data", {}),
+        )
+        return f"Goal '{goal_id}' deadline set to {deadline}"
+
+
+# ---------------------------------------------------------------------------
+# AddGoalDependency
+# ---------------------------------------------------------------------------
+
+@tool_parameters(properties={
+    "goal_id": p("string", "Goal ID that depends on another"),
+    "depends_on": p("string", "Goal ID that must be completed first"),
+    "dep_type": p("string",
+        "Dependency type: 'blocks' (default) / 'triggers' (completion triggers this goal)",
+        enum=["blocks", "triggers"],
+    ),
+})
+class AddGoalDependency(Tool):
+    """Declare that one goal depends on another."""
+
+    name = "add_goal_dependency"
+    description = (
+        "**用途**: 声明目标之间的依赖关系。\n\n"
+        "**什么时候用**:\n"
+        "- 一个目标需要等待另一个目标完成后才能开始\n"
+        "- 一个目标的完成会触发另一个目标的开始\n\n"
+        "**什么时候不用**:\n"
+        "- 只是先后顺序但无阻塞关系 → 用 write_goal 的 notes 记录即可\n"
+    )
+
+    def __init__(self, memory: MemoryStore):
+        super().__init__()
+        self._memory = memory
+
+    async def execute(self, goal_id: str, depends_on: str, dep_type: str = "blocks") -> str:
+        if self._memory._db is None:
+            return "DB not available"
+        dep_id = self._memory._db.insert_dependency(goal_id, depends_on, dep_type)
+        return f"Dependency added: '{goal_id}' depends on '{depends_on}' (type={dep_type}, id={dep_id})"
+
+
+# ---------------------------------------------------------------------------
+# EscalateBlocker
+# ---------------------------------------------------------------------------
+
+@tool_parameters(properties={
+    "goal_id": p("string", "Goal ID that is blocked"),
+    "description": p("string", "What's blocking progress"),
+    "attempted_solutions": p("array", "What solutions were already tried", items=p("string", "")),
+    "suggested_help": p("string", "What kind of help is needed from the user"),
+})
+class EscalateBlocker(Tool):
+    """Escalate a blocker to the user with context of what was tried."""
+
+    name = "escalate_blocker"
+    description = (
+        "**用途**: 将阻塞项升级给用户，说明已尝试的解决方案和需要的帮助。\n\n"
+        "**什么时候用**:\n"
+        "- 尝试了至少 2 种不同方法后仍无法解决阻塞\n"
+        "- 需要用户决策的外部依赖\n\n"
+        "**什么时候不用**:\n"
+        "- 只是暂未开始 → 用 write_goal 的 blockers 记录即可\n"
+        "- 可以自己解决 → 继续尝试，不要 escalate\n"
+    )
+
+    def __init__(self, memory: MemoryStore):
+        super().__init__()
+        self._memory = memory
+
+    async def execute(
+        self,
+        goal_id: str,
+        description: str,
+        attempted_solutions: list[str] | None = None,
+        suggested_help: str = "",
+    ) -> str:
+        if self._memory._db is None:
+            return "DB not available"
+        goal = self._memory._db.get_goal(goal_id)
+        if not goal:
+            return f"Goal '{goal_id}' not found"
+
+        # Log blocker event
+        detail = {
+            "description": description,
+            "attempted_solutions": attempted_solutions or [],
+            "suggested_help": suggested_help,
+        }
+        import json
+        self._memory._db.insert_event(
+            event_type="blocker_escalated",
+            content=json.dumps(detail, ensure_ascii=False),
+            goal_id=goal_id,
+            tags=["escalated"],
+        )
+
+        # Update goal blockers list
+        data = goal.get("data", {})
+        blockers = data.get("blockers", [])
+        if description not in blockers:
+            blockers.append(description)
+        data["blockers"] = blockers
+
+        self._memory._db.upsert_goal(
+            id=goal_id, title=goal["title"],
+            status=goal.get("status", "in_progress"),
+            data=data,
+        )
+
+        msg = f"Blocker escalated for goal '{goal_id}': {description}"
+        if suggested_help:
+            msg += f"\nHelp needed: {suggested_help}"
+        return msg
+
+
 def register(memory: MemoryStore) -> list[Tool]:
     """Register goal/event tools with the tool registry."""
     return [
@@ -613,4 +823,8 @@ def register(memory: MemoryStore) -> list[Tool]:
         DeclareAssumption(memory),
         VerifyAssumption(memory),
         DeclareCheckpoint(memory),
+        SetGoalPriority(memory),
+        SetGoalDeadline(memory),
+        AddGoalDependency(memory),
+        EscalateBlocker(memory),
     ]
