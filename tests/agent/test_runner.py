@@ -226,8 +226,8 @@ async def test_runner_empty_response_does_not_break_tool_chain():
 
     assert result.final_content == "Here are the results."
     assert result.stop_reason == "completed"
-    # 4 calls pre-verification + 1 extra for the verification gate
-    assert call_count == 5
+    # 4 calls (no verification gate)
+    assert call_count == 4
     assert "read_file" in result.tools_used
 
 
@@ -488,10 +488,9 @@ async def test_length_recovery_streaming_calls_on_stream_end_with_resuming():
         hook=StreamHook(),
     ))
 
-    assert len(stream_end_calls) == 3
+    assert len(stream_end_calls) == 2
     assert stream_end_calls[0] is True   # length recovery: resuming
-    assert stream_end_calls[1] is True   # verification gate: another round
-    assert stream_end_calls[2] is False  # final response: done
+    assert stream_end_calls[1] is False  # final response: done
 
 
 
@@ -899,13 +898,11 @@ async def test_checkpoint2_injects_after_final_response_with_resuming_stream():
 
     assert result.had_injections is True
     assert result.final_content == "second answer"
-    # 2 calls pre-verification + 1 extra for the verification gate
-    assert call_count["n"] == 3
+    # 2 calls (no verification gate)
+    assert call_count["n"] == 2
     # First stream_end should have resuming=True (because injections found)
     assert stream_end_calls[0] is True
-    # Second stream_end should have resuming=True (verification gate)
-    assert stream_end_calls[1] is True
-    # Third (final) stream_end should have resuming=False
+    # Second (final) stream_end should have resuming=False
     assert stream_end_calls[-1] is False
 
 

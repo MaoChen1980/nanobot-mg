@@ -195,8 +195,6 @@ class AgentRunner:
         external_lookup_counts: dict[str, int] = {}
         empty_content_retries = 0
         length_recovery_count = 0
-        verification_injected = False
-        info_gathered: dict[str, list[str]] = {}
         had_injections = False
         injection_cycles = 0
 
@@ -304,10 +302,6 @@ class AgentRunner:
                         if i < executed_count:
                             res = results[i]
                             content = _normalize(spec, tc.id, tc.name, res)
-                            _result = self._fmt_info_item(tc)
-                            if _result:
-                                _cat, _line = _result
-                                info_gathered.setdefault(_cat, []).append(_line)
                             ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else ""
                             content = self._fmt_tool_metadata(tc.name, content, ts)
                         else:
@@ -336,11 +330,6 @@ class AgentRunner:
                     if isinstance(fatal_error, AskUserInterrupt) and tool_call.name == "ask_user":
                         continue
                     content = _normalize(spec, tool_call.id, tool_call.name, result)
-                    # Record info-gathering for the fact-display gate
-                    _result = self._fmt_info_item(tool_call)
-                    if _result:
-                        _cat, _line = _result
-                        info_gathered.setdefault(_cat, []).append(_line)
                     ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else ""
                     content = self._fmt_tool_metadata(tool_call.name, content, ts)
                     tool_message = {
@@ -458,43 +447,6 @@ class AgentRunner:
             )
             if should_continue:
                 had_injections = True
-
-            # Verification gate: before finalizing, show what the agent has
-            # actually gathered, and let it decide if more is needed.
-            if not should_continue and not verification_injected and iteration > 0:
-                if info_gathered:
-                    _section_labels = {
-                        "files": "已经读取了以下文件/目录：",
-                        "web": "已经联网搜索了以下内容：",
-                        "memory": "已经在记忆中检索了以下内容：",
-                        "analysis": "已经进行了以下分析：",
-                    }
-                    _parts: list[str] = []
-                    for _cat in ("files", "web", "memory", "analysis"):
-                        _items = info_gathered.get(_cat)
-                        if _items:
-                            _parts.append(_section_labels.get(_cat, f"{_cat}："))
-                            for _item in _items:
-                                _parts.append(f" · {_item}")
-                            _parts.append("")
-                    _gate_msg = (
-                        "[信息确认]\n"
-                        "在给出最终答案之前，请确认信息是否充分。\n\n"
-                        "本对话已经通过工具获取了以下信息：\n\n"
-                        f"{chr(10).join(_parts)}"
-                        "以上信息是否足以回答当前问题？\n"
-                        "→ 如果足够，请直接给出最终答案。\n"
-                        "→ 如果还需要更多信息，请继续使用工具收集。"
-                    )
-                else:
-                    _gate_msg = (
-                        "[信息确认]\n"
-                        "你即将回答用户的问题，但你还没有通过任何工具读取文件、联网搜索或检索记忆。\n\n"
-                        "如果问题需要查阅代码、搜索网络或者回忆之前的信息，请先使用对应的工具获取信息再回答。"
-                    )
-                messages.append({"role": "user", "content": _gate_msg})
-                verification_injected = True
-                should_continue = True
 
             await hook.on_stream_end(context, resuming=should_continue)
 
@@ -626,38 +578,6 @@ class AgentRunner:
         messages.append(build_assistant_message(_PERSISTED_MODEL_ERROR_PLACEHOLDER))
 
     @staticmethod
-    def _fmt_info_item(tc: Any) -> tuple[str, str] | None:
-        """Format a source-tool call into (category, display_line) for the gate."""
-        if tc.name not in _SOURCE_TOOLS:
-            return None
-        args = tc.arguments if isinstance(tc.arguments, dict) else {}
-        name = tc.name
-
-        if name == "web_search":
-            q = args.get("query", "")
-            return ("web", q if q else "(搜索关键词)")
-        if name == "web_fetch":
-            return ("web", args.get("url", ""))
-        if name in ("recall", "search_text"):
-            return ("memory", args.get("query", ""))
-        if name == "read_file":
-            return ("files", args.get("path", ""))
-        if name == "read_files":
-            return ("files", f"{args.get('glob', args.get('path', ''))} (批量)")
-        if name in ("grep", "glob"):
-            return ("files", f"{name}搜索({args.get('pattern', '')})")
-        if name == "git_inspect":
-            return ("files", "git 历史记录")
-        if name in ("explore_module", "list_dir"):
-            return ("files", f"目录：{args.get('path', args.get('target', '.'))}")
-        if name == "analyze":
-            return ("analysis", "内容分析总结")
-        if name == "diagnose":
-            return ("analysis", "错误诊断分析")
-        if name == "run_recipe":
-            return ("analysis", f"多步流程：{args.get('recipe', '')}")
-        return ("analysis", f"{name}(...)")
-
     @staticmethod
     def _fmt_tool_metadata(tool_name: str, result: str, timestamp: str = "") -> str:
         """Prefix tool result with searchable metadata: tool name, size, time.
