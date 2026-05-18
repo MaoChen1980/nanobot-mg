@@ -237,11 +237,14 @@ class MemoryExtractor:
                 topic_files.setdefault("user.md", []).append(f"- {content}")
 
             elif ftype in ("knowledge", "decision"):
+                topic = (finding.get("topic") or "").strip()
+                if not topic:
+                    continue
+                rel_path = self._sanitize_topic_path(topic) + ".md"
                 paragraph = content
                 if ftype == "decision" and finding.get("rationale"):
                     paragraph += f"\n  > 理由：{finding['rationale']}"
-                # All knowledge/decisions go into one knowledge.md
-                topic_files.setdefault("knowledge.md", []).append(paragraph)
+                topic_files.setdefault(rel_path, []).append(paragraph)
 
             elif ftype == "reusable_pattern":
                 skills_to_create.append(finding)
@@ -485,9 +488,23 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     @staticmethod
+    @staticmethod
     def _sanitize_filename(name: str) -> str:
+        """Sanitize a single path component (no slashes)."""
         safe = _SESSION_KEY_RE.sub("_", name)
         return safe[: _SANITIZE_MAX_LEN].strip("_")
+
+    @staticmethod
+    def _sanitize_topic_path(topic: str) -> str:
+        """Convert a hierarchical topic (e.g. 'AI/harness design') into a safe relative path.
+
+        Preserves forward slashes as directory separators so the LLM can
+        organize knowledge into nested directories like AI/harness-design.md.
+        """
+        parts = topic.strip("/").split("/")
+        safe_parts = [MemoryExtractor._sanitize_filename(p) for p in parts]
+        safe_parts = [p for p in safe_parts if p]  # remove empties
+        return "/".join(safe_parts[:8])  # max 8 levels deep
 
     @staticmethod
     def save_pt(
