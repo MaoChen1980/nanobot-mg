@@ -20,6 +20,7 @@ from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.helpers import build_assistant_message, current_time_str, format_message_header
 from nanobot.utils.media_decode import detect_image_mime
 from nanobot.utils.prompt_templates import render_template
+from nanobot.utils.tools_index import rebuild_tools_index as _rebuild_tools_index
 
 # Module-level cache for template file contents (path -> (mtime, content))
 _template_content_cache: dict[str, tuple[float, str]] = {}
@@ -42,7 +43,7 @@ class ContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
 
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
-    _SKIP_IF_DEFAULT = {"USER.md", "TOOLS.md"}  # skip these when user hasn't customized
+    _SKIP_IF_DEFAULT = {"USER.md"}  # TOOLS.md is auto-generated — always inject
     _SECTION_SEPARATOR = "\n\n" + "═" * 72 + "\n\n"
     _RUNTIME_CONTEXT_TAG = "## Runtime Context"
     _RUNTIME_CONTEXT_END = "## /Runtime Context"
@@ -87,6 +88,9 @@ class ContextBuilder:
             section = self._build_tools_section(tool_definitions)
             if section:
                 parts.append(section)
+
+        # Regenerate tools index so TOOLS.md is always fresh
+        _rebuild_tools_index(self.workspace)
 
         bootstrap = self._load_bootstrap_files()
         if bootstrap:

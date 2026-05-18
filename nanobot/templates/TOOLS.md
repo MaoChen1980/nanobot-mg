@@ -1,26 +1,57 @@
-# Tool Usage Notes
+## Creating New Tools
 
-## Self-Installed Tools (workspace/tools/)
+You can extend nanobot's capabilities by writing your own tools. Each tool lives in its own subdirectory under `workspace/tools/`.
 
-> 💡 **Write your own tools — it's easy and powerful.** Use `write_file` → `then_check="auto"` → `then_exec` to create Python/JS scripts in `workspace/tools/` in one turn. They're instantly usable via `exec` thereafter. Self-written tools are often better than shell commands because you control the output format, error handling, and avoid OS-specific quoting issues.
+### How to create a tool
 
-> ⚠ Document each tool you install below. Future agent instances will read this table and use the tools without rediscovering them.
+1. Create a directory: `workspace/tools/<tool-name>/`
+2. Write your script (Python, shell, bat, or any executable format)
+3. Write a `readme.md` describing how to use it
 
-| Tool | Command | Notes |
-|------|---------|-------|
-| Python analysis | `python tools/analyze.py <cmd> [args]` | Example: imports, exports, callers, callees, tree, find |
-| TS analysis | `node tools/analyze.js <cmd> [args]` | Example: imports, exports, callers, callees, tree, find |
-| Fast find | `node tools/fast-find.js <symbol> [dir]` | Example: regex symbol search in .ts files |
+### readme.md format
 
-⚠ All paths relative to CWD; absolute paths also accepted.
+```markdown
+# Tool Name — one-line description
 
-## Known Failures — Don't Repeat
+## Usage
+    python workspace/tools/<name>/script.py <arg1> <arg2>
 
-> ⚠ This section is a template. Every time you discover a dead-end approach, document it here to prevent the agent from retrying it across sessions. **The table rows below are template examples — replace them with real failures. Do not avoid these commands unless you've actually hit these errors.**
->
-> <!-- Template examples — replace with actual project-specific failures -->
-| Date | What | Why failed | Verdict |
-|------|------|-----------|---------|
-| (date) | `corepack enable` | EPERM — needs admin | ❌ |
-| (date) | `npm install -g <pkg>` | EPERM on system dir | ❌ Use `--prefix tools` |
-| (date) | `node -e "..."` on CMD | Quote mangling | ❌ Use `write_file`→`exec` |
+## Arguments
+- `arg1`: description
+- `arg2`: description
+
+## Examples
+    python workspace/tools/<name>/script.py --input file.txt
+
+## Dependencies
+List any required packages or system dependencies.
+```
+
+### How to use installed tools
+
+- The **Installed Tools** section at the top of this file is auto-generated and refreshed on every turn
+- Read a tool's `readme.md` to learn how to invoke it
+- Use `exec` (shell execution) to run the tool script
+- If the tool has dependencies you can't install, add them to the readme and ask for help
+
+### Maintenance — Self-Healing & Updates
+
+When a tool errors during use, investigate and fix it:
+
+1. Run the tool with debugging flags or check the error output
+2. Read the tool's script to understand what went wrong
+3. Fix the script with `edit_file` or `write_file`
+4. If the interface (args, output format) changed, update its `readme.md`
+
+When enhancing a tool, always keep readme.md in sync:
+
+- Changed arguments? Update the **Arguments** section
+- Added features? Update **Examples**
+- If a tool becomes obsolete, delete its directory — the index cleans up automatically on the next turn
+
+### Best practices
+
+- One tool per directory — focused, single-purpose scripts
+- Include error handling and clear output
+- Document arguments and examples in readme.md
+- Use `--help` flag support in your scripts when possible

@@ -423,6 +423,12 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
     _write(tpl / "memory" / "MEMORY.md", workspace / "memory" / "MEMORY.md")
     (workspace / "skills").mkdir(exist_ok=True)
 
+    # Initialize self-installed tools directory and regenerate index
+    from nanobot.utils.tools_index import init_tools_dir, rebuild_tools_index
+
+    init_tools_dir(workspace)
+    rebuild_tools_index(workspace)
+
     if added and not silent:
         from rich.console import Console
 
