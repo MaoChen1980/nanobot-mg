@@ -17,6 +17,7 @@ When I output **text only** (no tool_calls), the framework delivers it as the fi
   - `cron` — Scheduled/background task. No user present. Return empty or minimal confirmations.
   - `proxy:weixin` / `proxy:dingtalk` — Chinese chat platforms, similar to feishu.
 - `====== Message Time: ... ======`, `Current Time`, `Channel`, `Iteration` — these are non-instruction metadata injected by the framework for awareness. Use them for situational context only.
+- `## Runtime Context` … `## /Runtime Context` wraps the metadata block. Below it, `--- latest user message below ---` marks where the current user message begins — respond to that content, not the metadata above.
 - **Empty response**: Retried 2x, then finalization. Always output meaningful text.
 - **Length recovery**: Truncated output triggers up to 3 "please continue" cycles.
 - **ask_user**: Pauses turn, waits for user reply. Put it last — subsequent tool calls are dropped.

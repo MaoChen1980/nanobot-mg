@@ -311,10 +311,7 @@ class ContextBuilder:
     # -- vector-indexed memory -------------------------------------------------
 
     def _build_memory_section(self) -> str:
-        """Build memory section: MEMORY.md first, then FAISS vector search results."""
-        parts: list[str] = []
-
-        # 1. Always include MEMORY.md (if customized by user)
+        """Build memory section: MEMORY.md only (no vector search)."""
         long_term = self.memory.read_memory()
         if long_term and not self._is_template_content(long_term, "memory/MEMORY.md"):
             # Strip "# Memory" H1 (redundant — wrapper is already # Memory)
@@ -324,37 +321,14 @@ class ContextBuilder:
             content = "\n".join(lines).strip()
             # Bump remaining headings by +1: ## 命名约定 → ### 命名约定
             content = self._adjust_headings(content, offset=1)
-            parts.append(
+            return (
                 "# Memory\n\n"
                 "## Long-term Memory\n\n"
                 "This is your persistent memory — facts, conventions, and patterns "
                 "learned from past work. Follow these guidelines in your responses.\n\n"
                 + content
             )
-
-        # 2. Append FAISS vector search results for additional relevant context
-        query_parts: list[str] = []
-
-        goals_text = self._query_goals_for_context()
-        if goals_text:
-            query_parts.append(goals_text)
-
-        events_text = self._query_recent_events()
-        if events_text:
-            query_parts.append(events_text)
-
-        query = "\n".join(query_parts) if query_parts else ""
-        if query:
-            vector_results = self.memory.vector_index.search(query, k=5)
-            if vector_results:
-                parts.append(
-                    "# Memory (retrieved)\n\n"
-                    "Relevant knowledge retrieved from past sessions. "
-                    "Use this for context on recurring patterns and past decisions.\n\n"
-                    + self._format_vector_results(vector_results)
-                )
-
-        return "\n\n---\n\n".join(parts) if parts else ""
+        return ""
 
     @staticmethod
     def _format_vector_results(results: list[dict]) -> str:
@@ -396,7 +370,7 @@ class ContextBuilder:
             ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" +
             "\n".join(lines) + "\n" +
             ContextBuilder._RUNTIME_CONTEXT_END +
-            "\n\n--- Current Turn ---"
+            "\n\n--- latest user message below ---"
         )
 
     @staticmethod
@@ -491,67 +465,41 @@ class ContextBuilder:
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
         cs = context_state or ContextState()
-
+        sys_static = self.build_system_prompt(
+            channel=channel,
+            tool_definitions=cs.tool_definitions,
+        )
         retained_history = history
 
-        runtime_ctx = self._build_runtime_context(
-            channel=channel, timezone=self.timezone,
-            current_iteration=cs.current_iteration,
-            max_iterations=cs.max_iterations,
-        )
-
-        # Search vector index with current message for relevant memory.
-        # Nested inside the runtime-context block so _record_turn strips it.
-        msg_query = current_message.strip()
-        if msg_query:
-            vec_results = self.memory.vector_index.search(msg_query, k=3)
-            if vec_results:
-                formatted = self._format_vector_results(vec_results)
-                memory_block = (
-                    "## Memory (current context)\n\n"
-                    f"Relevant memories for the current message:\n\n{formatted}"
-                )
-                end_marker = ContextBuilder._RUNTIME_CONTEXT_END
-                runtime_ctx = runtime_ctx.replace(
-                    end_marker, memory_block + "\n" + end_marker
-                )
-
-        user_content = self._build_user_content(current_message, media)
-        if runtime_ctx:
-            if isinstance(user_content, str):
-                user_content = f"{runtime_ctx}\n\n{user_content}"
-            else:
-                user_content = [{"type": "text", "text": runtime_ctx}] + list(user_content)
-        sys_static = self.build_system_prompt(skill_names, channel=channel, tool_definitions=cs.tool_definitions)
-
-        # Dynamic context injected into runtime_ctx for prefix cache stability
+        # Dynamic system content — runtime metadata, memory, state
         sys_dynamic_parts: list[str] = []
+
+        runtime_lines = [f"Current Time: {current_time_str(self.timezone)}"]
+        if channel:
+            runtime_lines.append(f"Channel: {channel}")
+        if cs.current_iteration is not None and cs.max_iterations is not None:
+            runtime_lines.append(f"Iteration: {cs.current_iteration}/{cs.max_iterations}")
+        sys_dynamic_parts.append("\n".join(runtime_lines))
+
         memory_section = self._build_memory_section()
         if memory_section:
             sys_dynamic_parts.append(memory_section)
+
         state_block = self._build_state_section()
         if state_block:
             sys_dynamic_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
 
-        if sys_dynamic_parts and runtime_ctx:
-            runtime_ctx = runtime_ctx.replace(
-                ContextBuilder._RUNTIME_CONTEXT_END,
-                "\n\n".join(sys_dynamic_parts) + "\n" + ContextBuilder._RUNTIME_CONTEXT_END,
-            )
-            user_content = self._build_user_content(current_message, media)
-            if isinstance(user_content, str):
-                user_content = f"{runtime_ctx}\n\n{user_content}"
-            else:
-                user_content = [{"type": "text", "text": runtime_ctx}] + list(user_content)
+        if sys_dynamic_parts:
+            sys_static = sys_static + "\n\n# Runtime Context\n\n" + "\n\n".join(sys_dynamic_parts)
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": sys_static},
         ]
 
-
-
-
         messages.extend(retained_history)
+
+        # Clean user message — no injected metadata
+        user_content = self._build_user_content(current_message, media)
         if messages[-1].get("role") == current_role:
             last = dict(messages[-1])
             last["content"] = self._merge_message_content(last.get("content"), user_content)
