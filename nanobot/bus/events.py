@@ -13,7 +13,7 @@ class InboundMessage:
     sender_id: str  # User identifier
     chat_id: str  # Chat/channel identifier
     content: str  # Message text
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=datetime.now)  # Naive datetime (UTC-agnostic), convert before comparing with protocol timestamps
     media: list[str] = field(default_factory=list)  # Media URLs
     metadata: dict[str, Any] = field(default_factory=dict)  # Channel-specific data
     session_key_override: Optional[str] = None  # Optional override for thread-scoped sessions

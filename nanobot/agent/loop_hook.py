@@ -11,7 +11,7 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.utils.progress_events import (
     build_tool_event_finish_payloads,
     build_tool_event_start_payload,
-    invoke_on_progress,
+    process_tool_events_and_progress,
     on_progress_accepts_tool_events,
 )
 
@@ -120,7 +120,7 @@ class _LoopHook(AgentHook):
         # Skip if nothing to send (e.g. tool hint but /tool is off and no content)
         if not effective_content and not effective_tool_events:
             return
-        await invoke_on_progress(
+        await process_tool_events_and_progress(
             self._on_progress,
             effective_content,
             tool_hint=effective_tool_hint,

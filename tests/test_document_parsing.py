@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from nanobot.utils.document import (
     SUPPORTED_EXTENSIONS,
-    extract_documents,
+    separate_and_extract_media,
     extract_text,
     stringify_text_blocks,
 )
@@ -376,24 +376,24 @@ class TestExtractTextErrors:
 
 
 # ---------------------------------------------------------------------------
-# extract_documents
+# separate_and_extract_media
 # ---------------------------------------------------------------------------
 
 class TestExtractDocuments:
     def test_empty_media_paths_returns_text_unchanged(self):
-        text, images = extract_documents("original", [])
+        text, images = separate_and_extract_media("original", [])
         assert text == "original"
         assert images == []
 
     def test_non_existent_file_skipped(self, tmp_path):
-        text, images = extract_documents("base", [str(tmp_path / "nope.txt")])
+        text, images = separate_and_extract_media("base", [str(tmp_path / "nope.txt")])
         assert text == "base"
         assert images == []
 
     def test_skips_oversized_file(self, tmp_path):
         large = tmp_path / "large.txt"
         large.write_text("x" * 100)
-        text, images = extract_documents("base", [str(large)], max_file_size=10)
+        text, images = separate_and_extract_media("base", [str(large)], max_file_size=10)
         assert text == "base"
         assert images == []
 
@@ -406,14 +406,14 @@ class TestExtractDocuments:
             b"\x00\x00\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
             b"\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
         )
-        text, images = extract_documents("base", [str(img)])
+        text, images = separate_and_extract_media("base", [str(img)])
         assert text == "base"
         assert images == [str(img)]
 
     def test_document_text_appended(self, tmp_path):
         doc = tmp_path / "notes.txt"
         doc.write_text("extra content", encoding="utf-8")
-        text, images = extract_documents("base", [str(doc)])
+        text, images = separate_and_extract_media("base", [str(doc)])
         assert "base" in text
         assert "extra content" in text
         assert "[File: notes.txt]" in text
@@ -424,7 +424,7 @@ class TestExtractDocuments:
         doc.write_text("content", encoding="utf-8")
         with patch("pathlib.Path.stat", side_effect=OSError("denied")), \
              patch("pathlib.Path.is_file", return_value=True):
-            text, images = extract_documents("base", [str(doc)])
+            text, images = separate_and_extract_media("base", [str(doc)])
         assert text == "base"
         assert images == []
 
@@ -432,7 +432,7 @@ class TestExtractDocuments:
         doc = tmp_path / "bad.txt"
         doc.write_text("", encoding="utf-8")
         with patch("nanobot.utils.document.extract_text", return_value="[error: failed]"):
-            text, images = extract_documents("base", [str(doc)])
+            text, images = separate_and_extract_media("base", [str(doc)])
         assert text == "base"
         assert images == []
 

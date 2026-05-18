@@ -7,12 +7,12 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from .filesystem_base import _FsTool
 from nanobot.agent.tools import file_state
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         path=p("string", "Absolute path to a file to write. OVERWRITES existing file, auto-creates parent directories."),
         content=p("string", "Full file content to write. Replaces entire file — use edit_file for partial edits or substitutions."),
         then_exec=p("string",
@@ -73,7 +73,7 @@ class WriteFileTool(_FsTool):
             verify_pattern = content_lines[0] if content_lines else None
             verify_result = ""
             if verify_pattern:
-                verify_result = self._grep_file(fp, verify_pattern, max_matches=3)
+                verify_result = self._find_in_file(fp, verify_pattern, max_matches=3)
 
             # Type-check before exec (if requested)
             check_result = ""
@@ -98,7 +98,7 @@ class WriteFileTool(_FsTool):
             if exec_result:
                 parts.append(exec_result)
             if then_grep:
-                parts.append(self._grep_file(fp, then_grep))
+                parts.append(self._find_in_file(fp, then_grep))
             return "\n".join(parts)
         except PermissionError as e:
             logger.warning("WriteFile permission denied: {}", e)

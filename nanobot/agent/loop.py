@@ -54,13 +54,13 @@ from nanobot.config.schema import AgentDefaults
 from nanobot.providers.base import LLMProvider
 from nanobot.providers.factory import ProviderSnapshot
 from nanobot.session.manager import Session, SessionManager
-from nanobot.utils.document import extract_documents
+from nanobot.utils.document import separate_and_extract_media
 from nanobot.utils.media_decode import image_placeholder_text
 from nanobot.utils.helpers import truncate_text as truncate_text_fn
 from nanobot.utils.progress_events import (
     build_tool_event_finish_payloads,
     build_tool_event_start_payload,
-    invoke_on_progress,
+    process_tool_events_and_progress,
     on_progress_accepts_tool_events,
 )
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
@@ -85,7 +85,7 @@ from .loop_checkpoint import (
     clear_runtime_checkpoint,
     mark_pending_user_turn,
     clear_pending_user_turn,
-    restore_runtime_checkpoint,
+    restore_and_clear_checkpoint,
     restore_pending_user_turn,
 )
 from .loop_checkpoint import RecoveryManager
@@ -139,7 +139,7 @@ class AgentLoop:
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
         timezone: str | None = None,
-        session_ttl_minutes: int = 0,
+        session_idle_timeout_minutes: int = 0,
         hooks: list[AgentHook] | None = None,
         unified_session: bool = False,
         disabled_skills: list[str] | None = None,
@@ -183,7 +183,7 @@ class AgentLoop:
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
         self._extra_hooks: list[AgentHook] = hooks or []
-        self._extra_hooks.extend(self._discover_workspace_hooks())
+        self._extra_hooks.extend(self._discover_hooks())
 
         self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db)
         self.sessions = session_manager or SessionManager(workspace)
@@ -375,8 +375,8 @@ class AgentLoop:
         self.tools.register(SpawnTool(manager=self.subagents))
         self.tools.register(CheckSubagentTool(manager=self.subagents))
         self.tools.register(ListSubagentsTool(manager=self.subagents))
-        from nanobot.agent.tools.goal_event import register as register_goal_event
-        for tool in register_goal_event(self.context.memory):
+        from nanobot.agent.tools.goal_event import create_goal_tools
+        for tool in create_goal_tools(self.context.memory):
             self.tools.register(tool)
         if self.cron_service:
             self.tools.register(
@@ -492,7 +492,7 @@ class AgentLoop:
         """
         return f"{channel}:{chat_id}"
 
-    def _replay_token_budget(self) -> int:
+    def _compute_history_budget(self) -> int:
         """Budget for history replay — leave room for output, no artificial caps."""
         if self.context_window_tokens <= 0:
             return 0
@@ -576,7 +576,7 @@ class AgentLoop:
                 content = pending_msg.content
                 media = pending_msg.media if pending_msg.media else None
                 if media:
-                    content, media = extract_documents(content, media)
+                    content, media = separate_and_extract_media(content, media)
                     media = media or None
                 user_content = self.context._build_user_content(content, media)
                 runtime_ctx = self.context._build_runtime_context(
@@ -825,7 +825,7 @@ class AgentLoop:
 
         return filtered
 
-    def _record_turn(self, session: Session, messages: list[dict], skip: int) -> None:
+    def _append_turn_to_session(self, session: Session, messages: list[dict], skip: int) -> None:
         """Record turn messages into session history, truncating large tool results.
 
         Appends ``messages[skip:]`` into ``session.messages``, stripping
@@ -902,7 +902,7 @@ class AgentLoop:
         )
         return True
 
-    def _discover_workspace_hooks(self) -> list[AgentHook]:
+    def _discover_hooks(self) -> list[AgentHook]:
         """Scan framework hooks then workspace/hooks/ for custom hook classes."""
         from pathlib import Path
         discovered: list[AgentHook] = []
@@ -959,7 +959,7 @@ class AgentLoop:
         clear_runtime_checkpoint(session)
 
     def _restore_runtime_checkpoint(self, session: Session) -> bool:
-        return restore_runtime_checkpoint(self, session)
+        return restore_and_clear_checkpoint(self, session)
 
     def _restore_pending_user_turn(self, session: Session) -> bool:
         return restore_pending_user_turn(session)

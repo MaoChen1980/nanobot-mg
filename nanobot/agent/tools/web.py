@@ -14,7 +14,7 @@ import httpx
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.utils.media_decode import build_image_content_blocks
 
 if TYPE_CHECKING:
@@ -95,7 +95,7 @@ def _format_results(query: str, items: list[dict[str, Any]], n: int) -> str:
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         query=p("string", "Search query — natural language question or keywords."),
         count=p("integer", "Results to return (1-10, default 5)", minimum=1, maximum=10, default=5),
         required=["query"],
@@ -286,7 +286,7 @@ class WebSearchTool(WebToolBase, Tool):
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         url=p("string", "URL to fetch"),
         extractMode={
             "type": "string",
@@ -353,9 +353,9 @@ class WebFetchTool(WebToolBase, Tool):
 
         if self.config.use_jina_reader:
             result = await self._fetch_jina(url, max_chars)
-            return self._apply_extract(result, extract) if extract else result
+            return self._regex_filter_result(result, extract) if extract else result
         result = await self._fetch_readability(url, extractMode, max_chars)
-        return self._apply_extract(result, extract) if extract else result
+        return self._regex_filter_result(result, extract) if extract else result
 
     async def _fetch_jina(self, url: str, max_chars: int) -> str:
         """Fetch via Jina Reader API. Returns result or error."""
@@ -449,7 +449,7 @@ class WebFetchTool(WebToolBase, Tool):
         return _normalize(_strip_tags(text))
 
     @staticmethod
-    def _apply_extract(result: str, pattern: str) -> str:
+    def _regex_filter_result(result: str, pattern: str) -> str:
         """Filter text content in the fetched result using regex."""
         try:
             data = json.loads(result)

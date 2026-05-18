@@ -603,7 +603,7 @@ class TaskExecutor:
         if self._db is None:
             return
 
-        lessons = self._parse_lessons_yaml(lessons_text)
+        lessons = self._parse_structured_lessons(lessons_text)
         if not lessons:
             return
 
@@ -695,7 +695,7 @@ class TaskExecutor:
             logger.warning("Failed to update MEMORY.md: {}", e)
 
     @staticmethod
-    def _parse_lessons_yaml(text: str) -> list[dict[str, Any]]:
+    def _parse_structured_lessons(text: str) -> list[dict[str, Any]]:
         """Parse structured lessons from LLM output.
 
         Handles multiple formats:

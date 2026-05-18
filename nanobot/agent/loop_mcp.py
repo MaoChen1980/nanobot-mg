@@ -37,7 +37,7 @@ async def connect_mcp(loop: AgentLoop) -> None:
 
 
 async def close_mcp(loop: AgentLoop) -> None:
-    """Drain pending background archives, then close MCP connections."""
+    """Drain pending background tasks, then close MCP connections."""
     if loop._background_tasks:
         try:
             await asyncio.gather(*loop._background_tasks, return_exceptions=True)

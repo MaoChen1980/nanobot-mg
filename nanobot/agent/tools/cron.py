@@ -9,11 +9,11 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.cron.service import CronService
-from nanobot.cron.types import CronJob, CronJobState, CronSchedule
+from nanobot.cron.types import CronJobState, CronSchedule
 
-_CRON_PARAMETERS = tool_parameters_schema(
+_CRON_PARAMETERS = build_parameters_schema(
     action=p("string", "Action to perform", enum=["add", "list", "remove", "update", "test"]),
     name=p("string",
         "Optional short human-readable label for the job "
@@ -115,10 +115,6 @@ class CronTool(Tool):
     def clear_execution_log(self) -> None:
         """Clear the current execution log."""
         self._execution_log.set(list())
-
-    def reset_current_job_id(self, token) -> None:
-        """Restore previous current job ID."""
-        self._current_job_id.reset(token)
 
     def set_progress_callback(self, cb: callable | None) -> None:
         """Set callback for progress updates during cron execution."""
@@ -305,7 +301,7 @@ class CronTool(Tool):
         return lines
 
     @staticmethod
-    def _system_job_purpose(job: CronJob) -> str:
+    def _system_job_purpose() -> str:
         return "System-managed internal job."
 
     def _list_jobs(self) -> str:
@@ -317,7 +313,7 @@ class CronTool(Tool):
             timing = self._format_timing(j.schedule)
             parts = [f"- {j.name} (id: {j.id}, {timing})"]
             if j.payload.kind == "system_event":
-                parts.append(f"  Purpose: {self._system_job_purpose(j)}")
+                parts.append(f"  Purpose: {self._system_job_purpose()}")
                 parts.append("  Protected: visible for inspection, but cannot be removed.")
             parts.extend(self._format_state(j.state, j.schedule))
             lines.append("\n".join(parts))

@@ -10,13 +10,13 @@ from loguru import logger
 
 from nanobot.agent.tools._section_utils import detect_sections, format_section_overview
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from .filesystem_base import _FsTool, _is_blocked_device, _parse_page_range
 from nanobot.agent.tools import file_state
 from nanobot.utils.media_decode import build_image_content_blocks, detect_image_mime
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         path=p("string", "Absolute path to a file to read. Supports text files, PDFs (pages param), and images (rendered as Markdown)."),
         mode=p("string", "Reading mode: 'full' (outputs numbered lines) or 'overview' (previews structure via headings/sections without reading the whole file). Use overview when unsure what a file contains.",
             enum=["full", "overview"], default="full",

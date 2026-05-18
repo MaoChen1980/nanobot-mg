@@ -441,14 +441,6 @@ class OpenAICompatProvider(LLMProvider):
                 clean["content"] = self._coerce_content_to_string(clean.get("content"))
         return self._enforce_role_alternation(sanitized)
 
-    def _drop_deepseek_incomplete_reasoning_history(
-        self,
-        messages: list[dict[str, Any]],
-        reasoning_effort: str | None,
-    ) -> list[dict[str, Any]]:
-        """No-op: DeepSeek manages reasoning state internally, history is not touched."""
-        return messages
-
     # ------------------------------------------------------------------
     # Build kwargs
     # ------------------------------------------------------------------
@@ -493,10 +485,6 @@ class OpenAICompatProvider(LLMProvider):
         if spec and spec.strip_model_prefix:
             model_name = model_name.split("/")[-1]
 
-        messages = self._drop_deepseek_incomplete_reasoning_history(
-            messages,
-            reasoning_effort,
-        )
         kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": self._sanitize_messages(self._sanitize_empty_content(messages)),

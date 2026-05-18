@@ -8,7 +8,7 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from .filesystem_base import _FsTool, _normalize_quotes
 from nanobot.agent.tools import file_state
 
@@ -69,7 +69,7 @@ def _diagnose_near_match(old_text: str, actual_text: str) -> list[str]:
     return hints
 
 
-def _best_window(old_text: str, content: str) -> tuple[list[str], list[str]]:
+def _first_lines_window(old_text: str, content: str) -> tuple[list[str], list[str]]:
     """Return the first line-window for diagnostics without fuzzy matching."""
     lines = content.splitlines(keepends=True)
     old_lines = old_text.splitlines(keepends=True)
@@ -96,7 +96,7 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         path=p("string", "Absolute path to a file to edit. Directories and special files are rejected."),
         old_text=p("string", "Text to find and replace. Must match EXACTLY and be UNIQUE in the file — include surrounding lines for disambiguation, or set replace_all=true. "
             "Leave empty (or omit) to prepend new_text at file beginning. Pair with first_line+last_line for line-range mode instead of text matching."),
@@ -125,7 +125,7 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
     )
 )
 class EditFileTool(_FsTool):
-    """Edit a file by replacing text with fallback matching."""
+    """Edit a file by replacing text (exact substring match only)."""
 
     _MAX_EDIT_FILE_SIZE = 1024 * 1024 * 1024  # 1 GiB
     _MARKDOWN_EXTS = frozenset({".md", ".mdx", ".markdown"})
@@ -178,9 +178,9 @@ class EditFileTool(_FsTool):
                     # Auto-verify: use then_grep if provided, otherwise first line of new_text
                     verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                     if then_grep:
-                        result += f"\n{self._grep_file(fp, then_grep)}"
+                        result += f"\n{self._find_in_file(fp, then_grep)}"
                     elif verify_lines:
-                        vr = self._grep_file(fp, verify_lines[0], max_matches=3)
+                        vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
                         if vr:
                             result += f"\nVerified:\n{vr}"
                 return result
@@ -203,11 +203,11 @@ class EditFileTool(_FsTool):
                     msg = f"Successfully created {fp}"
                     verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                     if verify_lines:
-                        vr = self._grep_file(fp, verify_lines[0], max_matches=3)
+                        vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
                         if vr:
                             msg += f"\nVerified:\n{vr}"
                     if then_grep:
-                        msg += f"\n{self._grep_file(fp, then_grep)}"
+                        msg += f"\n{self._find_in_file(fp, then_grep)}"
                     return msg
                 return self._file_not_found_msg(path, fp)
 
@@ -230,11 +230,11 @@ class EditFileTool(_FsTool):
                 msg = f"Successfully edited {fp}"
                 verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                 if verify_lines:
-                    vr = self._grep_file(fp, verify_lines[0], max_matches=3)
+                    vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
                     if vr:
                         msg += f"\nVerified:\n{vr}"
                 elif then_grep:
-                    msg += f"\n{self._grep_file(fp, then_grep)}"
+                    msg += f"\n{self._find_in_file(fp, then_grep)}"
                 return msg
 
             # Read-before-edit check
@@ -290,13 +290,13 @@ class EditFileTool(_FsTool):
             verify_result = ""
             if verify_lines:
                 verify_pattern = verify_lines[0]
-                verify_result = self._grep_file(fp, verify_pattern, max_matches=3)
+                verify_result = self._find_in_file(fp, verify_pattern, max_matches=3)
             if warning:
                 msg = f"{warning}\n{msg}"
             if verify_result:
                 msg += f"\nVerified:\n{verify_result}"
             if then_grep:
-                msg += f"\n{self._grep_file(fp, then_grep)}"
+                msg += f"\n{self._find_in_file(fp, then_grep)}"
             return msg
         except PermissionError as e:
             logger.warning("EditFile permission denied: {}", e)
@@ -311,7 +311,7 @@ class EditFileTool(_FsTool):
 
     @staticmethod
     def _not_found_msg(old_text: str, content: str, path: str) -> str:
-        best_window_lines, hints = _best_window(old_text, content)
+        best_window_lines, hints = _first_lines_window(old_text, content)
         if best_window_lines:
             diff = "\n".join(difflib.unified_diff(
                 old_text.splitlines(keepends=True),

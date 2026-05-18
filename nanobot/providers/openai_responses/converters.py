@@ -26,7 +26,7 @@ def convert_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str
             continue
 
         if role == "user":
-            input_items.append(convert_user_message(content))
+            input_items.append(convert_user_content(content))
             continue
 
         if role == "assistant":
@@ -56,7 +56,7 @@ def convert_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str
     return system_prompt, input_items
 
 
-def convert_user_message(content: Any) -> dict[str, Any]:
+def convert_user_content(content: Any) -> dict[str, Any]:
     """Convert a user message's content to Responses API format.
 
     Handles plain strings, ``text`` blocks -> ``input_text``, and

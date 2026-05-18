@@ -29,7 +29,7 @@ class SystemMessageHandler:
         logger.info("Processing system message from {}", msg.sender_id)
         key = msg.session_key_override or f"{channel}:{chat_id}"
         session = self._loop.sessions.get_or_create(key)
-        if self._loop._recovery.restore_runtime_checkpoint(session):
+        if self._loop._recovery.restore_and_clear_checkpoint(session):
             self._loop.sessions.save(session)
         if self._loop._recovery.restore_pending_user_turn(session):
             self._loop.sessions.save(session)
@@ -42,7 +42,7 @@ class SystemMessageHandler:
         effective_channel = channel if msg.channel == "system" else msg.channel
         self._loop._set_tool_context(effective_channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         from nanobot.utils.helpers import estimate_message_tokens
-        raw_budget = self._loop._replay_token_budget()
+        raw_budget = self._loop._compute_history_budget()
         tool_defs = self._loop.tools.get_definitions()
         sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
         sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
@@ -66,7 +66,7 @@ class SystemMessageHandler:
         )
         final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         msgs_count = len(messages)
-        self._loop._record_turn(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
+        self._loop._append_turn_to_session(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
         session.enforce_file_cap()
         self._loop._recovery.clear_runtime_checkpoint(session)
         self._loop.sessions.save(session)
@@ -189,11 +189,11 @@ class UserMessageHandler:
         """Restore checkpoints, return session + derived context."""
         key = session_key or msg.session_key
         session = self._loop.sessions.get_or_create(key)
-        self._loop._recovery.restore_runtime_checkpoint(session)
+        self._loop._recovery.restore_and_clear_checkpoint(session)
         self._loop._recovery.restore_pending_user_turn(session)
         pending = None
         from nanobot.utils.helpers import estimate_message_tokens
-        raw_budget = self._loop._replay_token_budget()
+        raw_budget = self._loop._compute_history_budget()
         tool_defs = self._loop.tools.get_definitions()
         sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
         sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
@@ -285,14 +285,14 @@ class UserMessageHandler:
         # skip: system prompt (1) + retained_history + user message if already in session
         # initial_msgs_count = 1 + len(retained_history) + 1
         save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
-        self._loop._record_turn(session, all_msgs, save_skip)
+        self._loop._append_turn_to_session(session, all_msgs, save_skip)
 
         # Turn-based archive: when session exceeds N turns, archive oldest M turns to history
         max_turns = session.metadata.get("max_turns", 200)
         trim_batch = session.metadata.get("trim_batch", 50)
         trimmed = session.trim_old_turns(max_turns, trim_batch)
         if trimmed:
-            archived = self._loop.context.memory.archive_session(trimmed)
+            archived = self._loop.context.memory.condense_session_to_history(trimmed)
             logger.info("_finalize_turn: archived {} oldest turns (N={}, M={})", archived, max_turns, trim_batch)
 
         session.enforce_file_cap()
@@ -304,7 +304,7 @@ class UserMessageHandler:
         turn_count = self._loop._pt_counters.get(session.key, 0) + 1
         self._loop._pt_counters[session.key] = turn_count
         if turn_count % self._loop._pt_save_interval == 0:
-            MemoryExtractor.save_pt(all_msgs, self._loop.prompts_dir, session.key)
+            MemoryExtractor.save_prompt_snapshot(all_msgs, self._loop.prompts_dir, session.key)
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
         """Format the final OutboundMessage for the user."""

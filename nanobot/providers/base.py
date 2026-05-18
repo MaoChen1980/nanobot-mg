@@ -439,7 +439,7 @@ class LLMProvider(ABC):
         return merged
 
     @staticmethod
-    def _strip_image_content(messages: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    def _replace_image_content(messages: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
         """Replace image_url blocks with text placeholder. Returns None if no images found."""
         found = False
         result = []
@@ -461,7 +461,7 @@ class LLMProvider(ABC):
         return result if found else None
 
     @staticmethod
-    def _strip_image_content_inplace(messages: list[dict[str, Any]]) -> bool:
+    def _replace_image_content_inplace(messages: list[dict[str, Any]]) -> bool:
         """Replace image_url blocks with text placeholder *in-place*.
 
         Mutates the content lists of the original message dicts so that
@@ -734,7 +734,7 @@ class LLMProvider(ABC):
                 identical_error_count = 1 if error_key else 0
 
             if not self._is_transient_response(response):
-                stripped = self._strip_image_content(original_messages)
+                stripped = self._replace_image_content(original_messages)
                 if stripped is not None and stripped != kw["messages"]:
                     logger.warning(
                         "Non-transient LLM error with image content, retrying without images"
@@ -745,7 +745,7 @@ class LLMProvider(ABC):
                     # Permanently strip images from the original messages so
                     # subsequent iterations do not repeat the error-retry cycle.
                     if result.finish_reason != "error":
-                        self._strip_image_content_inplace(original_messages)
+                        self._replace_image_content_inplace(original_messages)
                     return result
                 return response
 

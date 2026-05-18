@@ -19,8 +19,8 @@ class HeartbeatService:
     Periodic alarm clock that injects active goals (from DB) into the main
     session via the message bus.
 
-    Uses the owner's sender_id so the LLM treats these as user commands,
-    not system notifications.
+    Messages are marked ephemeral (skipped from session history) to avoid
+    polluting conversation context with routine ticks.
     """
 
     def __init__(

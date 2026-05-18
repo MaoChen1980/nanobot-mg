@@ -8,7 +8,7 @@ from nanobot.utils.restart import (
     RestartNotice,
     consume_restart_notice_from_env,
     format_restart_completed_message,
-    set_restart_notice_to_env,
+    write_restart_notice_env_vars,
     should_show_cli_restart_notice,
 )
 
@@ -19,7 +19,7 @@ def test_set_and_consume_restart_notice_env_roundtrip(monkeypatch):
     monkeypatch.delenv("NANOBOT_RESTART_NOTIFY_METADATA", raising=False)
     monkeypatch.delenv("NANOBOT_RESTART_STARTED_AT", raising=False)
 
-    set_restart_notice_to_env(channel="feishu", chat_id="oc_123")
+    write_restart_notice_env_vars(channel="feishu", chat_id="oc_123")
 
     notice = consume_restart_notice_from_env()
     assert notice is not None
@@ -42,7 +42,7 @@ def test_restart_notice_preserves_metadata_across_env(monkeypatch):
     monkeypatch.delenv("NANOBOT_RESTART_NOTIFY_METADATA", raising=False)
     monkeypatch.delenv("NANOBOT_RESTART_STARTED_AT", raising=False)
 
-    set_restart_notice_to_env(
+    write_restart_notice_env_vars(
         channel="slack",
         chat_id="C123",
         metadata={"slack": {"thread_ts": "1700.42", "channel_type": "channel"}},
@@ -58,7 +58,7 @@ def test_restart_notice_preserves_metadata_across_env(monkeypatch):
 
 def test_restart_notice_clears_stale_metadata(monkeypatch):
     monkeypatch.setenv("NANOBOT_RESTART_NOTIFY_METADATA", '{"stale": true}')
-    set_restart_notice_to_env(channel="cli", chat_id="direct")
+    write_restart_notice_env_vars(channel="cli", chat_id="direct")
     assert "NANOBOT_RESTART_NOTIFY_METADATA" not in os.environ
 
 
@@ -79,7 +79,7 @@ def test_set_restart_notice_json_encode_error_clears_metadata(monkeypatch):
             raise ValueError("bang")
 
     monkeypatch.setenv("NANOBOT_RESTART_NOTIFY_METADATA", '{"old": "data"}')
-    set_restart_notice_to_env(
+    write_restart_notice_env_vars(
         channel="cli", chat_id="direct", metadata={"bad": Unserializable()}
     )
     assert "NANOBOT_RESTART_NOTIFY_METADATA" not in os.environ

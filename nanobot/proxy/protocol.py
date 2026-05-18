@@ -14,7 +14,7 @@ class ProxyMessage:
     sender_id: str        # e.g. "ou_xxx"
     chat_id: str          # e.g. "oc_xxx"
     content: str
-    message_id: str      # 飞书 message_id，用于去重和回调
+    message_id: str      # Platform message ID, used for dedup and reply threading
     media: list[str] = field(default_factory=list)
     timestamp: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)

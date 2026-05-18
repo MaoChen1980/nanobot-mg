@@ -3,7 +3,7 @@
 from nanobot.providers.openai_responses.converters import (
     convert_messages,
     convert_tools,
-    convert_user_message,
+    convert_user_content,
     split_tool_call_id,
 )
 from nanobot.providers.openai_responses.parsing import (
@@ -18,7 +18,7 @@ from nanobot.providers.openai_responses.parsing import (
 __all__ = [
     "convert_messages",
     "convert_tools",
-    "convert_user_message",
+    "convert_user_content",
     "split_tool_call_id",
     "iter_sse",
     "consume_sse",

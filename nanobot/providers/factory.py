@@ -82,7 +82,7 @@ def make_provider(config: Config) -> LLMProvider:
 
 
 def provider_signature(config: Config) -> tuple[object, ...]:
-    """Return the config fields that affect the primary LLM provider."""
+    """Return a hashable tuple of config values identifying the current provider."""
     model = config.agents.defaults.model
     defaults = config.agents.defaults
     return (

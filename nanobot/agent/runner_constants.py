@@ -1,4 +1,4 @@
-"""Constants for AgentRunner."""
+"""Constants and callback helpers for AgentRunner."""
 
 from __future__ import annotations
 

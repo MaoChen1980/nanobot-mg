@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 
 if TYPE_CHECKING:
     from nanobot.agent.subagent import SubagentManager
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         task_id=p("string", "The subagent task ID to check (from spawn return value)"),
         required=["task_id"],
     )

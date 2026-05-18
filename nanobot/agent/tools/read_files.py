@@ -9,14 +9,14 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from nanobot.agent.tools.base import tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 
 _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".ruff_cache"})
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         pattern=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py' (legacy alias: glob)"),
         grep=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context)"),
         path=p("string", "Absolute path to a directory to search from (default: workspace root)."),

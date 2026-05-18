@@ -31,7 +31,7 @@ class ListSubagentsTool(Tool):
         )
 
     async def execute(self, **kwargs: Any) -> str:
-        statuses = self._manager.list_statuses()
+        statuses = self._manager.list_running_statuses()
         if not statuses:
             return "No subagents currently running."
 

@@ -12,7 +12,7 @@ from nanobot.bus.events import OutboundMessage
 from nanobot.agent.subagent_status import SubagentStatus
 from nanobot.command.router import CommandContext, CommandRouter
 from nanobot.utils.helpers import build_status_content
-from nanobot.utils.restart import set_restart_notice_to_env
+from nanobot.utils.restart import write_restart_notice_env_vars
 
 
 async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
@@ -28,9 +28,9 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
 
 
 async def cmd_restart(ctx: CommandContext) -> OutboundMessage:
-    """Restart the process in-place via os.execv."""
+    """Restart the process (os.execv on Unix, subprocess.Popen + sys.exit on Windows)."""
     msg = ctx.msg
-    set_restart_notice_to_env(
+    write_restart_notice_env_vars(
         channel=msg.channel,
         chat_id=msg.chat_id,
         metadata=dict(msg.metadata or {}),
@@ -107,7 +107,7 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     # Archive session messages to history before clearing
     if session.messages:
         try:
-            loop.context.memory.archive_session(session.messages)
+            loop.context.memory.condense_session_to_history(session.messages)
         except Exception:
             logger.exception("Failed to archive session to history")
 

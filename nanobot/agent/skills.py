@@ -136,7 +136,7 @@ class SkillsLoader:
         logger.warning(f"[SKILL] Not found: {name}")
         return None
 
-    def load_skills_for_context(self, skill_names: list[str]) -> str:
+    def format_skills_for_context(self, skill_names: list[str]) -> str:
         """
         Load specific skills for inclusion in agent context.
 

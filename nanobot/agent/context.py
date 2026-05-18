@@ -98,7 +98,7 @@ class ContextBuilder:
 
         always_skills = self.skills.get_always_skills()
         if always_skills:
-            always_content = self.skills.load_skills_for_context(always_skills)
+            always_content = self.skills.format_skills_for_context(always_skills)
             if always_content:
                 parts.append(f"# Active Skills\n\n{always_content}")
 
@@ -144,7 +144,7 @@ class ContextBuilder:
         return "\n".join(lines)
 
     @staticmethod
-    def _adjust_headings(text: str, offset: int = 1) -> str:
+    def _shift_headings(text: str, offset: int = 1) -> str:
         """Shift all markdown heading levels by *offset*.
 
         Positive = demote (add #), negative = promote (remove #).
@@ -157,7 +157,7 @@ class ContextBuilder:
         return re.sub(r'^(#{1,6})(\s)', _replace, text, flags=re.MULTILINE)
 
     @staticmethod
-    def _sanitize_md(text: str) -> str:
+    def _escape_block_md(text: str) -> str:
         """Escape block-level markdown constructs in *text* for safe embedding.
 
         Prevents injected DB content from creating headings, horizontal rules,
@@ -201,7 +201,7 @@ class ContextBuilder:
         return ts
 
     @staticmethod
-    def _fill_thinking_into_content(messages: list[dict]) -> list[dict]:
+    def _backfill_thinking_to_content(messages: list[dict]) -> list[dict]:
         """Fill empty assistant content with thinking/reasoning text.
 
         When a model returns only thinking (tool calls) without content, the
@@ -249,7 +249,7 @@ class ContextBuilder:
             result.append(msg)
         return result
 
-    def _build_state_section(self) -> str:
+    def _build_goals_and_events_section(self) -> str:
         """Build a merged Current State block from Goals + recent events.
 
         Note: HEARTBEAT active tasks are NOT injected here — they are embedded
@@ -288,7 +288,7 @@ class ContextBuilder:
         for g in goals:
             project = g.get("project", "")
             project_str = f" [{project}]" if project else ""
-            lines.append(f"- **{self._sanitize_md(g['title'])}**{project_str}")
+            lines.append(f"- **{self._escape_block_md(g['title'])}**{project_str}")
             meta_parts = []
             priority = g.get("priority", 0)
             if priority:
@@ -299,12 +299,12 @@ class ContextBuilder:
             if meta_parts:
                 lines[-1] += f" ({', '.join(meta_parts)})"
             if g.get("description"):
-                lines.append(f"  - {self._sanitize_md(g['description'])}")
+                lines.append(f"  - {self._escape_block_md(g['description'])}")
             data = g.get("data") or {}
             if data.get("subtasks"):
                 for st in data["subtasks"]:
                     status_icon = "✅" if st.get("status") == "done" else "⬜"
-                    lines.append(f"  {status_icon} {self._sanitize_md(st.get('title', st.get('id', '?')))}")
+                    lines.append(f"  {status_icon} {self._escape_block_md(st.get('title', st.get('id', '?')))}")
         return "\n".join(lines)
 
     def _query_recent_events(self) -> str:
@@ -318,7 +318,7 @@ class ContextBuilder:
         for e in reversed(events):
             ts = self._convert_timestamp(e["timestamp"], self.timezone)
             ts = ts[:26] if ts else "?"
-            lines.append(f"### [{ts}] {self._sanitize_md(e['content'])}")
+            lines.append(f"### [{ts}] {self._escape_block_md(e['content'])}")
         return "\n".join(lines)
 
     # -- vector-indexed memory -------------------------------------------------
@@ -330,7 +330,7 @@ class ContextBuilder:
 
         # Load MEMORY.md index
         index_content = self.memory.read_memory()
-        if index_content and not self._is_template_content(index_content, "memory/MEMORY.md"):
+        if index_content and not self._is_default_template_content(index_content, "memory/MEMORY.md"):
             lines = index_content.split("\n")
             if lines and lines[0].startswith("# "):
                 lines = lines[1:]
@@ -433,7 +433,7 @@ class ContextBuilder:
                     tpl = pkg_files("nanobot") / "templates" / filename
                     if tpl.is_file():
                         content = tpl.read_text(encoding="utf-8")
-                        parts.append(f"## {filename}\n\n{self._adjust_headings(content, offset=1)}")
+                        parts.append(f"## {filename}\n\n{self._shift_headings(content, offset=1)}")
                 except Exception as e:
                     logger.warning("Failed to load bundled template {}: {}", filename, e)
                 continue
@@ -447,7 +447,7 @@ class ContextBuilder:
             if cached is None or cached[0] != mtime:
                 content = file_path.read_text(encoding="utf-8")
                 # Skip if user hasn't customized this file (still default template)
-                if filename in self._SKIP_IF_DEFAULT and self._is_template_content(content, filename):
+                if filename in self._SKIP_IF_DEFAULT and self._is_default_template_content(content, filename):
                     self._bootstrap_cache[filename] = (mtime, None)  # sentinel: skipped
                     continue
                 self._bootstrap_cache[filename] = (mtime, content)
@@ -456,7 +456,7 @@ class ContextBuilder:
                 if cached[1] is None:
                     continue  # cached as skipped, still default
 
-            parts.append(f"## {filename}\n\n{self._adjust_headings(cached[1], offset=1)}")
+            parts.append(f"## {filename}\n\n{self._shift_headings(cached[1], offset=1)}")
 
         return "\n\n".join(parts) if parts else ""
 
@@ -469,13 +469,13 @@ class ContextBuilder:
             content = lessons_path.read_text(encoding="utf-8").strip()
             if not content:
                 return ""
-            return f"## Past Lessons\n\n{self._adjust_headings(content, offset=1)}"
+            return f"## Past Lessons\n\n{self._shift_headings(content, offset=1)}"
         except Exception as e:
             logger.warning("Failed to load lessons: {}", e)
             return ""
 
     @staticmethod
-    def _is_template_content(content: str, template_path: str) -> bool:
+    def _is_default_template_content(content: str, template_path: str) -> bool:
         """Check if *content* is identical to the bundled template (user hasn't customized it)."""
         try:
             tpl = pkg_files("nanobot") / "templates" / template_path
@@ -526,7 +526,7 @@ class ContextBuilder:
         if memory_section:
             sys_dynamic_parts.append(memory_section)
 
-        state_block = self._build_state_section()
+        state_block = self._build_goals_and_events_section()
         if state_block:
             sys_dynamic_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
 
@@ -562,7 +562,7 @@ class ContextBuilder:
             elif isinstance(content, list):
                 messages[i]["content"] = [{"type": "text", "text": header}] + list(content)
 
-        return self._fill_thinking_into_content(messages)
+        return self._backfill_thinking_to_content(messages)
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:
         """Build user message content with optional base64-encoded images."""

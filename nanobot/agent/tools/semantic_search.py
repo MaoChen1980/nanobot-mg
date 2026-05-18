@@ -11,7 +11,7 @@ from nanobot.agent.tools._semantic_base import (
     get_model,
 )
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 
 _MAX_TEXT_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -22,7 +22,7 @@ _MAX_TEXT_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         query=p("string", "Natural-language query to find relevant passages"),
         text=p("string", "Text content to search within (max 5 MB). Provide this or path."),
         path=p("string", "Absolute path to a file to read and search. Provide this or text."),

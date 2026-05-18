@@ -19,7 +19,7 @@ from nanobot.bus.queue import MessageBus
 from nanobot.config.schema import ExecToolConfig, WebToolsConfig
 from nanobot.providers.base import LLMProvider
 
-from .subagent_status import SubagentStatus, SubagentResult, format_partial_progress
+from .subagent_status import SubagentStatus, SubagentResult, format_error_progress
 from .subagent_tools import build_subagent_tools
 from .subagent_prompt import build_subagent_prompt
 
@@ -203,7 +203,7 @@ class SubagentManager:
                     status.tool_events = list(result.tool_events)
                     await self._announce_result(
                         task_id, label, task,
-                        format_partial_progress(result),
+                        format_error_progress(result),
                         origin, "error", sub_result=sub_result,
                     )
                 elif result.stop_reason == "error":
@@ -299,6 +299,6 @@ class SubagentManager:
             if tid in self._running_tasks and not self._running_tasks[tid].done()
         )
 
-    def list_statuses(self) -> list[SubagentStatus]:
+    def list_running_statuses(self) -> list[SubagentStatus]:
         """Return statuses of all currently running subagents."""
         return [s for s in self._task_statuses.values() if s.phase not in ("done", "error")]

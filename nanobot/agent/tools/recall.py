@@ -7,11 +7,7 @@ from typing import Any
 
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
-
-
-def _row_to_session_dict(row: tuple, cols: list[str]) -> dict:
-    return dict(zip(cols, row, strict=False))
+from nanobot.agent.tools.schema import p, build_parameters_schema
 
 
 def _find_line_range(full_text: str, chunk_text: str) -> tuple[int, int]:
@@ -33,7 +29,7 @@ def _find_line_range(full_text: str, chunk_text: str) -> tuple[int, int]:
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         query=p("string", "Describe what you're looking for. Used for both history and knowledge modes."),
         mode=p("string",
             "Search mode:\n"

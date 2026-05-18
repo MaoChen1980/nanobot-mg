@@ -122,7 +122,7 @@ class MemoryStore:
             self.vector_index.build_from_files(file_texts)
             self.vector_index.save()
 
-    def archive_session(self, messages: list[dict]) -> int:
+    def condense_session_to_history(self, messages: list[dict]) -> int:
         """Archive session messages into history, grouped by turns.
 
         Each turn is condensed to: user input -> thinking/tool_names -> final

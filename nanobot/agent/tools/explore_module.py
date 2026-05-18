@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from nanobot.agent.tools.base import tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 
 _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".ruff_cache"})
@@ -61,7 +61,7 @@ _LANG_PATTERNS: dict[str, list[tuple[str, str]]] = {
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         path=p("string", "Absolute path to a file or directory to explore."),
         max_level=p("integer", "Maximum depth for directory listing (default 2, max 5)", minimum=1, maximum=5, default=2),
         show_refs=p("boolean", "Show a sample of internal references for each symbol (default true)", default=True),

@@ -8,11 +8,11 @@ from typing import Any
 
 from nanobot.agent.tools.base import tool_parameters
 from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         data=p("string", "Text content to analyze (provide this or path)"),
         path=p("string", "Absolute path to a file to read and analyze. Provide this or data."),
         question=p("string", "Optional keyword filter — simple term matching, NOT semantic analysis. Example: 'database connection error' shows lines containing those words ranked by match count."),

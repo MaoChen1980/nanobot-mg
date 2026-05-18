@@ -11,7 +11,7 @@ from loguru import logger
 from nanobot.agent.runner_injection import drain_injections
 from nanobot.agent.tools.ask import AskUserInterrupt
 from nanobot.agent.runner_constants import _MAX_INJECTION_CYCLES
-from nanobot.utils.runtime import repeated_external_lookup_error
+from nanobot.utils.runtime import check_repeated_external_lookup
 
 
 def partition_tool_batches(
@@ -109,7 +109,7 @@ async def _run_tool(
     turn: int,
 ) -> tuple:
     """Execute a single tool call and return (result, event, error)."""
-    lookup_error = repeated_external_lookup_error(
+    lookup_error = check_repeated_external_lookup(
         tool_call.name,
         tool_call.arguments,
         external_lookup_counts,

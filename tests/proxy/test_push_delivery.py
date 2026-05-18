@@ -229,7 +229,7 @@ class TestBackgroundReader:
 
 
 class TestFeishuHandleDeliver:
-    """FeishuProxyChannel._handle_deliver sends messages via _send_text_reply."""
+    """FeishuProxyChannel._handle_deliver sends messages via _send_formatted_reply."""
 
     @pytest.fixture
     def channel(self):
@@ -240,21 +240,21 @@ class TestFeishuHandleDeliver:
             channel="feishu",
             bot="nanobot",
         )
-        ch._send_text_reply = MagicMock()
+        ch._send_formatted_reply = MagicMock()
         return ch
 
 
     async def test_deliver_empty_chat_id(self, channel):
         await channel._handle_deliver({"chat_id": "", "content": "some content"})
-        channel._send_text_reply.assert_not_called()
+        channel._send_formatted_reply.assert_not_called()
 
     async def test_deliver_empty_content(self, channel):
         await channel._handle_deliver({"chat_id": "oc_xxx", "content": ""})
-        channel._send_text_reply.assert_not_called()
+        channel._send_formatted_reply.assert_not_called()
 
     async def test_deliver_missing_keys(self, channel):
         await channel._handle_deliver({})
-        channel._send_text_reply.assert_not_called()
+        channel._send_formatted_reply.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

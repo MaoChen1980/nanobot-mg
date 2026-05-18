@@ -83,7 +83,7 @@ class Nanobot:
             timezone=defaults.timezone,
             unified_session=defaults.unified_session,
             disabled_skills=defaults.disabled_skills,
-            session_ttl_minutes=defaults.session_ttl_minutes,
+            session_idle_timeout_minutes=defaults.session_idle_timeout_minutes,
             tools_config=config.tools,
             pt_save_interval=defaults.extractor.save_interval,
         )

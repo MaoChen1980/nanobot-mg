@@ -387,10 +387,7 @@ def dingtalk(
 
 
 def _make_provider(config: Config):
-    """Create the appropriate LLM provider from config.
-
-    Routing is driven by ``ProviderSpec.backend`` in the registry.
-    """
+    """Create the appropriate LLM provider from config by delegating to providers.factory."""
     from nanobot.providers.factory import make_provider
 
     try:
@@ -565,7 +562,7 @@ def agent(
         timezone=config.agents.defaults.timezone,
         unified_session=config.agents.defaults.unified_session,
         disabled_skills=config.agents.defaults.disabled_skills,
-        session_ttl_minutes=config.agents.defaults.session_ttl_minutes,
+        session_idle_timeout_minutes=config.agents.defaults.session_idle_timeout_minutes,
         tools_config=config.tools,
         pt_save_interval=config.agents.defaults.extractor.save_interval,
     )

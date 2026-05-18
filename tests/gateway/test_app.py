@@ -471,12 +471,12 @@ class TestRunApiServer:
 
 
 # ---------------------------------------------------------------------------
-# _open_browser_when_ready
+# _poll_and_open_browser
 # ---------------------------------------------------------------------------
 
 
 class TestOpenBrowserWhenReady:
-    """_open_browser_when_ready — waits for port then opens browser."""
+    """_poll_and_open_browser — waits for port then opens browser."""
 
     @staticmethod
     async def _oc_ok(*_a, **_kw):
@@ -498,7 +498,7 @@ class TestOpenBrowserWhenReady:
             patch("nanobot.gateway.app.console.print"),
         ):
             import asyncio
-            asyncio.run(app._open_browser_when_ready())
+            asyncio.run(app._poll_and_open_browser())
 
         wb_open.assert_called_once_with("http://localhost:8080")
 
@@ -514,7 +514,7 @@ class TestOpenBrowserWhenReady:
             patch("nanobot.gateway.app.console.print"),
         ):
             import asyncio
-            asyncio.run(app._open_browser_when_ready())
+            asyncio.run(app._poll_and_open_browser())
 
         wb_open.assert_called_once_with("http://localhost:8080")
 
@@ -529,7 +529,7 @@ class TestOpenBrowserWhenReady:
         ):
             wb_open.side_effect = Exception("no browser")
             import asyncio
-            asyncio.run(app._open_browser_when_ready())
+            asyncio.run(app._poll_and_open_browser())
 
         texts = [c[0][0] for c in cp.call_args_list if c[0]]
         assert any("Could not open browser" in str(t) for t in texts)

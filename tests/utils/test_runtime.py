@@ -7,7 +7,7 @@ from nanobot.utils.runtime import (
     ensure_nonempty_tool_result,
     external_lookup_signature,
     is_blank_text,
-    repeated_external_lookup_error,
+    check_repeated_external_lookup,
 )
 
 
@@ -99,25 +99,25 @@ class TestExternalLookupSignature:
 class TestRepeatedExternalLookupError:
     def test_first_call_returns_none(self):
         seen = {}
-        result = repeated_external_lookup_error("web_fetch", {"url": "http://example.com"}, seen)
+        result = check_repeated_external_lookup("web_fetch", {"url": "http://example.com"}, seen)
         assert result is None
         assert seen == {"web_fetch:http://example.com": 1}
 
     def test_second_call_returns_none(self):
         seen = {"web_search:python": 1}
-        result = repeated_external_lookup_error("web_search", {"query": "Python"}, seen)
+        result = check_repeated_external_lookup("web_search", {"query": "Python"}, seen)
         assert result is None
         assert seen["web_search:python"] == 2
 
     def test_third_call_blocked(self):
         seen = {"web_fetch:http://example.com": 2}
-        result = repeated_external_lookup_error("web_fetch", {"url": "http://example.com"}, seen)
+        result = check_repeated_external_lookup("web_fetch", {"url": "http://example.com"}, seen)
         assert result is not None
         assert "blocked" in result
         assert seen["web_fetch:http://example.com"] == 3
 
     def test_non_tracked_tool_returns_none(self):
         seen = {}
-        result = repeated_external_lookup_error("read_file", {"path": "/tmp"}, seen)
+        result = check_repeated_external_lookup("read_file", {"path": "/tmp"}, seen)
         assert result is None
         assert seen == {}

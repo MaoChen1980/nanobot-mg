@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from nanobot.agent.tools.base import tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         error=p("string", "Error message, keyword, or code to investigate"),
         path=p("string", "Optional absolute path to a file or directory to narrow the search scope."),
         max_results=p("integer", "Max grep results to show (default 20)", minimum=1, maximum=50, default=20),

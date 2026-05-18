@@ -9,7 +9,7 @@ import pytest
 
 from nanobot.security.network import (
     configure_ssrf_whitelist,
-    contains_internal_url,
+    targets_internal_address,
     validate_resolved_url,
     validate_url_target,
 )
@@ -93,26 +93,26 @@ async def test_allows_normal_https():
 
 
 # ---------------------------------------------------------------------------
-# contains_internal_url — shell command scanning
+# targets_internal_address — shell command scanning
 # ---------------------------------------------------------------------------
 
 def test_detects_curl_metadata():
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve("169.254.169.254", ["169.254.169.254"])):
-        assert contains_internal_url('curl -s http://169.254.169.254/computeMetadata/v1/')
+        assert targets_internal_address('curl -s http://169.254.169.254/computeMetadata/v1/')
 
 
 def test_detects_wget_localhost():
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve("localhost", ["127.0.0.1"])):
-        assert contains_internal_url("wget http://localhost:8080/secret")
+        assert targets_internal_address("wget http://localhost:8080/secret")
 
 
 def test_allows_normal_curl():
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve("example.com", ["93.184.216.34"])):
-        assert not contains_internal_url("curl https://example.com/api/data")
+        assert not targets_internal_address("curl https://example.com/api/data")
 
 
 def test_no_urls_returns_false():
-    assert not contains_internal_url("echo hello && ls -la")
+    assert not targets_internal_address("echo hello && ls -la")
 
 
 # ---------------------------------------------------------------------------

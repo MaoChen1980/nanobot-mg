@@ -8,7 +8,7 @@ from nanobot.agent.runner import AgentRunner, AgentRunSpec
 from nanobot.agent.tools.ask import AskUserInterrupt, AskUserTool
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.tools.schema import tool_parameters_schema
+from nanobot.agent.tools.schema import build_parameters_schema
 from nanobot.bus.events import InboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.base import GenerationSettings, LLMResponse, ToolCallRequest
@@ -44,7 +44,7 @@ def test_ask_user_tool_schema_and_interrupt():
 
 @pytest.mark.asyncio
 async def test_runner_pauses_on_ask_user_without_executing_later_tools():
-    @tool_parameters(tool_parameters_schema(required=[]))
+    @tool_parameters(build_parameters_schema(required=[]))
     class LaterTool(Tool):
         called = False
 

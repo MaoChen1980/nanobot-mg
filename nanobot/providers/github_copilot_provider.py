@@ -59,7 +59,7 @@ def _load_github_token() -> OAuthToken | None:
     return token
 
 
-def get_github_copilot_login_status() -> OAuthToken | None:
+def get_github_copilot_token() -> OAuthToken | None:
     """Return the persisted GitHub OAuth token if available."""
     return _load_github_token()
 

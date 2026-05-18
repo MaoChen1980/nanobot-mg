@@ -106,7 +106,7 @@ class MemoryExtractor:
             return False
 
         # ── Step 2: write findings + cleanup ──
-        await self._write_and_cleanup(all_findings)
+        await self._write_cleanup_and_rebuild(all_findings)
         return True
 
     # ------------------------------------------------------------------
@@ -210,7 +210,7 @@ class MemoryExtractor:
     # Step 2 — Write findings + cleanup
     # ------------------------------------------------------------------
 
-    async def _write_and_cleanup(self, findings: list[dict[str, Any]]) -> None:
+    async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]]) -> None:
         """Write all findings to target files, then cleanup-check SOUL.md/USER.md, then commit and rebuild FAISS."""
         topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
         skills_to_create: list[dict[str, Any]] = []
@@ -240,7 +240,7 @@ class MemoryExtractor:
                 topic = (finding.get("topic") or "").strip()
                 if not topic:
                     continue
-                rel_path = self._sanitize_topic_path(topic) + ".md"
+                rel_path = self._topic_to_filepath(topic) + ".md"
                 paragraph = content
                 if ftype == "decision" and finding.get("rationale"):
                     paragraph += f"\n  > 理由：{finding['rationale']}"
@@ -495,7 +495,7 @@ class MemoryExtractor:
         return safe[: _SANITIZE_MAX_LEN].strip("_")
 
     @staticmethod
-    def _sanitize_topic_path(topic: str) -> str:
+    def _topic_to_filepath(topic: str) -> str:
         """Convert a hierarchical topic (e.g. 'AI/harness design') into a safe relative path.
 
         Preserves forward slashes as directory separators so the LLM can
@@ -507,7 +507,7 @@ class MemoryExtractor:
         return "/".join(safe_parts[:8])  # max 8 levels deep
 
     @staticmethod
-    def save_pt(
+    def save_prompt_snapshot(
         messages: list[dict[str, Any]], prompts_dir: Path, session_key: str
     ) -> None:
         """Save a .pt snapshot of the messages array before LLM send.

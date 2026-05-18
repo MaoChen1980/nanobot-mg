@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.context_vars import _current_messages_for_subagent, _in_subagent
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         task=p("string", "The task for the subagent to complete"),
         label=p("string", "Optional short label for the task (for display)"),
         max_iterations=p("integer", "Maximum tool call iterations (default 100)"),

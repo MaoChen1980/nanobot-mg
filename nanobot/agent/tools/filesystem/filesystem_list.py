@@ -6,11 +6,11 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from .filesystem_base import _FsTool
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         path=p("string", "Absolute path to a directory to list."),
         recursive=p("boolean", "Recursively list all files (default false)", default=False),
         max_entries=p("integer", "Maximum entries to return (default 400)",

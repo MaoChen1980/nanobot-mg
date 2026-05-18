@@ -17,8 +17,8 @@ from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.sandbox import wrap_command
-from nanobot.agent.tools.schema import p, tool_parameters_schema
-from nanobot.agent.tools.shell_validators import validate_command
+from nanobot.agent.tools.schema import p, build_parameters_schema
+from nanobot.agent.tools.shell_validators import check_command_safety
 from nanobot.config.paths import get_media_dir, get_runtime_subdir
 
 _IS_WINDOWS = sys.platform == "win32"
@@ -41,8 +41,8 @@ _TOOL_SUGGESTIONS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 # Error keyword patterns for always-on auto-verify.
-# Matches only capitalised first-letter variants to avoid false positives
-# on common lowercase words (e.g. "error" in "error handling", "exception" in "with exception of").
+# Case-sensitive patterns matching only capitalised forms (e.g. "Error" not "error")
+# to reduce false positives on everyday language.
 _AUTO_VERIFY_ERROR_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("Error", re.compile(r'\bError\b')),
     ("Exception", re.compile(r'\bException\b')),
@@ -73,7 +73,7 @@ def _extract_powershell_inner(command: str) -> str | None:
     return inner.strip()
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         command=p("string", "The shell command to execute. Not needed when from_cache is set."),
         working_dir=p("string", "Absolute path to the working directory (default: workspace root)."),
         timeout=p("integer",
@@ -411,7 +411,7 @@ class ExecTool(Tool):
     # ------------------------------------------------------------------
 
     def _save_to_cache(self, command: str, stdout: str, stderr: str, exit_code: int) -> Path:
-        """Save command output to a cache file and return the path."""
+        """Save command output to .json and .txt cache files and return the .json path."""
         cache_dir = get_runtime_subdir(self._CACHE_DIR_NAME)
         cmd_hash = hashlib.sha256(command.encode()).hexdigest()[:12]
         ts = int(time.time())
@@ -771,7 +771,7 @@ class ExecTool(Tool):
 
     def _guard_command(self, command: str, cwd: str) -> str | None:
         """Safety guard for potentially destructive commands."""
-        return validate_command(
+        return check_command_safety(
             command=command,
             cwd=cwd,
             deny_patterns=self.deny_patterns,

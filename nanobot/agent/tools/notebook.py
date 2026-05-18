@@ -9,7 +9,7 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.filesystem.filesystem import _FsTool
 
 
@@ -40,7 +40,7 @@ def _make_empty_notebook() -> dict:
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         path=p("string", "Absolute path to a .ipynb notebook file."),
         cell_index=p("integer", "0-based index of the cell to edit (default 0)", minimum=0, default=0),
         new_source=p("string", "New source content for the cell. Required for replace/insert modes; ignored when edit_mode is 'delete'."),

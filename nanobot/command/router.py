@@ -58,10 +58,10 @@ class CommandRouter:
         return text.strip().lower() in self._priority
 
     def is_dispatchable_command(self, text: str) -> bool:
-        """Check whether *text* matches any non-priority command tier (exact or prefix).
+        """Check whether *text* matches exact or prefix tiers.
 
         Does NOT check priority or interceptor tiers.
-        If this returns True, ``dispatch()`` is guaranteed to match a handler.
+        dispatch() may still return None if only interceptors match.
         """
         cmd = text.strip().lower()
         if cmd in self._exact:

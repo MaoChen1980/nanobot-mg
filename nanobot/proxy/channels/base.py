@@ -352,7 +352,7 @@ class BaseProxyChannel:
                 return False
         return os.getppid() == self._parent_pid
 
-    def _check_config_enabled(self) -> None:
+    def _exit_if_disabled(self) -> None:
         """Re-read config file from disk and exit if this channel is disabled.
 
         Respects the user's intent when they toggle ``enabled: false``
@@ -410,7 +410,7 @@ class BaseProxyChannel:
             config_check_interval += 1
             if config_check_interval >= 6:
                 config_check_interval = 0
-                self._check_config_enabled()
+                self._exit_if_disabled()
 
     async def _send_with_reconnect(self, msg: dict[str, Any]) -> HubResponse:
         """Send with automatic reconnect on failure."""
@@ -557,7 +557,7 @@ class BaseProxyChannel:
 
     @classmethod
     def validate_config(cls, config: dict[str, Any]) -> None:
-        """Check required config fields, exit if missing."""
+        """Check required config fields and exit via sys.exit(1) if missing."""
         missing = [f for f in cls.REQUIRED_CONFIG_FIELDS if not config.get(f)]
         if missing:
             logger.error(

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from nanobot.security.network import contains_internal_url
+    from nanobot.security.network import targets_internal_address
 
 # Dangerous command patterns that should be blocked
 DANGEROUS_PATTERNS: list[str] = [
@@ -24,9 +24,6 @@ DANGEROUS_PATTERNS: list[str] = [
     r":\(\)\s*\{.*\};\s*:",          # fork bomb
 ]
 
-# Nanobot internal files that should not be modified
-NANOBOT_FILES: list[str] = []
-
 
 def _check_dangerous_patterns(command: str, deny_patterns: list[str]) -> str | None:
     """Check for dangerous command patterns. Returns error message or None."""
@@ -39,26 +36,9 @@ def _check_dangerous_patterns(command: str, deny_patterns: list[str]) -> str | N
 
 def _check_internal_url(command: str) -> str | None:
     """Check for internal/private URLs. Returns error message or None."""
-    from nanobot.security.network import contains_internal_url
-    if contains_internal_url(command):
+    from nanobot.security.network import targets_internal_address
+    if targets_internal_address(command):
         return "Error: Command blocked by safety guard (internal/private URL detected)"
-    return None
-
-
-def _check_nanobot_files(command: str) -> str | None:
-    """Check for commands targeting nanobot internal files. Returns error message or None."""
-    lower = command.lower()
-    for filename in NANOBOT_FILES:
-        if re.search(r">>?\s*\S*" + re.escape(filename), lower):
-            return f"Error: Command blocked by safety guard (nanobot file '{filename}' redirect)"
-        if re.search(r"\btee\b[^|;&<>]*(?:" + re.escape(filename) + r")", lower):
-            return f"Error: Command blocked by safety guard (nanobot file '{filename}' via tee)"
-        if re.search(r"\b(?:cp|mv)\b(?:\s+[^\s|;&<>]+)+\s+\S*(?:" + re.escape(filename) + r")", lower):
-            return f"Error: Command blocked by safety guard (nanobot file '{filename}' via cp/mv)"
-        if re.search(r"\bdd\b[^|;&<>]*\bof=\S*(?:" + re.escape(filename) + r")", lower):
-            return f"Error: Command blocked by safety guard (nanobot file '{filename}' via dd)"
-        if re.search(r"\bsed\s+-i[^|;&<>]*(?:" + re.escape(filename) + r")", lower):
-            return f"Error: Command blocked by safety guard (nanobot file '{filename}' via sed -i)"
     return None
 
 
@@ -110,7 +90,7 @@ def _check_workspace_boundary(
     return None
 
 
-def validate_command(
+def check_command_safety(
     command: str,
     cwd: str,
     deny_patterns: list[str],
@@ -142,10 +122,6 @@ def validate_command(
         return error
 
     error = _check_workspace_boundary(cmd, cwd, workspace_root, restrict_to_workspace)
-    if error:
-        return error
-
-    error = _check_nanobot_files(cmd)
     if error:
         return error
 

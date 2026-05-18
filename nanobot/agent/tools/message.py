@@ -10,13 +10,13 @@ from typing import Any, Awaitable, Callable
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.bus.events import OutboundMessage
 from nanobot.config.paths import get_workspace_path
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         content=p("string", "The message content to send"),
         media=p("array",
             "Optional: list of absolute file paths to attach. Supports images, video, audio, documents.",

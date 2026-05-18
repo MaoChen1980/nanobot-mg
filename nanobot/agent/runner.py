@@ -51,7 +51,7 @@ __all__ = [
 from .runner_context import (
     drop_orphan_tool_results,
     backfill_missing_tool_results,
-    snip_history,
+    trim_history_to_budget,
 )
 from .runner_injection import drain_injections, append_injected_messages
 from .runner_llm import (
@@ -135,7 +135,7 @@ class AgentRunner:
             messages or [], injection_cycles, iteration,
         )
 
-    async def _try_drain_injections(
+    async def _drain_injections_and_should_continue(
         self,
         spec: AgentRunSpec,
         messages: list[dict[str, Any]],
@@ -216,7 +216,7 @@ class AgentRunner:
             try:
                 messages_for_model = drop_orphan_tool_results(messages)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
-                messages_for_model = snip_history(self.provider, spec, messages_for_model)
+                messages_for_model = trim_history_to_budget(self.provider, spec, messages_for_model)
                 messages_for_model = drop_orphan_tool_results(messages_for_model)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
             except Exception as exc:
@@ -347,7 +347,7 @@ class AgentRunner:
                     context.error = error
                     context.stop_reason = stop_reason
                     await hook.after_iteration(context)
-                    should_continue, injection_cycles = await self._try_drain_injections(
+                    should_continue, injection_cycles = await self._drain_injections_and_should_continue(
                         spec, messages, None, injection_cycles, phase="after tool error",
                     )
                     if should_continue:
@@ -431,7 +431,7 @@ class AgentRunner:
                     thinking_blocks=response.thinking_blocks,
                 )
 
-            should_continue, injection_cycles = await self._try_drain_injections(
+            should_continue, injection_cycles = await self._drain_injections_and_should_continue(
                 spec, messages, assistant_message, injection_cycles,
                 phase="after final response", iteration=iteration,
             )
@@ -453,7 +453,7 @@ class AgentRunner:
                 context.error = error
                 context.stop_reason = stop_reason
                 await hook.after_iteration(context)
-                should_continue, injection_cycles = await self._try_drain_injections(
+                should_continue, injection_cycles = await self._drain_injections_and_should_continue(
                     spec, messages, None, injection_cycles, phase="after LLM error",
                 )
                 if should_continue:
@@ -470,7 +470,7 @@ class AgentRunner:
                 context.error = error
                 context.stop_reason = stop_reason
                 await hook.after_iteration(context)
-                should_continue, injection_cycles = await self._try_drain_injections(
+                should_continue, injection_cycles = await self._drain_injections_and_should_continue(
                     spec, messages, None, injection_cycles, phase="after empty response",
                 )
                 if should_continue:
@@ -513,7 +513,7 @@ class AgentRunner:
                     max_iterations=spec.max_iterations,
                 )
             self._append_final_message(messages, final_content)
-            drained_after_max_iterations, injection_cycles = await self._try_drain_injections(
+            drained_after_max_iterations, injection_cycles = await self._drain_injections_and_should_continue(
                 spec, messages, None, injection_cycles, phase="after max_iterations",
             )
             if drained_after_max_iterations:

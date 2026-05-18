@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from nanobot.agent.tools.base import tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         path=p("string", "Absolute path to a file or directory inside a git repository. Tool locates the repo and shows relevant commit history."),
         since=p("string", "Time range, e.g. '7 days ago', '2024-01-01', '1 month'"),
         commit=p("string", "Specific commit SHA to inspect in detail (shows full diff)"),

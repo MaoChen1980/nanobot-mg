@@ -45,7 +45,7 @@ def clear_pending_user_turn(session: Any) -> None:
     session.metadata.pop(_PENDING_USER_TURN_KEY, None)
 
 
-def restore_runtime_checkpoint(loop: Any, session: Any) -> bool:
+def restore_and_clear_checkpoint(loop: Any, session: Any) -> bool:
     """Materialize an unfinished turn into session history before a new request."""
     checkpoint = session.metadata.get(_RUNTIME_CHECKPOINT_KEY)
     if not isinstance(checkpoint, dict):
@@ -144,9 +144,9 @@ class RecoveryManager:
         """Clear the pending-user-turn flag from session metadata."""
         clear_pending_user_turn(session)
 
-    def restore_runtime_checkpoint(self, session: Session) -> bool:
+    def restore_and_clear_checkpoint(self, session: Session) -> bool:
         """Materialize an unfinished turn into session history before a new request."""
-        return restore_runtime_checkpoint(self._loop, session)
+        return restore_and_clear_checkpoint(self._loop, session)
 
     def restore_pending_user_turn(self, session: Session) -> bool:
         """Close a turn that only persisted the user message before crashing."""

@@ -271,7 +271,7 @@ class FeishuProxyChannel(BaseProxyChannel):
         buttons = data.get("buttons", [])
         if not chat_id or (not content and not media):
             return
-        # Convert structured buttons to ---quick-replies format for _send_text_reply
+        # Convert structured buttons to ---quick-replies format for _send_formatted_reply
         if buttons and content:
             qr_lines = []
             for row in buttons:
@@ -302,7 +302,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 self._send_media(item["chat_id"], item.get("root_id"), [path],
                                  msg_type="image" if is_image else "file")
         if content:
-            self._send_text_reply(
+            self._send_formatted_reply(
                 chat_id=item["chat_id"],
                 root_id=item.get("root_id"),
                 content=content,
@@ -804,7 +804,7 @@ class FeishuProxyChannel(BaseProxyChannel):
 
     # ── Public send ────────────────────────────────────────────────────
 
-    def _send_text_reply(self, chat_id: str, root_id: str | None, content: str) -> None:
+    def _send_formatted_reply(self, chat_id: str, root_id: str | None, content: str) -> None:
         """Send a reply with automatic format selection based on content and config.
 
         Routing logic (config key ``renderMode``):

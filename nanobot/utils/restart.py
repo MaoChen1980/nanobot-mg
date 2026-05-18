@@ -34,7 +34,7 @@ def format_restart_completed_message(started_at_raw: str) -> str:
     return f"Restart completed{elapsed_suffix}."
 
 
-def set_restart_notice_to_env(
+def write_restart_notice_env_vars(
     *, channel: str, chat_id: str, metadata: dict[str, Any] | None = None,
 ) -> None:
     """Write restart notice env values for the next process."""

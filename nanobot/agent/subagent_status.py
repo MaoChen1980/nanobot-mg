@@ -39,7 +39,7 @@ class SubagentResult:
     errors: list[str]
 
 
-def format_partial_progress(result) -> str:
+def format_error_progress(result) -> str:
     """Format partial progress for error announcements."""
     completed = [e for e in result.tool_events if e["status"] == "ok"]
     failure = next((e for e in reversed(result.tool_events) if e["status"] == "error"), None)

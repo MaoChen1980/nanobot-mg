@@ -40,7 +40,7 @@ def p(type: str, description: str = "", **kwargs: Any) -> dict[str, Any]:
     return d
 
 
-def tool_parameters_schema(
+def build_parameters_schema(
     *,
     required: list[str] | None = None,
     description: str = "",

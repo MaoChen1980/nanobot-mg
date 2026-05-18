@@ -813,7 +813,7 @@ class EscalateBlocker(Tool):
         return msg
 
 
-def register(memory: MemoryStore) -> list[Tool]:
+def create_goal_tools(memory: MemoryStore) -> list[Tool]:
     """Register goal/event tools with the tool registry."""
     return [
         WriteGoal(memory),

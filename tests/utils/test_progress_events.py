@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from nanobot.utils.progress_events import (
     build_tool_event_finish_payloads,
     build_tool_event_start_payload,
-    invoke_on_progress,
+    process_tool_events_and_progress,
     on_progress_accepts_tool_events,
     tool_event_result_extras,
 )
@@ -175,21 +175,21 @@ class TestInvokeOnProgress:
         async def cb(content, tool_hint=False, tool_events=None):
             called_args.append((content, tool_hint, tool_events))
 
-        await invoke_on_progress(cb, "hello", tool_events=[{"event": "test"}])
+        await process_tool_events_and_progress(cb, "hello", tool_events=[{"event": "test"}])
         assert called_args == [("hello", False, [{"event": "test"}])]
 
     async def test_without_tool_events(self):
         cb = AsyncMock()
-        await invoke_on_progress(cb, "hello")
+        await process_tool_events_and_progress(cb, "hello")
         cb.assert_awaited_once_with("hello", tool_hint=False, tool_events=None)
 
     async def test_tool_events_not_accepted(self):
         cb = AsyncMock()
         with patch("nanobot.utils.progress_events.on_progress_accepts_tool_events", return_value=False):
-            await invoke_on_progress(cb, "hello", tool_events=[{"event": "test"}])
+            await process_tool_events_and_progress(cb, "hello", tool_events=[{"event": "test"}])
         cb.assert_awaited_once_with("hello", tool_hint=False, tool_events=None)
 
     async def test_with_tool_hint(self):
         cb = AsyncMock()
-        await invoke_on_progress(cb, "running exec", tool_hint=True)
+        await process_tool_events_and_progress(cb, "running exec", tool_hint=True)
         cb.assert_awaited_once_with("running exec", tool_hint=True, tool_events=None)

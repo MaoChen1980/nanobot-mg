@@ -66,7 +66,7 @@ class _FsTool(Tool):
         return _resolve_path(path, self._workspace, self._allowed_dir, self._extra_allowed_dirs)
 
     @staticmethod
-    def _grep_file(fp: Path, pattern: str, max_matches: int = 5) -> str:
+    def _find_in_file(fp: Path, pattern: str, max_matches: int = 5) -> str:
         """Search *pattern* in *fp* and return a compact verification result."""
         try:
             content = fp.read_text(encoding="utf-8")

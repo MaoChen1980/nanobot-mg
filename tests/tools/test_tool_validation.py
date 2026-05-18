@@ -3,7 +3,7 @@ import subprocess
 import sys
 from typing import Any
 
-from nanobot.agent.tools import Schema, p, tool_parameters, tool_parameters_schema
+from nanobot.agent.tools import Schema, p, tool_parameters, build_parameters_schema
 from nanobot.agent.tools.base import Tool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.shell import ExecTool

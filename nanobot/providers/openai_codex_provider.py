@@ -54,7 +54,7 @@ class OpenAICodexProvider(LLMProvider):
             "input": input_items,
             "text": {"verbosity": "medium"},
             "include": ["reasoning.encrypted_content"],
-            "prompt_cache_key": _prompt_cache_key(messages),
+            "prompt_cache_key": _messages_cache_key(messages),
             "tool_choice": tool_choice or "auto",
             "parallel_tool_calls": True,
         }
@@ -148,7 +148,7 @@ async def _request_codex(
             return await consume_sse(response, on_content_delta)
 
 
-def _prompt_cache_key(messages: list[dict[str, Any]]) -> str:
+def _messages_cache_key(messages: list[dict[str, Any]]) -> str:
     raw = json.dumps(messages, ensure_ascii=True, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 

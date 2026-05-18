@@ -51,7 +51,7 @@ def build_subagent_prompt(
     # 4. Skills
     always_skills = ctx.skills.get_always_skills()
     if always_skills:
-        always_content = ctx.skills.load_skills_for_context(always_skills)
+        always_content = ctx.skills.format_skills_for_context(always_skills)
         if always_content:
             parts.append(f"# Active Skills\n\n{always_content}")
 

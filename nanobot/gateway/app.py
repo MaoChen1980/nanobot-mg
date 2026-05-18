@@ -183,7 +183,7 @@ class GatewayApplication:
             timezone=self.config.agents.defaults.timezone,
             unified_session=self.config.agents.defaults.unified_session,
             disabled_skills=self.config.agents.defaults.disabled_skills,
-            session_ttl_minutes=self.config.agents.defaults.session_ttl_minutes,
+            session_idle_timeout_minutes=self.config.agents.defaults.session_idle_timeout_minutes,
             tools_config=self.config.tools,
             pt_save_interval=self.config.agents.defaults.extractor.save_interval,
             provider_snapshot_loader=load_provider_snapshot,
@@ -321,7 +321,7 @@ class GatewayApplication:
                 return None
 
             if job.name == "log_check":
-                await self._run_log_check(_deliver_to_channel)
+                await self._monitor_log_errors(_deliver_to_channel)
                 return None
 
             # Check if this is a test/dry-run execution
@@ -503,7 +503,7 @@ class GatewayApplication:
         )
         console.print("[green]✓[/green] Log check: every 2 hours")
 
-    async def _run_log_check(self, deliver_fn) -> None:
+    async def _monitor_log_errors(self, deliver_fn) -> None:
         """Check JSONL log for new ERROR/CRITICAL entries and alert active sessions."""
         from nanobot.bus.events import OutboundMessage
         from nanobot.config.paths import get_data_dir
@@ -715,7 +715,7 @@ class GatewayApplication:
             self._run_api_server(self.config.gateway.host, self.port),
         ]
         if self.open_browser_url:
-            tasks.append(self._open_browser_when_ready())
+            tasks.append(self._poll_and_open_browser())
 
         await asyncio.gather(*tasks)
 
@@ -745,7 +745,7 @@ class GatewayApplication:
             f"[green]✓[/green] Settings server: http://{host}:{api_port}/"
         )
 
-    async def _open_browser_when_ready(self) -> None:
+    async def _poll_and_open_browser(self) -> None:
         """Wait for the gateway to bind, then point the user's browser at the webui."""
         import webbrowser
 

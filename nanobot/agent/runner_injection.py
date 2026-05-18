@@ -54,7 +54,7 @@ async def drain_injections(spec: Any) -> list[dict[str, Any]]:
     return injected_messages
 
 
-def build_tool_call_status_messages(
+def build_unfinished_tool_status_messages(
     messages: list[dict[str, Any]],
     has_new_injections: bool = False,
 ) -> list[dict[str, Any]] | None:
@@ -122,7 +122,7 @@ def append_injected_messages(
     has_new_injections = bool(injections)
     tool_status_messages = None
     if assistant_message is not None:
-        tool_status_messages = build_tool_call_status_messages(messages, has_new_injections)
+        tool_status_messages = build_unfinished_tool_status_messages(messages, has_new_injections)
 
     if tool_status_messages:
         for tm in tool_status_messages:

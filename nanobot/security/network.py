@@ -39,7 +39,7 @@ def configure_ssrf_whitelist(cidrs: list[str]) -> None:
     _allowed_networks = nets
 
 
-def _is_private(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+def _is_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     if _allowed_networks and any(addr in net for net in _allowed_networks):
         return False
     return any(addr in net for net in _BLOCKED_NETWORKS)
@@ -89,7 +89,7 @@ async def validate_url_target(url: str) -> tuple[bool, str]:
             addr = ipaddress.ip_address(info[4][0])
         except ValueError:
             continue
-        if _is_private(addr):
+        if _is_blocked(addr):
             return False, f"Blocked: {hostname} resolves to private/internal address {addr}"
 
     return True, ""
@@ -109,7 +109,7 @@ async def validate_resolved_url(url: str) -> tuple[bool, str]:
 
     try:
         addr = ipaddress.ip_address(hostname)
-        if _is_private(addr):
+        if _is_blocked(addr):
             return False, f"Redirect target is a private address: {addr}"
     except ValueError:
         # hostname is a domain name, resolve it
@@ -122,20 +122,20 @@ async def validate_resolved_url(url: str) -> tuple[bool, str]:
                 addr = ipaddress.ip_address(info[4][0])
             except ValueError:
                 continue
-            if _is_private(addr):
+            if _is_blocked(addr):
                 return False, f"Redirect target {hostname} resolves to private address {addr}"
 
     return True, ""
 
 
-def contains_internal_url(command: str) -> bool:
+def targets_internal_address(command: str) -> bool:
     """Return True if the command string contains a URL targeting an internal/private address."""
     for m in _URL_RE.finditer(command):
         url = m.group(0)
         try:
             p = urlparse(url)
         except Exception as e:
-            logger.debug("Failed to parse URL in contains_internal_url: {} ({})", url, e)
+            logger.debug("Failed to parse URL in targets_internal_address: {} ({})", url, e)
             continue
         if p.scheme not in ("http", "https"):
             continue
@@ -151,6 +151,6 @@ def contains_internal_url(command: str) -> bool:
                 addr = ipaddress.ip_address(info[4][0])
             except ValueError:
                 continue
-            if _is_private(addr):
+            if _is_blocked(addr):
                 return True
     return False

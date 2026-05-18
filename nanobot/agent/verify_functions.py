@@ -1,4 +1,4 @@
-"""Hypothesis verification functions for goal constraint checking."""
+"""Structural constraint verification for goal-scoped tool actions."""
 
 from __future__ import annotations
 

@@ -526,12 +526,12 @@ class DingTalkProxyChannel(BaseProxyChannel):
             response = self.send_to_hub(msg_data)
 
             if response and response.success and (response.content or response.media):
-                self._send_reply(chat_id, sender_id, is_group, response.content, media=response.media)
+                self._enqueue_reply(chat_id, sender_id, is_group, response.content, media=response.media)
 
         except Exception as e:
             logger.error("DingTalk proxy message handler error: {}", e)
 
-    def _send_reply(self, chat_id: str, sender_id: str, is_group: bool, content: str, media: list[str] | None = None) -> None:
+    def _enqueue_reply(self, chat_id: str, sender_id: str, is_group: bool, content: str, media: list[str] | None = None) -> None:
         """Queue a reply for ordered delivery."""
         content = re.sub(
             r"^\*\*Nanobot Reply\*\*\s*\n+",

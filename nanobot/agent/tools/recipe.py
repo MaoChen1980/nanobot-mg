@@ -7,11 +7,11 @@ from collections import Counter
 from typing import Any, Callable, Coroutine
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         recipe=p("string", "Recipe to execute", enum=["find_and_read", "audit_todos", "trace_function"]),
         pattern=p("string", "Search pattern. Required for: find_and_read, trace_function. Ignored by: audit_todos."),
         path=p("string", "Absolute path to a file or directory."),

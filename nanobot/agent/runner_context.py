@@ -87,7 +87,7 @@ def backfill_missing_tool_results(messages: list[dict[str, Any]]) -> list[dict[s
     return updated
 
 
-def snip_history(
+def trim_history_to_budget(
     provider: Any,
     spec: Any,
     messages: list[dict[str, Any]],

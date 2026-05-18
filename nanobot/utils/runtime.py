@@ -73,7 +73,7 @@ def external_lookup_signature(tool_name: str, arguments: dict[str, Any]) -> str 
     return None
 
 
-def repeated_external_lookup_error(
+def check_repeated_external_lookup(
     tool_name: str,
     arguments: dict[str, Any],
     seen_counts: dict[str, int],

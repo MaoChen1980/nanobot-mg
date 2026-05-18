@@ -59,7 +59,7 @@ def on_progress_accepts_tool_events(on_progress: Callable[..., Any] | None) -> b
     return len(positional) >= 3
 
 
-async def invoke_on_progress(
+async def process_tool_events_and_progress(
     on_progress: Callable[..., Awaitable[None] | None] | None,
     content: str,
     tool_hint: bool = False,

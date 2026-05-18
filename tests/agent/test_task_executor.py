@@ -641,7 +641,7 @@ class TestIsGoalComplete:
 
 
 # ---------------------------------------------------------------------------
-# _parse_lessons_yaml
+# _parse_structured_lessons
 # ---------------------------------------------------------------------------
 
 
@@ -653,7 +653,7 @@ class TestParseLessonsYaml:
   detail: Replace individual inserts with batch operations
   tags: [performance, db]
 ```'''
-        lessons = TaskExecutor._parse_lessons_yaml(text)
+        lessons = TaskExecutor._parse_structured_lessons(text)
         assert len(lessons) == 1
         assert lessons[0]["type"] == "optimization"
         assert "bulk inserts" in lessons[0]["summary"]
@@ -664,7 +664,7 @@ summary: Use caching
 detail: Add Redis caching layer
 tags: [performance]
 '''
-        lessons = TaskExecutor._parse_lessons_yaml(text)
+        lessons = TaskExecutor._parse_structured_lessons(text)
         assert len(lessons) == 1
         assert lessons[0]["type"] == "optimization"
 
@@ -676,18 +676,18 @@ type: security
 summary: Second lesson
 '''
         # This may parse as 1 or 2 depending on format handling
-        lessons = TaskExecutor._parse_lessons_yaml(text)
+        lessons = TaskExecutor._parse_structured_lessons(text)
         assert len(lessons) >= 1
 
     def test_plain_text_fallback(self, executor):
         text = "Just some plain text about an important lesson learned."
-        lessons = TaskExecutor._parse_lessons_yaml(text)
+        lessons = TaskExecutor._parse_structured_lessons(text)
         assert len(lessons) == 1
         assert lessons[0]["type"] == "optimization"
         assert "Just some plain text" in lessons[0]["summary"]
 
     def test_empty_text_fallback(self, executor):
-        lessons = TaskExecutor._parse_lessons_yaml("")
+        lessons = TaskExecutor._parse_structured_lessons("")
         assert len(lessons) == 1  # fallback creates one generic lesson
 
     def test_multiple_lessons_in_yaml_block(self, executor):
@@ -701,7 +701,7 @@ summary: Validate all inputs
 detail: Never trust user input
 tags: [security]
 ```'''
-        lessons = TaskExecutor._parse_lessons_yaml(text)
+        lessons = TaskExecutor._parse_structured_lessons(text)
         assert len(lessons) >= 2  # Should detect two lessons
 
 
@@ -739,10 +739,10 @@ summary: File lesson
 detail: Written to file
 tags: [test]
 ```'''
-        # Temporarily patch _parse_lessons_yaml to avoid complexity
+        # Temporarily patch _parse_structured_lessons to avoid complexity
         from nanobot.agent.task_executor import TaskExecutor
-        original_parse = TaskExecutor._parse_lessons_yaml
-        TaskExecutor._parse_lessons_yaml = staticmethod(lambda text: [{"type": "optimization", "summary": "File lesson", "detail": "Written to file", "tags": ["test"]}])
+        original_parse = TaskExecutor._parse_structured_lessons
+        TaskExecutor._parse_structured_lessons = staticmethod(lambda text: [{"type": "optimization", "summary": "File lesson", "detail": "Written to file", "tags": ["test"]}])
         try:
             executor._save_lessons("g1", {"title": "Test Goal", "status": "completed"}, lesson_text)
             lessons_file = tmp_path / "tasks" / "lessons.md"
@@ -751,4 +751,4 @@ tags: [test]
             assert "Test Goal" in content
             assert "File lesson" in content
         finally:
-            TaskExecutor._parse_lessons_yaml = original_parse
+            TaskExecutor._parse_structured_lessons = original_parse

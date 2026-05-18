@@ -8,7 +8,7 @@ from nanobot.providers.base import LLMResponse, ToolCallRequest
 from nanobot.providers.openai_responses.converters import (
     convert_messages,
     convert_tools,
-    convert_user_message,
+    convert_user_content,
     split_tool_call_id,
 )
 from nanobot.providers.openai_responses.parsing import (
@@ -44,21 +44,21 @@ class TestSplitToolCallId:
 
 
 # ======================================================================
-# converters - convert_user_message
+# converters - convert_user_content
 # ======================================================================
 
 
 class TestConvertUserMessage:
     def test_string_content(self):
-        result = convert_user_message("hello")
+        result = convert_user_content("hello")
         assert result == {"role": "user", "content": [{"type": "input_text", "text": "hello"}]}
 
     def test_text_block(self):
-        result = convert_user_message([{"type": "text", "text": "hi"}])
+        result = convert_user_content([{"type": "text", "text": "hi"}])
         assert result["content"] == [{"type": "input_text", "text": "hi"}]
 
     def test_image_url_block(self):
-        result = convert_user_message([
+        result = convert_user_content([
             {"type": "image_url", "image_url": {"url": "https://img.example/a.png"}},
         ])
         assert result["content"] == [
@@ -66,7 +66,7 @@ class TestConvertUserMessage:
         ]
 
     def test_mixed_text_and_image(self):
-        result = convert_user_message([
+        result = convert_user_content([
             {"type": "text", "text": "what's this?"},
             {"type": "image_url", "image_url": {"url": "https://img.example/b.png"}},
         ])
@@ -75,26 +75,26 @@ class TestConvertUserMessage:
         assert result["content"][1]["type"] == "input_image"
 
     def test_empty_list_falls_back(self):
-        result = convert_user_message([])
+        result = convert_user_content([])
         assert result["content"] == [{"type": "input_text", "text": ""}]
 
     def test_none_falls_back(self):
-        result = convert_user_message(None)
+        result = convert_user_content(None)
         assert result["content"] == [{"type": "input_text", "text": ""}]
 
     def test_image_without_url_skipped(self):
-        result = convert_user_message([{"type": "image_url", "image_url": {}}])
+        result = convert_user_content([{"type": "image_url", "image_url": {}}])
         assert result["content"] == [{"type": "input_text", "text": ""}]
 
     def test_meta_fields_not_leaked(self):
         """_meta on content blocks must never appear in converted output."""
-        result = convert_user_message([
+        result = convert_user_content([
             {"type": "text", "text": "hi", "_meta": {"path": "/tmp/x"}},
         ])
         assert "_meta" not in result["content"][0]
 
     def test_non_dict_items_skipped(self):
-        result = convert_user_message(["just a string", 42])
+        result = convert_user_content(["just a string", 42])
         assert result["content"] == [{"type": "input_text", "text": ""}]
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from nanobot.agent.context import ContextBuilder
-from nanobot.utils.document import extract_documents
+from nanobot.utils.document import separate_and_extract_media
 
 
 def _make_builder(tmp_path: Path) -> ContextBuilder:
@@ -61,7 +61,7 @@ def test_build_user_content_mixed_image_and_non_image(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bug detection: extract_documents must be called BEFORE _build_user_content
+# Bug detection: separate_and_extract_media must be called BEFORE _build_user_content
 # to prevent document media from being silently dropped.
 # This simulates the _drain_pending code path.
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ def test_build_user_content_mixed_image_and_non_image(tmp_path: Path) -> None:
 def test_drain_pending_path_preserves_document_text(tmp_path: Path) -> None:
     """Simulates the _drain_pending path: a pending follow-up message
     with a document attachment must have its text extracted before being
-    passed to _build_user_content.  Without extract_documents, the
+    passed to _build_user_content.  Without separate_and_extract_media, the
     document is silently dropped."""
     from docx import Document
 
@@ -81,8 +81,8 @@ def test_drain_pending_path_preserves_document_text(tmp_path: Path) -> None:
     content = "summarize"
     media = [str(docx_path)]
 
-    # Step 1: extract_documents separates docs from images
-    new_content, image_only = extract_documents(content, media)
+    # Step 1: separate_and_extract_media separates docs from images
+    new_content, image_only = separate_and_extract_media(content, media)
 
     # Step 2: _build_user_content handles only images (none left here)
     builder = _make_builder(tmp_path)
@@ -95,7 +95,7 @@ def test_drain_pending_path_preserves_document_text(tmp_path: Path) -> None:
 
 def test_drain_pending_path_without_extract_loses_document(tmp_path: Path) -> None:
     """Demonstrates the BUG: if _drain_pending calls _build_user_content
-    directly without extract_documents, document content is lost."""
+    directly without separate_and_extract_media, document content is lost."""
     from docx import Document
 
     doc = Document()

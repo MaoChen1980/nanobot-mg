@@ -6,11 +6,11 @@ from typing import Any
 
 from nanobot.agent.db import NanobotDB
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p, tool_parameters_schema
+from nanobot.agent.tools.schema import p, build_parameters_schema
 
 
 @tool_parameters(
-    tool_parameters_schema(
+    build_parameters_schema(
         session_key=p("string",
             "Filter by session key (session identifier). "
             "To find the current session's key: run list_goals or check the "

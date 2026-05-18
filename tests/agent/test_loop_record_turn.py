@@ -30,7 +30,7 @@ def test_record_turn_skips_multimodal_user_when_only_runtime_context() -> None:
     session = Session(key="test:runtime-only")
     runtime = ContextBuilder._RUNTIME_CONTEXT_TAG + "\nCurrent Time: now (UTC)"
 
-    loop._record_turn(
+    loop._append_turn_to_session(
         session,
         [{"role": "user", "content": [{"type": "text", "text": runtime}]}],
         skip=0,
@@ -43,7 +43,7 @@ def test_record_turn_keeps_image_placeholder_with_path_after_runtime_strip() -> 
     session = Session(key="test:image")
     runtime = ContextBuilder._RUNTIME_CONTEXT_TAG + "\nCurrent Time: now (UTC)"
 
-    loop._record_turn(
+    loop._append_turn_to_session(
         session,
         [{
             "role": "user",
@@ -62,7 +62,7 @@ def test_record_turn_keeps_image_placeholder_without_meta() -> None:
     session = Session(key="test:image-no-meta")
     runtime = ContextBuilder._RUNTIME_CONTEXT_TAG + "\nCurrent Time: now (UTC)"
 
-    loop._record_turn(
+    loop._append_turn_to_session(
         session,
         [{
             "role": "user",
@@ -81,7 +81,7 @@ def test_record_turn_keeps_tool_results_under_16k() -> None:
     session = Session(key="test:tool-result")
     content = "x" * 12_000
 
-    loop._record_turn(
+    loop._append_turn_to_session(
         session,
         [{"role": "tool", "tool_call_id": "call_1", "name": "read_file", "content": content}],
         skip=0,
@@ -232,7 +232,7 @@ async def test_process_message_persists_user_message_before_turn_completes(tmp_p
     assert persisted.updated_at >= persisted.created_at
 
 
-# 1x1 PNG used by the media-persistence tests. ``extract_documents`` runs
+# 1x1 PNG used by the media-persistence tests. ``separate_and_extract_media`` runs
 # at the top of ``_process_message`` and filters ``msg.media`` down to
 # paths that magic-byte-sniff as images, so the test fixture needs real
 # bytes on disk (not just placeholder paths).
@@ -735,6 +735,6 @@ class TestRecoveryManagerContract:
         session.metadata = {}
         session.messages = []
 
-        rm.restore_runtime_checkpoint(session)
+        rm.restore_and_clear_checkpoint(session)
 
         loop.sessions.save.assert_not_called()

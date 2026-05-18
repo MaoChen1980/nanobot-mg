@@ -30,48 +30,43 @@ class DispatchManager:
     ) -> None:
         """Execute dispatch body: process message with streaming, handle cancel/error."""
         _current_inbound.set(msg)
-        async with self._gate():
+        try:
             try:
-                try:
-                    on_stream, on_stream_end, on_reasoning, on_reasoning_end = self._maybe_streaming(msg)
-                    response = await self._loop._process_message(
-                        msg, on_stream=on_stream, on_stream_end=on_stream_end,
-                        on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end,
-                        pending_queue=pending,
-                    )
-                    if response is not None:
-                        await self._loop.bus.publish_outbound(response)
-                    elif msg.channel == "cli":
-                        await self._loop.bus.publish_outbound(OutboundMessage(
-                            channel=msg.channel, chat_id=msg.chat_id,
-                            content="", metadata=msg.metadata or {},
-                        ))
-                except asyncio.CancelledError:
-                    await self._handle_cancellation(msg, session_key)
-                    raise
-                except Exception as exc:
-                    logger.exception(
-                        "Error processing message for session {}", session_key,
-                    )
-                    # Clean up checkpoint so next turn starts fresh
-                    try:
-                        key = self._effective_session_key(msg)
-                        session = self._loop.sessions.get_or_create(key)
-                        cleared = self._loop._recovery.clear_pending_user_turn(session)
-                        if cleared:
-                            self._loop.sessions.save(session)
-                    except Exception as inner:
-                        logger.debug("Checkpoint cleanup failed: {}", inner)
+                on_stream, on_stream_end, on_reasoning, on_reasoning_end = self._maybe_streaming(msg)
+                response = await self._loop._process_message(
+                    msg, on_stream=on_stream, on_stream_end=on_stream_end,
+                    on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end,
+                    pending_queue=pending,
+                )
+                if response is not None:
+                    await self._loop.bus.publish_outbound(response)
+                elif msg.channel == "cli":
                     await self._loop.bus.publish_outbound(OutboundMessage(
                         channel=msg.channel, chat_id=msg.chat_id,
-                        content="Sorry, I encountered an error.",
+                        content="", metadata=msg.metadata or {},
                     ))
-            finally:
-                await self._drain_leftover_queue(session_key, pending)
-
-    def _gate(self):
-        """Per-session lock already serializes dispatches within a session."""
-        return __import__("contextlib").nullcontext()
+            except asyncio.CancelledError:
+                await self._handle_cancellation(msg, session_key)
+                raise
+            except Exception as exc:
+                logger.exception(
+                    "Error processing message for session {}", session_key,
+                )
+                # Clean up checkpoint so next turn starts fresh
+                try:
+                    key = self._effective_session_key(msg)
+                    session = self._loop.sessions.get_or_create(key)
+                    cleared = self._loop._recovery.clear_pending_user_turn(session)
+                    if cleared:
+                        self._loop.sessions.save(session)
+                except Exception as inner:
+                    logger.debug("Checkpoint cleanup failed: {}", inner)
+                await self._loop.bus.publish_outbound(OutboundMessage(
+                    channel=msg.channel, chat_id=msg.chat_id,
+                    content="Sorry, I encountered an error.",
+                ))
+        finally:
+            await self._republish_leftover_messages(session_key, pending)
 
     def _effective_session_key(self, msg: InboundMessage) -> str:
         if self._loop._unified_session and not msg.session_key_override:
@@ -134,7 +129,7 @@ class DispatchManager:
         try:
             key = self._effective_session_key(msg)
             session = self._loop.sessions.get_or_create(key)
-            if self._loop._recovery.restore_runtime_checkpoint(session):
+            if self._loop._recovery.restore_and_clear_checkpoint(session):
                 self._loop._recovery.clear_pending_user_turn(session)
                 self._loop.sessions.save(session)
                 logger.info(
@@ -148,7 +143,7 @@ class DispatchManager:
                 exc_info=True,
             )
 
-    async def _drain_leftover_queue(
+    async def _republish_leftover_messages(
         self, session_key: str, queue: asyncio.Queue,
     ) -> None:
         """Re-publish leftover messages from pending queue to bus."""

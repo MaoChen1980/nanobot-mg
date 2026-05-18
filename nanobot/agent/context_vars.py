@@ -1,4 +1,4 @@
-"""Thread-local context for the current agent loop and session."""
+"""Coroutine-local context for the current agent loop and session."""
 
 from __future__ import annotations
 

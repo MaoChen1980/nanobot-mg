@@ -278,7 +278,7 @@ def _truncate(text: str, max_length: int) -> str:
 _MAX_EXTRACT_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
-def extract_documents(
+def separate_and_extract_media(
     text: str,
     media_paths: list[str],
     *,
