@@ -599,7 +599,7 @@ class TaskExecutor:
             logger.warning("Failed to extract lessons for goal {}: {}", goal_id, e)
 
     def _save_lessons(self, goal_id: str, goal: dict[str, Any], lessons_text: str) -> None:
-        """Parse and persist extracted lessons to DB and tasks/lessons.md."""
+        """Parse and persist extracted lessons to DB, tasks/lessons.md, and memory/."""
         if self._db is None:
             return
 
@@ -633,6 +633,66 @@ class TaskExecutor:
                 logger.info("Lessons appended to {} for goal {}", lessons_path, goal_id)
             except Exception as e:
                 logger.warning("Failed to append lessons to {}: {}", lessons_path, e)
+
+        # Also write to memory/ so recall can find lessons alongside other memories
+        self._save_lessons_to_memory(goal_id, goal, lessons)
+
+    def _save_lessons_to_memory(
+        self, goal_id: str, goal: dict[str, Any], lessons: list[dict[str, Any]],
+    ) -> None:
+        """Write lessons to memory/ for unified knowledge base access via recall."""
+        if not self._workspace:
+            return
+        memory_dir = self._workspace / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write individual lesson file
+        title_slug = goal.get("title", goal_id).replace(" ", "_").replace("/", "_")[:40]
+        lesson_file = memory_dir / f"lesson-{title_slug}.md"
+        try:
+            lines = [
+                f"# Lesson: {goal.get('title', goal_id)}",
+                f"**Goal**: {goal_id}",
+                f"**Status**: {goal.get('status', 'completed')}",
+                f"**Date**: {__import__('time').strftime('%Y-%m-%d')}",
+                "",
+            ]
+            for l in lessons:
+                lines.append(f"## {l.get('type', 'optimization').title()}")
+                lines.append(f"**Summary**: {l.get('summary', '')}")
+                if l.get("detail"):
+                    lines.append(f"**Detail**: {l.get('detail')}")
+                if l.get("tags"):
+                    tags = ", ".join(l["tags"]) if isinstance(l["tags"], list) else str(l["tags"])
+                    lines.append(f"**Tags**: {tags}")
+                lines.append("")
+            with lesson_file.open("w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+        except Exception as e:
+            logger.warning("Failed to write lesson memory file: {}", e)
+            return
+
+        # Update MEMORY.md index
+        memory_index = memory_dir / "MEMORY.md"
+        try:
+            summary = lessons[0].get("summary", "")[:80]
+            entry = f"- [Lesson: {goal.get('title', goal_id)}](lesson-{title_slug}.md) — {summary}"
+            if memory_index.exists():
+                content = memory_index.read_text(encoding="utf-8")
+                if "## Recent" in content:
+                    content = content.replace(
+                        "## Recent",
+                        f"## Recent\n{entry}",
+                    )
+                else:
+                    content += f"\n## Recent\n{entry}\n"
+            else:
+                content = f"# Memory\n\n## Recent\n{entry}\n"
+            with memory_index.open("w", encoding="utf-8") as f:
+                f.write(content)
+            logger.info("Lesson memory written to {}", lesson_file)
+        except Exception as e:
+            logger.warning("Failed to update MEMORY.md: {}", e)
 
     @staticmethod
     def _parse_lessons_yaml(text: str) -> list[dict[str, Any]]:
