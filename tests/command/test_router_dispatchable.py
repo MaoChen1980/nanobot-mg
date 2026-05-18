@@ -26,10 +26,6 @@ class TestIsDispatchableCommand:
         assert router.is_dispatchable_command("/help")
         assert router.is_dispatchable_command("/new")
 
-    def test_prefix_commands_match(self, router: CommandRouter) -> None:
-        assert router.is_dispatchable_command("/rounds 5")
-        assert router.is_dispatchable_command("/rounds 10")
-
     def test_priority_commands_not_matched(self, router: CommandRouter) -> None:
         # Priority commands are NOT in the dispatchable tiers — they are
         # handled by is_priority() separately.

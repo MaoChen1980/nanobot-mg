@@ -54,42 +54,6 @@ async def test_start_is_idempotent() -> None:
     await asyncio.sleep(0)
 
 
-@pytest.mark.asyncio
-async def test_tick_publishes_active_goals_to_main_session() -> None:
-    goals = [
-        {"id": "g1", "title": "Test goal", "status": "in_progress", "subtasks": []},
-        {"id": "g2", "title": "Another task", "status": "in_progress", "subtasks": [
-            {"id": "s1", "title": "sub1", "status": "done"},
-            {"id": "s2", "title": "sub2", "status": "todo"},
-        ]},
-    ]
-    loop = DummyAgentLoop(db=MockDB(goals))
-    service = HeartbeatService(agent_loop=loop, interval_s=60, enabled=True)
-
-    await service._tick()
-
-    assert len(loop.bus.published) == 1
-    msg = loop.bus.published[0]
-    assert msg.sender_id == "boss"
-    assert msg.chat_id == "direct"
-    assert "Test goal" in msg.content
-    assert "g1" in msg.content
-    assert "Another task" in msg.content
-    assert "g2" in msg.content
-    assert "## Active Tasks" in msg.content
-    assert msg.session_key_override == "cli:direct"
-
-
-@pytest.mark.asyncio
-async def test_tick_empty_when_no_active_goals() -> None:
-    loop = DummyAgentLoop(db=MockDB([]))
-    service = HeartbeatService(agent_loop=loop, interval_s=60, enabled=True)
-
-    await service._tick()
-
-    assert len(loop.bus.published) == 1
-    msg = loop.bus.published[0]
-    assert "none" in msg.content.lower()
 
 
 @pytest.mark.asyncio

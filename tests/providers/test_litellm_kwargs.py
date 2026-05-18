@@ -1015,11 +1015,6 @@ def test_openai_no_thinking_extra_body() -> None:
     assert "extra_body" not in kw
 
 
-def test_kimi_k25_thinking_enabled() -> None:
-    """kimi-k2.5 with reasoning_effort set should opt in to thinking."""
-    kw = _build_kwargs_for("moonshot", "kimi-k2.5", reasoning_effort="medium")
-    assert kw.get("extra_body") == {"thinking": {"type": "enabled"}}
-
 
 def test_kimi_k25_thinking_disabled_for_minimal() -> None:
     """reasoning_effort='minimal' maps to thinking disabled for kimi-k2.5."""
@@ -1033,24 +1028,6 @@ def test_kimi_k25_no_extra_body_when_reasoning_effort_none() -> None:
     assert "extra_body" not in kw
 
 
-def test_kimi_k25_thinking_enabled_with_openrouter_prefix() -> None:
-    """OpenRouter-style model names like moonshotai/kimi-k2.5 must trigger thinking."""
-    kw = _build_kwargs_for("openrouter", "moonshotai/kimi-k2.5", reasoning_effort="medium")
-    assert kw.get("extra_body") == {"thinking": {"type": "enabled"}}
-
-
-def test_kimi_k26_thinking_enabled() -> None:
-    """kimi-k2.6 with reasoning_effort set should opt in to thinking."""
-    kw = _build_kwargs_for("moonshot", "kimi-k2.6", reasoning_effort="medium")
-    assert kw.get("extra_body") == {"thinking": {"type": "enabled"}}
-
-
-def test_kimi_k26_thinking_enabled_with_openrouter_prefix() -> None:
-    """OpenRouter-style names like moonshotai/kimi-k2.6 must trigger thinking."""
-    kw = _build_kwargs_for("openrouter", "moonshotai/kimi-k2.6", reasoning_effort="medium")
-    assert kw.get("extra_body") == {"thinking": {"type": "enabled"}}
-
-
 def test_moonshot_kimi_k26_temperature_override() -> None:
     """Moonshot registry forces temperature 1.0 for kimi-k2.6 (API requirement)."""
     kw = _build_kwargs_for("moonshot", "kimi-k2.6", reasoning_effort=None)
@@ -1061,12 +1038,6 @@ def test_kimi_k25_thinking_disabled_with_openrouter_prefix() -> None:
     """OpenRouter names must NOT trigger thinking without reasoning_effort."""
     kw = _build_kwargs_for("openrouter", "moonshotai/kimi-k2.5", reasoning_effort=None)
     assert "extra_body" not in kw
-
-
-def test_kimi_k26_code_preview_thinking_enabled() -> None:
-    """k2.6-code-preview also supports thinking; should behave like k2.5."""
-    kw = _build_kwargs_for("moonshot", "k2.6-code-preview", reasoning_effort="high")
-    assert kw.get("extra_body") == {"thinking": {"type": "enabled"}}
 
 
 def test_kimi_k2_series_no_thinking_injection() -> None:

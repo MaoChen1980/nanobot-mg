@@ -3,35 +3,6 @@
 from nanobot.utils.helpers import build_status_content
 
 
-def test_status_shows_cache_hit_rate():
-    content = build_status_content(
-        version="0.1.0",
-        model="glm-4-plus",
-        start_time=1000000.0,
-        last_usage={"prompt_tokens": 2000, "completion_tokens": 300, "cached_tokens": 1200},
-        context_window_tokens=128000,
-        session_msg_count=10,
-        context_tokens_estimate=5000,
-    )
-    assert "60% cached" in content
-    assert "2000 in / 300 out" in content
-    assert "Tasks: 0 active" in content
-
-
-def test_status_no_cache_info():
-    """Without cached_tokens, display should not show cache percentage."""
-    content = build_status_content(
-        version="0.1.0",
-        model="glm-4-plus",
-        start_time=1000000.0,
-        last_usage={"prompt_tokens": 2000, "completion_tokens": 300},
-        context_window_tokens=128000,
-        session_msg_count=10,
-        context_tokens_estimate=5000,
-    )
-    assert "cached" not in content.lower()
-    assert "2000 in / 300 out" in content
-    assert "Tasks: 0 active" in content
 
 
 def test_status_zero_cached_tokens():

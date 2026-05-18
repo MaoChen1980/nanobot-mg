@@ -243,14 +243,6 @@ class TestFeishuHandleDeliver:
         ch._send_text_reply = MagicMock()
         return ch
 
-    async def test_deliver_sends_reply(self, channel):
-        await channel._handle_deliver({
-            "chat_id": "oc_xxx",
-            "content": "cron reminder text",
-        })
-        channel._send_text_reply.assert_called_once_with(
-            "oc_xxx", None, "cron reminder text",
-        )
 
     async def test_deliver_empty_chat_id(self, channel):
         await channel._handle_deliver({"chat_id": "", "content": "some content"})

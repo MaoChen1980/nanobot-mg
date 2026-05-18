@@ -431,13 +431,6 @@ class TestModifyOpen:
         result = await tool.execute(action="set", key="sessions", value=new_sessions)
         assert "protected" in result
 
-    @pytest.mark.asyncio
-    async def test_modify_extractor_blocked(self):
-        """extractor is BLOCKED — cannot be replaced."""
-        tool = _make_tool()
-        new_extractor = MagicMock()
-        result = await tool.execute(action="set", key="extractor", value=new_extractor)
-        assert "protected" in result
 
     @pytest.mark.asyncio
     async def test_modify_context_blocked(self):

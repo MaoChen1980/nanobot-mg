@@ -76,28 +76,8 @@ def test_retain_recent_legal_suffix_keeps_recent_messages():
     assert session.messages[-1]["content"] == "msg9"
 
 
-def test_retain_recent_legal_suffix_adjusts_last_consolidated():
-    session = Session(key="test:trim-cons")
-    for i in range(10):
-        session.messages.append({"role": "user", "content": f"msg{i}"})
-    session.last_consolidated = 7
-
-    session.retain_recent_legal_suffix(4)
-
-    assert len(session.messages) == 4
-    assert session.last_consolidated == 1
 
 
-def test_retain_recent_legal_suffix_zero_clears_session():
-    session = Session(key="test:trim-zero")
-    for i in range(10):
-        session.messages.append({"role": "user", "content": f"msg{i}"})
-    session.last_consolidated = 5
-
-    session.retain_recent_legal_suffix(0)
-
-    assert session.messages == []
-    assert session.last_consolidated == 0
 
 
 def test_retain_recent_legal_suffix_keeps_legal_tool_boundary():

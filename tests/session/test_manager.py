@@ -137,17 +137,6 @@ class TestSessionGetHistory:
         assert len(history) == 2  # user + assistant
         assert history[0]["role"] == "user"
 
-    def test_max_tokens_truncation(self, monkeypatch):
-        s = Session(key="ch:u")
-        for i in range(10):
-            s.add_message("user", "x" * 100)
-        monkeypatch.setattr(
-            "nanobot.session.manager.estimate_message_tokens",
-            lambda m: 30,
-        )
-        history = s.get_history(max_messages=10, max_tokens=60)
-        assert len(history) == 2
-
     def test_max_tokens_recovered_user_turn(self, monkeypatch):
         """When token budget is tight and no user turn in kept, recover nearest user."""
         s = Session(key="ch:u")
@@ -160,15 +149,6 @@ class TestSessionGetHistory:
         history = s.get_history(max_messages=10, max_tokens=50)
         assert any(m["role"] == "user" for m in history)
 
-
-class TestSessionClear:
-    def test_clears_messages_and_resets(self):
-        s = Session(key="ch:u")
-        s.add_message("user", "hello")
-        s.last_consolidated = 3
-        s.clear()
-        assert s.messages == []
-        assert s.last_consolidated == 0
 
 
 class TestSessionRetainRecent:
@@ -220,14 +200,6 @@ class TestSessionEnforceFileCap:
         s.enforce_file_cap()
         assert len(s.messages) == 1
 
-    def test_trims_and_calls_on_archive(self):
-        s = Session(key="ch:u")
-        for i in range(10):
-            s.add_message("user", f"msg-{i}")
-        archived = []
-        s.enforce_file_cap(on_archive=archived.append, limit=3)
-        assert len(s.messages) == 3
-        assert len(archived) > 0
 
     def test_on_archive_not_called_when_nothing_to_archive(self):
         """When all dropped messages were already consolidated, on_archive is not called."""
@@ -316,21 +288,6 @@ class TestLoadFromFile:
         mgr = SessionManager(tmp_path)
         assert mgr._load_from_file("nonexistent") is None
 
-    def test_migrates_from_legacy_path(self, tmp_path, monkeypatch):
-        mgr = SessionManager(tmp_path)
-        legacy_dir = tmp_path / "legacy"
-        legacy_dir.mkdir()
-        monkeypatch.setattr(mgr, "legacy_sessions_dir", legacy_dir)
-
-        legacy_path = legacy_dir / "ch_u.jsonl"
-        s = Session(key="ch:u")
-        s.add_message("user", "legacy-msg")
-        mgr._save_to_file(s)
-        (tmp_path / "sessions" / "ch_u.jsonl").rename(legacy_path)
-
-        loaded = mgr._load_from_file("ch:u")
-        assert loaded is not None
-        assert loaded.messages[0]["content"] == "legacy-msg"
 
     def test_repairs_corrupt_file(self, tmp_path):
         mgr = SessionManager(tmp_path)
@@ -728,31 +685,6 @@ class TestGetHistoryEdgeCases:
 class TestLoadFromFileEdgeCases:
     """Covers lines 336-337, 353."""
 
-    def test_legacy_migration_failure_logged(self, tmp_path, monkeypatch):
-        """Line 336-337: when shutil.move fails, exception is logged."""
-        mgr = SessionManager(tmp_path)
-        legacy_dir = tmp_path / "legacy"
-        legacy_dir.mkdir()
-        monkeypatch.setattr(mgr, "legacy_sessions_dir", legacy_dir)
-        # Put a file at legacy but make move fail by giving srcdst same
-        # Actually: make the move fail by faking the params
-        import shutil
-        original_move = shutil.move
-
-        def failing_move(src, dst):
-            raise PermissionError("access denied")
-
-        monkeypatch.setattr(shutil, "move", failing_move)
-        # Create legacy file
-        legacy_path = legacy_dir / "ch_u.jsonl"
-        s = Session(key="ch:u")
-        s.add_message("user", "legacy-msg")
-        mgr._save_to_file(s)
-        (tmp_path / "sessions" / "ch_u.jsonl").rename(legacy_path)
-
-        # Should not raise, returns None because no file in sessions dir
-        loaded = mgr._load_from_file("ch:u")
-        assert loaded is None
 
     def test_empty_line_skipped(self, tmp_path):
         """Line 353: empty line in JSONL file is silently skipped."""

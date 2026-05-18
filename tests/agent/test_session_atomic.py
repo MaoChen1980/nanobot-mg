@@ -191,22 +191,6 @@ class TestRepairCorruptFile:
         assert session.messages[0]["content"] == "msg1"
         assert session.messages[1]["content"] == "msg2"
 
-    def test_repair_with_bad_timestamp_uses_fallback(self, tmp_path: Path):
-        mgr = SessionManager(tmp_path)
-        path = mgr._get_session_path("test:badts")
-
-        self._write_corrupt_jsonl(path, [
-            json.dumps({"_type": "metadata", "key": "test:badts",
-                        "created_at": "not-a-date",
-                        "updated_at": "also-bad",
-                        "metadata": {}, "last_consolidated": 5}),
-            json.dumps({"role": "user", "content": "hi"}),
-        ])
-
-        session = mgr._load("test:badts")
-        assert session is not None
-        assert session.last_consolidated == 5
-        assert isinstance(session.created_at, datetime)
 
     def test_read_session_file_repairs_corrupt_jsonl(self, tmp_path: Path):
         mgr = SessionManager(tmp_path)

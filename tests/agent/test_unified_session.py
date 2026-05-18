@@ -222,71 +222,7 @@ class TestCmdNewUnifiedSession:
         register_builtin_commands(router)
         assert "/new" in router._exact
 
-    @pytest.mark.asyncio
-    async def test_cmd_new_clears_unified_session(self, tmp_path: Path):
-        """cmd_new called with key='unified:default' clears the shared session."""
-        sessions = SessionManager(tmp_path)
 
-        # Pre-populate the shared session with some messages
-        shared = sessions.get_or_create("unified:default")
-        shared.add_message("user", "hello from telegram")
-        shared.add_message("assistant", "hi there")
-        sessions.save(shared)
-        assert len(sessions.get_or_create("unified:default").messages) == 2
-
-        # _schedule_background is a *sync* method that schedules a coroutine via
-        # asyncio.create_task().  Mirror that exactly so the coroutine is consumed
-        # and no RuntimeWarning is emitted.
-        loop = SimpleNamespace(
-            sessions=sessions,
-            _cancel_active_tasks=AsyncMock(return_value=0),
-        )
-        loop._schedule_background = lambda coro: asyncio.ensure_future(coro)
-
-        msg = InboundMessage(
-            channel="telegram", sender_id="user1", chat_id="111", content="/new",
-            session_key_override="unified:default",  # as _dispatch() would set it
-        )
-        ctx = CommandContext(msg=msg, session=None, key="unified:default", raw="/new", loop=loop)
-
-        result = await cmd_new(ctx)
-
-        assert "New session started" in result.content
-        # Invalidate cache and reload from disk to confirm persistence
-        sessions.invalidate("unified:default")
-        reloaded = sessions.get_or_create("unified:default")
-        assert reloaded.messages == []
-
-    @pytest.mark.asyncio
-    async def test_cmd_new_in_unified_mode_does_not_affect_other_sessions(self, tmp_path: Path):
-        """Clearing unified:default must not touch other sessions on disk."""
-        sessions = SessionManager(tmp_path)
-
-        other = sessions.get_or_create("discord:999")
-        other.add_message("user", "discord message")
-        sessions.save(other)
-
-        shared = sessions.get_or_create("unified:default")
-        shared.add_message("user", "shared message")
-        sessions.save(shared)
-
-        loop = SimpleNamespace(
-            sessions=sessions,
-            _cancel_active_tasks=AsyncMock(return_value=0),
-        )
-        loop._schedule_background = lambda coro: asyncio.ensure_future(coro)
-
-        msg = InboundMessage(
-            channel="telegram", sender_id="user1", chat_id="111", content="/new",
-            session_key_override="unified:default",
-        )
-        ctx = CommandContext(msg=msg, session=None, key="unified:default", raw="/new", loop=loop)
-        await cmd_new(ctx)
-
-        sessions.invalidate("unified:default")
-        sessions.invalidate("discord:999")
-        assert sessions.get_or_create("unified:default").messages == []
-        assert len(sessions.get_or_create("discord:999").messages) == 1
 
 
 

@@ -195,3 +195,58 @@ class TestVerifyWithRunner:
         result = await verifier.verify(goal, subtask, "done", ["read_file"])
 
         assert not result.passed
+
+
+# ---------------------------------------------------------------------------
+# set_provider
+# ---------------------------------------------------------------------------
+
+
+class TestSetProvider:
+    def test_set_provider_recreates_runner(self, verifier, provider):
+        old_runner = verifier._runner
+        verifier.set_provider(provider, "test-model")
+        assert verifier._runner is not old_runner
+
+    def test_set_provider_updates_model(self, verifier, provider):
+        verifier.set_provider(provider, "new-model")
+        assert verifier._model == "new-model"
+
+    def test_set_provider_updates_provider_ref(self, verifier):
+        new_provider = MagicMock()
+        verifier.set_provider(new_provider, "test-model")
+        assert verifier._provider is new_provider
+
+
+# ---------------------------------------------------------------------------
+# _extract_evidence
+# ---------------------------------------------------------------------------
+
+
+class TestExtractEvidence:
+    def test_empty_messages_returns_empty_list(self, verifier):
+        assert verifier._extract_evidence([]) == []
+
+    def test_extracts_from_assistant_messages(self, verifier):
+        messages = [
+            {"role": "user", "content": "user message"},
+            {"role": "assistant", "content": "Line 1\nLine 2\nLine 3"},
+        ]
+        evidence = verifier._extract_evidence(messages)
+        assert len(evidence) >= 3
+        assert "Line 1" in evidence
+
+    def test_limits_to_20_lines(self, verifier):
+        messages = [
+            {"role": "assistant", "content": "\n".join(f"Line {i}" for i in range(50))},
+        ]
+        evidence = verifier._extract_evidence(messages)
+        assert len(evidence) <= 20
+
+    def test_skips_empty_content(self, verifier):
+        messages = [
+            {"role": "assistant", "content": ""},
+            {"role": "assistant", "content": "Real content"},
+        ]
+        evidence = verifier._extract_evidence(messages)
+        assert "Real content" in evidence

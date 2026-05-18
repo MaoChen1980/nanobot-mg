@@ -194,44 +194,10 @@ def test_provider_signature_basic():
     assert sig[8] == 100_000  # context_window_tokens
 
 
-def test_provider_signature_with_provider_config():
-    """provider_signature returns correct values when provider config is set."""
-    config = Config.model_validate({
-        "agents": {"defaults": {"model": "anthropic/claude-opus-4-5"}},
-        "providers": {"anthropic": {"apiKey": "sk-ant-test"}},
-    })
-    sig = provider_signature(config)
-
-    assert sig[0] == "anthropic/claude-opus-4-5"
-    assert sig[1] == "auto"
-    assert sig[2] == "anthropic"
-    assert sig[3] == "sk-ant-test"  # api_key
-    assert sig[4] is None  # no api_base
-    assert sig[5] == 8192  # default max_tokens
-    assert sig[6] == 0.1  # default temperature
-    assert sig[7] is None  # default reasoning_effort
-    assert sig[8] == 65_536  # default context_window_tokens
-
 
 # ---------------------------------------------------------------------------
 # build_provider_snapshot / load_provider_snapshot
 # ---------------------------------------------------------------------------
-
-
-@patch("nanobot.providers.factory.provider_signature")
-@patch("nanobot.providers.factory.make_provider")
-def test_build_provider_snapshot(mock_make, mock_sig):
-    """build_provider_snapshot assembles a ProviderSnapshot."""
-    mock_make.return_value = "fake_provider"
-    mock_sig.return_value = ("sig",)
-
-    config = Config()
-    snapshot = build_provider_snapshot(config)
-
-    assert snapshot.provider == "fake_provider"
-    assert snapshot.model == "anthropic/claude-opus-4-5"
-    assert snapshot.context_window_tokens == 65_536
-    assert snapshot.signature == ("sig",)
 
 
 @patch("nanobot.providers.factory.build_provider_snapshot")

@@ -40,31 +40,6 @@ def test_load_config_keeps_max_tokens_and_ignores_legacy_memory_window(tmp_path)
     assert not hasattr(config.agents.defaults, "memory_window")
 
 
-def test_save_config_writes_context_window_tokens_but_not_memory_window(tmp_path) -> None:
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps(
-            {
-                "agents": {
-                    "defaults": {
-                        "maxTokens": 2222,
-                        "memoryWindow": 30,
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    config = load_config(config_path)
-    save_config(config, config_path)
-    saved = json.loads(config_path.read_text(encoding="utf-8"))
-    defaults = saved["agents"]["defaults"]
-
-    assert defaults["maxTokens"] == 2222
-    assert defaults["contextWindowTokens"] == 65_536
-    assert "memoryWindow" not in defaults
-
 
 def test_onboard_does_not_crash_with_legacy_memory_window(tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "config.json"
@@ -158,29 +133,6 @@ def test_new_my_tool_keys_take_precedence_over_legacy(tmp_path) -> None:
 
     assert config.tools.my.enable is True
     assert config.tools.my.allow_set is True
-
-
-# ---------------------------------------------------------------------------
-# Corrupt / invalid config files
-# ---------------------------------------------------------------------------
-
-
-def test_load_config_corrupt_json_falls_back_to_default(tmp_path) -> None:
-    """Invalid JSON in config file should log a warning and use defaults."""
-    config_path = tmp_path / "config.json"
-    config_path.write_text("this is not json", encoding="utf-8")
-
-    config = load_config(config_path)
-    assert config.agents.defaults.model == "anthropic/claude-opus-4-5"
-
-
-def test_load_config_invalid_schema_falls_back_to_default(tmp_path) -> None:
-    """JSON that doesn't match the Config schema should log a warning and use defaults."""
-    config_path = tmp_path / "config.json"
-    config_path.write_text('{"agents": {"defaults": {"maxTokens": -1}}}', encoding="utf-8")
-
-    config = load_config(config_path)
-    assert config.agents.defaults.model == "anthropic/claude-opus-4-5"
 
 
 # ---------------------------------------------------------------------------

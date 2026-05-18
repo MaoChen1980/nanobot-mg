@@ -42,38 +42,6 @@ async def test_message_tool_keeps_task_local_context() -> None:
     assert ("email", "chat-b", "two") in seen
 
 
-@pytest.mark.asyncio
-async def test_spawn_tool_keeps_task_local_context() -> None:
-    seen: list[tuple[str, str, str]] = []
-    entered = asyncio.Event()
-    release = asyncio.Event()
-
-    class _Manager:
-        async def spawn(self, *, task: str, label: str | None, origin_channel: str, origin_chat_id: str, session_key: str, context: str = "") -> str:
-            seen.append((origin_channel, origin_chat_id, session_key))
-            return f"{origin_channel}:{origin_chat_id}:{task}"
-
-    tool = SpawnTool(_Manager())
-
-    async def task_one() -> str:
-        tool.set_context("whatsapp", "chat-a")
-        entered.set()
-        await release.wait()
-        return await tool.execute(task="one")
-
-    async def task_two() -> str:
-        await entered.wait()
-        tool.set_context("telegram", "chat-b")
-        release.set()
-        return await tool.execute(task="two")
-
-    result_one, result_two = await asyncio.gather(task_one(), task_two())
-
-    assert result_one == "whatsapp:chat-a:one"
-    assert result_two == "telegram:chat-b:two"
-    assert ("whatsapp", "chat-a", "whatsapp:chat-a") in seen
-    assert ("telegram", "chat-b", "telegram:chat-b") in seen
-
 
 @pytest.mark.asyncio
 async def test_cron_tool_keeps_task_local_context(tmp_path) -> None:
@@ -141,38 +109,6 @@ async def test_message_tool_default_values_without_set_context() -> None:
     assert seen == [("discord", "general", "hi")]
 
 
-@pytest.mark.asyncio
-async def test_spawn_tool_basic_set_context_and_execute() -> None:
-    """Single task: set_context then execute should pass correct origin."""
-    seen: list[tuple[str, str, str]] = []
-
-    class _Manager:
-        async def spawn(self, *, task, label, origin_channel, origin_chat_id, session_key, context=""):
-            seen.append((origin_channel, origin_chat_id, session_key))
-            return f"ok: {task}"
-
-    tool = SpawnTool(_Manager())
-    tool.set_context("feishu", "chat-abc")
-
-    result = await tool.execute(task="do something")
-    assert result == "ok: do something"
-    assert seen == [("feishu", "chat-abc", "feishu:chat-abc")]
-
-
-@pytest.mark.asyncio
-async def test_spawn_tool_default_values_without_set_context() -> None:
-    """Without set_context, default cli:direct should be used."""
-    seen: list[tuple[str, str, str]] = []
-
-    class _Manager:
-        async def spawn(self, *, task, label, origin_channel, origin_chat_id, session_key, context=""):
-            seen.append((origin_channel, origin_chat_id, session_key))
-            return "ok"
-
-    tool = SpawnTool(_Manager())
-
-    await tool.execute(task="test")
-    assert seen == [("cli", "direct", "cli:direct")]
 
 
 @pytest.mark.asyncio

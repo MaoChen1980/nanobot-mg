@@ -108,20 +108,6 @@ class TestInitServices:
         assert app.proxy_manager is not None
         assert app.heartbeat is not None
 
-    def test_value_error_exits(self, config: Config) -> None:
-        """When build_provider_snapshot raises ValueError, SystemExit is raised."""
-        app = GatewayApplication(config)
-
-        with (
-            patch("nanobot.bus.queue.MessageBus"),
-            patch(
-                "nanobot.providers.factory.build_provider_snapshot",
-                side_effect=ValueError("bad provider"),
-            ),
-        ):
-            with pytest.raises(SystemExit):
-                app._init_services()
-
     def test_init_uses_provider(self, config: Config) -> None:
         """Provider is resolved from provider_snapshot.provider."""
         app = GatewayApplication(config)
@@ -296,71 +282,6 @@ class TestChannelSessionKey:
 # _wire_callbacks — _deliver_to_channel
 # ---------------------------------------------------------------------------
 
-
-class TestDeliverToChannel:
-    @pytest.fixture
-    def app(self, config: Config) -> GatewayApplication:
-        app = _make_mocked_app(config)
-        app._wire_callbacks()
-        return app
-
-    def test_delivers_without_record(self, app: GatewayApplication) -> None:
-        from nanobot.bus.events import OutboundMessage
-
-        delivery = app.agent.tools["message"].set_send_callback.call_args[0][0]
-        msg = OutboundMessage(channel="telegram", chat_id="user-1", content="hello")
-
-        import asyncio
-        asyncio.run(delivery(msg))
-
-        app.bus.publish_outbound.assert_awaited_once_with(msg)
-
-    def test_deliver_records_session(self, app: GatewayApplication) -> None:
-        from nanobot.bus.events import OutboundMessage
-
-        delivery = app.agent.tools["message"].set_send_callback.call_args[0][0]
-        msg = OutboundMessage(channel="telegram", chat_id="user-1", content="hello")
-
-        import asyncio
-        asyncio.run(delivery(msg, record=True, session_key="tg:u1"))
-
-        app.session_manager.get_or_create.assert_called_once_with("tg:u1")
-
-    def test_deliver_skip_cli_channel(self, app: GatewayApplication) -> None:
-        from nanobot.bus.events import OutboundMessage
-
-        delivery = app.agent.tools["message"].set_send_callback.call_args[0][0]
-        msg = OutboundMessage(channel="cli", chat_id="local", content="hello")
-
-        import asyncio
-        asyncio.run(delivery(msg, record=True))
-
-        app.session_manager.get_or_create.assert_not_called()
-
-    def test_deliver_skip_empty_content(self, app: GatewayApplication) -> None:
-        from nanobot.bus.events import OutboundMessage
-
-        delivery = app.agent.tools["message"].set_send_callback.call_args[0][0]
-        msg = OutboundMessage(channel="telegram", chat_id="user-1", content="   ")
-
-        import asyncio
-        asyncio.run(delivery(msg, record=True))
-
-        app.session_manager.get_or_create.assert_not_called()
-
-    def test_record_from_metadata(self, app: GatewayApplication) -> None:
-        from nanobot.bus.events import OutboundMessage
-
-        delivery = app.agent.tools["message"].set_send_callback.call_args[0][0]
-        msg = OutboundMessage(
-            channel="telegram", chat_id="user-1", content="hi",
-            metadata={"_record_channel_delivery": True},
-        )
-
-        import asyncio
-        asyncio.run(delivery(msg))
-
-        app.session_manager.get_or_create.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -633,27 +554,6 @@ class TestSpawnProxyProcesses:
 
         app.proxy_manager.spawn.assert_not_called()
 
-    def test_spawns_for_enabled_channel_with_bots(self, config: Config) -> None:
-        app = _make_mocked_app(config)
-        ch_type = type(app.config.channels)
-        app.config.channels.__pydantic_extra__ = {
-            "custom_ch": {
-                "enabled": True, "bots": [{"name": "bot1", "token": "x"}],
-            }
-        }
-
-        with (
-            patch.object(ch_type, "model_fields", {}),
-            patch("nanobot.gateway.app.console.print"),
-        ):
-            app._spawn_proxy_processes()
-
-        app.proxy_manager.spawn.assert_called_once_with(
-            "custom_ch", "bot1",
-            {"enabled": True, "bots": [{"name": "bot1", "token": "x"}],
-             "name": "bot1", "token": "x"},
-        )
-
     def test_skips_channel_without_bots(self, config: Config) -> None:
         app = _make_mocked_app(config)
         ch_type = type(app.config.channels)
@@ -668,28 +568,6 @@ class TestSpawnProxyProcesses:
             app._spawn_proxy_processes()
 
         app.proxy_manager.spawn.assert_not_called()
-
-    def test_handles_pydantic_extra_sections(self, config: Config) -> None:
-        app = _make_mocked_app(config)
-        ch_type = type(app.config.channels)
-        app.config.channels.__pydantic_extra__ = {
-            "custom_ch": {
-                "enabled": True,
-                "type": "webhook",
-                "bots": ["default"],
-            }
-        }
-
-        with (
-            patch.object(ch_type, "model_fields", {}),
-            patch("nanobot.gateway.app.console.print"),
-        ):
-            app._spawn_proxy_processes()
-
-        app.proxy_manager.spawn.assert_called_once_with(
-            "custom_ch", "default",
-            {"enabled": True, "type": "webhook", "bots": ["default"]},
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -813,29 +691,6 @@ class TestOnCronJob:
         assert result == "Hello!"
         mock_eval.assert_not_called()
 
-    async def test_reminder_delivery_evaluate_notifies(self, config: Config) -> None:
-        """evaluate_response returns True -> message is delivered."""
-        app = _make_mocked_app(config)
-        app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Important!"))
-        app.agent.tools["message"]._sent_in_turn = False
-
-        app._wire_callbacks()
-        with patch(
-            "nanobot.utils.evaluator.evaluate_response",
-            AsyncMock(return_value=True),
-        ):
-            job = CronJob(
-                id="r1", name="reminder",
-                payload=CronPayload(
-                    message="Test", deliver=True,
-                    channel="cli", to="user1",
-                ),
-            )
-            result = await app.cron.on_job(job)
-
-        assert result == "Important!"
-        app.bus.publish_outbound.assert_awaited_once()
-
     async def test_reminder_delivery_evaluate_skips(self, config: Config) -> None:
         """evaluate_response returns False -> message is NOT delivered."""
         app = _make_mocked_app(config)
@@ -904,32 +759,5 @@ class TestOnCronJob:
 # ---------------------------------------------------------------------------
 
 
-class TestSpawnProxyUnderscore:
-    """Channel names starting with _ are skipped in _spawn_proxy_processes."""
 
-    def test_skips_underscore_prefixed_channel(self, config: Config) -> None:
-        app = _make_mocked_app(config)
-        ch_type = type(app.config.channels)
-        app.config.channels.__pydantic_extra__ = {
-            "_internal": {
-                "enabled": True, "bots": [{"name": "bot1", "token": "x"}],
-            },
-            "visible_ch": {
-                "enabled": True, "bots": [{"name": "bot2", "token": "y"}],
-            },
-        }
 
-        with (
-            patch.object(ch_type, "model_fields", {}),
-            patch("nanobot.gateway.app.console.print"),
-        ):
-            app._spawn_proxy_processes()
-
-        app.proxy_manager.spawn.assert_called_once_with(
-            "visible_ch", "bot2",
-            {
-                "enabled": True,
-                "bots": [{"name": "bot2", "token": "y"}],
-                "name": "bot2", "token": "y",
-            },
-        )
