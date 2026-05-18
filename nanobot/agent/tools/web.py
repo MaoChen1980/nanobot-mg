@@ -288,7 +288,7 @@ class WebSearchTool(WebToolBase, Tool):
 @tool_parameters(
     build_parameters_schema(
         url=p("string", "URL to fetch"),
-        extractMode={
+        format={
             "type": "string",
             "enum": ["markdown", "text"],
             "default": "markdown",
@@ -306,14 +306,18 @@ class WebFetchTool(WebToolBase, Tool):
 
     name = "web_fetch"
     description = (
-        "**用途**: 获取 URL 内容并提取可读文本。\n\n"
+        "**用途**: 获取 URL 内容并提取可读文本，支持截断预览和正则过滤。\n\n"
         "**什么时候用**:\n"
-        "- 已有 URL 需要获取页面内容时\n\n"
+        "- 已有 URL 需要获取页面内容时\n"
+        "- 不确定页面内容是否有用 → 先 `maxChars=1000` 预览，再决定是否读完整\n\n"
         "**什么时候不用**:\n"
         "- 无 URL → 用 web_search 先搜索\n"
         "- 只需页面元数据 → web_search 结果已包含\n"
-        "- JS 密集的页面可能渲染不完整\n"
-        "- extract 参数可用正则过滤行"
+        "- JS 密集的页面可能渲染不完整\n\n"
+        "**有用参数**:\n"
+        "- `maxChars` — 控制返回字数，小值预览大值深读\n"
+        "- `format` — `markdown`（结构化）或 `text`（纯文本）\n"
+        "- `extract` — 正则过滤，只返回匹配行"
     )
 
     def __init__(self, config: WebFetchConfig | None = None, proxy: str | None = None, user_agent: str | None = None, max_chars: int = 100000):
@@ -325,7 +329,7 @@ class WebFetchTool(WebToolBase, Tool):
 
     read_only = True
 
-    async def execute(self, url: str, extractMode: str = "markdown", maxChars: int | None = None, extract: str | None = None, **kwargs: Any) -> Any:
+    async def execute(self, url: str, format: str = "markdown", maxChars: int | None = None, extract: str | None = None, **kwargs: Any) -> Any:
         # Strip whitespace, markdown backticks, and quotes that LLM-generated URLs often carry
         url = url.strip().strip("`").strip('"').strip("'")
         max_chars = maxChars or self.max_chars
@@ -354,7 +358,7 @@ class WebFetchTool(WebToolBase, Tool):
         if self.config.use_jina_reader:
             result = await self._fetch_jina(url, max_chars)
             return self._regex_filter_result(result, extract) if extract else result
-        result = await self._fetch_readability(url, extractMode, max_chars)
+        result = await self._fetch_readability(url, format, max_chars)
         return self._regex_filter_result(result, extract) if extract else result
 
     async def _fetch_jina(self, url: str, max_chars: int) -> str:

@@ -42,10 +42,14 @@ class ReadFileTool(_FsTool):
     name = "read_file"
 
     description = (
-        "**用途**: 读取文件内容（文本/图片/PDF/Office），支持按行分段和正则过滤。\n\n"
+        "**用途**: 读取文件内容（文本/图片/PDF/Office），支持模式选择、正则过滤、按行分段。\n\n"
+        "**模式**:\n"
+        "- `mode=full`（默认）— 完整读取，支持 offset+limit 分页\n"
+        "- `mode=overview` — **只看结构不读全文**（heading/section 预览），不想读完整文件时用\n"
+        "- `extract=正则` — **只返回匹配行**，相当于文件内过滤，替代 grep+cat 组合\n\n"
         "**什么时候用**:\n"
-        "- 需要查看文件全部或部分内容时\n"
-        "- 需要读取日志、代码、配置文件时\n"
+        "- 需要查看文件内容时\n"
+        "- 不确定文件中有什么 → 先 `mode=overview` 预览结构\n"
         "- 需要按 offset+limit 分段读取大文件时\n"
         "- 需要从 PDF 或 Office 文档提取文本时\n"
         "- 需要用正则提取匹配的行时\n\n"

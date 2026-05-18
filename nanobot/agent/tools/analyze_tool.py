@@ -15,7 +15,7 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
     build_parameters_schema(
         data=p("string", "Text content to analyze (provide this or path)"),
         path=p("string", "Absolute path to a file to read and analyze. Provide this or data."),
-        question=p("string", "Optional keyword filter — simple term matching, NOT semantic analysis. Example: 'database connection error' shows lines containing those words ranked by match count."),
+        keyword=p("string", "Optional keyword filter — simple term matching, NOT semantic analysis. Example: 'database connection error' shows lines containing those words ranked by match count. (Legacy alias: question)"),
         max_keywords=p("integer", "Maximum keywords to extract (default 15)", minimum=1, maximum=50, default=15),
     ),
     required=[],
@@ -27,11 +27,11 @@ class AnalyzeTool(_FsTool):
     read_only = True
 
     description = (
-        "**用途**: 分析文本并返回结构化摘要（行统计、关键词、按问题匹配行），无需全文读到 context。\n\n"
+        "**用途**: 分析文本并返回结构化摘要（行统计、关键词、按关键词过滤），无需全文读到 context。\n\n"
         "**什么时候用**:\n"
         "- 文件太大（如日志），先 analyze 看概况，再决定读哪段\n"
         "- 想知道文件主题而非全文，analyze 出关键词\n"
-        "- 想找特定类型的内容（错误、警告），传 question\n\n"
+        "- 想找特定类型的内容（错误、警告），传 keyword\n\n"
         "**什么时候不用**:\n"
         "- 需要完整文本 → 用 read_file\n"
         "- 需要精确模式搜索 → 用 grep\n"
@@ -44,10 +44,13 @@ class AnalyzeTool(_FsTool):
         self,
         data: str | None = None,
         path: str | None = None,
-        question: str | None = None,
+        keyword: str | None = None,
         max_keywords: int = 15,
         **kwargs: Any,
     ) -> str:
+        # Backwards compat: legacy alias "question"
+        if keyword is None and kwargs.get("question"):
+            keyword = kwargs["question"]
         text = await self._load_text(data, path)
         if text is None:
             return "Error: Provide either `data` (text) or `path` (file) to analyze."
@@ -73,14 +76,14 @@ class AnalyzeTool(_FsTool):
             for title, size, preview in sections[:20]:
                 parts.append(f"- \"{title}\" ({size} lines)  {preview}")
 
-        keywords = self._extract_keywords(text, max_keywords)
-        if keywords:
+        kw = self._extract_keywords(text, max_keywords)
+        if kw:
             parts.append(f"\n## Keywords")
-            parts.append(", ".join(f"`{w}`" for w, _ in keywords[:max_keywords]))
+            parts.append(", ".join(f"`{w}`" for w, _ in kw[:max_keywords]))
 
-        if question:
-            parts.append(f"\n## Question: {question}")
-            q_lines = self._find_relevant_lines(lines, question)
+        if keyword:
+            parts.append(f"\n## Keyword filter: {keyword}")
+            q_lines = self._find_relevant_lines(lines, keyword)
             if q_lines:
                 for lineno, line in q_lines[:15]:
                     parts.append(f"  L{lineno}: {line[:120]}")

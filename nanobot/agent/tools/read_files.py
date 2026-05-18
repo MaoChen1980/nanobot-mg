@@ -18,7 +18,7 @@ _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv"
 @tool_parameters(
     build_parameters_schema(
         pattern=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py' (legacy alias: glob)"),
-        grep=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context)"),
+        extract=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context). Legacy alias: grep"),
         path=p("string", "Absolute path to a directory to search from (default: workspace root)."),
         max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50, default=10),
         max_lines=p("integer", "Maximum lines per file (default 100)", minimum=1, maximum=500, default=100),
@@ -36,7 +36,7 @@ class ReadFilesTool(_FsTool):
         "**用途**: 按 glob 模式批量读取多个文件，一次调用替代 glob+read 循环。\n\n"
         "**什么时候用**:\n"
         "- 需要同时读取匹配某个模式的多个文件\n"
-        "- 需要在多个文件中搜索关键词并查看匹配行及其上下文\n\n"
+        "- 需要在多个文件中搜索关键词并查看匹配行及其上下文（传 extract 参数）\n\n"
         "**什么时候不用**:\n"
         "- 需要从特定行号开始读单个文件 → 用 read_file\n"
         "- 只需要文件名列表 → 用 glob\n"
@@ -46,15 +46,17 @@ class ReadFilesTool(_FsTool):
     async def execute(
         self,
         pattern: str = "",
-        grep: str | None = None,
+        extract: str | None = None,
         path: str = ".",
         max_files: int = 10,
         max_lines: int = 100,
         **kwargs: Any,
     ) -> str:
-        # Backwards compat: legacy alias "glob"
+        # Backwards compat: legacy aliases "glob" and "grep"
         if not pattern and kwargs.get("glob"):
             pattern = kwargs["glob"]
+        if extract is None and kwargs.get("grep"):
+            extract = kwargs["grep"]
         try:
             root = self._resolve(path or ".")
             if not root.exists():
@@ -81,7 +83,7 @@ class ReadFilesTool(_FsTool):
             matches.sort(key=lambda x: (-x[1], x[0]))
             selected = matches[:max_files]
 
-            grep_re = re.compile(grep) if grep else None
+            extract_re = re.compile(extract) if extract else None
 
             parts: list[str] = []
             total_chars = 0
@@ -106,10 +108,10 @@ class ReadFilesTool(_FsTool):
                 lines = text.split("\n")
                 rel_path = fp.relative_to(root).as_posix()
 
-                if grep_re:
+                if extract_re:
                     match_idx: set[int] = set()
                     for i, line in enumerate(lines):
-                        if grep_re.search(line):
+                        if extract_re.search(line):
                             if i > 0:
                                 match_idx.add(i - 1)
                             match_idx.add(i)
