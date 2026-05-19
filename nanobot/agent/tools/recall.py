@@ -43,7 +43,7 @@ def _find_line_range(full_text: str, chunk_text: str) -> tuple[int, int]:
         k=p("integer", "Number of results to return (knowledge mode only, default 5, max 20)",
             minimum=1, maximum=20, default=5),
     ),
-    required=["query", "mode"],
+    required=[],
 )
 class RecallTool(Tool):
     """Cross-session search: retrieve information from past conversations or
@@ -135,7 +135,7 @@ class RecallTool(Tool):
 
     async def execute(
         self,
-        query: str,
+        query: str = "",
         mode: str = "history",
         keyword: str | None = None,
         start: str | None = None,
@@ -144,8 +144,11 @@ class RecallTool(Tool):
         **kwargs: Any,
     ) -> str:
         if mode == "history":
-            return self._search_history(query, keyword, start, end)
+            return self._search_history(query or None, keyword, start, end)
         elif mode == "knowledge":
+            query = query or ""
+            if not query.strip():
+                return "Please provide a query for knowledge search."
             return self._search_knowledge(query, k)
         return f"Error: Unknown mode '{mode}'. Use 'history' or 'knowledge'."
 
