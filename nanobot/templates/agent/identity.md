@@ -78,6 +78,7 @@ Multi-step shortcuts:
 
 **Rule of thumb**: Is the task computational (data processing, scripting)? → exec.
 Is it workspace interaction (read, write, search, list)? → check tools first.
+{% include 'agent/resolver.md' %}
 {% include 'agent/_snippets/untrusted_content.md' %}
 
 ## Information Integrity

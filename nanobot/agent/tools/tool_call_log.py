@@ -38,7 +38,7 @@ class ToolCallLogTool(Tool):
             "- 需要调试某个工具调用为什么失败时\n"
             "- 需要追踪之前工具调用的结果\n\n"
             "**什么时候不用**:\n"
-            "- 需要搜索对话历史 → 用 recall\n"
+            "- 需要搜索对话历史 → 用 conversation_search\n"
             "- 需要查看当前运行状态 → 用 my"
         )
 

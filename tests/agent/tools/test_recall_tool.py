@@ -1,4 +1,4 @@
-"""Tests for RecallTool — memory search tool (history + knowledge modes)."""
+"""Tests for MemorySearchTool and ConversationSearchTool."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from nanobot.agent.memory import MemoryStore
-from nanobot.agent.tools.recall import RecallTool
+from nanobot.agent.tools.memory_search import MemorySearchTool
+from nanobot.agent.tools.conversation_search import ConversationSearchTool
 
 
 # ---------------------------------------------------------------------------
@@ -24,189 +25,186 @@ def _make_store(tmp_path: Path) -> MemoryStore:
     return store
 
 
-def _make_tool(store: MemoryStore) -> RecallTool:
-    return RecallTool(store=store)
+# ===========================================================================
+# MemorySearchTool tests
+# ===========================================================================
 
-
-# ---------------------------------------------------------------------------
-# Basic properties
-# ---------------------------------------------------------------------------
-
-class TestRecallToolBasic:
-    """Basic RecallTool properties."""
+class TestMemorySearchToolBasic:
+    """Basic MemorySearchTool properties."""
 
     def test_tool_name(self, tmp_path: Path):
-        tool = _make_tool(_make_store(tmp_path))
-        assert tool.name == "recall"
+        tool = MemorySearchTool(_make_store(tmp_path))
+        assert tool.name == "memory_search"
 
     def test_tool_description(self, tmp_path: Path):
-        tool = _make_tool(_make_store(tmp_path))
-        assert "recall" in tool.description or "召回" in tool.description
+        tool = MemorySearchTool(_make_store(tmp_path))
+        assert "memory_search" in tool.description or "知识库" in tool.description
 
     def test_tool_is_read_only(self, tmp_path: Path):
-        tool = _make_tool(_make_store(tmp_path))
+        tool = MemorySearchTool(_make_store(tmp_path))
         assert tool.read_only is True
 
-    def test_parameters_have_mode_and_query(self, tmp_path: Path):
-        tool = _make_tool(_make_store(tmp_path))
+    def test_parameters_have_query_and_k(self, tmp_path: Path):
+        tool = MemorySearchTool(_make_store(tmp_path))
         params = tool.parameters
-        assert "mode" in params["properties"]
         assert "query" in params["properties"]
-        assert "history" in params["properties"]["mode"]["enum"]
-        assert "knowledge" in params["properties"]["mode"]["enum"]
+        assert "k" in params["properties"]
+        assert params["properties"]["k"]["minimum"] == 1
+        assert params["properties"]["k"]["maximum"] == 20
+        assert "query" in params["required"]
 
 
-# ---------------------------------------------------------------------------
-# history mode
-# ---------------------------------------------------------------------------
-
-class TestRecallToolHistoryMode:
-    """RecallTool.execute(mode='history') behavior."""
+class TestMemorySearchToolKnowledgeMode:
+    """MemorySearchTool.execute() behavior."""
 
     @pytest.mark.asyncio
-    async def test_with_query_only(self, tmp_path: Path):
-        """Query text matches content."""
+    async def test_empty_query_returns_error(self, tmp_path: Path):
+        """Empty query should return error message."""
+        store = MemoryStore(tmp_path)
+        tool = MemorySearchTool(store)
+        result = await tool.execute(query="   ")
+        assert "provide a query" in result.lower()
+
+    @pytest.mark.asyncio
+    async def test_empty_index_returns_no_results(self, tmp_path: Path):
+        """Empty memory dir returns no results."""
+        store = MemoryStore(tmp_path)
+        tool = MemorySearchTool(store)
+        result = await tool.execute(query="anything")
+        assert "No relevant knowledge found" in result
+
+    @pytest.mark.asyncio
+    async def test_with_custom_k(self, tmp_path: Path):
+        """k parameter is accepted."""
+        store = MemoryStore(tmp_path)
+        tool = MemorySearchTool(store)
+        result = await tool.execute(query="test", k=3)
+        assert isinstance(result, str)
+
+
+class TestMemorySearchToolDateParsing:
+    """_find_line_range edge cases."""
+
+    def test_find_line_range_found(self):
+        from nanobot.agent.tools.memory_search import _find_line_range
+        text = "line1\nline2\nline3"
+        assert _find_line_range(text, "line2") == (2, 2)
+
+    def test_find_line_range_missing(self):
+        from nanobot.agent.tools.memory_search import _find_line_range
+        assert _find_line_range("abc", "xyz") == (0, 0)
+
+    def test_find_line_range_empty(self):
+        from nanobot.agent.tools.memory_search import _find_line_range
+        assert _find_line_range("", "") == (0, 0)
+
+
+# ===========================================================================
+# ConversationSearchTool tests
+# ===========================================================================
+
+class TestConversationSearchToolBasic:
+    """Basic ConversationSearchTool properties."""
+
+    def test_tool_name(self, tmp_path: Path):
+        tool = ConversationSearchTool(_make_store(tmp_path))
+        assert tool.name == "conversation_search"
+
+    def test_tool_description(self, tmp_path: Path):
+        tool = ConversationSearchTool(_make_store(tmp_path))
+        assert "conversation_search" in tool.description or "对话" in tool.description
+
+    def test_tool_is_read_only(self, tmp_path: Path):
+        tool = ConversationSearchTool(_make_store(tmp_path))
+        assert tool.read_only is True
+
+    def test_parameters_have_keyword_and_query(self, tmp_path: Path):
+        tool = ConversationSearchTool(_make_store(tmp_path))
+        params = tool.parameters
+        assert "keyword" in params["properties"]
+        assert "query" in params["properties"]
+        assert "start" in params["properties"]
+        assert "end" in params["properties"]
+
+
+class TestConversationSearchToolHistoryMode:
+    """ConversationSearchTool.execute() behavior."""
+
+    @pytest.mark.asyncio
+    async def test_with_keyword_only(self, tmp_path: Path):
+        """Keyword matches content."""
         store = _make_store(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="history", query="Python")
+        tool = ConversationSearchTool(store)
+        result = await tool.execute(keyword="Python")
         assert "Python" in result
         assert "Java" in result
-
-    @pytest.mark.asyncio
-    async def test_with_keyword_filters(self, tmp_path: Path):
-        """Keyword filter narrows results."""
-        store = _make_store(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="history", query="Python", keyword="Python")
-        assert "Python" in result
-        assert "No memories found" not in result
 
     @pytest.mark.asyncio
     async def test_with_non_matching_keyword(self, tmp_path: Path):
         """Non-matching keyword returns empty."""
         store = _make_store(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="history", query="Ruby", keyword="Ruby")
+        tool = ConversationSearchTool(store)
+        result = await tool.execute(keyword="Ruby")
         assert "No memories found" in result
 
     @pytest.mark.asyncio
     async def test_with_date_range(self, tmp_path: Path):
         """Date range filters history entries."""
         store = _make_store(tmp_path)
-        tool = _make_tool(store)
+        tool = ConversationSearchTool(store)
         today = datetime.now().strftime("%Y-%m-%d")
-        result = await tool.execute(mode="history", query="Python", start=today, end=today)
+        result = await tool.execute(keyword="Python", start=today, end=today)
         assert "Python" in result or "No memories found" in result
 
     @pytest.mark.asyncio
-    async def test_empty_memory_returns_no_memories(self, tmp_path: Path):
+    async def test_empty_store_returns_no_memories(self, tmp_path: Path):
         """Empty memory store returns appropriate message."""
         store = MemoryStore(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="history", query="anything")
+        tool = ConversationSearchTool(store)
+        result = await tool.execute(keyword="anything")
         assert "No memories found" in result
 
     @pytest.mark.asyncio
     async def test_result_has_section_header(self, tmp_path: Path):
         """Results are formatted with section header."""
         store = _make_store(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="history", query="Python")
+        tool = ConversationSearchTool(store)
+        result = await tool.execute(keyword="Python")
         assert "## Relevant Memories" in result
 
-
-# ---------------------------------------------------------------------------
-# knowledge mode
-# ---------------------------------------------------------------------------
-
-class TestRecallToolKnowledgeMode:
-    """RecallTool.execute(mode='knowledge') behavior."""
-
     @pytest.mark.asyncio
-    async def test_empty_index_returns_no_results(self, tmp_path: Path):
-        """Empty memory dir returns no results."""
-        store = MemoryStore(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="knowledge", query="anything")
-        assert "No relevant knowledge found" in result
-
-    @pytest.mark.asyncio
-    async def test_knowledge_with_custom_k(self, tmp_path: Path):
-        """k parameter is accepted."""
-        store = MemoryStore(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="knowledge", query="test", k=3)
-        assert isinstance(result, str)
-
-    @pytest.mark.asyncio
-    async def test_knowledge_clamps_k(self, tmp_path: Path):
-        """k outside 1-20 is rejected by schema."""
-        store = MemoryStore(tmp_path)
-        tool = _make_tool(store)
-        params = tool.parameters
-        k_prop = params["properties"]["k"]
-        assert k_prop.get("minimum") == 1
-        assert k_prop.get("maximum") == 20
-
-
-# ---------------------------------------------------------------------------
-# mode validation
-# ---------------------------------------------------------------------------
-
-class TestRecallToolModeValidation:
-    """RecallTool mode parameter validation."""
-
-    @pytest.mark.asyncio
-    async def test_default_mode_is_history(self, tmp_path: Path):
-        """Without mode, defaults to history."""
+    async def test_query_alias(self, tmp_path: Path):
+        """query parameter works as alias for keyword."""
         store = _make_store(tmp_path)
-        tool = _make_tool(store)
+        tool = ConversationSearchTool(store)
         result = await tool.execute(query="Python")
-        # Default mode is history, so should search memory
-        assert isinstance(result, str)
+        assert "Python" in result
 
     @pytest.mark.asyncio
-    async def test_invalid_mode_returns_error(self, tmp_path: Path):
-        """Invalid mode value returns error."""
+    async def test_no_keyword_provided(self, tmp_path: Path):
+        """Neither keyword nor query returns error."""
         store = _make_store(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="invalid", query="test")
-        assert "Unknown mode" in result
+        tool = ConversationSearchTool(store)
+        result = await tool.execute()
+        assert "provide" in result.lower() or "Provide" in result
 
 
-# ---------------------------------------------------------------------------
-# Date parsing
-# ---------------------------------------------------------------------------
-
-class TestRecallToolDateParsing:
+class TestConversationSearchToolDateParsing:
     """Date parsing edge cases."""
 
-    @pytest.mark.asyncio
-    async def test_invalid_date_format_falls_back(self, tmp_path: Path):
-        """Invalid date format is handled gracefully."""
-        store = _make_store(tmp_path)
-        tool = _make_tool(store)
-        result = await tool.execute(mode="history", query="test", start="invalid-date")
-        assert isinstance(result, str)
-
-    def test_parse_date_supports_datetime_format(self):
-        """_parse_date handles YYYY-MM-DD HH:MM format."""
-        tool = RecallTool(MemoryStore(Path("/tmp/fake")))
-
+    def test_parse_date_supports_formats(self):
+        tool = ConversationSearchTool(MemoryStore(Path("/tmp/fake")))
         dt = tool._parse_date("2026-04-21")
-        assert dt is not None
-        assert dt.year == 2026
-        assert dt.month == 4
-        assert dt.day == 21
-
+        assert dt is not None and dt.year == 2026
         dt = tool._parse_date("2026-04-21 09:30")
-        assert dt is not None
-        assert dt.hour == 9
-        assert dt.minute == 30
-
-    def test_parse_date_returns_none_for_invalid(self):
-        """_parse_date returns None for invalid input."""
-        tool = RecallTool(MemoryStore(Path("/tmp/fake")))
+        assert dt is not None and dt.hour == 9
         assert tool._parse_date(None) is None
         assert tool._parse_date("") is None
         assert tool._parse_date("not-a-date") is None
+
+    def test_in_date_range_valid(self):
+        from datetime import timedelta
+        now = datetime.now().astimezone()
+        yesterday = (now - timedelta(days=1)).isoformat()
+        tomorrow = (now + timedelta(days=1)).isoformat()
+        assert ConversationSearchTool._in_date_range(now.isoformat(), "", None, None)

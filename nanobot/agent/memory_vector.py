@@ -160,17 +160,48 @@ class MemoryVectorIndex:
         self._index = index
         self._chunks = chunks
 
-    # -- search ----------------------------------------------------------------
+    # -- hybrid search (vector + keyword + RRF) --------------------------------
+
+    @staticmethod
+    def _extract_terms(query: str) -> set[str]:
+        """Extract meaningful search terms from query for keyword matching.
+
+        Handles English words (>=2 chars) and Chinese bigrams.
+        """
+        import re
+
+        terms: set[str] = set()
+        for part in query.split():
+            terms.update(w.lower() for w in re.findall(r"[a-zA-Z]{2,}", part))
+            cjk = re.findall(r"[一-鿿]", part)
+            for i in range(len(cjk) - 1):
+                terms.add(cjk[i] + cjk[i + 1])
+        return terms
+
+    def _keyword_rank(self, terms: set[str]) -> dict[int, int]:
+        """Score all chunks by keyword hit count. Returns {chunk_idx: rank}."""
+        if not terms:
+            return {}
+
+        scored: list[tuple[int, int]] = []
+        for idx, chunk in enumerate(self._chunks):
+            text = chunk.get("text", "").lower()
+            count = sum(1 for t in terms if t in text)
+            if count > 0:
+                scored.append((idx, count))
+
+        scored.sort(key=lambda x: -x[1])
+        return {idx: rank for rank, (idx, _) in enumerate(scored)}
 
     def search(self, query: str, k: int = 5, min_score: float = 0.3) -> list[dict[str, Any]]:
-        """Search memory chunks by *query*.
+        """Search memory chunks by *query* using hybrid vector + keyword search.
 
-        Returns up to *k* results with ``source``, ``heading``, ``text``,
-        and ``score`` keys.  Results below *min_score* are discarded.
+        Uses Reciprocal Rank Fusion (RRF) to merge FAISS vector search results
+        with keyword term matching.  Returns up to *k* results with ``source``,
+        ``heading``, ``text``, and ``score`` keys.
         """
         if not self._chunks:
             return []
-        # Load model BEFORE checking _index — this also invalidates mismatched indexes
         if not self._load_model():
             return []
         if self._index is None:
@@ -180,30 +211,77 @@ class MemoryVectorIndex:
 
         query_vec = self._model.encode([query], normalize_embeddings=True)
 
-        # Set HNSW search quality (no-op for non-HNSW indexes loaded from disk)
         if hasattr(self._index, "hnsw"):
             self._index.hnsw.ef_search = 40
 
+        # Fetch extra candidates from FAISS for better RRF fusion
+        faiss_k = min(k * 3, len(self._chunks))
         scores, indices = self._index.search(
-            np.array(query_vec, dtype=np.float32),
-            k=min(k, len(self._chunks)),
+            np.array(query_vec, dtype=np.float32), faiss_k,
         )
 
-        results: list[dict[str, Any]] = []
-        for score, idx in zip(scores[0], indices[0]):
+        # Build FAISS result list with vector rank
+        faiss_results: list[dict[str, Any]] = []
+        for v_rank, (score, idx) in enumerate(zip(scores[0], indices[0])):
             if idx < 0 or idx >= len(self._chunks):
                 continue
             if score < min_score:
                 continue
             chunk = self._chunks[idx]
-            results.append({
+            faiss_results.append({
                 "source": chunk["source"],
                 "heading": chunk.get("heading", ""),
                 "text": chunk["text"],
-                "score": float(score),
+                "_vec_score": float(score),
+                "_vec_rank": v_rank,
+                "_chunk_idx": idx,
             })
 
-        return results
+        # Keyword ranking across all chunks
+        terms = self._extract_terms(query)
+        kw_rank = self._keyword_rank(terms)
+
+        if not kw_rank:
+            # No keyword terms or matches — fall back to pure FAISS
+            for r in faiss_results:
+                r["score"] = r.pop("_vec_score")
+                del r["_vec_rank"], r["_chunk_idx"]
+            return faiss_results[:k]
+
+        # RRF fusion: 1/(k + rank) for each strategy
+        RRF_K = 61  # gbrain uses k=60; +1 for 0-indexed ranks
+
+        seen: set[int] = set()
+        fused: list[dict[str, Any]] = []
+
+        for r in faiss_results:
+            ci = r["_chunk_idx"]
+            vr = r["_vec_rank"]
+            kr = kw_rank.get(ci)
+            rrf = 1.0 / (RRF_K + vr)
+            if kr is not None:
+                rrf += 1.0 / (RRF_K + kr)
+            r["score"] = rrf
+            del r["_vec_rank"], r["_chunk_idx"], r["_vec_score"]
+            fused.append(r)
+            seen.add(ci)
+
+        # Add keyword-only results (missed by vector)
+        for ci, kr in sorted(kw_rank.items(), key=lambda x: x[1]):
+            if ci in seen:
+                continue
+            chunk = self._chunks[ci]
+            fused.append({
+                "source": chunk["source"],
+                "heading": chunk.get("heading", ""),
+                "text": chunk["text"],
+                "score": 1.0 / (RRF_K + kr),
+            })
+            if len(fused) >= k + len(faiss_results):
+                break
+
+        fused.sort(key=lambda x: -x["score"])
+        return fused[:k]
 
     # -- persistence -----------------------------------------------------------
 

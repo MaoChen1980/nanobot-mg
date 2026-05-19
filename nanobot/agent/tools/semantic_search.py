@@ -52,7 +52,7 @@ class SearchTextTool(Tool):
         "**什么时候不用**:\n"
         "- 需要精确关键词匹配 → 用 grep\n"
         "- 需要代码搜索 → 用 grep\n"
-        "- 搜索 memory/ 目录 → 用 recall(mode='knowledge')\n"
+        "- 搜索 memory/ 目录 → 用 memory_search\n"
     )
 
     async def execute(

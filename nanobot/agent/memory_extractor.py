@@ -62,8 +62,17 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def run(self) -> bool:
-        """Step 1 → Step 2. Returns True if any work was done."""
+        """Step 0 → Step 1 → Step 2. Returns True if any work was done."""
         all_findings: list[dict[str, Any]] = []
+
+        # ── Step 0: detect memory/ changes from external writes ──
+        if self._memory_dir_changed():
+            self._generate_memory_index()
+            self._add_backlinks()
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self.store.build_vector_index)
+            if self.store.git.is_initialized():
+                self.store.git.auto_commit("memory: sync external changes")
 
         # ── Step 1: extract findings from .pt files ──
         pt_files = sorted(self.prompts_dir.glob("*.pt"))
@@ -366,6 +375,144 @@ class MemoryExtractor:
                 )
 
     # ------------------------------------------------------------------
+    # Memory directory change detection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _snapshot_memory_dir(memory_dir: Path) -> dict[str, int]:
+        """Scan memory/ and return {relative_path: mtime_ns} for all .md files."""
+        snapshot: dict[str, int] = {}
+        exclude_names = {"MEMORY.md", "topic-map.json"}
+        for p in sorted(memory_dir.rglob("*.md")):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            try:
+                snapshot[str(p.relative_to(memory_dir))] = p.stat().st_mtime_ns
+            except OSError:
+                continue
+        return snapshot
+
+    def _memory_dir_changed(self) -> bool:
+        """Check if memory/ directory contents have changed since last check."""
+        state_file = self.store.memory_dir / ".memory_state.json"
+        current = self._snapshot_memory_dir(self.store.memory_dir)
+
+        if state_file.exists():
+            try:
+                previous = json.loads(state_file.read_text(encoding="utf-8"))
+                if current == previous:
+                    return False
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        state_file.write_text(
+            json.dumps(current, ensure_ascii=False), encoding="utf-8"
+        )
+        return True
+
+    # ------------------------------------------------------------------
+    # Auto-linking (See also backlinks between memory files)
+    # ------------------------------------------------------------------
+
+    def _build_reference_index(self) -> dict[str, set[str]]:
+        """Build {lowercase_term: set[rel_path]} from memory file headings.
+
+        Extracts H1 titles and ## section headings from each memory file.
+        Only keeps terms with >=2 words to reduce false positives.
+        Returns mapping from normalized term to set of file paths.
+        """
+        index: dict[str, set[str]] = {}
+        exclude_names = {"MEMORY.md", "topic-map.json"}
+
+        for p in self.store.memory_dir.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            try:
+                rel = str(p.relative_to(self.store.memory_dir))
+                text = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+
+            # H1 title → derive terms from filename stem
+            stem = p.stem.lower().replace("_", " ").replace("-", " ")
+            if len(stem.split()) >= 2:
+                index.setdefault(stem, set()).add(rel)
+
+            # H1 and ## headings
+            for line in text.split("\n"):
+                line = line.strip()
+                if line.startswith("# "):
+                    heading = line.lstrip("# ").strip().lower()
+                    words = heading.split()
+                    if len(words) >= 2 and len(heading) <= 80:
+                        index.setdefault(heading, set()).add(rel)
+                elif line.startswith("## "):
+                    heading = line.lstrip("# ").strip().lower()
+                    words = heading.split()
+                    if len(words) >= 2 and len(heading) <= 80:
+                        index.setdefault(heading, set()).add(rel)
+
+        return index
+
+    def _add_backlinks(self) -> None:
+        """Add '## See also' sections to memory files based on cross-references.
+
+        Scans each memory file's content for occurrences of other files' headings.
+        Only matches terms >= 2 words long, using word-boundary regex.
+        Only writes a file if its See also section actually changed.
+        """
+        ref_index = self._build_reference_index()
+        if not ref_index:
+            return
+
+        exclude_names = {"MEMORY.md", "topic-map.json"}
+        # Sort terms by length (longest first) to prefer multi-word matches
+        sorted_terms = sorted(ref_index.keys(), key=len, reverse=True)
+
+        for p in self.store.memory_dir.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            try:
+                rel = str(p.relative_to(self.store.memory_dir))
+                text = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+
+            # Find which other files this file references
+            referenced: set[str] = set()
+            text_lower = text.lower()
+            for term in sorted_terms:
+                target_files = ref_index[term]
+                # Build word-boundary pattern for multi-word term
+                escaped = re.escape(term)
+                if re.search(rf"(?<![a-zA-Z一-鿿]){escaped}(?![a-zA-Z一-鿿])", text_lower):
+                    for tf in target_files:
+                        if tf != rel:
+                            referenced.add(tf)
+
+            if not referenced:
+                continue
+
+            # Build See also section
+            see_also_lines = ["\n## See also\n"]
+            for ref in sorted(referenced):
+                title = Path(ref).stem
+                see_also_lines.append(f"- [{title}]({ref})\n")
+
+            see_also_text = "".join(see_also_lines)
+
+            # Replace existing See also section or append
+            existing_see_also = re.search(r"\n## See also\n.*?(?=\n## |\Z)", text, re.DOTALL)
+            if existing_see_also:
+                new_text = text[:existing_see_also.start()] + see_also_text + text[existing_see_also.end():]
+            else:
+                new_text = text.rstrip() + see_also_text
+
+            if new_text != text:
+                p.write_text(new_text, encoding="utf-8")
+                logger.debug("MemoryExtractor: added backlinks to {}", rel)
+
+    # ------------------------------------------------------------------
     # MEMORY.md auto-generation
     # ------------------------------------------------------------------
 
@@ -487,7 +634,6 @@ class MemoryExtractor:
     # Helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
     @staticmethod
     def _sanitize_filename(name: str) -> str:
         """Sanitize a single path component (no slashes)."""
