@@ -435,7 +435,7 @@ class CronTool(Tool):
             old_callback = self._progress_callback.get()
             self._progress_callback.set(on_progress)
 
-            steps.append(f"🔍 Test running job '{job.name}' (id: {job.id})")
+            steps.append(f"Test running job '{job.name}' (id: {job.id})")
             if dry_run:
                 steps.append("  [Mode] Dry run - result will not be delivered")
 

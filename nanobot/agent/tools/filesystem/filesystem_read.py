@@ -11,7 +11,7 @@ from loguru import logger
 from nanobot.agent.tools._section_utils import detect_sections, format_section_overview
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
-from .filesystem_base import _FsTool, _is_blocked_device, _parse_page_range
+from .filesystem_base import _FsTool, _is_blocked_device, _line_tag, _parse_page_range
 from nanobot.agent.tools import file_state
 from nanobot.utils.media_decode import build_image_content_blocks, detect_image_mime
 
@@ -43,10 +43,13 @@ class ReadFileTool(_FsTool):
 
     description = (
         "**用途**: 读取文件内容（文本/图片/PDF/Office），支持模式选择、正则过滤、按行分段。\n\n"
+        "**输出格式 (mode=full)**:\n"
+        "每行格式为 `LINENO:4CHAR_TAG| CONTENT` (e.g. `42:Q8fA| def foo():`)。\n"
+        "其中 TAG 是内容的 4 字符校验码，可直接传给 edit_file 的 line_tag 参数做修改校验。\n\n"
         "**模式**:\n"
         "- `mode=full`（默认）— 完整读取，支持 offset+limit 分页\n"
-        "- `mode=overview` — **只看结构不读全文**（heading/section 预览），不想读完整文件时用\n"
-        "- `extract=正则` — **只返回匹配行**，相当于文件内过滤，替代 grep+cat 组合\n\n"
+        "- `mode=overview` — 只看结构不读全文（heading/section 预览），不想读完整文件时用\n"
+        "- `extract=正则` — 只返回匹配行+前后各 1 行上下文，替代 grep+cat 组合\n\n"
         "**什么时候用**:\n"
         "- 需要查看文件内容时\n"
         "- 不确定文件中有什么 → 先 `mode=overview` 预览结构\n"
@@ -156,7 +159,7 @@ class ReadFileTool(_FsTool):
 
             start = offset - 1
             end = min(start + (limit or self._DEFAULT_LIMIT), total)
-            numbered = [f"{start + i + 1}| {line}" for i, line in enumerate(all_lines[start:end])]
+            numbered = [f"{start + i + 1}:{_line_tag(line)}| {line}" for i, line in enumerate(all_lines[start:end])]
 
             # -- extract mode: filter to lines matching the regex + 1 line context --
             if extract:

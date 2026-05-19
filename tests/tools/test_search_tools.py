@@ -29,9 +29,9 @@ async def test_glob_matches_recursively_and_skips_noise_dirs(tmp_path: Path) -> 
     tool = GlobTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(pattern="*.py", path=".")
 
-    assert "src/app.py" in result
-    assert "nested/util.py" in result
-    assert "node_modules/skip.py" not in result
+    assert (tmp_path / "src" / "app.py").resolve().as_posix() in result
+    assert (tmp_path / "nested" / "util.py").resolve().as_posix() in result
+    assert (tmp_path / "node_modules" / "skip.py").resolve().as_posix() not in result
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_glob_can_return_directories_only(tmp_path: Path) -> None:
         entry_type="dirs",
     )
 
-    assert result.splitlines() == ["src/api/"]
+    assert result.splitlines() == [(tmp_path / "src" / "api").resolve().as_posix() + "/"]
 
 
 @pytest.mark.asyncio
@@ -69,7 +69,7 @@ async def test_grep_respects_glob_filter_and_context(tmp_path: Path) -> None:
         context_after=1,
     )
 
-    assert "src/main.py:3" in result
+    assert (tmp_path / "src" / "main.py").resolve().as_posix() + ":3" in result
     assert "  2| beta" in result
     assert "> 3| match_here" in result
     assert "  4| gamma" in result
@@ -87,7 +87,7 @@ async def test_grep_defaults_to_files_with_matches(tmp_path: Path) -> None:
         path="src",
     )
 
-    assert result.splitlines() == ["src/main.py"]
+    assert result.splitlines() == [(tmp_path / "src" / "main.py").resolve().as_posix()]
     assert "1|" not in result
 
 
@@ -107,7 +107,7 @@ async def test_grep_supports_case_insensitive_search(tmp_path: Path) -> None:
         output_mode="content",
     )
 
-    assert "memory/HISTORY.md:1" in result
+    assert (tmp_path / "memory" / "HISTORY.md").resolve().as_posix() + ":1" in result
     assert "OAuth token rotated" in result
 
 
@@ -124,7 +124,7 @@ async def test_grep_type_filter_limits_files(tmp_path: Path) -> None:
         type="py",
     )
 
-    assert result.splitlines() == ["src/a.py"]
+    assert result.splitlines() == [(tmp_path / "src" / "a.py").resolve().as_posix()]
 
 
 @pytest.mark.asyncio
@@ -143,7 +143,7 @@ async def test_grep_fixed_strings_treats_regex_chars_literally(tmp_path: Path) -
         output_mode="content",
     )
 
-    assert "memory/HISTORY.md:1" in result
+    assert (tmp_path / "memory" / "HISTORY.md").resolve().as_posix() + ":1" in result
     assert "[2026-04-02 10:00] OAuth token rotated" in result
 
 
@@ -164,7 +164,10 @@ async def test_grep_files_with_matches_mode_returns_unique_paths(tmp_path: Path)
         output_mode="files_with_matches",
     )
 
-    assert result.splitlines() == ["src/b.py", "src/a.py"]
+    assert result.splitlines() == [
+        (tmp_path / "src" / "b.py").resolve().as_posix(),
+        (tmp_path / "src" / "a.py").resolve().as_posix(),
+    ]
 
 
 @pytest.mark.asyncio
@@ -185,8 +188,9 @@ async def test_grep_files_with_matches_supports_head_limit_and_offset(tmp_path: 
     # 1. Only one file path is returned (head_limit=1 after offset=1)
     # 2. The pagination info is correct
     assert "pagination: limit=1, offset=1" in result
-    # Count non-empty lines that start with src/ (file paths)
-    file_lines = [l for l in result.splitlines() if l.startswith("src/")]
+    # Count non-empty lines that contain the absolute path prefix (file paths)
+    prefix = (tmp_path / "src").resolve().as_posix()
+    file_lines = [l for l in result.splitlines() if l.startswith(prefix)]
     assert len(file_lines) == 1
 
 
@@ -203,8 +207,8 @@ async def test_grep_count_mode_reports_counts_per_file(tmp_path: Path) -> None:
         output_mode="count",
     )
 
-    assert "logs/one.log: 2" in result
-    assert "logs/two.log: 1" in result
+    assert (tmp_path / "logs" / "one.log").resolve().as_posix() + ": 2" in result
+    assert (tmp_path / "logs" / "two.log").resolve().as_posix() + ": 1" in result
     assert "total matches: 3 in 2 files" in result
 
 
@@ -226,7 +230,10 @@ async def test_grep_files_with_matches_mode_respects_max_results(tmp_path: Path)
         max_results=2,
     )
 
-    assert result.splitlines()[:2] == ["src/c.py", "src/b.py"]
+    assert result.splitlines()[:2] == [
+        (tmp_path / "src" / "c.py").resolve().as_posix(),
+        (tmp_path / "src" / "b.py").resolve().as_posix(),
+    ]
     assert "pagination: limit=2, offset=0" in result
 
 
@@ -253,7 +260,7 @@ async def test_glob_supports_head_limit_offset_and_recent_first(tmp_path: Path) 
     )
 
     lines = result.splitlines()
-    assert lines[0] == "src/b.py"
+    assert lines[0] == (tmp_path / "src" / "b.py").resolve().as_posix()
     assert "pagination: limit=1, offset=1" in result
 
 

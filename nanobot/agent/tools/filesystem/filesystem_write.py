@@ -43,7 +43,12 @@ class WriteFileTool(_FsTool):
         "**什么时候用**:\n"
         "- 需要创建新文件时\n"
         "- 需要整体替换文件内容时\n"
-        "- 需要写文件后自动执行命令或类型检查时\n\n"
+        "- 需要写文件后自动验证、类型检查或执行命令时\n\n"
+        "**后处理链**（按顺序执行）:\n"
+        "- `then_grep` — 写入后搜索指定字符串，验证写入成功，不重新读取整个文件\n"
+        "- `then_check` — 写入后运行类型检查（pyright/tsc），返回 pass/fail + 错误详情\n"
+        "- `then_exec` — 写入并验证后执行一条 shell 命令（工作目录为文件所在目录）\n"
+        "三者可组合使用，e.g. write → then_check → then_exec。\n\n"
         "**什么时候不用**:\n"
         "- 只需要修改文件中的部分内容 → 用 edit_file\n"
         "- 只需要读取文件 → 用 read_file\n"
@@ -63,10 +68,16 @@ class WriteFileTool(_FsTool):
             if content is None:
                 raise ValueError("Unknown content")
             fp = self._resolve(path)
+
+            # Read-before-write check: warn if overwriting unread content
+            warning = file_state.check_read(fp)
+
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
             file_state.record_write(fp)
             write_result = f"Successfully wrote {len(content)} characters to {fp}"
+            if warning:
+                write_result = f"{warning}\n{write_result}"
 
             # Auto-verify: extract first meaningful line from content as verification
             content_lines = [l.strip() for l in content.splitlines() if l.strip() and not l.strip().startswith("#")]

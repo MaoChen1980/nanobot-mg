@@ -70,7 +70,7 @@ _SOURCE_TOOLS = frozenset({
     "read_file", "read_files", "list_dir", "glob", "grep",
     "web_search", "web_fetch", "git_inspect",
     "recall", "search_text", "explore_module", "analyze",
-    "diagnose", "run_recipe",
+    "diagnose",
 })
 
 

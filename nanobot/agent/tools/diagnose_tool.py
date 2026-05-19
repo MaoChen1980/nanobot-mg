@@ -109,7 +109,7 @@ class DiagnoseTool(_FsTool):
                     seen.add(key)
                     if len(hits) < max_results:
                         first_match = self._first_match_line(f, term)
-                        rel = Path(f).relative_to(search_root).as_posix() if search_root in Path(f).parents else f
+                        rel = Path(f).as_posix()
                         hits.append(f"  {rel}{first_match}")
         except OSError:
             pass

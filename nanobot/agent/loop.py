@@ -43,7 +43,6 @@ from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.read_files import ReadFilesTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.git_inspect import GitInspectTool
-from nanobot.agent.tools.recipe import RecipeTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.diagnose_tool import DiagnoseTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
@@ -366,7 +365,6 @@ class AgentLoop:
         self.tools.register(ReadFilesTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ExploreModuleTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(GitInspectTool(workspace=self.workspace, allowed_dir=allowed_dir))
-        self.tools.register(RecipeTool(run_tool=self.tools.execute))
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
         if self._db:

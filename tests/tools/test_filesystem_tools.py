@@ -30,14 +30,14 @@ class TestReadFileTool:
     async def test_basic_read_has_line_numbers(self, tool, sample_file):
         result = await tool.execute(path=str(sample_file))
         assert "1| line 1" in result
-        assert "20| line 20" in result
+        assert "| line 20" in result
 
     @pytest.mark.asyncio
     async def test_offset_and_limit(self, tool, sample_file):
         result = await tool.execute(path=str(sample_file), offset=5, limit=3)
-        assert "5| line 5" in result
-        assert "7| line 7" in result
-        assert "8| line 8" not in result
+        assert "| line 5" in result
+        assert "| line 7" in result
+        assert "| line 8" not in result
         assert "Use offset=8 to continue" in result
 
     @pytest.mark.asyncio
@@ -225,11 +225,9 @@ class TestListDirTool:
     @pytest.mark.asyncio
     async def test_recursive(self, tool, populated_dir):
         result = await tool.execute(path=str(populated_dir), recursive=True)
-        # Normalize path separators for cross-platform compatibility
-        normalized = result.replace("\\", "/")
-        assert "src/main.py" in normalized
-        assert "src/utils.py" in normalized
-        assert "README.md" in result
+        assert (populated_dir / "src" / "main.py").resolve().as_posix() in result
+        assert (populated_dir / "src" / "utils.py").resolve().as_posix() in result
+        assert (populated_dir / "README.md").resolve().as_posix() in result
         # Ignored dirs should not appear
         assert ".git" not in result
         assert "node_modules" not in result

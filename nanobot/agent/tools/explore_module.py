@@ -76,9 +76,12 @@ class ExploreModuleTool(_FsTool):
 
     description = (
         "**用途**: 获取代码文件或目录的结构化概览（函数/类定义、签名、行号）。\n\n"
+        "**输出格式**:\n"
+        "- 函数和类定义附带 1-indexed 行号（可直接传给 read_file 的 offset 参数）\n"
+        "- Python 用 AST 解析（精确），其他语言用正则（可能不完整）\n"
+        "- 末尾附带 Tip: read_file 命令，可直接复制使用\n\n"
         "**什么时候用**:\n"
-        "- 想快速了解一个文件或目录有哪些类和函数及其定义位置\n"
-        "- Python 用 AST 解析（精确），其他语言用正则（可能不完整）\n\n"
+        "- 想快速了解一个文件或目录有哪些类和函数及其定义位置\n\n"
         "**什么时候不用**:\n"
         "- 需要完整文件内容 → 用 read_file\n"
         "- 只需要搜索关键词 → 用 grep"
@@ -130,6 +133,12 @@ class ExploreModuleTool(_FsTool):
             result = self._explore_generic(fp, suffix, lines)
 
         result += f"\n({total_lines} lines total in {fp.name})"
+
+        # Actionable hint: tell LLM how to jump to definitions
+        result += (
+            f"\n\n- Tip: use `read_file(path=\"{fp.resolve().as_posix()}\", offset=<line_no>, limit=40)` "
+            f"to read a specific function/class body."
+        )
         return result
 
     # ------------------------------------------------------------------
@@ -434,11 +443,11 @@ class ExploreModuleTool(_FsTool):
                 if entry.name in _IGNORE_DIRS:
                     continue
                 if level < max_level:
-                    dirs.append(str(Path(entry.path).relative_to(root).as_posix()))
+                    dirs.append(Path(entry.path).resolve().as_posix())
                 self._walk_dir(root, Path(entry.path), by_type, dirs, max_level, level + 1)
             elif entry.is_file():
                 ext = Path(entry.name).suffix.lower() or "(no ext)"
-                rel = str(Path(entry.path).relative_to(root).as_posix())
+                rel = Path(entry.path).resolve().as_posix()
                 try:
                     sz = entry.stat().st_size
                 except OSError:

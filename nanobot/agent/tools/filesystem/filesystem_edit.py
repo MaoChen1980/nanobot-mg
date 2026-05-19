@@ -9,7 +9,7 @@ from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
-from .filesystem_base import _FsTool, _normalize_quotes
+from .filesystem_base import _FsTool, _normalize_quotes, _line_tag
 from nanobot.agent.tools import file_state
 
 @dataclass(slots=True)
@@ -116,6 +116,12 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
         last_line=p("integer", "Line number to end replacing at (1-indexed, inclusive). Must be >= first_line.",
             minimum=1,
         ),
+        line_tag=p("string",
+            "Tag from read_file output for the line at first_line (e.g. 'Q8fA'). "
+            "When set with first_line+last_line, the tool verifies the tag matches "
+            "the actual file content before editing. Prevents editing the wrong line "
+            "when the file has changed since you read it."
+        ),
         then_grep=p("string",
             "If set, searches the edited file for this exact substring (not a regex) after saving, "
             "and returns matching line numbers and content. "
@@ -134,18 +140,29 @@ class EditFileTool(_FsTool):
 
     description = (
         "**用途**: 通过文本匹配或行号范围修改文件内容。\n\n"
+        "**两种模式**:\n"
+        "- **old_text/new_text**（默认）— 精确文本匹配替换，适合小段替换\n"
+        "- **first_line/last_line**（行号范围）— 按行号替换，支持传入 read_file 输出的 line_tag 做校验\n\n"
+        "**行号 + line_tag**:\n"
+        "read_file 输出格式为 `LINENO:TAG| CONTENT`（如 `42:Q8fA| def foo():`）。\n"
+        "编辑时传入 `first_line=42, line_tag='Q8fA'`，工具会自动校验该行内容是否已被修改。\n"
+        "推荐用这种方式编辑已知行号范围的内容，避免输出大段 old_text。\n\n"
+        "**自动验证**:\n"
+        "编辑后会自动搜索 new_text 的第一行内容是否写入成功。\n"
+        "也可用 `then_grep` 参数指定一个字符串来验证写入结果。\n\n"
         "**限制**:\n"
         "- 不支持跨文件的查找替换\n"
         "- 文本匹配容忍空格差异，但不能跨越函数/类重组\n\n"
         "**错误应对**:\n"
         "- old_text 找不到 → 显示 diff 辅助定位\n"
         "- old_text 出现多次且 replace_all=false → 显示每处匹配的行号，要求提供更多上下文或设置 replace_all=true\n"
+        "- line_tag 不匹配 → 说明文件已改变，要求重新 read_file\n"
         "- 文件不存在 → 返回错误\n\n"
         "**边界条件**:\n"
         "- 需要创建新文件 → 用 write_file\n"
         "- 需要跨文件查找替换 → 用 exec sed\n\n"
-        "**极简案例**: edit_file(path='main.py', old_text='foo()', new_text='bar()')\n"
-        "→ 替换文件中的文本，返回确认"
+        "**极简案例**: edit_file(path='main.py', first_line=42, last_line=45, line_tag='Q8fA', new_text='def bar():')\n"
+        "→ 替换文件中 42-45 行为新内容"
     )
 
     @staticmethod
@@ -159,6 +176,7 @@ class EditFileTool(_FsTool):
         replace_all: bool = False,
         first_line: int | None = None,
         last_line: int | None = None,
+        line_tag: str | None = None,
         then_grep: str | None = None,
         **kwargs: Any,
     ) -> str:
@@ -172,7 +190,7 @@ class EditFileTool(_FsTool):
             if first_line is not None or last_line is not None:
                 if first_line is None or last_line is None:
                     raise ValueError("Both first_line and last_line must be provided (or neither)")
-                result = await self._edit_by_lines(path, new_text, first_line, last_line)
+                result = await self._edit_by_lines(path, new_text, first_line, last_line, line_tag=line_tag)
                 if result.startswith("Successfully"):
                     fp = self._resolve(path)
                     # Auto-verify: use then_grep if provided, otherwise first line of new_text
@@ -338,8 +356,13 @@ class EditFileTool(_FsTool):
 
     async def _edit_by_lines(
         self, path: str, new_text: str, first_line: int, last_line: int,
+        line_tag: str | None = None,
     ) -> str:
-        """Replace lines first_line through last_line (1-indexed) with new_text."""
+        """Replace lines first_line through last_line (1-indexed) with new_text.
+
+        When *line_tag* is provided, verifies that the tag of the existing
+        content at *first_line* matches before editing.
+        """
         fp = self._resolve(path)
         if not fp.exists():
             return self._file_not_found_msg(path, fp)
@@ -362,6 +385,17 @@ class EditFileTool(_FsTool):
             return f"Error: last_line ({last_line}) must be >= first_line ({first_line})"
         if end_idx >= len(lines):
             return f"Error: last_line ({last_line}) exceeds file length ({len(lines)} lines)"
+
+        # Verify line tag if provided
+        if line_tag:
+            actual_tag = _line_tag(lines[start_idx])
+            if line_tag != actual_tag:
+                return (
+                    f"Error: line tag mismatch at line {first_line}. "
+                    f"Expected tag '{line_tag}', got '{actual_tag}'. "
+                    f"The file content has changed since you read it. "
+                    f"Use read_file to get the current content and tags."
+                )
 
         norm_new = new_text.replace("\r\n", "\n")
         # Strip trailing whitespace (skip markdown)

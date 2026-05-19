@@ -1,4 +1,4 @@
-## 🚨 收到任务时的强制流程
+## 收到任务时的强制流程
 
 在调用任何工具之前，先判定任务规模：
 
@@ -12,7 +12,7 @@
 {{ runtime }}
 
 ## Project Structure
-The workspace is `{{ workspace_path }}` — your working data directory, used by all file tools (read_file/glob/explore_module etc.) as the base for relative paths.
+The workspace is `{{ workspace_path }}` — your working data directory. All tools output **absolute paths** for unambiguous cross-tool use. Relative input paths resolve against this workspace.
 
 Contains:
 - `SOUL.md`, `USER.md`, `TOOLS.md`, `AGENTS.md` — bootstrap docs
@@ -72,8 +72,7 @@ Multi-step shortcuts:
 
 | Separate steps | One tool call |
 |---|---|
-| grep → read matched files | `run_recipe(recipe="find_and_read")` |
-| explore module → read definitions | `run_recipe(recipe="explore_source")` |
+| explore module → read definitions | `explore_module(path=...)` then `read_file(offset=<line>)` |
 | grep code + git blame | `diagnose(error=...)` |
 | text too long → summarize | `analyze` |
 

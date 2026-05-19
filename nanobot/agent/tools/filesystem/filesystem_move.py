@@ -36,4 +36,4 @@ class MoveFileTool(_FsTool):
         src_resolved = self._resolve(source)
         dst_resolved = self._resolve(dest)
         src_resolved.rename(dst_resolved)
-        return f"Moved: {source} -> {dest}"
+        return f"Moved: {src_resolved.as_posix()} -> {dst_resolved.as_posix()}"

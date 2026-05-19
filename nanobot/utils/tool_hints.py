@@ -26,7 +26,6 @@ _TOOL_FORMATS: dict[str, tuple[list[str], str, bool, bool]] = {
     "git_inspect":    (["path"],                           "git {}",           True,  False),
     "recall":         (["query"],                          'recall("{}")',     False, False),
     "search_text":    (["query"],                          'search("{}")',     False, False),
-    "run_recipe":     (["name", "recipe"],                 'recipe("{}")',     False, False),
     "ask_user":       (["question"],                       'ask("{}")',        False, False),
     "spawn":          (["task"],                           'spawn("{}")',      False, False),
     "diagnose":       (["error", "target"],                'diagnose("{}")',   False, False),

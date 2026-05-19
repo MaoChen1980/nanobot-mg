@@ -33,6 +33,10 @@ class ListDirTool(_FsTool):
 
     description = (
         "**用途**: 列出目录内容，支持递归。\n\n"
+        "**输出格式**:\n"
+        "- 每行一个绝对路径\n"
+        "- 目录路径以 / 结尾（便于区分文件和目录）\n"
+        "- 递归模式输出所有子条目\n\n"
         "**什么时候用**:\n"
         "- 需要查看目录中有哪些文件和子目录时\n"
         "- 需要递归探索项目结构时\n\n"
@@ -68,16 +72,14 @@ class ListDirTool(_FsTool):
                         continue
                     total += 1
                     if len(items) < cap:
-                        rel = item.relative_to(dp)
-                        items.append(f"{rel}/" if item.is_dir() else str(rel))
+                        items.append(f"{item.resolve()}/" if item.is_dir() else item.resolve().as_posix())
             else:
                 for item in sorted(dp.iterdir()):
                     if item.name in self._IGNORE_DIRS:
                         continue
                     total += 1
                     if len(items) < cap:
-                        pfx = "📁 " if item.is_dir() else "📄 "
-                        items.append(f"{pfx}{item.name}")
+                        items.append(f"{item.resolve()}/" if item.is_dir() else item.resolve().as_posix())
 
             if not items and total == 0:
                 return f"Directory {path} is empty"

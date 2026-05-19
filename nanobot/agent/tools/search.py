@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import os
 import re
+import shutil
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, TypeVar
 
@@ -93,12 +95,8 @@ class _SearchTool(_FsTool):
     _IGNORE_DIRS = set(ListDirTool._IGNORE_DIRS)
 
     def _display_path(self, target: Path, root: Path) -> str:
-        if self._workspace:
-            try:
-                return target.relative_to(self._workspace).as_posix()
-            except ValueError:
-                pass
-        return target.relative_to(root).as_posix()
+        """Always return an absolute resolved path for unambiguous cross-tool use."""
+        return target.resolve().as_posix()
 
     def _iter_files(self, root: Path) -> Iterable[Path]:
         if root.is_file():
@@ -171,7 +169,7 @@ class GlobTool(_SearchTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "Directory path relative to workspace root, e.g. 'nanobot/proxy/channels' (default '.')",
+                    "description": "Absolute path to a directory to search in (default: workspace root). Accepts relative paths that resolve against workspace.",
                 },
                 "max_results": {
                     "type": "integer",
@@ -276,6 +274,11 @@ class GrepTool(_SearchTool):
     def description(self) -> str:
         return (
             "**用途**: 用正则表达式搜索文件内容。\n\n"
+            "**输出格式 (output_mode)**:\n"
+            "- `content`:  PATH:LINENO 头 + \"> LINENO| 匹配行\" + \"  LINENO| 上下文行\"\n"
+            "  匹配行的 path 和 lineno 可直接传给 read_file 的 path 和 offset 参数\n"
+            "- `files_with_matches`（默认）: 每行一个绝对路径\n"
+            "- `count`:  path:匹配行数\n\n"
             "**什么时候用**:\n"
             "- 需要在文件内容中搜索匹配某个模式的行\n"
             "- 支持正则表达式\n\n"
@@ -302,7 +305,7 @@ class GrepTool(_SearchTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to a file or directory to search in (default: workspace root)",
+                    "description": "Absolute path to a file or directory to search in (default: workspace root). Accepts relative paths that resolve against workspace.",
                 },
                 "glob": {
                     "type": "string",
@@ -395,6 +398,105 @@ class GrepTool(_SearchTool):
             block.append(f"{marker} {line_no}| {lines[line_no - 1]}")
         return "\n".join(block)
 
+    @staticmethod
+    async def _try_rg_search(
+        pattern: str,
+        target: Path,
+        *,
+        case_insensitive: bool = False,
+        fixed_strings: bool = False,
+        output_mode: str = "files_with_matches",
+        glob: str | None = None,
+        context_before: int = 0,
+        context_after: int = 0,
+    ) -> str | None:
+        """Try ripgrep first. Returns formatted result or None for fallback."""
+        rg_path = shutil.which("rg")
+        if not rg_path:
+            return None
+
+        args = [rg_path, "--no-ignore", "--color", "never"]
+        if case_insensitive:
+            args.append("-i")
+        if fixed_strings:
+            args.append("-F")
+        if glob:
+            args.extend(["-g", glob])
+        if context_before:
+            args.extend(["-B", str(context_before)])
+        if context_after:
+            args.extend(["-A", str(context_after)])
+
+        if output_mode == "files_with_matches":
+            args.append("-l")
+        elif output_mode == "content":
+            args.append("-n")
+        # count mode handled below (rg -c format differs)
+
+        args.extend(["--", pattern, str(target)])
+
+        if output_mode == "count":
+            # rg -c outputs "path:count" per file — use -c with --count-matches
+            count_args = args[:-2] + ["-c", "--count-matches", "--", pattern, str(target)]
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *count_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            except Exception:
+                return None
+            if proc.returncode not in (0, 1):
+                return None
+            text = stdout.decode("utf-8", errors="replace").strip()
+            if not text:
+                return f"No matches found for pattern '{pattern}'"
+            # Normalize "path:count" lines
+            lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+            return "\n".join(lines)
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        except Exception:
+            return None
+        if proc.returncode not in (0, 1):
+            return None
+
+        text = stdout.decode("utf-8", errors="replace").strip()
+        if not text:
+            return f"No matches found for pattern '{pattern}'"
+
+        if output_mode == "files_with_matches":
+            return text
+
+        # content mode: normalize rg "path:line:content" → "path:lineno| content"
+        # to match the existing nanobot grep output format
+        lines = text.split("\n")
+        normalized: list[str] = []
+        for ln in lines:
+            if not ln.strip():
+                continue
+            # rg with -n outputs: path:lineno:content
+            # We want:           path:lineno| content
+            colon = ln.find(":")
+            if colon == -1:
+                normalized.append(ln)
+                continue
+            rest = ln[colon + 1:]
+            # Check if it's a "path:lineno:content" match or a context line
+            # Context lines from -A/-B don't have lineno prefix
+            second_colon = rest.find(":")
+            if second_colon != -1 and rest[:second_colon].isdigit():
+                lineno = rest[:second_colon]
+                content = rest[second_colon + 1:]
+                normalized.append(f"{ln[:colon]}:{lineno}| {content}")
+            else:
+                # Context line — preserve raw
+                normalized.append(ln)
+        return "\n".join(normalized)
+
     async def execute(
         self,
         pattern: str,
@@ -421,6 +523,30 @@ class GrepTool(_SearchTool):
                 return f"Error: Path not found: {path} — use glob to locate it first"
             if not (target.is_dir() or target.is_file()):
                 return f"Error: Unsupported path: {path}"
+
+            # Try ripgrep first for directory searches (fast path).
+            # Falls back to Python implementation when rg is unavailable,
+            # targeting a single file, or using legacy-only features.
+            if target.is_dir() and not file_type:
+                rg_result = await self._try_rg_search(
+                    pattern, target,
+                    case_insensitive=case_insensitive,
+                    fixed_strings=fixed_strings,
+                    output_mode=output_mode,
+                    glob=glob,
+                    context_before=context_before,
+                    context_after=context_after,
+                )
+                if rg_result is not None:
+                    if rg_result.startswith("No matches"):
+                        return rg_result
+                    # Apply offset/limit post-hoc for consistent pagination
+                    lines = rg_result.split("\n")
+                    paged, truncated = _paginate(lines, head_limit or _DEFAULT_HEAD_LIMIT, offset)
+                    result = "\n".join(paged)
+                    if note := _pagination_note(head_limit or _DEFAULT_HEAD_LIMIT, offset, truncated):
+                        result += f"\n\n{note}"
+                    return result
 
             flags = re.IGNORECASE if case_insensitive else 0
             try:

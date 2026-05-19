@@ -202,7 +202,7 @@ class ExecTool(Tool):
         # Match against full command (cat file.txt, grep foo, etc.)
         for pat, tool_call, reason in _TOOL_SUGGESTIONS:
             if pat.search(stripped):
-                return f"💡 Suggestion: Use **{tool_call}** instead of exec — {reason}."
+                return f"Suggestion: Use{tool_call}** instead of exec — {reason}."
 
         # For powershell -Command "...", extract the inner command and re-check.
         # This catches e.g. "powershell -Command \"Get-ChildItem -Name\"" where
@@ -211,21 +211,21 @@ class ExecTool(Tool):
         if inner:
             for pat, tool_call, reason in _TOOL_SUGGESTIONS:
                 if pat.search(inner):
-                    return f"💡 Suggestion: Use **{tool_call}** instead of exec — {reason}."
+                    return f"Suggestion: Use{tool_call}** instead of exec — {reason}."
             # PowerShell inner command doesn't need sed/git checks below
             return None
 
         # Special case: sed -i (in-place edit)
         lower = stripped.lower()
         if lower.startswith("sed") and " -i" in lower:
-            return "💡 Suggestion: Use **edit_file(path=..., old_string=..., new_string=...)** instead of `sed -i`."
+            return "Suggestion: Useedit_file(path=..., old_string=..., new_string=...)** instead of `sed -i`."
         # git log/show
         if lower.startswith("git"):
             rest = lower[3:].strip()
             if rest.startswith("log"):
-                return "💡 Suggestion: Use **git_inspect(action='log', ...)** to browse commit history."
+                return "Suggestion: Usegit_inspect(action='log', ...)** to browse commit history."
             if rest.startswith("show"):
-                return "💡 Suggestion: Use **git_inspect(action='show', ...)** to inspect commits."
+                return "Suggestion: Usegit_inspect(action='show', ...)** to inspect commits."
         return None
 
     async def execute(

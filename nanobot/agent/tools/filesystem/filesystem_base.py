@@ -168,3 +168,13 @@ _QUOTE_TABLE = str.maketrans({
 
 def _normalize_quotes(s: str) -> str:
     return s.translate(_QUOTE_TABLE)
+
+
+def _line_tag(line: str) -> str:
+    """Generate a 4-char hex tag for a line based on its content.
+
+    Used by read_file (tagged output) and edit_file (verification).
+    Deterministic — same line always produces the same tag.
+    """
+    import hashlib
+    return hashlib.md5(line.encode()).hexdigest()[:4]
