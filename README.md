@@ -18,14 +18,86 @@ This repository is a fork of [HKUDS/nanobot](https://github.com/HKUDS/nanobot) -
 
 ---
 
-## Quick Start
+## Install
+
+**Install from PyPI** (stable release):
 
 ```bash
 pip install nanobot-ai
+```
+
+**Install with uv** (stable release, fast):
+
+```bash
+uv tool install nanobot-ai
+```
+
+**Install from source** (latest features):
+
+```bash
+git clone https://github.com/HKUDS/nanobot.git
+cd nanobot
+pip install -e .
+```
+
+---
+
+## Quick Start
+
+**1. Initialize**
+
+```bash
+nanobot onboard
+```
+
+This creates the default config at `~/.nanobot/config.json` and workspace directory. Use `nanobot onboard --wizard` for interactive setup.
+
+**2. Configure**
+
+Edit `~/.nanobot/config.json` -- set your API key and model:
+
+```json
+{
+  "providers": {
+    "openrouter": {
+      "apiKey": "sk-or-v1-xxx"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-opus-4-5",
+      "provider": "openrouter"
+    }
+  }
+}
+```
+
+**3. Start the agent**
+
+```bash
 nanobot agent
 ```
 
-Config file at `~/.nanobot/config.toml` -- auto-generated on first run.
+This opens an interactive CLI chat with the agent.
+
+---
+
+## Gateway (WebUI)
+
+The gateway provides a WebUI accessible from a browser, and is required for most chat channel integrations.
+
+```bash
+nanobot gateway
+```
+
+Opens WebUI at `http://127.0.0.1:18790` by default. Channel-specific onboarding:
+
+```bash
+nanobot onboard feishu    # QR-code scan to create a Feishu bot
+nanobot onboard dingtalk  # QR-code scan to create a DingTalk bot
+```
+
+For the full channel configuration guide, see [Chat Apps](docs/chat-apps.md).
 
 ---
 
@@ -82,29 +154,59 @@ Three-layer design:
 | Durable | `memory/*.md` files | Auto-extracted knowledge, preferences, decisions, rules |
 | Index | `MEMORY.md` | Index of all memory files, injected into context each turn |
 
-Snapshots (`.pt`) saved every 30 turns (configurable). Extractor runs on configurable intervals (default every 2 hours), extracting 5 discovery types: soul rules, user preferences, knowledge, decisions, reusable patterns.
+Snapshots (`.pt`) saved every 30 turns (configurable via `extractor.saveInterval`). Extractor runs on configurable intervals (default every 2 hours), extracting 5 discovery types: soul rules, user preferences, knowledge, decisions, reusable patterns.
 
 ---
 
 ## Configuration
 
-```toml
-[agents.defaults]
-model = "deepseek-chat"
-provider = "auto"
-context_window_tokens = 200000
-max_tokens = 160000
-max_tool_iterations = 200
-max_tool_result_chars = 32000
-temperature = 0.1
+Config file: `~/.nanobot/config.json` (JSON format, camelCase keys).
 
-[provider.custom]
-api_base = "https://api.deepseek.com/v1"
-api_key = "sk-..."
+Environment variables can be referenced with `${VAR_NAME}` syntax:
 
-[channel]
-type = "terminal"
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": "deepseek-chat",
+      "provider": "auto",
+      "maxTokens": 160000,
+      "contextWindowTokens": 200000,
+      "maxToolIterations": 200,
+      "maxToolResultChars": 32000,
+      "temperature": 0.1,
+      "timezone": "Asia/Shanghai",
+      "extractor": {
+        "intervalH": 2,
+        "saveInterval": 30
+      }
+    }
+  },
+  "providers": {
+    "custom": {
+      "apiBase": "https://api.deepseek.com/v1",
+      "apiKey": "${DEEPSEEK_API_KEY}"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "${TELEGRAM_TOKEN}"
+    }
+  },
+  "tools": {
+    "web": {
+      "enable": true,
+      "search": {
+        "provider": "duckduckgo",
+        "maxResults": 5
+      }
+    }
+  }
+}
 ```
+
+See the full [Configuration](docs/configuration.md) doc for all options.
 
 ---
 
