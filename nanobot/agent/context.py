@@ -48,8 +48,10 @@ class ContextBuilder:
     _RUNTIME_CONTEXT_TAG = "## Runtime Context"
     _RUNTIME_CONTEXT_END = "## /Runtime Context"
 
-    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None):
+    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None,
+                 project_root: Path | None = None):
         self.workspace = workspace
+        self.project_root = project_root
         self.timezone = timezone
         self.memory = MemoryStore(workspace, db=db)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
@@ -95,6 +97,10 @@ class ContextBuilder:
         bootstrap = self._load_bootstrap_files()
         if bootstrap:
             parts.append(bootstrap)
+
+        framework_doc = self._load_framework_doc()
+        if framework_doc:
+            parts.append(framework_doc)
 
         lessons = self._load_lessons()
         if lessons:
@@ -272,6 +278,27 @@ class ContextBuilder:
             + self._shift_headings(content, offset=1)
         )
 
+    def _build_project_card_section(self) -> str:
+        """Read project_card.md from project root for context injection."""
+        if self.project_root is None:
+            return ""
+        card_path = self.project_root / "project_card.md"
+        if not card_path.exists():
+            return ""
+        try:
+            content = card_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            logger.warning("Failed to read project card at {}", card_path)
+            return ""
+        if not content:
+            return ""
+        return (
+            "## Project Card\n\n"
+            "Project context (generated from actual filesystem). "
+            "This is the source of truth about the project structure.\n\n"
+            + self._shift_headings(content, offset=1)
+        )
+
     # -- vector-indexed memory -------------------------------------------------
 
     def _build_memory_section(self) -> str:
@@ -411,6 +438,47 @@ class ContextBuilder:
 
         return "\n\n".join(parts) if parts else ""
 
+    def _load_framework_doc(self) -> str:
+        """Load framework.md — the core framework operating manual (auto-injected, must follow).
+        Appends the workflow routing table so workflows are discoverable via framework_search.
+        """
+        fw_path = self.workspace / "framework" / "framework.md"
+        if not fw_path.exists():
+            return ""
+        try:
+            content = fw_path.read_text(encoding="utf-8").strip()
+        except Exception as e:
+            logger.warning("Failed to load framework doc: {}", e)
+            return ""
+        if not content:
+            return ""
+
+        lines = [content]
+
+        # Append workflow routing table
+        wf_dir = self.workspace / "framework" / "workflows"
+        if wf_dir.is_dir():
+            wf_lines = ["", "## Workflows", "", "Search with framework_search when scenario matches:"]
+            for f in sorted(wf_dir.iterdir()):
+                if not f.name.endswith(".md"):
+                    continue
+                try:
+                    c = f.read_text(encoding="utf-8").strip()
+                except Exception:
+                    continue
+                if not c:
+                    continue
+                trigger = ""
+                for line in c.split("\n"):
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        trigger = line[:120]
+                        break
+                wf_lines.append(f"- **{f.stem}**: {trigger} — `framework_search(query=\"{f.stem}\")`")
+            lines.append("\n".join(wf_lines))
+
+        return f"## Framework Doc\n\n{self._shift_headings('\n\n'.join(lines), offset=1)}"
+
     def _load_lessons(self) -> str:
         """Load past lessons from tasks/lessons.md into the system prompt."""
         lessons_path = self.workspace / "tasks" / "lessons.md"
@@ -480,6 +548,10 @@ class ContextBuilder:
         state_block = self._build_task_tree_section()
         if state_block:
             sys_dynamic_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
+
+        project_card = self._build_project_card_section()
+        if project_card:
+            sys_dynamic_parts.append(project_card)
 
         if sys_dynamic_parts:
             sys_static = sys_static + "\n\n# Runtime Context\n\n" + "\n\n".join(sys_dynamic_parts)

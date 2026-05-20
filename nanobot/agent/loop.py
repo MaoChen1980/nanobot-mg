@@ -49,9 +49,10 @@ from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.git_inspect import GitInspectTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.diagnose_tool import DiagnoseTool
+from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
-from nanobot.agent.context_vars import _current_agent_loop
+from nanobot.agent.context_vars import _current_agent_loop, _current_debug_enabled
 from nanobot.command import CommandContext, CommandRouter, register_builtin_commands
 from nanobot.config.schema import AgentDefaults
 from nanobot.providers.base import LLMProvider
@@ -147,6 +148,7 @@ class AgentLoop:
         unified_session: bool = False,
         disabled_skills: list[str] | None = None,
         tools_config: ToolsConfig | None = None,
+        project_root: Path | None = None,
         provider_snapshot_loader: Callable[[], ProviderSnapshot] | None = None,
         provider_signature: tuple[object, ...] | None = None,
         db=None,
@@ -185,11 +187,13 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
+        self.project_root = project_root
         self._extra_hooks: list[AgentHook] = hooks or []
         self._extra_hooks.extend(self._discover_hooks())
 
         self._init_framework_dir(workspace)
-        self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db)
+        self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db,
+                                       project_root=project_root)
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
@@ -209,6 +213,7 @@ class AgentLoop:
             disabled_skills=disabled_skills,
             db=db,
             timezone=self.context.timezone,
+            project_root=self.project_root,
         )
         self._unified_session = unified_session
         self._running = False
@@ -243,10 +248,11 @@ class AgentLoop:
         register_builtin_commands(self.commands)
         self.context.warmup()
         # Per-session observe toggles — keyed by session_key
-        # Format: {_observe_think: {session_key: bool}, _observe_tool: {session_key: bool}}
+        # Format: {_observe_think: {session_key: bool}, _observe_tool: {session_key: bool}, _observe_debug: {session_key: bool}}
         self._session_observe: dict[str, dict[str, bool]] = {
             "_observe_think": {},
             "_observe_tool": {},
+            "_observe_debug": {},
         }
 
     # ------------------------------------------------------------------
@@ -361,6 +367,7 @@ class AgentLoop:
         self.tools.register(GitInspectTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
+        self.tools.register(ScanProjectTool(loop=self))
         if self._db:
             from nanobot.agent.tools.tool_call_log import ToolCallLogTool
             self.tools.register(ToolCallLogTool(db=self._db))
@@ -656,6 +663,8 @@ class AgentLoop:
         """
         observe_think = self._session_observe["_observe_think"].get(session_key, True)
         observe_tool = self._session_observe["_observe_tool"].get(session_key, True)
+        if self._session_observe["_observe_debug"].get(session_key, False):
+            _current_debug_enabled.set(True)
         loop_hook = _LoopHook(
             self,
             on_progress=on_progress,

@@ -386,6 +386,53 @@ def dingtalk(
     )
 
 
+@app.command()
+def init(
+    project_dir: str = typer.Argument(".", help="Project directory to scan"),
+    config_path: str | None = typer.Option(None, "--config", "-c", help="Path to nanobot config"),
+    force: bool = typer.Option(False, "--force", "-f", help="Re-scan even if project_card.md already exists"),
+):
+    """Scan a project and generate project_card.md for coding agent use.
+
+    Reads the actual filesystem (not docs, not training data) and produces
+    a structured project card. The agent reads this to understand the project
+    instead of guessing from training-data knowledge.
+    """
+    from nanobot.agent.project_scanner import write_project_card
+    from pathlib import Path
+
+    target = Path(project_dir).expanduser().resolve()
+    if not target.is_dir():
+        console.print(f"[red]Error: directory not found: {target}[/red]")
+        raise typer.Exit(1)
+
+    card_path = target / "project_card.md"
+    if card_path.exists() and not force:
+        console.print(f"[green]✓[/green] project_card.md already exists at {card_path}")
+        console.print("  Use [cyan]--force[/cyan] to re-scan.")
+    else:
+        console.print(f"[dim]Scanning project: {target}[/dim]")
+        try:
+            write_project_card(target)
+            console.print(f"[green]✓[/green] Generated [bold]{card_path}[/bold]")
+        except Exception as e:
+            console.print(f"[red]Error scanning project: {e}[/red]")
+            raise typer.Exit(1)
+
+    tasks_dir = target / "tasks"
+    if not tasks_dir.is_dir():
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        console.print(f"[green]✓[/green] Created [bold]{tasks_dir}[/bold]")
+
+    tree_path = target / "tasks" / "TREE.md"
+    if not tree_path.exists():
+        tree_path.write_text("# Task Tree\n\n## active\n\n## paused\n\n## done\n", encoding="utf-8")
+        console.print(f"[green]✓[/green] Created [bold]{tree_path}[/bold]")
+
+    console.print(f"\n[bold]Project initialized for coding agent.[/bold]")
+    console.print(f"  Next: start the agent with [cyan]nanobot agent --project-root .[/cyan]")
+
+
 def _make_provider(config: Config):
     """Create the appropriate LLM provider from config by delegating to providers.factory."""
     from nanobot.providers.factory import make_provider
@@ -514,10 +561,13 @@ def agent(
     session_id: str = typer.Option("cli:direct", "--session", "-s", help="Session ID"),
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
     config: str | None = typer.Option(None, "--config", "-c", help="Config file path"),
+    project_root: str | None = typer.Option(None, "--project-root", "-p", help="Project root directory (enables coding agent mode with project card)"),
     markdown: bool = typer.Option(True, "--markdown/--no-markdown", help="Render assistant output as Markdown"),
     logs: bool = typer.Option(False, "--logs/--no-logs", help="Show nanobot runtime logs during chat"),
 ):
     """Interact with the agent directly."""
+    from pathlib import Path
+
     from loguru import logger
 
     from nanobot.agent.loop import AgentLoop
@@ -525,6 +575,7 @@ def agent(
     from nanobot.cron.service import CronService
 
     config = _load_runtime_config(config, workspace)
+    project_root_path = Path(project_root).expanduser().resolve() if project_root else None
     sync_workspace_templates(config.workspace_path)
 
     bus = MessageBus()
@@ -548,6 +599,7 @@ def agent(
         provider=provider,
         workspace=config.workspace_path,
         model=config.agents.defaults.model,
+        project_root=project_root_path,
         max_iterations=config.agents.defaults.max_tool_iterations,
         context_window_tokens=config.agents.defaults.context_window_tokens,
         web_config=config.tools.web,

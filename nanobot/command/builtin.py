@@ -146,6 +146,11 @@ def build_help_text() -> str:
 
 - **/sub** — Show subagent status
 
+## Observe
+- **/think** — Show/hide LLM reasoning blocks
+- **/tool** — Show/hide tool call events
+- **/debug** — Save raw prompts to ~/.nanobot/debug/
+
 ## Info
 - **/help** — Show this message"""
 

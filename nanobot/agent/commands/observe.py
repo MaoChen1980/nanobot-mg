@@ -1,4 +1,4 @@
-"""Observe toggles: /think, /tool."""
+"""Observe toggles: /think, /tool, /debug."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from nanobot.bus.events import OutboundMessage
 def register_observe_commands(router) -> None:
     router.exact("/think", cmd_think)
     router.exact("/tool", cmd_tool)
+    router.exact("/debug", cmd_debug)
 
 
 async def cmd_think(ctx) -> OutboundMessage:
@@ -39,6 +40,23 @@ async def cmd_tool(ctx) -> OutboundMessage:
         chat_id=ctx.msg.chat_id,
         content=(
             f"🔧 /tool {status} — Tool call events will{' ' if enabled else ' not '}be shown."
+        ),
+        metadata=dict(ctx.msg.metadata or {}),
+    )
+
+
+async def cmd_debug(ctx) -> OutboundMessage:
+    """Toggle raw prompt dumping to ~/.nanobot/debug/."""
+    session_key = ctx.key
+    enabled = ctx.loop._session_observe["_observe_debug"].get(session_key, False)
+    enabled = not enabled
+    ctx.loop._session_observe["_observe_debug"][session_key] = enabled
+    status = "ON" if enabled else "OFF"
+    return OutboundMessage(
+        channel=ctx.msg.channel,
+        chat_id=ctx.msg.chat_id,
+        content=(
+            f"🔍 /debug {status} — Raw prompts will{' ' if enabled else ' not '}be saved to ~/.nanobot/debug/."
         ),
         metadata=dict(ctx.msg.metadata or {}),
     )

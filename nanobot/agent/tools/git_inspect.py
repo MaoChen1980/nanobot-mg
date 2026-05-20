@@ -88,7 +88,7 @@ class GitInspectTool(_FsTool):
     # Log view
     # ------------------------------------------------------------------
 
-    def _show_log(self, git_dir: Path, since: str | None, path: str | None, max_commits: int) -> str:
+    async def _show_log(self, git_dir: Path, since: str | None, path: str | None, max_commits: int) -> str:
         cmd = [
             "git", "-C", str(git_dir),
             "log",
@@ -114,7 +114,7 @@ class GitInspectTool(_FsTool):
             filter_str = f" ({', '.join(filters)})" if filters else ""
             return f"(No commits found{filter_str})"
 
-        summary = self._build_log_summary(git_dir, since, path, commits)
+        summary = await self._build_log_summary(git_dir, since, path, commits)
 
         lines: list[str] = [f"# Git log — {git_dir.name}"]
         if summary:
@@ -149,7 +149,7 @@ class GitInspectTool(_FsTool):
     # Structured summary
     # ------------------------------------------------------------------
 
-    def _build_log_summary(
+    async def _build_log_summary(
         self, git_dir: Path, since: str | None, path: str | None,
         commits: list[dict[str, str]],
     ) -> str | None:
@@ -220,7 +220,7 @@ class GitInspectTool(_FsTool):
     # Single commit view
     # ------------------------------------------------------------------
 
-    def _show_commit(self, git_dir: Path, sha: str) -> str:
+    async def _show_commit(self, git_dir: Path, sha: str) -> str:
         cmd = [
             "git", "-C", str(git_dir), "show",
             "--format=%H%n%an%n%ae%n%ai%n%s%n%b",

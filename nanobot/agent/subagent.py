@@ -66,9 +66,11 @@ class SubagentManager:
         disabled_skills: list[str] | None = None,
         db=None,
         timezone: str | None = None,
+        project_root: Path | None = None,
     ):
         self.provider = provider
         self.workspace = workspace
+        self.project_root = project_root
         self.bus = bus
         self.model = model or provider.get_default_model()
         self.web_config = web_config or WebToolsConfig()
@@ -156,6 +158,7 @@ class SubagentManager:
                 timezone=getattr(self, 'timezone', None),
                 db=self.db,
                 tool_definitions=tools.get_definitions(),
+                project_root=self.project_root,
             )
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},

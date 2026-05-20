@@ -1,0 +1,30 @@
+# Workflow: Bug Fix
+
+当用户报告一个 bug 时，按以下步骤执行：
+
+## Step 1: 理解项目
+如果还没有加载项目上下文（project_card.md），先调 `scan_project` 扫描项目根目录。
+
+## Step 2: 重现并缩小范围
+- 读用户提供的错误信息、log、截图
+- 用 read_file 读相关源码，不靠猜测
+- 用 grep 搜索关键变量、错误信息在代码中的位置
+- 目标是定位到出错的函数/模块
+
+## Step 3: 追溯设计意图
+- 用 `git_inspect(path="<file>")` 查看文件的 commit 历史，找到引入该代码的 commit
+- 用 `git_inspect(path="<file>", commit="<sha>")` 查看那个 commit 的完整 diff
+- 读 commit message 和 diff，理解当初为什么这么写
+- 问自己：这个 bug 是设计决策的自然结果吗？修复会不会破坏那个设计？
+
+## Step 4: 分析根因
+- 想清楚根因再动手，不做 try-fix
+- 如果发现"按下葫芦浮起瓢"，回退改动，回到设计层面重新分析
+
+## Step 5: 修复
+- 修改代码
+- 只修必要的地方，不改无关代码
+
+## Step 6: 验证
+- 运行相关测试
+- 确保修复不破坏现有功能

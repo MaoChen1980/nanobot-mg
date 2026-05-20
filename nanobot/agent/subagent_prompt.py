@@ -18,6 +18,7 @@ def build_subagent_prompt(
     timezone: str | None = None,
     db=None,
     tool_definitions: list[dict[str, Any]] | None = None,
+    project_root: Path | None = None,
 ) -> str:
     """Build system prompt for subagent — same structure as main agent.
 
@@ -29,6 +30,7 @@ def build_subagent_prompt(
         timezone=timezone,
         disabled_skills=list(disabled_skills),
         db=db,
+        project_root=project_root,
     )
 
     parts: list[str] = []

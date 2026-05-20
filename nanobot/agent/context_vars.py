@@ -21,3 +21,6 @@ _current_messages_for_subagent: ContextVar[list[dict] | None] = ContextVar(
 
 # Flag: True during subagent execution. Used by SpawnTool to block nested spawn.
 _in_subagent: ContextVar[bool] = ContextVar("_in_subagent", default=False)
+
+# Flag: True when prompt debug is enabled for this session.
+_current_debug_enabled: ContextVar[bool] = ContextVar("_current_debug_enabled", default=False)
