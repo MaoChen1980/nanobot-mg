@@ -338,16 +338,16 @@ class GrepTool(_SearchTool):
                 "context_before": {
                     "type": "integer",
                     "default": 0,
-                    "description": "Number of lines of context before each match (only applies when output_mode='content')",
+                    "description": "Lines of context before each match, max 50 (only applies when output_mode='content')",
                     "minimum": 0,
-                    "maximum": 20,
+                    "maximum": 50,
                 },
                 "context_after": {
                     "type": "integer",
                     "default": 0,
-                    "description": "Number of lines of context after each match (only applies when output_mode='content')",
+                    "description": "Lines of context after each match, max 50 (only applies when output_mode='content')",
                     "minimum": 0,
-                    "maximum": 20,
+                    "maximum": 50,
                 },
                 "max_matches": {
                     "type": "integer",
