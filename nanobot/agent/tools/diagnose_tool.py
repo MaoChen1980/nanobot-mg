@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -66,7 +67,7 @@ class DiagnoseTool(_FsTool):
 
         if git_dir:
             since = f"{days} days ago"
-            log = self._git_log(git_dir, terms, since, 10)
+            log = await self._git_log(git_dir, terms, since, 10)
             if log:
                 parts.append(f"## Recent changes (last {days} days, {len(log)} commits)")
                 parts.append("")
@@ -159,7 +160,7 @@ class DiagnoseTool(_FsTool):
         return None
 
     @staticmethod
-    def _git_log(git_dir: Path, terms: list[str], since: str, max_count: int) -> list[str]:
+    async def _git_log(git_dir: Path, terms: list[str], since: str, max_count: int) -> list[str]:
         if not terms:
             return []
         log_lines: list[str] = []
@@ -173,9 +174,9 @@ class DiagnoseTool(_FsTool):
                 "--format=%h | %ai | %s",
                 f"--grep={term}", "-i", "--all",
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            if result.returncode == 0 and result.stdout.strip():
-                for line in result.stdout.strip().split("\n"):
+            proc = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=15)
+            if proc.returncode == 0 and proc.stdout.strip():
+                for line in proc.stdout.strip().split("\n"):
                     sha = line.split(" | ")[0] if " | " in line else line[:8]
                     if sha not in seen_shas:
                         seen_shas.add(sha)

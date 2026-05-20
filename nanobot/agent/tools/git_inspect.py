@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import subprocess
 from pathlib import Path
@@ -99,7 +100,7 @@ class GitInspectTool(_FsTool):
         if path:
             cmd.extend(["--", path])
 
-        result, err = self._run(cmd)
+        result, err = await self._run(cmd)
         if result is None:
             return f"Error: git log failed — {err}" if err else "Error: git log failed"
 
@@ -170,7 +171,7 @@ class GitInspectTool(_FsTool):
         if path:
             cmd.extend(["--", path])
 
-        result, err = self._run(cmd)
+        result, err = await self._run(cmd)
         if result:
             total_files = total_added = total_removed = 0
             for line in result.split("\n"):
@@ -227,7 +228,7 @@ class GitInspectTool(_FsTool):
             "--patch",
             sha,
         ]
-        result, err = self._run(cmd)
+        result, err = await self._run(cmd)
         if result is None:
             msg = err or f"commit {sha} not found"
             return f"Error: {msg}"
@@ -239,10 +240,10 @@ class GitInspectTool(_FsTool):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _run(cmd: list[str]) -> tuple[str | None, str | None]:
+    async def _run(cmd: list[str]) -> tuple[str | None, str | None]:
         """Returns (stdout, error). error is None on success."""
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            proc = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired:
             return None, "timeout"
         except (FileNotFoundError, OSError) as e:

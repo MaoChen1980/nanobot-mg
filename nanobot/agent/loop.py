@@ -590,7 +590,9 @@ class AgentLoop:
             elif action_type == "exit_zero":
                 cmd = args[0] if args else ""
                 try:
-                    r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                    r = await asyncio.to_thread(
+                        subprocess.run, cmd, shell=True, capture_output=True, text=True, timeout=30,
+                    )
                     if r.returncode == 0:
                         results.append(f"✅ {kind} exit_zero('{cmd}'): passed")
                     else:

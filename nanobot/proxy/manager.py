@@ -349,14 +349,22 @@ class ProxyManager:
         return True
 
     def unregister_by_writer(self, writer: asyncio.StreamWriter) -> None:
-        """Remove proxy registration by writer instance."""
+        """Remove proxy registration by writer instance.
+
+        Only clears proxy state when *writer* is still the current writer —
+        prevents a race where register_via_tcp has already updated to a new
+        TCP connection while the old _handle_client's finally block is still
+        running cleanup (Windows TCP half-open race).
+        """
         writer_id = id(writer)
         if writer_id in self._writers:
             key = self._writers.pop(writer_id)
             if key in self._proxies:
-                self._proxies[key].reader = None
-                self._proxies[key].writer = None
-                self._proxies[key].running = False
+                proxy = self._proxies[key]
+                if proxy.writer is writer:
+                    proxy.reader = None
+                    proxy.writer = None
+                    proxy.running = False
             logger.debug("Proxy {} unregistered (TCP disconnected)", key)
 
     async def deliver_to_proxy(self, proxy_key: str, data: dict[str, Any]) -> bool:

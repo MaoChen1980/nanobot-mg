@@ -63,9 +63,20 @@ class HubTCPServer:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
-        """Handle a single proxy TCP connection."""
+        """Handle a single proxy TCP connection.
+
+        All writes to *writer* are serialized through a per-connection lock
+        to prevent interleaving between the main loop (pong, register response)
+        and concurrently dispatched _route_message tasks.
+        """
         peername = writer.get_extra_info("peername")
         logger.info("Proxy TCP connection from {}", peername)
+        write_lock = asyncio.Lock()
+
+        async def _write(data: dict) -> None:
+            async with write_lock:
+                writer.write((json.dumps(data) + "\n").encode())
+                await writer.drain()
 
         try:
             while True:
@@ -86,8 +97,7 @@ class HubTCPServer:
                 msg_type = data.get("type", "")
 
                 if msg_type == "ping":
-                    writer.write((json.dumps({"type": "pong"}) + "\n").encode())
-                    await writer.drain()
+                    await _write({"type": "pong"})
 
                 elif msg_type == "register":
                     channel = data.get("channel", "")
@@ -107,14 +117,12 @@ class HubTCPServer:
                         break
 
                     logger.info("Proxy registered: {}:{} (pid={})", channel, bot, pid)
-                    resp = HubResponse(success=True)
-                    writer.write((json.dumps(resp.to_dict()) + "\n").encode())
-                    await writer.drain()
+                    await _write(HubResponse(success=True).to_dict())
 
                 elif msg_type == "message":
                     # Process asynchronously so heartbeats and other messages
                     # from the same proxy are still serviced during long LLM calls.
-                    asyncio.create_task(self._route_message(writer, data, peername))
+                    asyncio.create_task(self._route_message(write_lock, writer, data, peername))
 
         except asyncio.CancelledError:
             pass
@@ -131,6 +139,7 @@ class HubTCPServer:
 
     async def _route_message(
         self,
+        write_lock: asyncio.Lock,
         writer: asyncio.StreamWriter,
         data: dict[str, Any],
         peername: Any,
@@ -140,9 +149,9 @@ class HubTCPServer:
             msg = ProxyMessage.from_dict(data)
         except Exception as e:
             logger.warning("Invalid ProxyMessage from proxy {}: {}", peername, e)
-            resp = HubResponse(success=False, error=str(e))
-            writer.write((json.dumps(resp.to_dict()) + "\n").encode())
-            await writer.drain()
+            async with write_lock:
+                writer.write((json.dumps(HubResponse(success=False, error=str(e)).to_dict()) + "\n").encode())
+                await writer.drain()
             return
 
         session_key = f"{msg.channel}:{msg.bot}:{msg.sender_id}"
