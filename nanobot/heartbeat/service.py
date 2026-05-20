@@ -77,31 +77,16 @@ class HeartbeatService:
         from nanobot.utils.helpers import current_time_str
         now_ts = current_time_str(self.agent_loop.context.timezone)
 
-        # Read active goals from DB, ordered by priority
-        db = getattr(self.agent_loop, "_db", None)
-        if db is None:
-            logger.warning("Heartbeat: no DB available, skipping goal check")
-            return
-        goals = db.list_goals(
-            status="in_progress",
-            sort_by="priority",
-            sort_desc=True,
-        )
+        # Read task tree from tasks/TREE.md
+        tree_path = self.agent_loop.workspace / "tasks" / "TREE.md"
+        tree_content = ""
+        if tree_path.exists():
+            try:
+                tree_content = tree_path.read_text(encoding="utf-8").strip()
+            except Exception:
+                logger.warning("Failed to read task tree at {}", tree_path)
 
-        # Build message with goal list
-        if goals:
-            lines = ["## Active Tasks\n"]
-            for g in goals:
-                subtasks_str = ""
-                subtasks = g.get("data", {}).get("subtasks", [])
-                if subtasks:
-                    done = [s for s in subtasks if s.get("status") == "done"]
-                    subtasks_str = f" [{len(done)}/{len(subtasks)} done]"
-                priority = g.get("priority", 0)
-                lines.append(f"- **{g['title']}**{subtasks_str} [P{priority}] [{g.get('status', 'in_progress')}] [{g.get('id', '')}]")
-            goal_block = "\n".join(lines)
-        else:
-            goal_block = "*(none — no active goals)*"
+        goal_block = tree_content if tree_content else "*(none — no active tasks)*"
 
         msg = replace(
             InboundMessage(
@@ -121,4 +106,4 @@ class HeartbeatService:
             session_key_override="cli:direct",
         )
         await self.agent_loop.bus.publish_inbound(msg)
-        logger.info("Heartbeat: trigger published to main session via bus ({} goals)", len(goals))
+        logger.info("Heartbeat: trigger published to main session via bus")

@@ -114,7 +114,7 @@ class MyTool(Tool):
             "- check（有 key）→ 查看具体值，支持点路径（如 '_last_usage.prompt_tokens'）\n"
             "- set（有 key, value）→ 修改配置或存储 scratchpad 笔记\n\n"
             "**什么时候不用**:\n"
-            "- 需要持久化信息 → 用 write_goal 或 write_event\n"
+            "- 需要持久化信息 → 用 write_file 写入 tasks/ 或 memory/\n"
             "- 敏感字段（api_key, secret, token 等）不可访问\n"
             "- scratchpad 最多 64 个 key，值必须是 JSON 安全类型\n"
             "- 修改只读字段（web_config, exec_config）→ 拒绝\n"

@@ -253,77 +253,24 @@ class ContextBuilder:
             result.append(msg)
         return result
 
-    def _build_goals_and_events_section(self) -> str:
-        """Build a merged Current State block from Goals + recent events.
-
-        Note: HEARTBEAT active tasks are NOT injected here — they are embedded
-        directly in heartbeat messages by the heartbeat service (service.py).
-        """
-        blocks = []
-
-        # Goals — query from DB instead of file
-        goals = self._query_goals_for_context()
-        if goals:
-            blocks.append(
-                "## Active Goals\n\n"
-                "These are your active objectives. Work toward them proactively "
-                "in your responses — suggest next steps, track progress, and "
-                "drive them forward.\n\n" + goals
-            )
-
-        # Process log — from events table instead of file
-        events = self._query_recent_events()
-        if events:
-            blocks.append(
-                "## Recent Activity\n\n"
-                "Timeline of recent events for context on what just happened.\n\n" + events
-            )
-
-        return "\n\n".join(blocks) if blocks else ""
-
-    def _query_goals_for_context(self) -> str:
-        """Query active goals from DB and format as text."""
-        if self.memory._db is None:
+    def _build_task_tree_section(self) -> str:
+        """Read tasks/TREE.md from the workspace for context injection."""
+        tree_path = self.workspace / "tasks" / "TREE.md"
+        if not tree_path.exists():
             return ""
-        goals = self.memory._db.list_goals(status="in_progress")
-        if not goals:
+        try:
+            content = tree_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            logger.warning("Failed to read task tree at {}", tree_path)
             return ""
-        lines = []
-        for g in goals:
-            project = g.get("project", "")
-            project_str = f" [{project}]" if project else ""
-            lines.append(f"- **{self._escape_block_md(g['title'])}**{project_str}")
-            meta_parts = []
-            priority = g.get("priority", 0)
-            if priority:
-                meta_parts.append(f"P{priority}")
-            deadline = g.get("deadline")
-            if deadline:
-                meta_parts.append(f"due {deadline[:10]}")
-            if meta_parts:
-                lines[-1] += f" ({', '.join(meta_parts)})"
-            if g.get("description"):
-                lines.append(f"  - {self._escape_block_md(g['description'])}")
-            data = g.get("data") or {}
-            if data.get("subtasks"):
-                for st in data["subtasks"]:
-                    status_icon = "✅" if st.get("status") == "done" else "⬜"
-                    lines.append(f"  {status_icon} {self._escape_block_md(st.get('title', st.get('id', '?')))}")
-        return "\n".join(lines)
-
-    def _query_recent_events(self) -> str:
-        """Query recent events from DB and format as text."""
-        if self.memory._db is None:
+        if not content:
             return ""
-        events = self.memory._db.list_events(limit=5)
-        if not events:
-            return ""
-        lines = []
-        for e in reversed(events):
-            ts = self._convert_timestamp(e["timestamp"], self.timezone)
-            ts = ts[:26] if ts else "?"
-            lines.append(f"### [{ts}] {self._escape_block_md(e['content'])}")
-        return "\n".join(lines)
+        return (
+            "## Task Tree\n\n"
+            "Current task tree. Tasks are managed as files under tasks/ — "
+            "use read_file/write_file/edit_file to update them.\n\n"
+            + self._shift_headings(content, offset=1)
+        )
 
     # -- vector-indexed memory -------------------------------------------------
 
@@ -530,7 +477,7 @@ class ContextBuilder:
         if memory_section:
             sys_dynamic_parts.append(memory_section)
 
-        state_block = self._build_goals_and_events_section()
+        state_block = self._build_task_tree_section()
         if state_block:
             sys_dynamic_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
 

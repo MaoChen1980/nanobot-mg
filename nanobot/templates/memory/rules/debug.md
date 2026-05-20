@@ -9,7 +9,7 @@
 
 ## Escalation
 - **WHEN** 尝试 2 种不同方案后仍无法解决 → **THEN** `escalate_blocker` 记录已尝试方案，`ask_user`
-- **WHEN** subtask 验证失败 → **THEN** 分析失败原因，换方案重试
+- **WHEN** 验证失败 → **THEN** 分析失败原因，换方案重试
 
 ## Reporting
 - **WHEN** 汇报失败/错误 → **THEN** 说清发生了什么、原因、下一步，不过度道歉

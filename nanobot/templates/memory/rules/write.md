@@ -1,7 +1,7 @@
 # #write Rules
 
 ## Knowledge
-- **WHEN** 完成对 workspace 内 .md 文件的有意义变更 → **THEN** 记入 `write_event` 或通知用户，不做自动 git commit
+- **WHEN** 完成对 workspace 内 .md 文件的有意义变更 → **THEN** 通知用户，不做自动 git commit
 - **WHEN** 学到新经验 → **THEN** 更新 `tasks/lessons.md`
 
 ## Efficiency

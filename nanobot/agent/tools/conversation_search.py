@@ -41,7 +41,7 @@ class ConversationSearchTool(Tool):
         "- start/end — 按时间范围过滤（YYYY-MM-DD 格式）\n"
         "- query — keyword 的别名，两个参数传一个即可\n\n"
         "**注意**:\n"
-        "- 不搜索 goal/event/lesson 表（查询目标进度用 list_goals）\n"
+        "- 不搜索 goal/event/lesson 表（查询目标进度用 read_file(\"tasks/TREE.md\")）\n"
         "- 关键词是子串匹配，'deploy' 会匹配 'deployment'、'deploying' 等\n\n"
         "**示例**:\n"
         "  conversation_search(keyword='docker')\n"

@@ -6,6 +6,8 @@ import asyncio
 import dataclasses
 import json
 import os
+import re
+import subprocess
 import time
 from contextlib import AsyncExitStack, nullcontext
 from pathlib import Path
@@ -189,17 +191,6 @@ class AgentLoop:
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
-        # TaskExecutor for goal-based execution (from task-execution-system.md)
-        from nanobot.agent.task_executor import TaskExecutor
-        self._task_executor = TaskExecutor(
-            provider=provider,
-            db=db,
-            tools=self.tools,
-            model=self.model or "sonnet",
-            max_iterations=max_iterations or 50,
-            max_tool_result_chars=max_tool_result_chars or defaults.max_tool_result_chars,
-            workspace=workspace,
-        )
         self._recovery = RecoveryManager(self)
         self._dispatch_manager = DispatchManager(self)
         self._system_handler = SystemMessageHandler(self)
@@ -321,8 +312,6 @@ class AgentLoop:
         self.runner.provider = provider
         self.subagents.set_provider(provider, model)
         self.extractor.set_provider(provider, model)
-        if self._task_executor:
-            self._task_executor.set_provider(provider, model)
         self._provider_signature = snapshot.signature
         logger.info("Runtime model switched for next turn: {} -> {}", old_model, model)
 
@@ -375,9 +364,6 @@ class AgentLoop:
         self.tools.register(SpawnTool(manager=self.subagents))
         self.tools.register(CheckSubagentTool(manager=self.subagents))
         self.tools.register(ListSubagentsTool(manager=self.subagents))
-        from nanobot.agent.tools.goal_event import create_goal_tools
-        for tool in create_goal_tools(self.context.memory):
-            self.tools.register(tool)
         if self.cron_service:
             self.tools.register(
                 CronTool(self.cron_service, default_timezone=self.context.timezone or "UTC")
@@ -506,6 +492,135 @@ class AgentLoop:
         # a rough cap so history doesn't crowd out the entire window.
         budget = self.context_window_tokens - max(1, reserved_output) - 4096
         return budget if budget > 0 else max(4096, self.context_window_tokens // 4)
+
+    # ------------------------------------------------------------------
+    # Investigate / Verify dispatcher
+    # ------------------------------------------------------------------
+
+    _INVESTIGATE_RE = re.compile(
+        r'✅\s*investigate:\s*(\w+)\(([^)]+)\)\s*'
+    )
+    _VERIFY_RE = re.compile(
+        r'✅\s*verify:\s*(\w+)\(([^)]+)\)\s*'
+    )
+
+    def _scan_iv_markers(self, text: str) -> list[tuple[str, str, list[str]]]:
+        """Scan text for investigate/verify markers.
+
+        Returns list of (kind, action_type, args) tuples.
+        """
+        markers: list[tuple[str, str, list[str]]] = []
+        for match in self._INVESTIGATE_RE.finditer(text):
+            action_type = match.group(1)
+            args = self._parse_iv_args(match.group(2))
+            markers.append(("investigate", action_type, args))
+        for match in self._VERIFY_RE.finditer(text):
+            action_type = match.group(1)
+            args = self._parse_iv_args(match.group(2))
+            markers.append(("verify", action_type, args))
+        return markers
+
+    @staticmethod
+    def _strip_iv_markers(text: str) -> str:
+        """Remove investigate/verify markers from text, keeping surrounding content."""
+        result = re.sub(
+            r'✅\s*(investigate|verify):\s*\w+\([^)]+\)\s*',
+            '',
+            text,
+        )
+        return result.strip()
+
+    @staticmethod
+    def _parse_iv_args(args_str: str) -> list[str]:
+        """Parse quoted arguments from an investigate/verify marker.
+
+        Handles single and double quoted args, e.g.:
+            'pattern', 'file'  →  ['pattern', 'file']
+            "some path"        →  ['some path']
+        """
+        parts: list[str] = []
+        current: list[str] = []
+        in_quote: str | None = None
+        for ch in args_str.strip():
+            if in_quote:
+                if ch == in_quote:
+                    in_quote = None
+                else:
+                    current.append(ch)
+            elif ch in ("'", '"'):
+                in_quote = ch
+            elif ch == ",":
+                parts.append("".join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append("".join(current).strip())
+        return parts
+
+    async def _execute_investigate_verify(
+        self, markers: list[tuple[str, str, list[str]]]
+    ) -> list[str]:
+        """Execute investigate/verify markers and return result lines.
+
+        Each marker is (kind, action_type, args) where kind='investigate'|'verify'.
+        """
+        results: list[str] = []
+        for kind, action_type, args in markers:
+            if action_type == "file_exists":
+                path = args[0] if args else ""
+                exists = os.path.exists(path)
+                results.append(f"✅ {kind} file_exists('{path}'): {'exists' if exists else 'not found'}")
+            elif action_type == "grep":
+                pattern = args[0] if len(args) > 0 else ""
+                filepath = args[1] if len(args) > 1 else ""
+                try:
+                    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                        matches = [line.rstrip() for line in f if re.search(pattern, line)]
+                    if matches:
+                        lines = "\n".join(matches[:20])
+                        results.append(f"✅ {kind} grep('{pattern}', '{filepath}'):\n{lines}")
+                    else:
+                        results.append(f"✅ {kind} grep('{pattern}', '{filepath}'): no matches")
+                except Exception as e:
+                    results.append(f"✅ {kind} grep('{pattern}', '{filepath}'): error — {e}")
+            elif action_type == "exit_zero":
+                cmd = args[0] if args else ""
+                try:
+                    r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                    if r.returncode == 0:
+                        results.append(f"✅ {kind} exit_zero('{cmd}'): passed")
+                    else:
+                        out = (r.stdout or "")[:200] + (r.stderr or "")[:200]
+                        results.append(f"❌ {kind} exit_zero('{cmd}'): failed (code {r.returncode})\n{out}")
+                except subprocess.TimeoutExpired:
+                    results.append(f"❌ {kind} exit_zero('{cmd}'): timed out")
+                except Exception as e:
+                    results.append(f"❌ {kind} exit_zero('{cmd}'): error — {e}")
+            elif action_type == "llm":
+                prompt = args[0] if args else ""
+                try:
+                    resp = await self.provider.chat([
+                        {"role": "user", "content": prompt}
+                    ], model=self.model)
+                    text = resp.get("content", "") or ""
+                    results.append(f"✅ {kind} llm:\n{text[:500]}")
+                except Exception as e:
+                    results.append(f"❌ {kind} llm: error — {e}")
+            elif action_type == "agent_loop":
+                prompt = args[0] if args else ""
+                try:
+                    resp = await self.provider.chat([
+                        {"role": "system", "content": "You are a research assistant. Investigate the task thoroughly and report findings."},
+                        {"role": "user", "content": prompt},
+                    ], model=self.model)
+                    text = resp.get("content", "") or ""
+                    results.append(f"✅ {kind} agent_loop:\n{text[:500]}")
+                except Exception as e:
+                    results.append(f"❌ {kind} agent_loop: error — {e}")
+            else:
+                results.append(f"❓ {kind}: unknown action type '{action_type}'")
+        return results
 
     async def _run_agent_loop(
         self,
@@ -639,10 +754,47 @@ class AgentLoop:
             reasoning_effort=self.provider.generation.reasoning_effort,
         ))
         self._last_usage = result.usage
+
+        # Post-process: scan for investigate/verify markers and re-enter if found
+        if result.final_content and result.messages:
+            markers = self._scan_iv_markers(result.final_content)
+            if markers:
+                iv_results = await self._execute_investigate_verify(markers)
+                if iv_results:
+                    cleaned = self._strip_iv_markers(result.final_content)
+                    # Replace the last assistant message content with cleaned text
+                    for i in range(len(result.messages) - 1, -1, -1):
+                        if result.messages[i].get("role") == "assistant":
+                            result.messages[i]["content"] = cleaned
+                            break
+                    result.messages.append({
+                        "role": "user",
+                        "content": "## Investigation/Verification Results\n\n" + "\n\n".join(iv_results),
+                    })
+                    result = await self.runner.run(AgentRunSpec(
+                        initial_messages=result.messages,
+                        tools=self.tools,
+                        model=self.model,
+                        max_iterations=self.max_iterations,
+                        max_tool_result_chars=self.max_tool_result_chars,
+                        hook=hook,
+                        error_message="Sorry, I encountered an error calling the AI model.",
+                        concurrent_tools=True,
+                        workspace=self.workspace,
+                        session_key=session.key if session else None,
+                        context_window_tokens=self.context_window_tokens,
+                        context_block_limit=self.context_block_limit,
+                        provider_retry_mode=self.provider_retry_mode,
+                        progress_callback=on_progress,
+                        retry_wait_callback=on_retry_wait,
+                        checkpoint_callback=_checkpoint,
+                        injection_callback=_drain_pending,
+                        reasoning_effort=self.provider.generation.reasoning_effort,
+                    ))
+                    self._last_usage = result.usage
+
         if result.stop_reason == "max_iterations":
             logger.warning("Max iterations ({}) reached", self.max_iterations)
-            # Push final content through stream so streaming channels (e.g. Feishu)
-            # update the card instead of leaving it empty.
             if on_stream and on_stream_end:
                 await on_stream(result.final_content or "")
                 await on_stream_end(resuming=False)

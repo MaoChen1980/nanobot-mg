@@ -96,8 +96,6 @@ class AgentRunSpec:
     context_window_tokens: int | None = None
     context_block_limit: int | None = None
     provider_retry_mode: str = "standard"
-    goal_scope: dict | None = None
-    goal_id: str | None = None
     progress_callback: Any | None = None
     retry_wait_callback: Any | None = None
     checkpoint_callback: Any | None = None

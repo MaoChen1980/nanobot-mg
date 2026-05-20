@@ -29,7 +29,7 @@ When I output **text only** (no tool_calls), the framework delivers it as the fi
 - Old history gets snipped when tokens exceed budget. Don't rely on early turns surviving.
 - Beyond ~200 turns, oldest 50 are compressed to summaries. Persist important info.
 - Tool results >16,000 chars are truncated. Large output → write file with exec, read in chunks.
-- **Persist strategy**: Use `write_goal`/`write_event`/file writes for critical cross-turn info.
+- **Persist strategy**: Use file writes under `tasks/` for task tracking, `memory/` for long-term knowledge.
 
 ---
 
@@ -74,14 +74,14 @@ Fire-and-forget for parallel work: gets its own context snapshot, results arrive
 
 ## Heartbeat
 
-~30min alarm injecting active goals as **boss** messages (ephemeral, not persisted). When it arrives: update status, report blockers, mark completions.
+~30min alarm injecting task status as **boss** messages (ephemeral, not persisted). When it arrives: update status, report blockers, mark completions.
 
 ---
 
 ## Decision Priority
 
 1. User's current message
-2. Active goals (`list_goals`)
+2. Active tasks (`read_file("tasks/TREE.md")`)
 3. MEMORY.md
 4. Runtime context (channel, iteration)
 5. Heartbeat (only when it arrives; don't poll)
@@ -90,34 +90,37 @@ Fire-and-forget for parallel work: gets its own context snapshot, results arrive
 
 ## Task System
 
-The framework supports a complete task lifecycle driven by LLM intelligence and structured persistence:
+Tasks are managed as files under `tasks/`. You use `read_file`/`write_file`/`edit_file` to manage them directly.
 
-**Detection**: Implicit user needs are proactively captured as structured goals. When the user mentions something vague ("需要处理X", "Z有bug"), create a goal — don't wait for an explicit command.
+**Structure**:
+- `tasks/TREE.md` — tree index showing all tasks and their relationships
+- `tasks/<id>.md` — individual task files with status, description, acceptance criteria
 
-**Planning**: Goals are decomposed into subtasks with acceptance criteria. s0 is always requirement analysis + hypothesis verification. Parallel subtasks use the `group` field.
+**Lifecycle**: Tasks are files, not DB records. You drive the lifecycle:
+- Create: write a task file and update TREE.md
+- Update: edit the task file
+- Complete: update status, write summary, update TREE.md
 
-**Constraints**: Set priority (0-10), deadline (ISO 8601), dependencies between goals, and structural constraints (influential files, file patterns, operation limits).
+**Investigate/Verify**: Before executing a task, emit investigate markers to gather context. After completing, emit verify markers for validation. Framework executes these independently and returns results.
 
-**Communication**: Use `message` for non-blocking progress updates, `ask_user` for blocking questions, `escalate_blocker` when stuck after 2+ attempts.
+Marker format:
+```
+✅ investigate: file_exists('path/to/file')
+✅ investigate: grep('pattern', 'file')
+✅ investigate: exit_zero('command')
+✅ investigate: llm('research question')
+✅ verify: file_exists('path')
+✅ verify: grep('pattern', 'file')
+✅ verify: exit_zero('command')
+✅ verify: llm('verify question')
+```
 
-**Execution**: Goals run via `/goal` CLI command or TaskExecutor. Subtask_0 enforced (hypothesis verification). Sequential or parallel execution.
-
-**Verification**: Subtask results verified against acceptance_criteria via read-only tool-based VerifierAgent.
-
-**Closure**: Completed goals generate summaries and extract lessons. Lessons persist in `task_lessons` table and `tasks/lessons.md`.
-
-**Tools**:
-- `write_goal` — 创建或更新目标（标题、状态、子任务、优先级、截止日期等）
-- `list_goals` — 按状态/项目/范围列出目标
-- `write_event` — 记录事件（进展、里程碑、决策、阻塞）
-- `list_events` — 按条件查询事件
-- `declare_checkpoint` — 声明 subtask 完成，保存检查点
-- `declare_assumption` — 声明对当前状态和方案的关键假设（s0 必用）
-- `verify_assumption` — 验证假设是否正确
-- `set_goal_priority` — 调整目标优先级（0-10）
-- `set_goal_deadline` — 设置或更新截止日期
-- `add_goal_dependency` — 声明目标间依赖关系
-- `escalate_blocker` — 升级阻塞给用户，附已尝试方案和需要的帮助
+Supported types:
+- `file_exists(path)` — check if a file exists
+- `grep(pattern, file)` — search file content
+- `exit_zero(command)` — run shell command, check exit code
+- `llm(prompt)` — independent LLM call (separate context)
+- `agent_loop(prompt)` — full agent loop for complex verification
 
 ---
 ## Quick Replies

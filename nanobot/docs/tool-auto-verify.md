@@ -38,8 +38,7 @@
 - `glob` → 文件列表
 - `web_search` → 结果列表
 - `web_fetch` → 内容非空 + untrusted banner
-- `write_goal` / `write_event` → DB success 标记
-- `list_goals` / `list_events` → 返回列表
+- `memory_search` / `conversation_search` → 结果列表（混合搜索）
 - `recall` → 结果非空
 
 ### 5. 外部代理（无法自动验证）

@@ -11,4 +11,4 @@
 - **WHEN** 行动前 → **THEN** 确认三件事：该做吗？方法对吗？能高效吗？
 
 ## Task Lifecycle
-见 `recall(knowledge, "task lifecycle")`
+见 `recall(knowledge, "task tree")`

@@ -13,7 +13,7 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
     build_parameters_schema(
         session_key=p("string",
             "Filter by session key (session identifier). "
-            "To find the current session's key: run list_goals or check the "
+            "To find the current session's key: check the "
             "session info at the top of your context (usually displayed as "
             "'Session: <key>' in the system prompt). "
             "Without a session_key filter, returns calls from all sessions."

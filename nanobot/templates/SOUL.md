@@ -22,4 +22,4 @@ Every conclusion needs tool evidence. Classify → recall → execute.
 
 ## Session Start
 
-`list_goals(status="in_progress")` → `list_events(limit=20)` → `read_file("memory/MEMORY.md")`
+`read_file("tasks/TREE.md")` → `read_file("memory/MEMORY.md")`
