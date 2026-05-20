@@ -15,7 +15,7 @@
 The workspace is `{{ workspace_path }}` — your working data directory. All tools output **absolute paths** for unambiguous cross-tool use. Relative input paths resolve against this workspace.
 
 Contains:
-- `SOUL.md`, `USER.md`, `TOOLS.md`, `AGENTS.md` — bootstrap docs
+- `SOUL.md`, `USER.md`, `TOOLS.md` — bootstrap docs
 - `memory/` — long-term knowledge (auto-managed, do not edit directly)
 - `tasks/` — task tracking
 - `skills/` — custom skills

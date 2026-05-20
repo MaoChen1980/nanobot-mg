@@ -422,6 +422,8 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
             _write(item, workspace / item.name)
     for item in (tpl / "memory").rglob("*.md"):
         _write(item, workspace / "memory" / item.relative_to(tpl / "memory"))
+    for item in (tpl / "framework").rglob("*.md"):
+        _write(item, workspace / "framework" / item.relative_to(tpl / "framework"))
     (workspace / "skills").mkdir(exist_ok=True)
 
     # Initialize self-installed tools directory and regenerate index

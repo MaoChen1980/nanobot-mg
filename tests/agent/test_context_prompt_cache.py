@@ -95,7 +95,7 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
 
     prompt = builder.build_system_prompt()
     # Core discipline from SOUL.md
-    assert "Classify → recall → execute" in prompt
+    assert "Every conclusion needs tool evidence" in prompt
     # Tag table from SOUL.md
     assert "| **#code**" in prompt
     assert "| **#plan**" in prompt
@@ -116,21 +116,22 @@ def test_identity_has_no_behavioral_instructions(tmp_path) -> None:
     assert "Execution Rules" not in identity
 
 
-def test_agents_framework_architecture_in_bootstrap_docs(tmp_path) -> None:
-    """Framework Architecture section appears in the AGENTS.md bootstrap docs."""
+def test_framework_search_is_registered(tmp_path) -> None:
+    """framework_search tool should be listed in system prompt."""
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
     prompt = builder.build_system_prompt()
 
-    assert "stateless per turn" in prompt
+    assert "framework_search" in prompt
+    assert "memory_search" in prompt
 
 
 def test_default_soul_template_contains_execution_rules() -> None:
     """Default SOUL.md template must contain tag dispatch table and core discipline."""
     soul = (pkg_files("nanobot") / "templates" / "SOUL.md").read_text(encoding="utf-8")
     assert "## " in soul  # top-level section exists
-    assert "Classify → recall → execute" in soul  # core discipline
+    assert "Every conclusion needs tool evidence" in soul  # core discipline
     assert "| **#code**" in soul  # tag table present
     assert "Session Start" in soul  # session start section
 

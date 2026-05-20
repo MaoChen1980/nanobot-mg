@@ -49,6 +49,13 @@ class MemoryStore:
         if not self.vector_index.load() and self.list_memory_files():
             logger.info("No vector index found — building from existing memory/ files")
             self.build_vector_index()
+        self.framework_index = MemoryVectorIndex(
+            workspace / "framework",
+            index_dir=".framework_index",
+        )
+        if not self.framework_index.load() and self._list_framework_files():
+            logger.info("No framework index found — building from existing framework/ files")
+            self.build_framework_index()
 
     @property
     def git(self) -> GitStore:
@@ -123,6 +130,30 @@ class MemoryStore:
         if file_texts:
             self.vector_index.build_from_files(file_texts)
             self.vector_index.save()
+
+    # -- framework index -------------------------------------------------------
+
+    def _list_framework_files(self) -> list[Path]:
+        """Return all .md files under framework/ (excluding .framework_index/)."""
+        path = self.workspace / "framework"
+        if not path.exists():
+            return []
+        return sorted(
+            p for p in path.rglob("*.md")
+            if ".framework_index" not in p.parts
+        )
+
+    def build_framework_index(self) -> None:
+        """Rebuild the FAISS index from all framework/ docs."""
+        file_texts: dict[str, str] = {}
+        for f in self._list_framework_files():
+            content = self.read_file(f)
+            if content.strip():
+                rel = str(f.relative_to(self.workspace / "framework"))
+                file_texts[rel] = content
+        if file_texts:
+            self.framework_index.build_from_files(file_texts)
+            self.framework_index.save()
 
     def condense_session_to_history(self, messages: list[dict]) -> int:
         """Archive session messages into history, grouped by turns.

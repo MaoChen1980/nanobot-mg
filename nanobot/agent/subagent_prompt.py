@@ -43,7 +43,7 @@ def build_subagent_prompt(
         if section:
             parts.append(section)
 
-    # 3. Bootstrap files (SOUL.md, AGENTS.md, USER.md, TOOLS.md) — full content
+    # 3. Bootstrap files (SOUL.md, USER.md, TOOLS.md) — full content
     bootstrap = ctx._load_bootstrap_files()
     if bootstrap:
         parts.append(bootstrap)

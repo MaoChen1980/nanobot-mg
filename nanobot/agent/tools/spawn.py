@@ -105,7 +105,7 @@ class SpawnTool(Tool):
         # Workspace bootstrap files (only if workspace is available on the manager)
         workspace = getattr(self._manager, "workspace", None)
         if workspace is not None:
-            for filename in ["SOUL.md", "USER.md", "MEMORY.md", "AGENTS.md", "TOOLS.md"]:
+            for filename in ["SOUL.md", "USER.md", "MEMORY.md", "TOOLS.md"]:
                 content = self._read_file(workspace, filename)
                 if content:
                     parts.append(f"=== {filename} ===\n{content[:800]}\n===============")

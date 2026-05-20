@@ -85,7 +85,7 @@ class TestContextMonitorHook:
 
     def test_resolve_workspace_fallback_to_agents_marker(self, tmp_path):
         hook = ContextMonitorHook()
-        (tmp_path / "AGENTS.md").write_text("")
+        (tmp_path / "SOUL.md").write_text("")
         ctx = _FakeContext([], workspace=None)
         with patch("nanobot.hooks.context_monitor.Path.cwd", return_value=tmp_path):
             ws = hook._resolve_workspace(ctx)

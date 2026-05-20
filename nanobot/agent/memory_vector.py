@@ -18,13 +18,12 @@ class MemoryVectorIndex:
     """
 
     _MODEL_NAME = "BAAI/bge-small-zh-v1.5"
-    _INDEX_DIR = ".vector_index"
     _INDEX_FILE = "index.faiss"
     _CHUNKS_FILE = "chunks.json"
 
-    def __init__(self, memory_dir: Path) -> None:
+    def __init__(self, memory_dir: Path, index_dir: str = ".vector_index") -> None:
         self._memory_dir = memory_dir
-        self._index_dir = memory_dir / self._INDEX_DIR
+        self._index_dir = memory_dir / index_dir
         self._model: Any = None  # lazy-loaded
         self._model_lock = threading.Lock()
         self._index: Any = None  # faiss Index

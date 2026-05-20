@@ -66,7 +66,7 @@ def test_onboard_fresh_install(mock_paths):
     assert "Created workspace" in _strip_ansi(result.stdout)
     assert "nanobot is ready" in _strip_ansi(result.stdout)
     assert config_file.exists()
-    assert (workspace_dir / "AGENTS.md").exists()
+    assert (workspace_dir / "SOUL.md").exists()
     assert (workspace_dir / "memory" / "MEMORY.md").exists()
 
 
@@ -80,7 +80,7 @@ def test_onboard_existing_config_refresh(mock_paths):
     assert result.exit_code == 0
     assert "Config already exists" in _strip_ansi(result.stdout)
     assert workspace_dir.exists()
-    assert (workspace_dir / "AGENTS.md").exists()
+    assert (workspace_dir / "SOUL.md").exists()
 
 
 def test_onboard_existing_config_overwrite(mock_paths):
@@ -105,8 +105,8 @@ def test_onboard_existing_workspace_safe_create(mock_paths):
 
     assert result.exit_code == 0
     assert "Created workspace" not in _strip_ansi(result.stdout)
-    assert "Created AGENTS.md" in _strip_ansi(result.stdout)
-    assert (workspace_dir / "AGENTS.md").exists()
+    assert "Created SOUL.md" in _strip_ansi(result.stdout)
+    assert (workspace_dir / "SOUL.md").exists()
 
 
 def _strip_ansi(text):
@@ -141,7 +141,7 @@ def test_onboard_uses_explicit_config_and_workspace_paths(tmp_path, monkeypatch)
     assert result.exit_code == 0
     saved = Config.model_validate(json.loads(config_path.read_text(encoding="utf-8")))
     assert saved.workspace_path == workspace_path
-    assert (workspace_path / "AGENTS.md").exists()
+    assert (workspace_path / "SOUL.md").exists()
     stripped_output = _strip_ansi(result.stdout)
     compact_output = stripped_output.replace("\n", "")
     resolved_config = str(config_path.resolve())

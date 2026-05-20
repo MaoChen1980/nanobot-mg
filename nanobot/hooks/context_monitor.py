@@ -71,13 +71,13 @@ class ContextMonitorHook(AgentHook):
             return ctx.workspace
         p = Path.cwd()
         for _ in range(6):
-            if (p / "AGENTS.md").exists():
+            if (p / "SOUL.md").exists():
                 return p
             parent = p.parent
             if parent == p:
                 break
             p = parent
         home_ws = Path.home() / ".nanobot" / "workspace"
-        if (home_ws / "AGENTS.md").exists():
+        if (home_ws / "SOUL.md").exists():
             return home_ws
         return None

@@ -71,6 +71,7 @@ class MemoryExtractor:
             self._add_backlinks()
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self.store.build_vector_index)
+            await loop.run_in_executor(None, self.store.build_framework_index)
             if self.store.git.is_initialized():
                 self.store.git.auto_commit("memory: sync external changes")
 
@@ -306,6 +307,7 @@ class MemoryExtractor:
         # ── FAISS rebuild ──
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self.store.build_vector_index)
+        await loop.run_in_executor(None, self.store.build_framework_index)
 
     # ------------------------------------------------------------------
     # Skill creation

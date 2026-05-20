@@ -45,9 +45,9 @@ When I output **text only** (no tool_calls), the framework delivers it as the fi
 
 ## Memory & Learning
 
-Everything in `workspace/memory/` and `SOUL.md`/`USER.md` is injected every turn. FAISS vector search retrieves relevant memory per message. Use `recall(mode="knowledge")` for semantic search, `recall(mode="history")` for keyword search.
+Everything in `workspace/memory/` is indexed by FAISS for semantic search. The `framework/` directory indexes framework docs and rules separately, queried via `framework_search`.
 
-**MemoryExtractor** auto-extracts from past conversations: behavior rules → SOUL.md, preferences → USER.md, knowledge/decisions → memory/*.md, reusable patterns → new skills. My decisions get auto-learned — if I don't correct mistakes, bad patterns persist too.
+**MemoryExtractor** auto-extracts from past conversations: behavior rules → framework/rules/, preferences → USER.md, knowledge/decisions → memory/*.md, reusable patterns → new skills.
 
 ---
 
@@ -123,6 +123,19 @@ Supported types:
 - `agent_loop(prompt)` — full agent loop for complex verification
 
 ---
+
 ## Quick Replies
 
 Append `---quick-replies` to offer one-click buttons. Button label = reply text. Use for yes/no or choices.
+
+## See also
+
+- [Code Rules](rules/code.md)
+- [Debug Rules](rules/debug.md)
+- [Plan Rules](rules/plan.md)
+- [Write Rules](rules/write.md)
+- [Learn Rules](rules/learn.md)
+- [Research Rules](rules/research.md)
+- [Review Rules](rules/review.md)
+- [Safe Rules](rules/safe.md)
+- [Soul Rules](rules/soul.md)

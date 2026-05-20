@@ -41,6 +41,7 @@ from nanobot.agent.tools.check_subagent import CheckSubagentTool
 from nanobot.agent.tools.list_subagents import ListSubagentsTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
+from nanobot.agent.tools.framework_search import FrameworkSearchTool
 from nanobot.agent.tools.conversation_search import ConversationSearchTool
 from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.read_files import ReadFilesTool
@@ -187,6 +188,7 @@ class AgentLoop:
         self._extra_hooks: list[AgentHook] = hooks or []
         self._extra_hooks.extend(self._discover_hooks())
 
+        self._init_framework_dir(workspace)
         self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db)
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
@@ -351,6 +353,7 @@ class AgentLoop:
             self.tools.register(WebFetchTool(config=self.web_config.fetch, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound, workspace=self.workspace))
         self.tools.register(MemorySearchTool(store=self.context.memory))
+        self.tools.register(FrameworkSearchTool(store=self.context.memory))
         self.tools.register(ConversationSearchTool(store=self.context.memory))
         self.tools.register(SearchTextTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ReadFilesTool(workspace=self.workspace, allowed_dir=allowed_dir))
@@ -1094,6 +1097,24 @@ class AgentLoop:
                         logger.info("Loaded hook: {} from {}", attr_name, path.name)
         except Exception as e:
             logger.warning("Failed to load hook {}: {}", path.name, e)
+
+    @staticmethod
+    def _init_framework_dir(workspace: Path) -> None:
+        """Copy bundled framework/ templates to workspace if not present."""
+        target = workspace / "framework"
+        if target.exists():
+            return
+        try:
+            from importlib.resources import files as pkg_files
+            src = pkg_files("nanobot.templates") / "framework"
+            if not src.is_dir():
+                logger.info("No bundled framework templates found")
+                return
+            import shutil
+            shutil.copytree(str(src), str(target), dirs_exist_ok=True)
+            logger.info("Initialized framework/ from bundled templates")
+        except Exception:
+            logger.exception("Failed to initialize framework/ directory")
 
     # Backward-compat wrappers delegating to module functions
     # (used by tests that patch __init__ and set attributes directly)

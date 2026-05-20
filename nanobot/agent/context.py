@@ -42,7 +42,7 @@ class ContextState:
 class ContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
 
-    BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md"]
+    BOOTSTRAP_FILES = ["SOUL.md", "USER.md", "TOOLS.md"]
     _SKIP_IF_DEFAULT = {"USER.md"}  # TOOLS.md is auto-generated — always inject
     _SECTION_SEPARATOR = "\n\n" + "═" * 72 + "\n\n"
     _RUNTIME_CONTEXT_TAG = "## Runtime Context"
