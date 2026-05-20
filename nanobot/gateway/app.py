@@ -29,6 +29,19 @@ def _looks_like_traceback(line: str) -> bool:
             ))
 
 
+def _find_webui_index() -> Path:
+    """Locate webui/index.html — try source checkout, then installed locations."""
+    candidates = [
+        Path(__file__).parent.parent.parent / "webui" / "index.html",
+        Path.cwd() / "webui" / "index.html",
+    ]
+    for p in candidates:
+        resolved = p.resolve()
+        if resolved.is_file():
+            return resolved
+    return candidates[0].resolve()
+
+
 class GatewayApplication:
     """Concrete gateway application that starts and manages all services."""
 
@@ -675,9 +688,7 @@ class GatewayApplication:
             import uvicorn
             from nanobot.api.server import create_app as make_api_app
 
-            webui_index = (
-                Path(__file__).parent.parent.parent / "webui" / "index.html"
-            ).resolve()
+            webui_index = _find_webui_index()
             api_app = make_api_app(webui_index, proxy_manager=None)
 
             config = uvicorn.Config(
@@ -724,9 +735,7 @@ class GatewayApplication:
         import uvicorn
         from nanobot.api.server import create_app as make_api_app
 
-        webui_index = (
-            Path(__file__).parent.parent.parent / "webui" / "index.html"
-        ).resolve()
+        webui_index = _find_webui_index()
         api_app = make_api_app(
             webui_index, proxy_manager=self.proxy_manager
         )
