@@ -514,6 +514,20 @@ class AgentLoop:
         r'✅\s*verify:\s*(\w+)\(([^)]+)\)\s*'
     )
 
+    _COMPLETION_PATTERNS = re.compile(
+        r'(?i)(?<![a-z])('
+        r'完成|做完了|全部完成|任务完成|'
+        r'done|finished|completed|all done|task complete'
+        r')(?![a-z])'
+    )
+
+    @staticmethod
+    def _has_completion_marker(text: str) -> bool:
+        """Check if the tail of *text* signals task completion."""
+        if not text:
+            return False
+        return bool(AgentLoop._COMPLETION_PATTERNS.search(text[-400:]))
+
     def _scan_iv_markers(self, text: str) -> list[tuple[str, str, list[str]]]:
         """Scan text for investigate/verify markers.
 
@@ -769,6 +783,9 @@ class AgentLoop:
         ))
         self._last_usage = result.usage
 
+        # Completion detection guard — prevent infinite re-entry loops
+        _completion_reentry = 0
+
         # Post-process: scan for investigate/verify markers and re-enter if found
         if result.final_content and result.messages:
             markers = self._scan_iv_markers(result.final_content)
@@ -806,6 +823,47 @@ class AgentLoop:
                         reasoning_effort=self.provider.generation.reasoning_effort,
                     ))
                     self._last_usage = result.usage
+
+        # Completion detection — gentle verification reminder when agent claims done
+        if (result.final_content
+            and result.tools_used
+            and _completion_reentry < 1
+            and result.stop_reason not in ("max_iterations", "error", "ask_user")
+        ):
+            if self._has_completion_marker(result.final_content):
+                _completion_reentry += 1
+                result.messages.append({
+                    "role": "user",
+                    "content": (
+                        "⚠️ Verification Reminder\n\n"
+                        "You signaled completion. Before closing the turn:\n"
+                        "- Have all acceptance criteria been verified?\n"
+                        "- Are tests passing?\n"
+                        "- Any missed requirements?\n\n"
+                        "If confirmed, wrap up. If more work is needed, continue."
+                    ),
+                })
+                result = await self.runner.run(AgentRunSpec(
+                    initial_messages=result.messages,
+                    tools=self.tools,
+                    model=self.model,
+                    max_iterations=self.max_iterations,
+                    max_tool_result_chars=self.max_tool_result_chars,
+                    hook=hook,
+                    error_message="Sorry, I encountered an error calling the AI model.",
+                    concurrent_tools=True,
+                    workspace=self.workspace,
+                    session_key=session.key if session else None,
+                    context_window_tokens=self.context_window_tokens,
+                    context_block_limit=self.context_block_limit,
+                    provider_retry_mode=self.provider_retry_mode,
+                    progress_callback=on_progress,
+                    retry_wait_callback=on_retry_wait,
+                    checkpoint_callback=_checkpoint,
+                    injection_callback=_drain_pending,
+                    reasoning_effort=self.provider.generation.reasoning_effort,
+                ))
+                self._last_usage = result.usage
 
         if result.stop_reason == "max_iterations":
             logger.warning("Max iterations ({}) reached", self.max_iterations)

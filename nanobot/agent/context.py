@@ -278,6 +278,25 @@ class ContextBuilder:
             + self._shift_headings(content, offset=1)
         )
 
+    def _build_current_context_section(self) -> str:
+        """Read tasks/CURRENT.md from the workspace for session-level working context."""
+        current_path = self.workspace / "tasks" / "CURRENT.md"
+        if not current_path.exists():
+            return ""
+        try:
+            content = current_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            logger.warning("Failed to read current context at {}", current_path)
+            return ""
+        if not content:
+            return ""
+        return (
+            "## Working Context\n\n"
+            "Session-level working context. Tracks what you're doing this session. "
+            "Create and update it with write_file.\n\n"
+            + self._shift_headings(content, offset=1)
+        )
+
     def _build_project_card_section(self) -> str:
         """Read project_card.md from project root for context injection."""
         if self.project_root is None:
@@ -548,6 +567,10 @@ class ContextBuilder:
         state_block = self._build_task_tree_section()
         if state_block:
             sys_dynamic_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
+
+        current_block = self._build_current_context_section()
+        if current_block:
+            sys_dynamic_parts.append(current_block)
 
         project_card = self._build_project_card_section()
         if project_card:

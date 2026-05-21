@@ -94,6 +94,7 @@ Tasks are managed as files under `tasks/`. You use `read_file`/`write_file`/`edi
 
 **Structure**:
 - `tasks/TREE.md` — tree index showing all tasks and their relationships
+- `tasks/CURRENT.md` — session working context: current goal, progress, next steps, deviation log
 - `tasks/<id>.md` — individual task files with status, description, acceptance criteria
 
 **Lifecycle**: Tasks are files, not DB records. You drive the lifecycle:

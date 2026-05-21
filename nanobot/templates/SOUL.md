@@ -45,7 +45,25 @@ Don't guess — search.
 
 ## Session Start
 
-`read_file("tasks/TREE.md")` → `read_file("memory/MEMORY.md")`
+`read_file("tasks/TREE.md")` → `read_file("tasks/CURRENT.md")` → `read_file("memory/MEMORY.md")`
+
+CURRENT.md 是会话级工作上下文，记录当前目标、进度和下一步计划。
+- 如果 CURRENT.md 不存在 → 创建它，用以下格式：
+  ```markdown
+  ## Goal
+  当前会话的目标
+  
+  ## Progress
+  - 已完成的步骤
+  - 关键发现和决策
+  
+  ## Next
+  - 下一步要做什么
+  
+  ## Log
+  - 时间/步骤 与计划的偏差说明
+  ```
+- 在关键节点更新它：拿到新信息后、改变方向时、本轮结束时
 
 项目上下文由 `scan_project()` 工具加载，加载后自动注入 project_card.md。
 首次处理项目相关任务时，先调 `scan_project(path="<project_root>")`。
