@@ -1,6 +1,6 @@
 # Project Card: nanobot
 
-Last scanned: 2026-05-21T00:48:17+0800
+Last scanned: 2026-05-22T00:15:14+0800
 Project root: `E:\claude\nanobot`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~64,166
+- **Approx LOC**: ~64,484
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 289 | ~64,166 |
+| Python | 290 | ~64,484 |
 
 ## Directory Structure
 
@@ -31,6 +31,8 @@ E:\claude\nanobot/
     package.json (588B)
     tsconfig.json (355B)
   docs/
+    ideas/
+      session-reset-after-task.md (1KB)
     agent-social-network.md (622B)
     AGENTS.md (16KB)
     channel-plugin-guide.md (14KB)
@@ -135,6 +137,7 @@ E:\claude\nanobot/
         read_files.py (7KB)
         registry.py (8KB)
         sandbox.py (2KB)
+        scan_project.py (3KB)
         schema.py (2KB)
         search.py (27KB)
         self.py (20KB)
@@ -145,11 +148,11 @@ E:\claude\nanobot/
         web.py (21KB)
       verify/
       __init__.py (584B)
-      context.py (25KB)
-      context_vars.py (988B)
+      context.py (28KB)
+      context_vars.py (1KB)
       db.py (16KB)
       hook.py (5KB)
-      loop.py (54KB)
+      loop.py (57KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (199B)
       loop_dispatch.py (7KB)
@@ -167,7 +170,7 @@ E:\claude\nanobot/
       runner_context.py (6KB)
       runner_execution.py (7KB)
       runner_injection.py (5KB)
-      runner_llm.py (3KB)
+      runner_llm.py (5KB)
       skills.py (11KB)
       subagent.py (13KB)
       subagent_prompt.py (4KB)
@@ -204,6 +207,7 @@ E:\claude\nanobot/
   Dockerfile (2KB)
   entrypoint.sh (443B)
   LICENSE (1KB)
+  project_card.md (12KB)
   pyproject.toml (4KB)
   README.md (6KB)
   README_en.md (4KB)
