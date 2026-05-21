@@ -426,6 +426,15 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
         _write(item, workspace / "framework" / item.relative_to(tpl / "framework"))
     (workspace / "skills").mkdir(exist_ok=True)
 
+    # Create tasks/ directory with empty TREE.md and CURRENT.md for task tracking
+    tasks_dir = workspace / "tasks"
+    tasks_dir.mkdir(exist_ok=True)
+    for name in ("TREE.md", "CURRENT.md"):
+        f = tasks_dir / name
+        if not f.exists():
+            f.write_text("", encoding="utf-8")
+            added.append(f"tasks/{name}")
+
     # Initialize self-installed tools directory and regenerate index
     from nanobot.utils.tools_index import init_tools_dir, rebuild_tools_index
 
