@@ -783,9 +783,6 @@ class AgentLoop:
         ))
         self._last_usage = result.usage
 
-        # Completion detection guard — prevent infinite re-entry loops
-        _completion_reentry = 0
-
         # Post-process: scan for investigate/verify markers and re-enter if found
         if result.final_content and result.messages:
             markers = self._scan_iv_markers(result.final_content)
@@ -827,11 +824,9 @@ class AgentLoop:
         # Completion detection — gentle verification reminder when agent claims done
         if (result.final_content
             and result.tools_used
-            and _completion_reentry < 1
             and result.stop_reason not in ("max_iterations", "error", "ask_user")
         ):
             if self._has_completion_marker(result.final_content):
-                _completion_reentry += 1
                 result.messages.append({
                     "role": "user",
                     "content": (

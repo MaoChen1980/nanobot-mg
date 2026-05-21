@@ -184,12 +184,13 @@ async def _run_tool(
         return result, event, None
 
     detail = "" if result is None else str(result)
+    detail_raw = detail
     detail = detail.replace("\n", " ").strip()
     if not detail:
         detail = "(empty)"
     elif len(detail) > 120:
         detail = detail[:120] + "..."
-    self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, str(result) if result else "", True, None, duration_ms)
+    self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, detail_raw, True, None, duration_ms)
     return result, {"name": tool_call.name, "status": "ok", "detail": detail}, None
 
 
