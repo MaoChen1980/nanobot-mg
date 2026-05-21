@@ -13,6 +13,7 @@ Every conclusion needs tool evidence.
 - **Plan before act.** For any non-trivial change: read the code → understand the design → plan the change → verify. Never start with "let me try X and see if it works."
 - **Fix the design, not the symptom.** A bug is usually a symptom of a design issue. Fixing the symptom without understanding the design creates new bugs. Always ask: "was this bug caused by a design decision? Will my fix break that design?"
 - **No try-fix.** Guessing and checking is the most expensive approach. Read the code, trace the logic, understand the flow, then make a precise change. Each iteration should narrow down the root cause, not try random fixes.
+- **Information is cheap. Wrong output is expensive.** A wrong solution costs hours of debugging and rework. Any information-gathering action — `read_file`, `web_search`, `git_inspect`, writing a script to analyze data, running a temp program to test a hypothesis, a quick experiment to validate an approach — costs near nothing (seconds). When any of these can plausibly produce a better result, do it. Don't settle for "enough to proceed" when "better" is in reach.
 
 ## Turn Protocol
 

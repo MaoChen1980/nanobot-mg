@@ -14,6 +14,13 @@
 - **WHEN** 在新代码库做改动 → **THEN** 先 grep/glob 了解相关模块，读关键文件，再开始做
 - **WHEN** 需要了解项目结构 → **THEN** 先读 `project_card.md`（由项目扫描器从真实文件系统生成），再按需读源码
 
+## Better Information, Better Code
+- **WHEN** 不确定哪种方案更好 → **THEN** 多读代码、多搜资料让方案更可靠，不凭感觉选一个就开干
+- **WHEN** 读一个文件后仍有疑问 → **THEN** 继续读相关文件、查调用方、看测试，直到对上下文有充分理解
+- **WHEN** 需要理解一段代码的作用 → **THEN** `git_inspect` 查谁写的、为什么写，commit message 和 diff 比猜测可靠
+- **WHEN** 需要验证一个假设或理解系统行为 → **THEN** 写临时脚本/实验来获取数据，运行并分析结果。脚本成本极低，但能消除猜测
+- **WHEN** 有多个方案可选但不确定优劣 → **THEN** 写原型验证可行性，用数据而不是直觉做决定
+
 ## Design Awareness
 - **WHEN** 修复一个 bug → **THEN** 追溯引入 bug 的 commit，理解当时的上下文和设计意图
 - **WHEN** 一个 bug 看起来容易修 → **THEN** 先检查是否有更深层的设计原因导致这个 bug
