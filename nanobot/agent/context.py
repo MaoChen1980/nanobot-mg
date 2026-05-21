@@ -211,12 +211,15 @@ class ContextBuilder:
         return ts
 
     @staticmethod
-    def _backfill_thinking_to_content(messages: list[dict]) -> list[dict]:
-        """Fill empty assistant content with thinking/reasoning text.
+    def _split_thinking_messages(messages: list[dict]) -> list[dict]:
+        """Split assistant messages with thinking/reasoning into separate messages.
 
-        When a model returns only thinking (tool calls) without content, the
-        content field is empty. This copies thinking into content so the LLM
-        sees the thought process as conversation text on subsequent turns.
+        When an assistant message contains both thinking/reasoning and tool calls
+        (or regular content), split it into two messages so the LLM doesn't
+        confuse thinking text with tool call structure during history parsing:
+
+          1. Assistant message with just the thinking/reasoning content
+          2. Assistant message with the original content / tool calls
         """
         result: list[dict] = []
         for msg in messages:
@@ -224,27 +227,19 @@ class ContextBuilder:
                 result.append(msg)
                 continue
 
-            content = msg.get("content", "")
-            if isinstance(content, str) and content.strip():
-                result.append(msg)
-                continue
-            if isinstance(content, list) and content:
-                result.append(msg)
-                continue
-
-            # Empty content — collect thinking from available fields
+            # Extract thinking from structured fields
             thinking = None
 
-            blocks = msg.get("thinking_blocks")
-            if isinstance(blocks, list):
-                texts = [b.get("thinking", "") for b in blocks if isinstance(b, dict) and b.get("thinking")]
-                if texts:
-                    thinking = " ".join(texts)
+            rc = msg.get("reasoning_content")
+            if isinstance(rc, str) and rc.strip():
+                thinking = rc.strip()
 
             if not thinking:
-                rc = msg.get("reasoning_content")
-                if isinstance(rc, str) and rc.strip():
-                    thinking = rc.strip()
+                blocks = msg.get("thinking_blocks")
+                if isinstance(blocks, list):
+                    texts = [b.get("thinking", "") for b in blocks if isinstance(b, dict) and b.get("thinking")]
+                    if texts:
+                        thinking = " ".join(texts)
 
             if not thinking:
                 rd = msg.get("reasoning_details")
@@ -253,10 +248,45 @@ class ContextBuilder:
                     if texts:
                         thinking = " ".join(texts)
 
-            if thinking:
-                msg = dict(msg)
-                msg["content"] = thinking
-            result.append(msg)
+            if not thinking:
+                result.append(msg)
+                continue
+
+            # Detect if content was previously backfilled
+            content = msg.get("content", "")
+            content_is_backfilled = (
+                isinstance(content, str)
+                and content.strip()
+                and content.strip() == thinking
+            )
+
+            has_tool_calls = bool(msg.get("tool_calls"))
+            has_real_content = (
+                isinstance(content, str)
+                and content.strip()
+                and not content_is_backfilled
+            )
+            has_content_list = isinstance(content, list) and bool(content)
+
+            if has_tool_calls or has_real_content or has_content_list:
+                # Split into two messages
+                msg_think: dict = {"role": "assistant", "content": thinking}
+                msg_rest: dict = {
+                    k: v for k, v in msg.items()
+                    if k not in ("reasoning_content", "reasoning_details", "thinking_blocks")
+                }
+                if has_tool_calls:
+                    msg_rest["content"] = ""
+                result.append(msg_think)
+                result.append(msg_rest)
+            else:
+                # Thinking only — single message
+                cleaned = dict(msg)
+                for k in ("reasoning_content", "reasoning_details", "thinking_blocks"):
+                    cleaned.pop(k, None)
+                cleaned["content"] = thinking
+                result.append(cleaned)
+
         return result
 
     def _build_task_tree_section(self) -> str:
@@ -608,7 +638,7 @@ class ContextBuilder:
             elif isinstance(content, list):
                 messages[i]["content"] = [{"type": "text", "text": header}] + list(content)
 
-        return self._backfill_thinking_to_content(messages)
+        return self._split_thinking_messages(messages)
 
     def _build_user_content(self, text: str, media: list[str] | None) -> str | list[dict[str, Any]]:
         """Build user message content with optional base64-encoded images."""
