@@ -516,7 +516,7 @@ class AgentLoop:
 
     _COMPLETION_PATTERNS = re.compile(
         r'(?i)(?<![a-z])('
-        r'完成|做完了|全部完成|任务完成|'
+        r'(?<!未)完成|做完了|全部完成|任务完成|'
         r'done|finished|completed|all done|task complete'
         r')(?![a-z])'
     )

@@ -401,6 +401,7 @@ class EditFileTool(_FsTool):
         # Strip trailing whitespace (skip markdown)
         if fp.suffix.lower() not in self._MARKDOWN_EXTS:
             norm_new = self._strip_trailing_ws(norm_new)
+        norm_new = norm_new.rstrip("\n")
 
         # Replace the line range
         new_lines = lines[:start_idx] + [norm_new] + lines[end_idx + 1:]

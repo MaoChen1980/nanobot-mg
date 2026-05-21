@@ -133,7 +133,7 @@ class Session:
                 )
                 content = f"{content}\n{breadcrumbs}" if content else breadcrumbs
             entry: dict[str, Any] = {"role": message["role"], "content": content}
-            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "reasoning_details", "thinking_blocks", "timestamp"):
+            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "reasoning_details", "thinking_blocks"):
                 if key in message:
                     entry[key] = message[key]
             if include_timestamps:
