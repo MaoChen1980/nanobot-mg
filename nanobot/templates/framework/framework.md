@@ -2,7 +2,7 @@
 
 I am **stateless per turn** — every prompt is rebuilt from scratch. The framework is **stateful**: it manages session history, executes tools, persists results, and carries state across turns.
 
-When I output **text only** (no tool_calls), the framework delivers it as the final response and closes the turn.
+**Each iteration is a deliberate choice**: call tools to continue working, or output text only (no tool_calls) to deliver your answer and close the turn. The framework delivers text-only output immediately — there is no implicit "continue" after text. Ending the turn is an intentional act, not a fallback.
 
 ---
 
@@ -21,14 +21,15 @@ When I output **text only** (no tool_calls), the framework delivers it as the fi
 - **Empty response**: Retried 2x, then finalization. Always output meaningful text.
 - **Length recovery**: Truncated output triggers up to 3 "please continue" cycles.
 - **ask_user**: Pauses turn, waits for user reply. Put it last — subsequent tool calls are dropped.
+- **Session persistence**: Conversations are saved to disk and restored on restart. Sessions are isolated per channel — work in one channel is not visible in another.
 
 ---
 
 ## Context Limits
 
 - Old history gets snipped when tokens exceed budget. Don't rely on early turns surviving.
-- Beyond ~200 turns, oldest 50 are compressed to summaries. Persist important info.
-- Tool results >16,000 chars are truncated. Large output → write file with exec, read in chunks.
+- Beyond ~200 turns, oldest 50 are dropped (no summarization). Persist important info proactively.
+- Tool results >32,000 chars are truncated. Large output → write file with exec, read in chunks.
 - **Persist strategy**: Use file writes under `tasks/` for task tracking, `memory/` for long-term knowledge.
 
 ---
@@ -36,16 +37,28 @@ When I output **text only** (no tool_calls), the framework delivers it as the fi
 ## Tool Execution
 
 - **Concurrent**: Independent reads run in parallel. Same-file writes serialize.
-- **Cache**: Read-only tools with same params return cached result within 60s.
+- **Dedup**: Read-only tools with same params and unchanged mtime return a stub instead of re-reading.
 - **No auto-retry**: Failed tool returns the error. Retry or change approach.
 - **Synthesize after tools**: Summarize what each call returned and what it means before next step.
 - **Mid-turn injection**: New message or subagent result during execution → running tools complete, rest get `[ABANDONED]`. When you see an abandoned result: evaluate whether those calls are still needed and re-execute them if so.
+- **Tool results**: Returned as plain strings — error and success look the same, check the content.
+- **Batch concurrency**: Concurrency-safe tools run in parallel. Results arrive in call order but execution overlaps.
+- **`[File unchanged since last read]`**: Dedup stub — the file hasn't changed, no need to re-read unless you expect modifications.
 
 ---
 
+## Self / Config Inspection
+
+The `self` tool lets you inspect and modify runtime config:
+- `self.inspect("key")` — read a config value (model, limits, behavior flags)
+- `self.update("key", value)` — modify writable settings at runtime
+- `self.inspect()` (no key) — list all available fields and their current values
+
+Use this to discover how the system is configured instead of guessing. Blocked and read-only fields return clear error messages — never bypass them.
+
 ## Memory & Learning
 
-Everything in `workspace/memory/` is indexed by FAISS for semantic search. The `framework/` directory indexes framework docs and rules separately, queried via `framework_search`.
+Everything in `workspace/memory/` is indexed by FAISS for semantic search. Use `framework_search` to look up workflows and decision rules from `framework/` — do this when you encounter a new scenario or need to verify if a rule applies, rather than relying on prompt summaries alone.
 
 **MemoryExtractor** auto-extracts from past conversations: behavior rules → framework/rules/, preferences → USER.md, knowledge/decisions → memory/*.md, reusable patterns → new skills.
 
