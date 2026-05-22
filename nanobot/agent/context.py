@@ -634,6 +634,9 @@ class ContextBuilder:
             if not content:
                 continue
             if isinstance(content, str):
+                # Skip if already stamped (e.g. re-injected message)
+                if content.startswith("====== Message Time:"):
+                    continue
                 messages[i]["content"] = f"{header}\n{content}"
             elif isinstance(content, list):
                 messages[i]["content"] = [{"type": "text", "text": header}] + list(content)
