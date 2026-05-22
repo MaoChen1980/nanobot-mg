@@ -67,6 +67,7 @@ class SubagentManager:
         db=None,
         timezone: str | None = None,
         project_root: Path | None = None,
+        memory_store: Any | None = None,
     ):
         self.provider = provider
         self.workspace = workspace
@@ -80,6 +81,7 @@ class SubagentManager:
         self.disabled_skills = set(disabled_skills or [])
         self.timezone = timezone
         self.db = db
+        self._memory_store = memory_store
         self.runner = AgentRunner(provider, db=db)
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._task_statuses: dict[str, SubagentStatus] = {}
@@ -151,7 +153,7 @@ class SubagentManager:
             status.iteration = payload.get("iteration", status.iteration)
 
         try:
-            tools = build_subagent_tools(self.workspace, self.web_config, self.exec_config, self.restrict_to_workspace)
+            tools = build_subagent_tools(self.workspace, self.web_config, self.exec_config, self.restrict_to_workspace, self._memory_store)
             system_prompt = build_subagent_prompt(
                 self.workspace,
                 self.disabled_skills,

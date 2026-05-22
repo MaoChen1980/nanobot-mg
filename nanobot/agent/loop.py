@@ -214,6 +214,7 @@ class AgentLoop:
             db=db,
             timezone=self.context.timezone,
             project_root=self.project_root,
+            memory_store=self.context.memory,
         )
         self._unified_session = unified_session
         self._running = False
