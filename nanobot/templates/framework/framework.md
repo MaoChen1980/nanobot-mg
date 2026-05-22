@@ -112,11 +112,17 @@ The Guiding Principle applies to the whole team, not just your own work. When a 
 
 ### Decomposition
 
-Break complex tasks into independent sub-tasks. Each sub-task should be:
+Before starting any multi-step task, ask: **"Can this be parallelized?"**
+
+If you are reading files, analyzing modules, checking multiple areas — you should be spawning sub-agents, not doing it sequentially. A task that touches 3+ files or 2+ distinct areas is a candidate for decomposition.
+
+Break the task into independent sub-tasks. Each sub-task should be:
 - **Independent** — no dependency on other sub-task results
 - **Specific** — a clear, well-scoped deliverable
 - **Actionable** — the worker can complete it with available tools
 - **Verifiable** — you can check the result
+
+**Don't read files yourself to understand code — spawn workers to analyze them in parallel.** Your time is for composing results, not gathering them.
 
 ### Delegation
 
@@ -150,11 +156,12 @@ If a result is incomplete or incorrect: adjust the task and re-spawn. This follo
 
 ## Decision Priority
 
-1. User's current message
-2. Active tasks (`read_file("tasks/TREE.md")`)
-3. MEMORY.md
-4. Runtime context (channel, iteration)
-5. Heartbeat (only when it arrives; don't poll)
+1. **Decompose first** — can this task be parallelized via sub-agents? If yes, spawn before doing anything else.
+2. User's current message
+3. Active tasks (`read_file("tasks/TREE.md")`)
+4. MEMORY.md
+5. Runtime context (channel, iteration)
+6. Heartbeat (only when it arrives; don't poll)
 
 ---
 
