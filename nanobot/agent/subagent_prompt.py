@@ -36,22 +36,13 @@ def build_subagent_prompt(
 
     parts: list[str] = []
 
-    # 1. Subagent identity (same template as main agent)
-    identity = ctx._get_identity(channel=None)
-    parts.append(identity)
-
-    # 2. Tools (subagent's tool set, built by build_subagent_tools)
+    # 1. Tools
     if tool_definitions:
         section = ctx._build_tools_section(tool_definitions)
         if section:
             parts.append(section)
 
-    # 3. Bootstrap files (SOUL.md, USER.md, TOOLS.md) — full content
-    bootstrap = ctx._load_bootstrap_files()
-    if bootstrap:
-        parts.append(bootstrap)
-
-    # 4. Skills
+    # 2. Skills
     always_skills = ctx.skills.get_always_skills()
     if always_skills:
         always_content = ctx.skills.format_skills_for_context(always_skills)
@@ -62,17 +53,17 @@ def build_subagent_prompt(
     if skills_summary:
         parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
-    # 5. Runtime context
+    # 3. Runtime context
     runtime = ContextBuilder._build_runtime_context(timezone=timezone)
     if runtime:
         parts.append(f"# Runtime Context\n\n{runtime}")
 
-    # 6. MEMORY.md (if any)
+    # 4. MEMORY.md (if any)
     memory = ctx.memory.read_memory()
     if memory:
         parts.append(f"# Persistent Memory\n\n{memory}")
 
-    # 7. Output schema (optional)
+    # 5. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"
@@ -82,33 +73,29 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 8. Subagent-specific instruction
+    # 6. Worker identity and protocol
     parts.append(
-        "## Subagent Role\n\n"
-        "You are a **subagent** — a lightweight, focused worker spawned by the main agent "
-        "to complete a specific task independently. You run in your own isolated session.\n\n"
-        "### Your Capabilities\n\n"
-        "- **Tools**: Your available tools are listed above in the Tools section. You have "
-        "file read/write, search, web, and exec tools.\n"
-        "- **Skills**: You can read and follow skills loaded in this prompt.\n"
-        "- **Memory**: MEMORY.md is loaded above for reference.\n\n"
-        "### Your Limitations\n\n"
-        "- **No nested spawn** — you cannot spawn sub-subagents.\n"
-        "- **No ask_user** — you cannot block waiting for user input.\n"
-        "- **No session management** — you cannot manage sessions, recall history, "
-        "or schedule cron jobs.\n"
-        "- **No conversation history** — you only see the context snapshot from when you "
-        "were spawned.\n"
-        "- **Fixed iteration limit** — your execution budget is capped.\n\n"
-        "### Response Protocol\n\n"
-        "Your final response is reported back to the main agent as a system message. "
-        "Be concise and actionable:\n"
-        "1. **Write detailed results to a file** (e.g. `reviews/code-review-xxx.md`, "
-        "`research/findings.md`)\n"
-        "2. **Return a one-paragraph summary** with the file path so the main agent "
-        "can read the full details if needed.\n\n"
-        "Think of yourself as a capable subordinate reporting to a busy lead: "
-        "deliver the bottom line upfront, reference the full document."
+        "## Role\n\n"
+        "You are a **Specialist Worker** — a focused, task-oriented agent. "
+        "You have been spawned by an Orchestrator to execute a specific task.\n\n"
+        "### Your Task\n\n"
+        "- Execute the assigned task thoroughly and autonomously\n"
+        "- Do NOT make changes outside your task scope\n"
+        "- Do NOT second-guess the task — execute it\n"
+        "- If the task is impossible or ambiguous, document your reasoning\n"
+        "- Return a complete, actionable result\n\n"
+        "### Constraints\n\n"
+        "- **No nested spawn** — you cannot spawn sub-agents\n"
+        "- **No ask_user** — you cannot block waiting for input\n"
+        "- **No conversation history** — you only see the context snapshot from spawn\n"
+        "- **Fixed iteration limit** — your execution budget is capped\n\n"
+        "### Output Format\n\n"
+        "Your final response is reported back to the Orchestrator. Format it as:\n"
+        "1. **Summary** (1-3 sentences) — bottom line first\n"
+        "2. **Details** — structured findings, code, data\n"
+        "3. **Files created/modified** — absolute paths\n\n"
+        "Think of yourself as a capable specialist delivering results to a lead: "
+        "bottom line upfront, full details referenced."
     )
 
     return "\n\n".join(parts)

@@ -45,7 +45,8 @@ class SpawnTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 启动子任务在后台独立执行，不阻塞当前对话，完成后异步通知结果。\n\n"
+            "**用途**: 委托 Specialist Worker 在后台独立执行子任务，不阻塞当前对话。\n\n"
+            "你是 Orchestrator，sub-agent 是 Specialist Worker。由你负责分解、委托、组合。\n\n"
             "## ⚠️ 重要：接受不确定性\n\n"
             "spawn 是 fire-and-forget 模式。发起时必须接受：\n"
             "- **结果异步到达** — 不保证在当前对话的这个 turn 回来，可能在后续任意 turn 注入\n"
@@ -78,9 +79,15 @@ class SpawnTool(Tool):
             "- 成功 → 系统消息通知结果内容\n"
             "- 失败 → 系统消息通知错误信息\n"
             "- 可以用 check_subagent(task_id=...) 主动查询\n\n"
-            "## 极简案例\n\n"
+            "## 案例\n\n"
             "spawn(task='搜索所有包含 TODO 的文件', label='find-todos')\n"
-            "→ 后台搜索 TODO，完成后系统消息通知你结果"
+            "→ 后台搜索 TODO，完成后系统消息通知你结果\n\n"
+            "spawn(\n"
+            '    task="分析 src/utils.py 的结构",\n'
+            '    label="utils-analysis",\n'
+            '    output_schema=\'{"type": "object", "properties": {"classes": {"type": "array"}, "functions": {"type": "array"}}}\'\n'
+            ")\n"
+            "→ 后台分析模块，返回符合 schema 的结构化结果，便于你直接组合"
         )
 
     async def execute(self, task: str, label: str | None = None, output_schema: str | None = None, max_iterations: int | None = None, **kwargs: Any) -> str:

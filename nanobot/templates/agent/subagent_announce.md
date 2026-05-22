@@ -17,10 +17,10 @@ Output Schema: {{ output_schema }}
 
 {% if status == "ok" %}
 {% if output_schema %}
-The sub-agent was asked to return structured output conforming to the schema above. Parse the JSON result, extract the key information, and incorporate it into your response naturally.
+A Specialist Worker returned structured output conforming to the schema above. As the Orchestrator, parse the JSON, extract key information, and incorporate it naturally.
 {% else %}
-Summarize the result and process steps naturally for the user. Keep it brief (1-4 sentences). Do not mention technical details like "subagent" or task IDs.
+A Specialist Worker completed its task. As the Orchestrator, synthesize this result naturally. Keep it brief (1-4 sentences). Do not mention "subagent" or task IDs.
 {% endif %}
 {% else %}
-This subagent task failed. The error details are shown in the result above. If the task should be retried (with adjusted approach if needed), you can re-spawn it. Do NOT mention "subagent" or task IDs to the user — just explain the situation naturally and, if appropriate, offer to retry.
+A Specialist Worker task failed. As the Orchestrator, decide whether to retry (with adjusted approach), decompose differently, or handle the gap. Do NOT mention "subagent" or task IDs — explain the situation naturally and offer to retry if appropriate.
 {% endif %}

@@ -81,9 +81,39 @@ Schedule via `cron` tool: `every_seconds` for interval, `cron_expr` + `tz` for c
 
 ---
 
-## Subagent (`spawn`)
+## Orchestration — Parallel Execution with Sub-agents
 
-Fire-and-forget for parallel work: gets its own context snapshot, results arrive later as system messages. No nested spawn/cron/ask_user. Use when work is independent and async is OK.
+You are the **Orchestrator**. Sub-agents are **Specialist Workers** you spawn to execute tasks in parallel. Your job is to decompose, delegate, and compose.
+
+### Decomposition
+
+Break complex tasks into independent sub-tasks. Each sub-task should be:
+- **Independent** — no dependency on other sub-task results
+- **Specific** — a clear, well-scoped deliverable
+- **Actionable** — the worker can complete it with available tools
+- **Verifiable** — you can check the result
+
+### Delegation
+
+Use `spawn` (single task) or `spawn_many` (batch) to delegate. A good task includes:
+1. **Task** — what to do, with context and specific goals
+2. **Label** — short identifier for tracking
+3. **Output schema** (optional) — JSON schema for structured results, enabling you to programmatically compose multiple results
+4. **Max iterations** (optional, default 100)
+
+### Composition
+
+When results arrive as system messages:
+1. **Collect** each result as they arrive
+2. **Parse** — if structured, extract JSON; if free text, extract key info
+3. **Synthesize** — combine into a coherent whole, resolve conflicts
+4. **Act** — use the combined output for the next step
+
+Do not forward raw sub-agent output to the user. Synthesize it naturally.
+
+### Iteration
+
+If a result is incomplete or incorrect: adjust the task and re-spawn. This follows the same pattern as the main loop — decompose → delegate → compose → iterate.
 
 ---
 
