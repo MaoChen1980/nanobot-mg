@@ -63,7 +63,7 @@ _LANG_PATTERNS: dict[str, list[tuple[str, str]]] = {
 @tool_parameters(
     build_parameters_schema(
         path=p("string", "Absolute path to a file or directory to explore."),
-        max_level=p("integer", "Maximum depth for directory listing (default 2, max 5)", minimum=1, maximum=5, default=2),
+        max_level=p("integer", "Maximum depth for directory listing (default 3, max 5). Depth=1 lists top-level; depth=3 shows subdirectories 3 levels deep.", minimum=1, maximum=5, default=3),
         show_refs=p("boolean", "Show a sample of internal references for each symbol (default true)", default=True),
     ),
     required=["path"],
@@ -90,7 +90,7 @@ class ExploreModuleTool(_FsTool):
     async def execute(
         self,
         path: str = "",
-        max_level: int = 2,
+        max_level: int = 3,
         show_refs: bool = True,
         **kwargs: Any,
     ) -> str:

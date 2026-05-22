@@ -21,7 +21,8 @@ _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv"
         extract=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context). Legacy alias: grep"),
         path=p("string", "Absolute path to a directory to search from (default: workspace root)."),
         max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50, default=10),
-        max_lines=p("integer", "Maximum lines per file (default 100)", minimum=1, maximum=500, default=100),
+        max_lines=p("integer", "Maximum lines per file (default 2000, max 5000). Most files fit within 2000 lines — increase if file is longer.",
+            minimum=1, maximum=5000, default=2000),
     ),
     required=["pattern"],
 )
@@ -49,7 +50,7 @@ class ReadFilesTool(_FsTool):
         extract: str | None = None,
         path: str = ".",
         max_files: int = 10,
-        max_lines: int = 100,
+        max_lines: int = 2000,
         **kwargs: Any,
     ) -> str:
         # Backwards compat: legacy aliases "glob" and "grep"

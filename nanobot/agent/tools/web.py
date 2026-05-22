@@ -97,7 +97,7 @@ def _format_results(query: str, items: list[dict[str, Any]], n: int) -> str:
 @tool_parameters(
     build_parameters_schema(
         query=p("string", "Search query — natural language question or keywords."),
-        count=p("integer", "Results to return (1-10, default 5)", minimum=1, maximum=10, default=5),
+        count=p("integer", "Results to return (1-20, default 8)", minimum=1, maximum=20, default=8),
         required=["query"],
     )
 )
@@ -114,7 +114,7 @@ class WebSearchTool(WebToolBase, Tool):
         "- 已有 URL → 用 web_fetch，不用 web_search\n"
         "- 需要读取具体页面 → 用 web_fetch\n"
         "- 结果来自搜索引擎，不保证 100% 准确\n"
-        "- 默认返回 5 条结果，最多 10 条"
+        "- 默认返回 8 条结果，最多 20 条"
     )
 
     def __init__(self, config: WebSearchConfig | None = None, proxy: str | None = None, user_agent: str | None = None):
@@ -294,8 +294,8 @@ class WebSearchTool(WebToolBase, Tool):
             "default": "markdown",
             "description": "Output format: 'markdown' (default) — clean structured text preserving tables and code blocks; 'text' — raw text extraction with minimal formatting",
         },
-        maxChars=p("integer", "Max characters to extract (minimum 100, default 3000). Pages exceeding this limit are truncated.",
-            minimum=100, default=3000,
+        maxChars=p("integer", "Max characters to extract (minimum 100, default 2000000). Pages exceeding this limit are truncated (~2MB of text). Typical pages are 10-40KB after extraction. Use smaller values (1000-5000) for quick previews to reduce token cost.",
+            minimum=100, default=2000000,
         ),
         extract=p("string", "Optional regex — only lines matching this pattern are returned from the fetched text, with 1 line context before/after"),
         required=["url"],
@@ -304,18 +304,19 @@ class WebSearchTool(WebToolBase, Tool):
 class WebFetchTool(WebToolBase, Tool):
     """Fetch and extract content from a URL."""
 
+    _MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB hard cap
     name = "web_fetch"
     description = (
         "**用途**: 获取 URL 内容并提取可读文本，支持截断预览和正则过滤。\n\n"
         "**什么时候用**:\n"
         "- 已有 URL 需要获取页面内容时\n"
-        "- 不确定页面内容是否有用 → 先 `maxChars=1000` 预览，再决定是否读完整\n\n"
+        "- 不确定页面内容是否有用 → 先 `maxChars=1000` 预览，再决定是否读完整（默认 2000000）\n\n"
         "**什么时候不用**:\n"
         "- 无 URL → 用 web_search 先搜索\n"
         "- 只需页面元数据 → web_search 结果已包含\n"
         "- JS 密集的页面可能渲染不完整\n\n"
         "**有用参数**:\n"
-        "- `maxChars` — 控制返回字数，小值预览大值深读\n"
+        "- `maxChars` — 控制返回字数（默认 2000000），小值预览大值深读\n"
         "- `format` — `markdown`（结构化）或 `text`（纯文本）\n"
         "- `extract` — 正则过滤，只返回匹配行"
     )
@@ -350,7 +351,12 @@ class WebFetchTool(WebToolBase, Tool):
                     ctype = r.headers.get("content-type", "")
                     if ctype.startswith("image/"):
                         r.raise_for_status()
+                        cl = r.headers.get("content-length")
+                        if cl and int(cl) > self._MAX_RESPONSE_BYTES:
+                            return json.dumps({"error": f"Image too large ({int(cl) / 1024 / 1024:.0f} MB exceeds 5 MB limit)", "url": url}, ensure_ascii=False)
                         raw = await r.aread()
+                        if len(raw) > self._MAX_RESPONSE_BYTES:
+                            return json.dumps({"error": f"Image too large ({len(raw) / 1024 / 1024:.0f} MB exceeds 5 MB limit)", "url": url}, ensure_ascii=False)
                         return build_image_content_blocks(raw, ctype, url, f"(Image fetched from: {url})")
         except Exception as e:
             logger.debug("Pre-fetch image detection failed for {}: {}", url, e)
@@ -404,6 +410,14 @@ class WebFetchTool(WebToolBase, Tool):
             client = self._client
             r = await client.get(url, headers={"User-Agent": self.user_agent}, follow_redirects=True, timeout=30.0)
             r.raise_for_status()
+
+            # Check response size before processing (5 MB hard cap)
+            cl = r.headers.get("content-length")
+            if cl and int(cl) > self._MAX_RESPONSE_BYTES:
+                return json.dumps({"error": f"Response too large ({int(cl) / 1024 / 1024:.0f} MB exceeds 5 MB limit)", "url": url}, ensure_ascii=False)
+            body = r.content
+            if len(body) > self._MAX_RESPONSE_BYTES:
+                return json.dumps({"error": f"Response too large ({len(body) / 1024 / 1024:.0f} MB exceeds 5 MB limit)", "url": url}, ensure_ascii=False)
 
             from nanobot.security.network import validate_resolved_url
             redir_ok, redir_err = await validate_resolved_url(str(r.url))
