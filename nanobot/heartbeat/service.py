@@ -93,12 +93,18 @@ class HeartbeatService:
                 channel="cli",
                 sender_id=self._owner_id,
                 chat_id="direct",
-                content=(
-                    f"定时检查 {now_ts}\n\n"
+content=(
+                    f"⏰ 定时检查 {now_ts}\n\n"
                     f"{goal_block}\n\n"
-                    "有进展就更新一下状态，别忘了记录里程碑。\n"
-                    "有问题就说，阻塞太久不好。\n"
-                    "完成的就标记 completed。\n"
+                    "**你的职责**：\n"
+                    "1. 按照任务依赖关系主动推进，除非遇到 block\n"
+                    "2. 有进展立即更新 TREE.md 状态\n"
+                    "3. 完成后标记 completed 并总结\n"
+                    "4. 遇到阻塞明确说出来，不要空等\n"
+                    "5. 如果没有可推进的任务，说明原因并等待\n"
+                ),
+                    "4. 不要在无阻塞的任务上停下来等信号\n"
+                    "5. 有进展更新 TREE.md/CURRENT.md\n"
                 ),
                 media=[],
                 ephemeral=True,
