@@ -21,6 +21,12 @@ A Specialist Worker returned structured output conforming to the schema above. A
 {% else %}
 A Specialist Worker completed its task. As the Orchestrator, synthesize this result naturally. Keep it brief (1-4 sentences). Do not mention "subagent" or task IDs.
 {% endif %}
+{% if pt_path %}*(Conversation snapshot saved at: {{ pt_path }})*{% endif %}
 {% else %}
 A Specialist Worker task failed. As the Orchestrator, decide whether to retry (with adjusted approach), decompose differently, or handle the gap. Do NOT mention "subagent" or task IDs — explain the situation naturally and offer to retry if appropriate.
+
+{% if pt_path %}Debug snapshot saved at: {{ pt_path }}
+
+Use `read_file` to inspect the full conversation trace (tool calls, errors, thinking) if you need to understand the root cause.
+{% endif %}
 {% endif %}

@@ -205,7 +205,7 @@ class SubagentManager:
                 ))
 
                 # Save conversation snapshot for MemoryExtractor
-                MemoryExtractor.save_prompt_snapshot(
+                pt_path = MemoryExtractor.save_prompt_snapshot(
                     result.messages,
                     self.workspace / "prompts",
                     f"subagent:{task_id}",
@@ -237,18 +237,18 @@ class SubagentManager:
                     await self._announce_result(
                         task_id, label, task,
                         format_error_progress(result),
-                        origin, "error", sub_result=sub_result,
+                        origin, "error", sub_result=sub_result, pt_path=pt_path,
                     )
                 elif result.stop_reason == "error":
                     await self._announce_result(
                         task_id, label, task,
                         result.error or "Error: subagent execution failed.",
-                        origin, "error", sub_result=sub_result,
+                        origin, "error", sub_result=sub_result, pt_path=pt_path,
                     )
                 else:
                     final_result = result.final_content or "Task completed but no final response was generated."
                     logger.info("Subagent [{}] completed successfully", task_id)
-                    await self._announce_result(task_id, label, task, final_result, origin, "ok", sub_result=sub_result)
+                    await self._announce_result(task_id, label, task, final_result, origin, "ok", sub_result=sub_result, pt_path=pt_path)
             finally:
                 _in_subagent.reset(token)
 
@@ -267,12 +267,14 @@ class SubagentManager:
         origin: dict[str, str],
         status: str,
         sub_result: SubagentResult | None = None,
+        pt_path: Path | None = None,
     ) -> None:
         """Announce the subagent result to the main agent via the message bus."""
         from nanobot.utils.prompt_templates import render_template
 
         status_text = "completed successfully" if status == "ok" else "failed"
         _schema = sub_result.output_schema if sub_result else None
+        _pt_path = str(pt_path) if pt_path else ""
 
         announce_content = render_template(
             "agent/subagent_announce.md",
@@ -285,6 +287,7 @@ class SubagentManager:
             iteration_count=sub_result.iteration_count if sub_result else 0,
             status=status,
             output_schema=_schema,
+            pt_path=_pt_path,
         )
 
         # Inject as system message to trigger main agent.

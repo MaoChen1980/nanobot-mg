@@ -657,10 +657,11 @@ class MemoryExtractor:
     @staticmethod
     def save_prompt_snapshot(
         messages: list[dict[str, Any]], prompts_dir: Path, session_key: str
-    ) -> None:
+    ) -> Path:
         """Save a .pt snapshot of the messages array before LLM send.
 
         Called from the message pipeline (not from MemoryExtractor itself).
+        Returns the path to the saved file.
         """
         safe_key = MemoryExtractor._sanitize_filename(session_key)
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
@@ -677,3 +678,4 @@ class MemoryExtractor:
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         logger.debug("Saved .pt: {}", filename)
+        return path
