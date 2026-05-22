@@ -94,17 +94,16 @@ class HeartbeatService:
                 sender_id=self._owner_id,
                 chat_id="direct",
 content=(
-                    f"⏰ 定时检查 {now_ts}\n\n"
-                    f"{goal_block}\n\n"
-                    "**你的职责**：\n"
-                    "1. 按照任务依赖关系主动推进，除非遇到 block\n"
-                    "2. 有进展立即更新 TREE.md 状态\n"
-                    "3. 完成后标记 completed 并总结\n"
-                    "4. 遇到阻塞明确说出来，不要空等\n"
-                    "5. 如果没有可推进的任务，说明原因并等待\n"
-                ),
-                    "4. 不要在无阻塞的任务上停下来等信号\n"
-                    "5. 有进展更新 TREE.md/CURRENT.md\n"
+                    f"⏰ Heartbeat {now_ts}\n\n"
+                    f"任务树：\n{goal_block}\n\n"
+                    "**行动原则（不要等用户指令，除非真的 block 了）**：\n\n"
+                    "1. 看 TREE.md 中任务的依赖关系，优先推进没有前置依赖的\n"
+                    "2. 前置依赖已满足的任务 → 立即开始\n"
+                    "3. 有进展 → 更新 CURRENT.md 和 TREE.md\n"
+                    "4. 真正 block（缺信息/缺决策/缺资源）→ 明确说明卡在哪、需要什么\n"
+                    "5. 任务全部完成 → 标记 completed\n\n"
+                    "**不要**：停下来等用户说「继续」或「做什么」\n"
+                    "**要**：持续推进任务树，除非遇到上述 block 情况\n"
                 ),
                 media=[],
                 ephemeral=True,
