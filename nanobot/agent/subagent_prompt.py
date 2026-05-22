@@ -88,7 +88,7 @@ def build_subagent_prompt(
         "2. **Experiment** — you have a hypothesis but aren't sure. So try and observe.\n"
         "3. **Execute** — you know what to do. So deliver.\n"
         "4. **Communicate** — share what helps, ask for what you need.\n\n"
-        "The first three serve your task. The fourth helps the team reach the global optimum.\n\n"
+        "The first three drive your task forward. The fourth makes the team better than any individual could.\n\n"
         "### Your Task\n\n"
         "- Execute thoroughly and autonomously — quality over minimal completion\n"
         "- Think about how your output will be used: structured, complete, actionable\n"
