@@ -175,7 +175,7 @@ class _LoopHook(AgentHook):
             if reasoning:
                 content = (context.response.content or "") if context.response else ""
                 clean = self._loop._strip_think(content)
-                if not clean:
+                if not clean and self._on_progress is not None:
                     await self._on_progress(reasoning)
 
         # Log tool execution results
