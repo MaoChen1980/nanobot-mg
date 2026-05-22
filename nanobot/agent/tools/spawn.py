@@ -87,7 +87,8 @@ class SpawnTool(Tool):
         """Spawn a subagent to execute the given task."""
         if _in_subagent.get():
             return "Error: subagent cannot spawn sub-subagents."
-        context = self._build_context_block()
+        workspace = getattr(self._manager, "workspace", None)
+        context = build_context_block(workspace)
         return await self._manager.spawn(
             task=task,
             label=label,
@@ -99,40 +100,39 @@ class SpawnTool(Tool):
             max_iterations=max_iterations,
         )
 
-    def _build_context_block(self) -> str:
-        """Build context block from current messages and files."""
-        messages = _current_messages_for_subagent.get() or []
-        parts: list[str] = ["## Context from Main Agent"]
 
-        # Workspace bootstrap files (only if workspace is available on the manager)
-        workspace = getattr(self._manager, "workspace", None)
-        if workspace is not None:
-            for filename in ["SOUL.md", "USER.md", "MEMORY.md", "TOOLS.md"]:
-                content = self._read_file(workspace, filename)
-                if content:
-                    parts.append(f"=== {filename} ===\n{content[:800]}\n===============")
+def build_context_block(workspace: Path | None = None) -> str:
+    """Build context block from current messages and files."""
+    messages = _current_messages_for_subagent.get() or []
+    parts: list[str] = ["## Context from Main Agent"]
 
-        # Recent messages (last 10) — preserve structure
-        recent = messages[-10:] if len(messages) > 10 else messages
-        if recent:
-            parts.append("### Recent Conversation")
-            for msg in recent:
-                role = msg.get("role", "?")
-                content = msg.get("content", "")
-                if content:
-                    if len(content) > 400:
-                        content = content[:400] + "..."
-                    parts.append(f"[{role}]: {content}")
+    if workspace is not None:
+        for filename in ["SOUL.md", "USER.md", "MEMORY.md", "TOOLS.md"]:
+            content = _read_workspace_file(workspace, filename)
+            if content:
+                parts.append(f"=== {filename} ===\n{content[:800]}\n===============")
 
-        return "\n\n".join(parts)
+    recent = messages[-10:] if len(messages) > 10 else messages
+    if recent:
+        parts.append("### Recent Conversation")
+        for msg in recent:
+            role = msg.get("role", "?")
+            content = msg.get("content", "")
+            if content:
+                if len(content) > 400:
+                    content = content[:400] + "..."
+                parts.append(f"[{role}]: {content}")
 
-    def _read_file(self, workspace: Path, filename: str) -> str:
-        """Read a file from workspace."""
-        try:
-            path = workspace / filename
-            if path.exists():
-                return path.read_text(encoding="utf-8")
-        except Exception:
-            logger.debug("Failed to read workspace file {} for subagent context", filename)
-            pass
-        return ""
+    return "\n\n".join(parts)
+
+
+def _read_workspace_file(workspace: Path, filename: str) -> str:
+    """Read a file from workspace."""
+    try:
+        path = workspace / filename
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    except Exception:
+        logger.debug("Failed to read workspace file {} for subagent context", filename)
+        pass
+    return ""
