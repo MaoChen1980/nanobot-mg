@@ -12,6 +12,7 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
+from nanobot.agent.memory_extractor import MemoryExtractor
 from nanobot.agent.runner import AgentRunSpec, AgentRunner
 from nanobot.agent.context_vars import _in_subagent
 from nanobot.bus.events import InboundMessage
@@ -202,6 +203,14 @@ class SubagentManager:
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
                     session_key=origin["session_key"],
                 ))
+
+                # Save conversation snapshot for MemoryExtractor
+                MemoryExtractor.save_prompt_snapshot(
+                    result.messages,
+                    self.workspace / "prompts",
+                    f"subagent:{task_id}",
+                )
+
                 status.phase = "done"
                 status.stop_reason = result.stop_reason
                 status.completed_at = time.monotonic()
