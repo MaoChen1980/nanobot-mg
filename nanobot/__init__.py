@@ -25,10 +25,21 @@ def _read_pyproject_version() -> Optional[str]:
 
 
 def _resolve_version() -> str:
+    # Prefer git tag when running from a source checkout
+    try:
+        import subprocess
+        tag = subprocess.check_output(
+            ["git", "describe", "--tags", "--always"],
+            stderr=subprocess.DEVNULL,
+            cwd=Path(__file__).resolve().parent,
+        ).decode().strip()
+        if tag:
+            return tag
+    except Exception:
+        pass
     try:
         return _pkg_version("nanobot-ai")
     except PackageNotFoundError:
-        # Source checkouts often import nanobot without installed dist-info.
         return _read_pyproject_version() or "0.1.5.post2"
 
 

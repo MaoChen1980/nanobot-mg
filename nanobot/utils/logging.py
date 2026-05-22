@@ -10,7 +10,19 @@ from nanobot.config.schema import LogConfig
 
 
 def _get_git_commit() -> str:
-    """Return short git commit hash, or 'unknown' if not a git repo."""
+    """Return short git commit hash.
+
+    Priority:
+      1. nanobot._commit (build-time — survives pip install)
+      2. git rev-parse (runtime — works in source checkout)
+      3. "unknown"
+    """
+    try:
+        from nanobot._commit import __commit__  # type: ignore[import-untyped]
+        if __commit__:
+            return __commit__
+    except (ImportError, AttributeError):
+        pass
     try:
         project_root = Path(__file__).resolve().parent.parent.parent
         result = subprocess.run(
@@ -18,9 +30,17 @@ def _get_git_commit() -> str:
             capture_output=True, text=True, timeout=5,
             cwd=str(project_root),
         )
-        return result.stdout.strip() if result.returncode == 0 else "unknown"
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
     except Exception:
-        return "unknown"
+        pass
+    try:
+        from nanobot import __version__
+        if __version__:
+            return __version__
+    except (ImportError, AttributeError):
+        pass
+    return "unknown"
 
 
 _COMMIT = _get_git_commit()

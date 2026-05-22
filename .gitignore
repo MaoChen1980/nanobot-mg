@@ -1,3 +1,6 @@
+# Build-time generated files
+nanobot/_commit.py
+
 # Project-specific
 .worktrees/
 .assets
