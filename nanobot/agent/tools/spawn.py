@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         label=p("string", "Optional short label for the task (for display)"),
         output_schema=p("string", "Optional JSON schema describing the expected output format. When provided, the sub-agent will be instructed to structure its response accordingly, making it easier for you to parse and compose results from multiple sub-agents."),
         max_iterations=p("integer", "Maximum tool call iterations (default 100)"),
+        team_context=p("string", "Optional team context: describe other Workers, their tasks, and dependencies so this Worker understands its role in the team."),
         required=["task"],
     )
 )
@@ -90,12 +91,12 @@ class SpawnTool(Tool):
             "→ 后台分析模块，返回符合 schema 的结构化结果，便于你直接组合"
         )
 
-    async def execute(self, task: str, label: str | None = None, output_schema: str | None = None, max_iterations: int | None = None, **kwargs: Any) -> str:
+    async def execute(self, task: str, label: str | None = None, output_schema: str | None = None, max_iterations: int | None = None, team_context: str | None = None, **kwargs: Any) -> str:
         """Spawn a subagent to execute the given task."""
         if _in_subagent.get():
             return "Error: subagent cannot spawn sub-subagents."
         workspace = getattr(self._manager, "workspace", None)
-        context = build_context_block(workspace)
+        context = build_context_block(workspace, team_context=team_context)
         return await self._manager.spawn(
             task=task,
             label=label,
@@ -108,7 +109,7 @@ class SpawnTool(Tool):
         )
 
 
-def build_context_block(workspace: Path | None = None) -> str:
+def build_context_block(workspace: Path | None = None, team_context: str | None = None) -> str:
     """Build context block from current messages and files."""
     messages = _current_messages_for_subagent.get() or []
     parts: list[str] = ["## Context from Main Agent"]
@@ -129,6 +130,9 @@ def build_context_block(workspace: Path | None = None) -> str:
                 if len(content) > 400:
                     content = content[:400] + "..."
                 parts.append(f"[{role}]: {content}")
+
+    if team_context:
+        parts.append(f"## Team Context\n\n{team_context}")
 
     return "\n\n".join(parts)
 

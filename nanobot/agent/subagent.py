@@ -86,6 +86,9 @@ class SubagentManager:
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._task_statuses: dict[str, SubagentStatus] = {}
         self._session_tasks: dict[str, set[str]] = {}  # session_key -> {task_id, ...}
+        self._pending_worker_questions: dict[str, asyncio.Future] = {}
+        self._worker_origin: dict[str, dict[str, str]] = {}  # task_id -> origin info
+        self._worker_label_to_id: dict[str, str] = {}  # label -> task_id
 
     def set_provider(self, provider: LLMProvider, model: str) -> None:
         self.provider = provider
@@ -107,6 +110,8 @@ class SubagentManager:
         task_id = str(uuid.uuid4())[:8]
         display_label = label or task[:30] + ("..." if len(task) > 30 else "")
         origin = {"channel": origin_channel, "chat_id": origin_chat_id, "session_key": session_key}
+        self._worker_origin[task_id] = origin
+        self._worker_label_to_id[display_label] = task_id
 
         status = SubagentStatus(
             task_id=task_id,
@@ -156,6 +161,16 @@ class SubagentManager:
 
         try:
             tools = build_subagent_tools(self.workspace, self.web_config, self.exec_config, self.restrict_to_workspace, self._memory_store)
+
+            # Register team communication tools
+            from nanobot.agent.tools.notify_orchestrator import NotifyOrchestratorTool
+            from nanobot.agent.tools.request_input import RequestOrchestratorInputTool
+            tools.register(NotifyOrchestratorTool(
+                manager=self, worker_id=task_id, worker_label=label,
+            ))
+            tools.register(RequestOrchestratorInputTool(
+                manager=self, worker_id=task_id, worker_label=label,
+            ))
             system_prompt = build_subagent_prompt(
                 self.workspace,
                 self.disabled_skills,
@@ -313,3 +328,111 @@ class SubagentManager:
     def list_running_statuses(self) -> list[SubagentStatus]:
         """Return statuses of all currently running subagents."""
         return [s for s in self._task_statuses.values() if s.phase not in ("done", "error")]
+
+    # ------------------------------------------------------------------
+    # Team communication: Worker ↔ Orchestrator
+    # ------------------------------------------------------------------
+
+    def notify_orchestrator(
+        self,
+        message: str,
+        worker_id: str,
+        worker_label: str,
+        priority: str = "info",
+    ) -> str:
+        """Fire-and-forget: publish a notification from Worker to Orchestrator."""
+        if not self.bus:
+            return "Error: message bus not available"
+        origin = self._worker_origin.get(worker_id)
+        if not origin:
+            return "Error: worker origin not found"
+
+        content = f"[Worker '{worker_label}' ({priority})]: {message}"
+        msg = InboundMessage(
+            channel="system",
+            sender_id="subagent",
+            chat_id=f"{origin['channel']}:{origin['chat_id']}",
+            content=content,
+            session_key_override=origin["session_key"],
+            metadata={
+                "injected_event": "worker_notification",
+                "worker_id": worker_id,
+                "worker_label": worker_label,
+                "notification_priority": priority,
+            },
+        )
+        self.bus.publish_inbound(msg)
+        logger.info("Worker [{}] notified Orchestrator (priority={}): {}", worker_label, priority, message[:80])
+        return f"Orchestrator notified (priority: {priority})"
+
+    async def request_orchestrator_input(
+        self,
+        question: str,
+        worker_id: str,
+        worker_label: str,
+        context: str = "",
+        timeout: float = 120.0,
+    ) -> str:
+        """Blocking: Worker asks Orchestrator for input, waits for response."""
+        if not self.bus:
+            return "Error: message bus not available"
+        origin = self._worker_origin.get(worker_id)
+        if not origin:
+            return "Error: worker origin not found"
+
+        # Create a Future and store it
+        future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
+        self._pending_worker_questions[worker_id] = future
+
+        # Notify Orchestrator
+        ctx = f"\nContext: {context}" if context else ""
+        content = (
+            f"[Worker '{worker_label}' requests input]: {question}{ctx}\n"
+            f"Use respond_to_worker(worker_id='{worker_label}', response=...) to reply."
+        )
+        msg = InboundMessage(
+            channel="system",
+            sender_id="subagent",
+            chat_id=f"{origin['channel']}:{origin['chat_id']}",
+            content=content,
+            session_key_override=origin["session_key"],
+            metadata={
+                "injected_event": "worker_request",
+                "worker_id": worker_id,
+                "worker_label": worker_label,
+            },
+        )
+        self.bus.publish_inbound(msg)
+        logger.info("Worker [{}] requested Orchestrator input: {}", worker_label, question[:80])
+
+        # Wait for response with timeout
+        try:
+            response = await asyncio.wait_for(future, timeout=timeout)
+            return response
+        except asyncio.TimeoutError:
+            self._pending_worker_questions.pop(worker_id, None)
+            logger.warning("Worker [{}] timed out waiting for Orchestrator input", worker_label)
+            return "Orchestrator did not respond in time. Continuing autonomously."
+        except asyncio.CancelledError:
+            self._pending_worker_questions.pop(worker_id, None)
+            return "Request cancelled. Continuing autonomously."
+
+    def respond_to_worker(self, worker_id: str, response: str) -> str:
+        """Orchestrator responds to a Worker's pending request."""
+        # Try worker_id as label first, then as task_id
+        actual_id = self._worker_label_to_id.get(worker_id, worker_id)
+        future = self._pending_worker_questions.pop(actual_id, None)
+        if future is None:
+            # Also try the original worker_id directly (could be task_id)
+            future = self._pending_worker_questions.pop(worker_id, None)
+        if future is None:
+            known = list(self._pending_worker_questions.keys())
+            labels = {v: k for k, v in self._worker_label_to_id.items()}
+            known_labels = [labels.get(uid, uid) for uid in known]
+            return (
+                f"Error: no pending question from worker '{worker_id}'. "
+                f"Workers with pending questions: {known_labels}"
+            )
+        future.set_result(response)
+        logger.info("Orchestrator responded to worker [{}]: {}", worker_id, response[:80])
+        return f"Response delivered to worker '{worker_id}'"

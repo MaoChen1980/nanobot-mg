@@ -28,6 +28,7 @@ if TYPE_CHECKING:
                 "required": ["task"],
             }
         ),
+        team_context=p("string", "Optional team context: describe all Workers, their tasks, and dependencies so each Worker understands its role."),
         required=["tasks"],
     )
 )
@@ -78,12 +79,12 @@ class SpawnManyTool(Tool):
             "→ 三个子任务同时启动，各自完成后通知结果"
         )
 
-    async def execute(self, tasks: list[dict], **kwargs: Any) -> str:
+    async def execute(self, tasks: list[dict], team_context: str | None = None, **kwargs: Any) -> str:
         """Spawn multiple subagents."""
         if _in_subagent.get():
             return "Error: subagent cannot spawn sub-subagents."
         workspace = getattr(self._manager, "workspace", None)
-        context = build_context_block(workspace)
+        context = build_context_block(workspace, team_context=team_context)
         results: list[str] = []
         for t in tasks:
             task = t["task"]
