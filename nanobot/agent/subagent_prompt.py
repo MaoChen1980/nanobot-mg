@@ -19,6 +19,7 @@ def build_subagent_prompt(
     db=None,
     tool_definitions: list[dict[str, Any]] | None = None,
     project_root: Path | None = None,
+    output_schema: str | None = None,
 ) -> str:
     """Build system prompt for subagent — same structure as main agent.
 
@@ -71,7 +72,17 @@ def build_subagent_prompt(
     if memory:
         parts.append(f"# Persistent Memory\n\n{memory}")
 
-    # 7. Subagent-specific instruction
+    # 7. Output schema (optional)
+    if output_schema:
+        parts.append(
+            "## Output Schema\n\n"
+            "Your final response MUST conform to this JSON schema:\n\n"
+            f"```json\n{output_schema}\n```\n\n"
+            "Return valid JSON matching this schema. "
+            "Do NOT include any text outside the JSON code block."
+        )
+
+    # 8. Subagent-specific instruction
     parts.append(
         "## Subagent Role\n\n"
         "You are a **subagent** — a lightweight, focused worker spawned by the main agent "

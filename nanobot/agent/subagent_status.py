@@ -37,6 +37,7 @@ class SubagentResult:
     iteration_count: int
     token_usage: dict
     errors: list[str]
+    output_schema: str | None = None
 
 
 def format_error_progress(result) -> str:

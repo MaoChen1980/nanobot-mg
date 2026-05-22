@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     build_parameters_schema(
         task=p("string", "The task for the subagent to complete"),
         label=p("string", "Optional short label for the task (for display)"),
+        output_schema=p("string", "Optional JSON schema describing the expected output format. When provided, the sub-agent will be instructed to structure its response accordingly, making it easier for you to parse and compose results from multiple sub-agents."),
         max_iterations=p("integer", "Maximum tool call iterations (default 100)"),
         required=["task"],
     )
@@ -82,7 +83,7 @@ class SpawnTool(Tool):
             "→ 后台搜索 TODO，完成后系统消息通知你结果"
         )
 
-    async def execute(self, task: str, label: str | None = None, max_iterations: int | None = None, **kwargs: Any) -> str:
+    async def execute(self, task: str, label: str | None = None, output_schema: str | None = None, max_iterations: int | None = None, **kwargs: Any) -> str:
         """Spawn a subagent to execute the given task."""
         if _in_subagent.get():
             return "Error: subagent cannot spawn sub-subagents."
@@ -90,6 +91,7 @@ class SpawnTool(Tool):
         return await self._manager.spawn(
             task=task,
             label=label,
+            output_schema=output_schema,
             context=context,
             origin_channel=self._origin_channel.get(),
             origin_chat_id=self._origin_chat_id.get(),

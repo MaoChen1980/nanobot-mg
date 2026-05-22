@@ -101,6 +101,7 @@ class SubagentManager:
         origin_chat_id: str = "direct",
         session_key: str | None = None,
         max_iterations: int | None = None,
+        output_schema: str | None = None,
     ) -> str:
         """Spawn a subagent to execute a task in the background."""
         task_id = str(uuid.uuid4())[:8]
@@ -116,7 +117,7 @@ class SubagentManager:
         self._task_statuses[task_id] = status
 
         bg_task = asyncio.create_task(
-            self._run_subagent(task_id, task, display_label, origin, status, context, max_iterations)
+            self._run_subagent(task_id, task, display_label, origin, status, context, max_iterations, output_schema)
         )
         self._running_tasks[task_id] = bg_task
         if session_key:
@@ -144,6 +145,7 @@ class SubagentManager:
         status: SubagentStatus,
         context: str = "",
         max_iterations: int | None = None,
+        output_schema: str | None = None,
     ) -> None:
         """Execute the subagent task and announce the result."""
         logger.info("Subagent [{}] starting task: {}", task_id, label)
@@ -161,6 +163,7 @@ class SubagentManager:
                 db=self.db,
                 tool_definitions=tools.get_definitions(),
                 project_root=self.project_root,
+                output_schema=output_schema,
             )
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},
@@ -202,6 +205,7 @@ class SubagentManager:
                     iteration_count=status.iteration,
                     token_usage=token_usage,
                     errors=[result.error] if result.error else [],
+                    output_schema=output_schema,
                 )
 
                 if result.stop_reason == "tool_error":
@@ -244,6 +248,7 @@ class SubagentManager:
         from nanobot.utils.prompt_templates import render_template
 
         status_text = "completed successfully" if status == "ok" else "failed"
+        _schema = sub_result.output_schema if sub_result else None
 
         announce_content = render_template(
             "agent/subagent_announce.md",
@@ -255,6 +260,7 @@ class SubagentManager:
             tools_used=", ".join(sub_result.tools_used) if sub_result and sub_result.tools_used else "",
             iteration_count=sub_result.iteration_count if sub_result else 0,
             status=status,
+            output_schema=_schema,
         )
 
         # Inject as system message to trigger main agent.
