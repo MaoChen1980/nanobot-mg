@@ -383,7 +383,7 @@ class SubagentManager:
         worker_id: str,
         worker_label: str,
         context: str = "",
-        timeout: float = 120.0,
+        timeout: float = 300.0,
     ) -> str:
         """Blocking: Worker asks Orchestrator for input, waits for response."""
         if not self.bus:

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     build_parameters_schema(
         question=p("string", "The question for the Orchestrator"),
         context=p("string", "Optional context to help the Orchestrator understand the question"),
-        timeout=p("number", "Seconds to wait before continuing autonomously (default 120)"),
+        timeout=p("number", "Seconds to wait before continuing autonomously (default 300)"),
         required=["question"],
     )
 )
@@ -43,10 +43,10 @@ class RequestOrchestratorInputTool(Tool):
             "- 只是一般性通知 → 用 notify_orchestrator\n"
             "- 可以跳过或绕过的问题 → 自己决策，不要阻塞\n\n"
             "**注意**: Orchestrator 回复前会暂停执行。"
-            "超时（默认 120s）后自动继续自主执行。"
+            "超时（默认 300s）后自动继续自主执行。"
         )
 
-    async def execute(self, question: str, context: str = "", timeout: float = 120.0, **kwargs: Any) -> str:
+    async def execute(self, question: str, context: str = "", timeout: float = 300.0, **kwargs: Any) -> str:
         return await self._manager.request_orchestrator_input(
             question=question,
             worker_id=self._worker_id,
