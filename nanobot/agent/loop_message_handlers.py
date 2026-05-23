@@ -19,6 +19,23 @@ from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.tools.message import MessageTool
 
 
+def _has_recent_user_response(session, content):
+    """Check if session already has a user message matching *content* with an assistant response."""
+    for i in range(len(session.messages) - 1, -1, -1):
+        if session.messages[i].get("role") == "assistant":
+            continue
+        if session.messages[i].get("role") == "user":
+            stored = session.messages[i].get("content", "")
+            if stored.strip() == content.strip():
+                has_assistant = any(
+                    m.get("role") == "assistant" and m.get("content")
+                    for m in session.messages[i:]
+                )
+                return has_assistant
+        break
+    return False
+
+
 class SystemMessageHandler:
     def __init__(self, loop):
         self._loop = loop
@@ -138,6 +155,15 @@ class UserMessageHandler:
         # Stage 1: session preparation
         session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
 
+        # Fix 3: Re-dispatch guard — skip if session already has this exact message
+        # with a matching assistant response (means prior dispatch already completed).
+        if _has_recent_user_response(session, msg.content):
+            logger.info("Re-dispatch detected for session {} (msg='{}...'), skipping", key, msg.content[:40])
+            return None
+
+        # Fix 1: Reset iteration counter — each new turn starts at 0
+        self._loop._current_iteration = 0
+
         # Stage 2: tool context
         self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         self._maybe_start_message_tool()
@@ -201,6 +227,16 @@ class UserMessageHandler:
         if adjusted < 1024:
             adjusted = raw_budget
         history = session.get_history(max_turns=200, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+
+        # Fix 2: If history is empty but session has messages, it means the token
+        # budget dropped everything. Log warning and fall back to unfiltered history.
+        if not history and session.messages:
+            logger.warning(
+                "get_history returned empty for session {} ({} msgs, budget={}), falling back",
+                key, len(session.messages), adjusted,
+            )
+            history = session.get_history(max_turns=200, max_tokens=0, include_timestamps=True, timezone=self._loop.context.timezone)
+
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key
 
