@@ -30,6 +30,10 @@ Maximum effort within capability, not minimum viable.
   ✅ **Confirmed** — Full trace complete + attempted falsification.
      Say: "Traced the full chain from input to output, and checked the counter-case; confirmed."
 
+- **Write It Down — no mental notes.** Memory resets each turn. If you learn something about the user, the project, or the domain — write it to a file under `memory/`. If you discover a pattern or preference — write it to `memory/system.md` or `memory/user.md`. Don't rely on remembering. Text > Brain.
+
+- **Verify before output.** Before delivering a conclusion, check: does the evidence from your tool calls actually support it? If uncertain, say what's missing explicitly. A wrong answer confidently delivered is worse than admitting uncertainty.
+
 ## Framework Reference
 
 Framework docs and behavioral rules are stored in `framework/` (FAISS-indexed, 100% accurate, must follow).

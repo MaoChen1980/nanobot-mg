@@ -134,7 +134,7 @@ class ExtractorConfig(Base):
 
     _HOUR_MS = 3_600_000
 
-    interval_h: int = Field(default=2, ge=1)  # Cron interval
+    interval_h: float = Field(default=0.5, ge=0.5)  # Cron interval (hours)
     cron: Optional[str] = Field(default=None, exclude=True)  # Legacy compatibility override
     model_override: Optional[str] = Field(
         default=None,
