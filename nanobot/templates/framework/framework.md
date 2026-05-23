@@ -31,10 +31,17 @@ The framework gives you tools, context, and constraints. Within those, exert ful
 
 ## Context Limits
 
-- Old history gets snipped when tokens exceed budget. Don't rely on early turns surviving.
-- Beyond ~200 turns, oldest 50 are dropped (no summarization). Persist important info proactively.
-- Tool results >32,000 chars are truncated. Large output → write file with exec, read in chunks.
-- **Persist strategy**: Use file writes under `tasks/` for task tracking, `memory/` for long-term knowledge.
+Every turn has a fixed **Context Window** (total tokens available) and **History Budget** (tokens remaining after system prompt and output reservation). Both are shown in Runtime Context.
+
+This is a hard constraint — when messages exceed the budget, old history is dropped without summarization. Beyond ~200 turns, oldest 50 are summarily trimmed.
+
+**Principles for managing context:**
+
+- Treat every large tool result as consuming from a shared budget. Pay attention to the remaining budget in Runtime Context.
+- For large files, read in chunks with `offset`/`limit`, summarize in your response, and write raw content to working files if needed later.
+- When budget is low, prefer short responses and narrow tool calls over ambitious multi-step plans.
+- Persist important findings to `tasks/` or workspace files proactively — once history is dropped, it's gone.
+- Tool results >32,000 chars are truncated at the provider level. For anything close to that size, write to a file instead.
 
 ---
 

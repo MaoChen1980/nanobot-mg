@@ -37,6 +37,8 @@ class ContextState:
     tool_definitions: list[dict[str, Any]] | None = None
     current_iteration: int | None = None
     max_iterations: int | None = None
+    context_window_tokens: int | None = None
+    history_budget_tokens: int | None = None
 
 
 class ContextBuilder:
@@ -567,6 +569,10 @@ class ContextBuilder:
             runtime_lines.append(f"Channel: {channel}")
         if cs.current_iteration is not None and cs.max_iterations is not None:
             runtime_lines.append(f"Iteration: {cs.current_iteration}/{cs.max_iterations}")
+        if cs.context_window_tokens is not None:
+            runtime_lines.append(f"Context Window: {cs.context_window_tokens} tokens")
+        if cs.history_budget_tokens is not None:
+            runtime_lines.append(f"History Budget: ~{cs.history_budget_tokens} tokens available")
         sys_dynamic_parts.append("\n".join(runtime_lines))
 
         memory_section = self._build_memory_section()

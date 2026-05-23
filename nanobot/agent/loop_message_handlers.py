@@ -72,6 +72,8 @@ class SystemMessageHandler:
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
+            context_window_tokens=self._loop.context_window_tokens or None,
+            history_budget_tokens=adjusted or None,
         )
         messages = self._loop.context.build_messages(
             history=history,
@@ -153,7 +155,7 @@ class UserMessageHandler:
             return result
 
         # Stage 1: session preparation
-        session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
+        session, pending, history, channel, chat_id, key, budget_adjusted, context_window = self._prepare_session(msg, session_key)
 
         # Fix 3: Re-dispatch guard — skip if session already has this exact message
         # with a matching assistant response (means prior dispatch already completed).
@@ -169,7 +171,7 @@ class UserMessageHandler:
         self._maybe_start_message_tool()
 
         # Stage 3: build initial messages
-        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session)
+        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session, budget_adjusted, context_window)
         initial_msgs_count = len(initial_messages)
 
         # Stage 4: callbacks
@@ -238,7 +240,7 @@ class UserMessageHandler:
             history = session.get_history(max_turns=200, max_tokens=0, include_timestamps=True, timezone=self._loop.context.timezone)
 
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
-        return session, pending, history, channel, chat_id, key
+        return session, pending, history, channel, chat_id, key, adjusted, self._loop.context_window_tokens
 
     async def _dispatch_command(self, msg, session, key):
         """Run command dispatch, return result if handled."""
@@ -258,7 +260,7 @@ class UserMessageHandler:
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
 
-    def _build_initial_messages(self, msg, history, pending, session):
+    def _build_initial_messages(self, msg, history, pending, session, budget_adjusted=0, context_window=0):
         """Build the initial message list for the agent loop."""
         from nanobot.agent.tools.ask import pending_ask_user_id, ask_user_tool_result_messages
         pending_ask_id = pending_ask_user_id(history)
@@ -274,6 +276,8 @@ class UserMessageHandler:
                 tool_definitions=self._loop.tools.get_definitions(),
                 current_iteration=self._loop._current_iteration,
                 max_iterations=self._loop.max_iterations,
+                context_window_tokens=context_window or None,
+                history_budget_tokens=budget_adjusted or None,
             )
             initial_messages = self._loop.context.build_messages(
                 history=history,
