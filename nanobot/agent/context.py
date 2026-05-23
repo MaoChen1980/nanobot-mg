@@ -327,27 +327,6 @@ class ContextBuilder:
             + self._shift_headings(content, offset=1)
         )
 
-    def _build_project_card_section(self) -> str:
-        """Read project_card.md from project root for context injection."""
-        if self.project_root is None:
-            return ""
-        card_path = self.project_root / "project_card.md"
-        if not card_path.exists():
-            return ""
-        try:
-            content = card_path.read_text(encoding="utf-8").strip()
-        except Exception:
-            logger.warning("Failed to read project card at {}", card_path)
-            return ""
-        if not content:
-            return ""
-        return (
-            "## Project Card\n\n"
-            "Project context (generated from actual filesystem). "
-            "This is the source of truth about the project structure.\n\n"
-            + self._shift_headings(content, offset=1)
-        )
-
     # -- vector-indexed memory -------------------------------------------------
 
     def _build_memory_section(self) -> str:
@@ -601,10 +580,6 @@ class ContextBuilder:
         current_block = self._build_current_context_section()
         if current_block:
             sys_dynamic_parts.append(current_block)
-
-        project_card = self._build_project_card_section()
-        if project_card:
-            sys_dynamic_parts.append(project_card)
 
         if sys_dynamic_parts:
             sys_static = sys_static + "\n\n# Runtime Context\n\n" + "\n\n".join(sys_dynamic_parts)

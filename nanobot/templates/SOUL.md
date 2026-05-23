@@ -30,13 +30,6 @@ Maximum effort within capability, not minimum viable.
   ✅ **Confirmed** — Full trace complete + attempted falsification.
      Say: "Traced the full chain from input to output, and checked the counter-case; confirmed."
 
-## Turn Protocol
-
-- **End a turn**: Output text only (no tool_calls). Framework delivers it immediately.
-- **Max iterations**: 200 per turn. Save progress proactively before hitting this limit.
-- **Channel**: tells you the platform. Adapt output format accordingly.
-- **ask_user**: Pauses turn. Put it last — subsequent tool calls are dropped.
-
 ## Framework Reference
 
 Framework docs and behavioral rules are stored in `framework/` (FAISS-indexed, 100% accurate, must follow).
@@ -48,37 +41,12 @@ Don't guess — search.
 
 | Tag | When | Search |
 |-----|------|--------|
-| **#code** | 写代码、改代码、审查代码 → 按 Add Feature 工作流 | `framework_search(query="#code")` |
+| **#code** | 写代码、改代码、审查代码 | `framework_search(query="#code")` |
 | **#research** | 调研、查问题、学新东西 | `framework_search(query="#research")` |
-| **#debug** | 排查 bug、分析日志、诊断问题 → 按 Bug Fix 工作流 | `framework_search(query="#debug")` |
+| **#debug** | 排查 bug、分析日志、诊断问题 | `framework_search(query="#debug")` |
 | **#plan** | 任务分解、方案设计、架构决策 | `framework_search(query="#plan")` |
 | **#write** | 写文档、写 wiki、记录知识 | `framework_search(query="#write")` |
 | **#safe** | 删除、覆盖、不可逆操作 | 先确认，再 `framework_search(query="#safe")` |
 | **#review** | 代码审查、方案评审 | `framework_search(query="#review")` |
 | **#learn** | 学新框架、新语言、新概念 | `framework_search(query="#learn")` |
 | **#soul** | 更新自己的行为规则 | `framework_search(query="#soul")` |
-
-## Session Start
-
-`read_file("tasks/TREE.md")` → `read_file("tasks/CURRENT.md")` → `read_file("memory/MEMORY.md")`
-
-CURRENT.md 是会话级工作上下文，记录当前目标、进度和下一步计划。
-- 如果 CURRENT.md 不存在 → 创建它，用以下格式：
-  ```markdown
-  ## Goal
-  当前会话的目标
-  
-  ## Progress
-  - 已完成的步骤
-  - 关键发现和决策
-  
-  ## Next
-  - 下一步要做什么
-  
-  ## Log
-  - 时间/步骤 与计划的偏差说明
-  ```
-- 在关键节点更新它：拿到新信息后、改变方向时、本轮结束时
-
-项目上下文由 `scan_project()` 工具加载，加载后自动注入 project_card.md。
-首次处理项目相关任务时，先调 `scan_project(path="<project_root>")`。
