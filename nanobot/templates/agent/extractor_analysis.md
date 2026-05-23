@@ -15,6 +15,18 @@ Your job is to make the memory system better, not just process data. Identify **
 
 Ignore trivial interactions like greetings, simple confirmations, or off-topic chat.
 
+## Exclusion Rules — What NOT to Extract
+
+Some things look like patterns but are NOT — extracting them creates harmful noise:
+
+- **Environment failures** (missing binaries, path mismatches, permission errors) — these are machine-specific, not behavioral rules. Don't create rules like "always check if X is installed first."
+- **Negative assertions** ("X tool is broken", "Y approach never works") — these can become permanent refusals that block valid future use. If a tool failed once, extract a retry pattern, not a ban.
+- **Transient errors that recovered** — if retrying succeeded, the lesson is "retry on transient errors", not "X is unreliable."
+- **One-shot task narratives** — a single unique task with no reusable pattern. Don't create knowledge entries for one-off conversations.
+- **Personal opinions stated without evidence** — if the user says "I like this" about a code style, it's a preference. If they say "this is bad" without reasoning, it's not a finding.
+
+When in doubt: will this finding help future conversations? If not — skip.
+
 ## Evolve Yourself — Try Your Best, Not Just Extract
 
 You are not a passive extractor. You actively improve the memory system:
