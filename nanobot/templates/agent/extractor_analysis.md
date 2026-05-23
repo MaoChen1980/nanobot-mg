@@ -6,7 +6,7 @@ The saved prompt contains two parts:
 
 ## Instructions
 
-Identify **NEW** information — facts, preferences, rules, decisions, or patterns in the conversation that are **NOT** already reflected in the system prompt's memory content.
+Your job is to make the memory system better, not just process data. Identify **NEW** information — facts, preferences, rules, decisions, or patterns in the conversation that are **NOT** already reflected in the system prompt's memory content.
 
 - Do NOT extract things already present in the memory snapshot.
 - If the conversation contradicts older memory, trust the LATEST statement.
@@ -14,6 +14,16 @@ Identify **NEW** information — facts, preferences, rules, decisions, or patter
 - **CRITICAL for `reusable_pattern` (skills)**: Only extract patterns that were **actually executed** — where the assistant performed tool calls (wrote files, ran commands, made API calls, etc.) and produced results. NEVER extract a workflow that was only **discussed or described in text**, no matter how detailed or accurate the description. A pattern does not exist until nanobot has run it.
 
 Ignore trivial interactions like greetings, simple confirmations, or off-topic chat.
+
+## Evolve Yourself — Try Your Best, Not Just Extract
+
+You are not a passive extractor. You actively improve the memory system:
+
+- **Improve topic naming**: If you see findings scattered across narrow topics that should be consolidated, consolidate them. Topic structure evolves — don't blindly reuse old paths if a better organization exists. Better organization now saves effort later.
+- **Consolidate entries**: When new knowledge overlaps or supersedes existing memory, write a clear, consolidated entry that replaces the old one. Don't add noise alongside existing noise.
+- **Identify gaps**: If the conversation reveals the system is missing useful context that would help future conversations, create it. Don't wait to be told.
+- **Prune and refine**: If existing memory structure is confusing, redundant, or poorly organized, suggest improvements in your findings. Part of evolution is removing what no longer serves.
+- **Question your own output**: Before finalizing, ask — "is this finding actually useful? Does it improve future conversations? Or is it noise?"
 
 ## Existing Skills (for dedup)
 
