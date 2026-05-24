@@ -357,10 +357,9 @@ class UserMessageHandler:
             archived = self._loop.context.memory.condense_session_to_history(trimmed)
             logger.info("_finalize_turn: archived {} oldest turns", archived)
 
-        # .pt save: every N turns (50, 100, 150…), save a snapshot
-        turn_count = self._loop._pt_counters.get(session.key, 0) + 1
-        self._loop._pt_counters[session.key] = turn_count
-        if turn_count % self._loop._pt_save_interval == 0:
+        # .pt save: every N turns, using session assistant count (persists across restarts)
+        assistant_count = sum(1 for m in session.messages if m.get("role") == "assistant")
+        if assistant_count > 0 and assistant_count % self._loop._pt_save_interval == 0:
             MemoryExtractor.save_prompt_snapshot(all_msgs, self._loop.prompts_dir, session.key)
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):

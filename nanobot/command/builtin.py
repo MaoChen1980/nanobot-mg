@@ -114,7 +114,6 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     session.clear()
     loop.sessions.save(session)
     loop.sessions.invalidate(session.key)
-    loop._pt_counters[ctx.key] = 0
 
     stopped = f"Stopped {cancelled} running task(s)." if cancelled else "No running tasks."
     return OutboundMessage(

@@ -236,7 +236,6 @@ class AgentLoop:
         )
         from nanobot.utils.helpers import ensure_dir
         self.prompts_dir = ensure_dir(workspace / "prompts")
-        self._pt_counters: dict[str, int] = {}
         self._pt_save_interval = pt_save_interval
         self.extractor = MemoryExtractor(
             store=self.context.memory,
