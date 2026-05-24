@@ -49,11 +49,12 @@ class BaseProxyChannel:
         self._conn_loop: asyncio.AbstractEventLoop | None = None
         self._conn_thread: threading.Thread | None = None
         self._send_lock = threading.Lock()
-        self._async_send_lock = asyncio.Lock()
+        self._msg_send_lock = asyncio.Lock()
+        self._write_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task | None = None
         self._reader_task: asyncio.Task | None = None
         self._pending_response: asyncio.Future | None = None
-        self._pending_request_type: str | None = None
+        self._pong_future: asyncio.Future | None = None
         self._parent_pid: int = 0  # set after TCP connect
         # FIFO send queue — linearizes outbound messages so push deliveries
         # (tool/think events) always arrive before the reply.
@@ -175,56 +176,58 @@ class BaseProxyChannel:
         return HubResponse.from_dict(resp)
 
     async def _send_raw(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Low-level: write JSON dict to TCP, wait for response via background reader."""
+        """Low-level: write JSON dict to TCP, wait for response via background reader.
+
+        The TCP write is serialized through _write_lock (microseconds).  The
+        response wait happens without any lock so message sends and heartbeats
+        don't block each other.
+        """
         loop = asyncio.get_running_loop()
         future = loop.create_future()
         self._pending_response = future
-        self._pending_request_type = data.get("type", "")
         try:
-            self._writer.write((json.dumps(data) + "\n").encode())
-            await self._writer.drain()
+            async with self._write_lock:
+                self._writer.write((json.dumps(data) + "\n").encode())
+                await self._writer.drain()
             response = await asyncio.wait_for(future, timeout=120)
             return response
         finally:
             self._pending_response = None
-            self._pending_request_type = None
 
     async def _background_reader(self) -> None:
-        """Continuously read TCP messages and dispatch pushes or fulfill pending responses."""
+        """Continuously read TCP messages and dispatch pushes or fulfill pending responses.
+
+        Routes responses by type:
+        - ``pong``       → heartbeat's _pong_future (never touches _pending_response)
+        - ``deliver``    → message _pending_response (if "success") or _handle_deliver
+        - other          → _pending_response (fallback for unexpected data)
+        """
         try:
             while True:
                 line = await self._reader.readline()
                 if not line:
                     break
                 data = json.loads(line.decode())
+
+                # 1. Heartbeat pong — dedicated future, separate from message response
+                if data.get("type") == "pong":
+                    if self._pong_future is not None and not self._pong_future.done():
+                        self._pong_future.set_result(data)
+                    continue
+
+                # 2. Deliver from hub — message response (has "success") or progress update
                 if data.get("type") == "deliver":
-                    # Fulfill pending response for final replies (have "success" key).
-                    # Skip _handle_deliver here — the caller (on_message._process)
-                    # will enqueue the response. Progress deliveries (tool events,
-                    # think text) lack "success" and still go through _handle_deliver.
                     if "success" in data and self._pending_response is not None and not self._pending_response.done():
-                        # Guard: a deliver-with-success is a message response, NOT a pong.
-                        # Fulfilling a ping's future with deliver data causes the heartbeat
-                        # to see type != "pong" and reconnect unnecessarily.
-                        if self._pending_request_type == "ping":
-                            logger.debug("Ignoring deliver during ping wait, routing to _handle_deliver")
-                            await self._handle_deliver(data)
-                        else:
-                            self._pending_response.set_result(data)
+                        self._pending_response.set_result(data)
                     else:
                         logger.debug("Background reader: deliver msg to chat={}", data.get("chat_id", "")[:20])
                         await self._handle_deliver(data)
-                elif self._pending_response is not None and not self._pending_response.done():
-                    # Only fulfill if the response type matches expectation.
-                    # Prevents async route_message responses from resolving heartbeat ping futures.
-                    if self._pending_request_type == "ping" and data.get("type") != "pong":
-                        logger.warning(
-                            "Background reader: ignoring msg (expected pong, got type={}): {}",
-                            data.get("type", "none"), str(data.get("content", ""))[:60],
-                        )
-                    else:
-                        logger.trace("Background reader: fulfill pending response")
-                        self._pending_response.set_result(data)
+                    continue
+
+                # 3. Unexpected response type — fulfill pending response if any
+                if self._pending_response is not None and not self._pending_response.done():
+                    logger.trace("Background reader: fulfill pending response")
+                    self._pending_response.set_result(data)
                 else:
                     has_content = bool(data.get("content"))
                     logger.warning(
@@ -389,6 +392,9 @@ class BaseProxyChannel:
         2. Hub responds to ping via TCP (with 5s timeout — half-open TCP on
            Windows can hang forever otherwise when gateway is killed)
         3. Channel is still enabled in config file on disk
+
+        Only acquires ``_write_lock`` (microseconds) — never ``_msg_send_lock``,
+        so heartbeating is never blocked by long-running message processing.
         """
         config_check_interval = 0  # counter-based throttle: check every 6th tick (30s)
         while True:
@@ -400,35 +406,50 @@ class BaseProxyChannel:
                 os._exit(1)
 
             # Check 2: hub connection health
-            # Use try-lock so heartbeat isn't blocked by long-running message sends.
-            # When lock is busy (LLM processing), verify reader health instead.
+            # Acquire write lock (microseconds — just for TCP write serialization).
+            # If busy, verify reader health instead of silently skipping.
             try:
-                await asyncio.wait_for(self._async_send_lock.acquire(), timeout=0.5)
+                await asyncio.wait_for(self._write_lock.acquire(), timeout=0.5)
             except asyncio.TimeoutError:
                 if self._reader_task is None or self._reader_task.done():
-                    logger.warning("Heartbeat: reader task dead behind send lock, reconnecting...")
+                    logger.warning("Heartbeat: reader task dead behind write lock, reconnecting...")
                     await self._reconnect_to_hub()
                 else:
-                    logger.debug("Heartbeat skipped: send lock is busy (msg in progress)")
+                    logger.debug("Heartbeat skipped: write lock busy (msg write in progress)")
                 continue
+
             try:
-                # Pre-check: reconnect directly if writer is already dead
                 if self._writer is None or self._writer.is_closing():
                     logger.warning("Heartbeat detected dead writer, reconnecting...")
                     await self._reconnect_to_hub()
                     continue
-                resp = await asyncio.wait_for(
-                    self._send_raw({"type": "ping"}),
-                    timeout=5,
-                )
+
+                loop = asyncio.get_running_loop()
+                pong_future = loop.create_future()
+                self._pong_future = pong_future
+                self._writer.write((json.dumps({"type": "ping"}) + "\n").encode())
+                await self._writer.drain()
+            except Exception as e:
+                logger.warning("Heartbeat ping write failed ({}), reconnecting...", repr(e))
+                await self._reconnect_to_hub()
+                continue
+            finally:
+                self._write_lock.release()
+
+            # Wait for pong outside any lock — message sends are not blocked
+            try:
+                resp = await asyncio.wait_for(pong_future, timeout=5)
                 if resp.get("type") != "pong":
                     logger.error("Heartbeat: unexpected pong response, reconnecting...")
                     await self._reconnect_to_hub()
+            except asyncio.TimeoutError:
+                logger.warning("Heartbeat pong timeout")
+                await self._reconnect_to_hub()
             except Exception as e:
                 logger.warning("Heartbeat ping failed ({}), reconnecting...", repr(e))
                 await self._reconnect_to_hub()
             finally:
-                self._async_send_lock.release()
+                self._pong_future = None
 
             # Check 3: config file says channel is still enabled (every 30s)
             config_check_interval += 1
@@ -438,7 +459,7 @@ class BaseProxyChannel:
 
     async def _send_with_reconnect(self, msg: dict[str, Any]) -> HubResponse:
         """Send with automatic reconnect on failure."""
-        async with self._async_send_lock:
+        async with self._msg_send_lock:
             last_error = None
             for attempt in range(3):
                 try:
