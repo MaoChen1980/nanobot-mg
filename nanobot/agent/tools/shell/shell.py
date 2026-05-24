@@ -289,6 +289,11 @@ class ExecTool(Tool):
 
         if _IS_WINDOWS:
             cwd = os.path.normpath(cwd)
+            # PowerShell's `curl` is an alias for Invoke-WebRequest, not
+            # the real curl.exe.  Replace bare `curl` at start-of-command
+            # so piped/inlined invocations like `curl -s url | grep ...`
+            # don't block waiting for interactive Uri parameter input.
+            command = re.sub(r'^(\s*)curl(?=\s|$)', r'\1curl.exe', command, count=1)
 
         if self.path_append:
             if _IS_WINDOWS:
