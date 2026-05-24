@@ -60,6 +60,9 @@ class SessionLifecycle:
         if pending_ask_id or not (has_text or media_paths):
             return False
         extra: dict[str, Any] = {"media": list(media_paths)} if media_paths else {}
+        message_id = msg.metadata.get("message_id", "")
+        if message_id:
+            extra["_message_id"] = message_id
         session.add_message(
             "user", msg.content,
             timestamp=msg.timestamp.isoformat(),

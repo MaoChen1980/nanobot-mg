@@ -347,9 +347,8 @@ class HubTCPServer:
                         pending_queue=pending_queue,
                     )
             if response is None:
-                resp = HubResponse(success=True, content="")
-            else:
-                resp = outbound_to_hub_response(response, reply_to=msg.message_id)
+                return
+            resp = outbound_to_hub_response(response, reply_to=msg.message_id)
         except Exception as e:
             logger.exception("Error processing proxy TCP message: {}", e)
             resp = HubResponse(success=False, error=str(e))
