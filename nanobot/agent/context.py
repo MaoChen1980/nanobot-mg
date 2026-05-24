@@ -18,6 +18,7 @@ from loguru import logger
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.helpers import build_assistant_message, current_time_str, format_message_header
+from nanobot.utils.helpers import split_thinking_messages as _split_thinking_messages
 from nanobot.utils.media_decode import detect_image_mime
 from nanobot.utils.prompt_templates import render_template
 from nanobot.utils.tools_index import rebuild_tools_index as _rebuild_tools_index
@@ -226,81 +227,8 @@ class ContextBuilder:
     @staticmethod
     def _split_thinking_messages(messages: list[dict]) -> list[dict]:
         """Split assistant messages with thinking/reasoning into separate messages.
-
-        When an assistant message contains both thinking/reasoning and tool calls
-        (or regular content), split it into two messages so the LLM doesn't
-        confuse thinking text with tool call structure during history parsing:
-
-          1. Assistant message with just the thinking/reasoning content
-          2. Assistant message with the original content / tool calls
-        """
-        result: list[dict] = []
-        for msg in messages:
-            if msg.get("role") != "assistant":
-                result.append(msg)
-                continue
-
-            # Extract thinking from structured fields
-            thinking = None
-
-            rc = msg.get("reasoning_content")
-            if isinstance(rc, str) and rc.strip():
-                thinking = rc.strip()
-
-            if not thinking:
-                blocks = msg.get("thinking_blocks")
-                if isinstance(blocks, list):
-                    texts = [b.get("thinking", "") for b in blocks if isinstance(b, dict) and b.get("thinking")]
-                    if texts:
-                        thinking = " ".join(texts)
-
-            if not thinking:
-                rd = msg.get("reasoning_details")
-                if isinstance(rd, list):
-                    texts = [d.get("reasoning", "") for d in rd if isinstance(d, dict) and d.get("reasoning")]
-                    if texts:
-                        thinking = " ".join(texts)
-
-            if not thinking:
-                result.append(msg)
-                continue
-
-            # Detect if content was previously backfilled
-            content = msg.get("content", "")
-            content_is_backfilled = (
-                isinstance(content, str)
-                and content.strip()
-                and content.strip() == thinking
-            )
-
-            has_tool_calls = bool(msg.get("tool_calls"))
-            has_real_content = (
-                isinstance(content, str)
-                and content.strip()
-                and not content_is_backfilled
-            )
-            has_content_list = isinstance(content, list) and bool(content)
-
-            if has_tool_calls or has_real_content or has_content_list:
-                # Split into two messages
-                msg_think: dict = {"role": "assistant", "content": thinking}
-                msg_rest: dict = {
-                    k: v for k, v in msg.items()
-                    if k not in ("reasoning_content", "reasoning_details", "thinking_blocks")
-                }
-                if has_tool_calls:
-                    msg_rest["content"] = ""
-                result.append(msg_think)
-                result.append(msg_rest)
-            else:
-                # Thinking only — single message
-                cleaned = dict(msg)
-                for k in ("reasoning_content", "reasoning_details", "thinking_blocks"):
-                    cleaned.pop(k, None)
-                cleaned["content"] = thinking
-                result.append(cleaned)
-
-        return result
+        Delegates to nanobot.utils.helpers.split_thinking_messages."""
+        return _split_thinking_messages(messages)
 
     def _build_task_tree_section(self) -> str:
         """Read tasks/TREE.md from the workspace for context injection."""

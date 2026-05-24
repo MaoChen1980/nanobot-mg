@@ -716,6 +716,7 @@ class GatewayApplication:
             proxy_tcp_port,
             self.agent,
             self.proxy_manager,
+            bus=self.bus,
             concurrency_gate=concurrency_gate,
         )
         await self.hub_server.start()

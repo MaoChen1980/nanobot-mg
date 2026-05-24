@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from nanobot.agent.context import ContextBuilder
 from nanobot.agent.context_vars import _current_messages_for_subagent, _current_agent_loop
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
@@ -20,6 +19,7 @@ from nanobot.utils.helpers import (
     estimate_message_tokens,
     estimate_prompt_tokens_chain,
     maybe_persist_tool_result,
+    split_thinking_messages,
     truncate_text,
 )
 from nanobot.utils.runtime import (
@@ -230,7 +230,7 @@ class AgentRunner:
                 messages_for_model = trim_history_to_budget(self.provider, spec, messages_for_model)
                 messages_for_model = drop_orphan_tool_results(messages_for_model)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
-                messages_for_model = ContextBuilder._split_thinking_messages(messages_for_model)
+                messages_for_model = split_thinking_messages(messages_for_model)
             except Exception as exc:
                 logger.warning(
                     "Context governance failed on turn {} for {}: {}; applying minimal repair",
@@ -239,7 +239,7 @@ class AgentRunner:
                 try:
                     messages_for_model = drop_orphan_tool_results(messages)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
-                    messages_for_model = ContextBuilder._split_thinking_messages(messages_for_model)
+                    messages_for_model = split_thinking_messages(messages_for_model)
                 except Exception:
                     messages_for_model = messages
 

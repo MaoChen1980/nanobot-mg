@@ -15,7 +15,7 @@ from typing import Any
 from loguru import logger
 
 from nanobot.proxy.manager import ProxyManager
-from nanobot.proxy.protocol import HubResponse, ProxyMessage
+from nanobot.proxy.protocol import HubResponse, ProxyMessage, outbound_to_hub_response
 from nanobot.utils.tool_hints import format_single_tool_hint
 
 
@@ -36,12 +36,14 @@ class HubTCPServer:
         port: int,
         agent_loop: Any,
         proxy_manager: ProxyManager,
+        bus: Any = None,
         concurrency_gate: asyncio.Semaphore | None = None,
     ):
         self._host = host
         self._port = port
         self._agent_loop = agent_loop
         self._proxy_manager = proxy_manager
+        self._bus = bus
         self._concurrency_gate = concurrency_gate
         self._server: asyncio.Server | None = None
         # message_id → expiry timestamp; used to drop duplicate messages
@@ -190,9 +192,7 @@ class HubTCPServer:
         _outbound_bridge_task: asyncio.Task | None = None
 
         async def _bridge_outbound() -> None:
-            bus = getattr(self._agent_loop, "bus", None)
-            if bus is None:
-                return
+            bus = self._bus
             try:
                 while True:
                     try:
@@ -290,7 +290,7 @@ class HubTCPServer:
             if response is None:
                 resp = HubResponse(success=True, content="")
             else:
-                resp = response.to_hub_response(reply_to=msg.message_id)
+                resp = outbound_to_hub_response(response, reply_to=msg.message_id)
         except Exception as e:
             logger.exception("Error processing proxy TCP message: {}", e)
             resp = HubResponse(success=False, error=str(e))

@@ -97,3 +97,18 @@ class HubResponse:
         )
 
 
+def outbound_to_hub_response(msg, reply_to: str = "") -> HubResponse:
+    """Convert an OutboundMessage to HubResponse for proxy wire transport.
+    Lives in proxy/protocol.py (the proxy layer) rather than on OutboundMessage
+    itself to avoid a reverse dependency from bus -> proxy.
+    """
+    return HubResponse(
+        success=True,
+        reply_to=reply_to,
+        content=msg.content,
+        media=getattr(msg, "media", []),
+        metadata=getattr(msg, "metadata", {}),
+        buttons=getattr(msg, "buttons", []),
+    )
+
+

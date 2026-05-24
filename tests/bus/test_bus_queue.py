@@ -64,12 +64,13 @@ class TestInboundMessage:
 
 
 class TestOutboundMessage:
-    def test_to_hub_response(self):
+    def test_outbound_to_hub_response(self):
+        from nanobot.proxy.protocol import outbound_to_hub_response
         msg = OutboundMessage(
             channel="test", chat_id="c1", content="hello",
             media=["f1.txt"], metadata={"key": "val"},
         )
-        resp = msg.to_hub_response(reply_to="parent123")
+        resp = outbound_to_hub_response(msg, reply_to="parent123")
         assert resp.success is True
         assert resp.content == "hello"
         assert resp.media == ["f1.txt"]

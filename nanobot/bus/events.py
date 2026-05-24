@@ -37,15 +37,3 @@ class OutboundMessage:
     metadata: dict[str, Any] = field(default_factory=dict)
     buttons: list[list[str]] = field(default_factory=list)
 
-    def to_hub_response(self, reply_to: str = "") -> "HubResponse":
-        """Convert to HubResponse for proxy wire transport."""
-        from nanobot.proxy.protocol import HubResponse
-        return HubResponse(
-            success=True,
-            reply_to=reply_to,
-            content=self.content,
-            media=self.media,
-            metadata=self.metadata,
-            buttons=self.buttons,
-        )
-
