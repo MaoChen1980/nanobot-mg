@@ -75,7 +75,7 @@ class SystemMessageHandler:
         adjusted = raw_budget - sys_tokens
         if adjusted < 1024:
             adjusted = raw_budget
-        history = session.get_history(max_turns=200, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        history = session.get_history(max_turns=80, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
@@ -248,7 +248,7 @@ class UserMessageHandler:
         adjusted = raw_budget - sys_tokens
         if adjusted < 1024:
             adjusted = raw_budget
-        history = session.get_history(max_turns=200, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        history = session.get_history(max_turns=80, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         # Log what get_history actually returned
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns = sum(1 for m in history if m.get("role") == "assistant")
@@ -264,7 +264,7 @@ class UserMessageHandler:
                 "sys_tokens={}), falling back to max_tokens=0",
                 key, len(session.messages), assistant_count, total_tokens, adjusted, sys_tokens,
             )
-            history = session.get_history(max_turns=200, max_tokens=0, include_timestamps=True, timezone=self._loop.context.timezone)
+            history = session.get_history(max_turns=80, max_tokens=0, include_timestamps=True, timezone=self._loop.context.timezone)
 
         if not history and session.messages:
             logger.error(

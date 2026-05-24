@@ -78,8 +78,8 @@ class SessionLifecycle:
 
         Returns any trimmed messages for the caller to archive to history.
         """
-        max_turns = session.metadata.get("max_turns", 200)
-        trim_batch = session.metadata.get("trim_batch", 50)
+        max_turns = session.metadata.get("max_turns", 80)
+        trim_batch = session.metadata.get("trim_batch", 20)
         trimmed = session.trim_old_turns(max_turns, trim_batch)
         session.enforce_file_cap()
         self._recovery.clear_pending_user_turn(session)
