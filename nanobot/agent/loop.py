@@ -1063,7 +1063,7 @@ class AgentLoop:
         for m in messages[skip:]:
             entry = dict(m)
             role, content = entry.get("role"), entry.get("content")
-            if role == "assistant" and not content and not entry.get("tool_calls"):
+            if role == "assistant" and not entry.get("tool_calls") and not (content and content.strip() if isinstance(content, str) else content):
                 continue  # skip empty assistant messages — they poison session context
             if role == "tool":
                 if isinstance(content, str) and len(content) > self.max_tool_result_chars:

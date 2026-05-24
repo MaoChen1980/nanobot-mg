@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from nanobot.agent.context import ContextState
 from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
+from nanobot.agent.memory_extractor import MemoryExtractor
 from nanobot.agent.tools.message import MessageTool
 
 
@@ -213,12 +214,22 @@ class UserMessageHandler:
         """Restore checkpoints, return session + derived context."""
         key = session_key or msg.session_key
         session = self._loop.lifecycle.prepare(key)
-        logger.debug(
-            "Session {}: {} messages in store",
-            key, len(session.messages),
-        )
-        pending = None
+
+        # DEBUG: log actual session state for diagnosing session-reset-after-reconnect
+        session_msg_count = len(session.messages)
+        session_keys = list(self._loop.sessions._cache.keys()) if hasattr(self._loop.sessions, '_cache') else []
+        in_cache = key in session_keys if hasattr(self._loop.sessions, '_cache') else 'unknown'
+        # Count assistant messages = turns
+        assistant_count = sum(1 for m in session.messages if m.get("role") == "assistant")
+        # Estimate total history tokens
         from nanobot.utils.helpers import estimate_message_tokens
+        total_tokens = sum(estimate_message_tokens(m) for m in session.messages) if session.messages else 0
+        logger.info(
+            "SESSION_DBG: key={}, msgs={}, turns={}, tokens={}, in_cache={}, cache_keys_count={}",
+            key, session_msg_count, assistant_count, total_tokens, in_cache, len(session_keys),
+        )
+
+        pending = None
         raw_budget = self._loop._compute_history_budget()
         tool_defs = self._loop.tools.get_definitions()
         sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
@@ -232,17 +243,17 @@ class UserMessageHandler:
         # budget dropped everything. Log warning and fall back to unfiltered history.
         if not history and session.messages:
             logger.warning(
-                "get_history returned empty for session {} ({} msgs, budget={}, "
+                "get_history returned empty for session {} ({} msgs, {} turns, {} tokens, budget={}, "
                 "sys_tokens={}), falling back to max_tokens=0",
-                key, len(session.messages), adjusted, sys_tokens,
+                key, len(session.messages), assistant_count, total_tokens, adjusted, sys_tokens,
             )
             history = session.get_history(max_turns=200, max_tokens=0, include_timestamps=True, timezone=self._loop.context.timezone)
 
         if not history and session.messages:
             logger.error(
                 "get_history returned empty even with max_tokens=0 for session {} "
-                "({} msgs), falling back to raw session.messages",
-                key, len(session.messages),
+                "({} msgs, {} turns, {} tokens), falling back to raw session.messages",
+                key, len(session.messages), assistant_count, total_tokens,
             )
             # Last-resort fallback: manually build history entries from raw messages.
             for m in session.messages:
