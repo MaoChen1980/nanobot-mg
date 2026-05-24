@@ -1247,6 +1247,65 @@ class AgentLoop:
         finally:
             loop.close()
 
+    async def _summarize_turns(self, turns: list[dict]) -> str:
+        """Summarize a list of conversation turns via LLM for context compression.
+
+        Called when session turns reach the trim threshold. The summary is
+        injected back as an assistant+user pair so trimmed context survives.
+        """
+        lines: list[str] = []
+        for msg in turns:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                lines.append(f"<{role}>\n{content}\n</{role}>")
+            elif isinstance(content, list):
+                texts = [
+                    b.get("text", "") for b in content
+                    if isinstance(b, dict) and b.get("type") == "text"
+                ]
+                joined = "\n".join(texts)
+                if joined:
+                    lines.append(f"<{role}>\n{joined}\n</{role}>")
+        turns_text = "\n".join(lines)
+
+        prompt = (
+            "你正在总结即将被裁剪的旧对话轮次。\n"
+            "你的任务：提取\"未来的你\"需要知道的上下文。\n"
+            "\n"
+            "## 必须保留（如果在这些轮次中出现）\n"
+            "- 事实: 文件路径、参数名、配置值、API\n"
+            "- 决定: 架构选择、为什么选 A 不选 B\n"
+            "- 话题: 正在做什么、瓶颈、下一步\n"
+            "\n"
+            "## 必须丢弃\n"
+            "- 试错过程、中间报错\n"
+            "- 已被替代的值（200→80 只记 80）\n"
+            "- 寒暄\n"
+            "\n"
+            "## 你可以并且应该补充任何你觉得重要的内容\n"
+            "以上只是最低要求。如果有重要的上下文不属于这些分类，照样加上。\n"
+            "你的判断比分类更重要。\n"
+            "\n"
+            "## 输出\n"
+            "简洁的要点列表，按主题分组。不要按轮次顺序。\n"
+            "\n"
+            "以下是需要总结的对话：\n\n"
+            f"{turns_text}"
+        )
+
+        try:
+            resp = await self.provider.chat(
+                [{"role": "user", "content": prompt}],
+                model=self.model,
+            )
+            summary = (resp.get("content") or "").strip()
+            logger.info("Summarized {} turns ({} chars)", len(turns), len(summary))
+            return summary or "(no context to preserve)"
+        except Exception as e:
+            logger.warning("Failed to summarize turns: {}", e)
+            return ""
+
     async def process_direct(
         self,
         content: str,

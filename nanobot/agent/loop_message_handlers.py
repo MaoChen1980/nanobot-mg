@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from nanobot.agent.context import ContextState
 from nanobot.bus.events import OutboundMessage
+from nanobot.session.manager import Session
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.memory_extractor import MemoryExtractor
 from nanobot.agent.tools.message import MessageTool
@@ -216,7 +217,7 @@ class UserMessageHandler:
             # but still clear any runtime checkpoint the loop may have set.
             self._loop.lifecycle.finalize_ephemeral(session)
         else:
-            self._finalize_turn(session, all_msgs, initial_msgs_count, user_persisted_early, final_content)
+            await self._finalize_turn(session, all_msgs, initial_msgs_count, user_persisted_early, final_content)
 
         # Stage 8: build outbound response
         return self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)
@@ -351,14 +352,34 @@ class UserMessageHandler:
         """Add user message to session before the loop runs (persisted at finalize)."""
         return self._loop.lifecycle.persist_user_message(session, msg, pending_ask_id)
 
-    def _finalize_turn(self, session, all_msgs, initial_msgs_count, user_persisted_early, final_content):
-        """Save turn, enforce file cap, clear recovery state."""
+    async def _finalize_turn(self, session, all_msgs, initial_msgs_count, user_persisted_early, final_content):
+        """Save turn, compress context via LLM summarization, enforce file cap, clear recovery state."""
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE
         # skip: system prompt (1) + retained_history + user message if already in session
         # initial_msgs_count = 1 + len(retained_history) + 1
         save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
         self._loop._append_turn_to_session(session, all_msgs, save_skip)
+
+        # Context compression: before trimming, summarize oldest turns via LLM
+        max_turns = session.metadata.get("max_turns", 80)
+        trim_batch = session.metadata.get("trim_batch", 20)
+        turns = Session._split_turns_by_assistant(session.messages)
+        if len(turns) >= max_turns:
+            trim_turns = turns[:trim_batch]
+            boundary = sum(len(t) for t in trim_turns)
+            trim_flat = [m for turn in trim_turns for m in turn]
+            summary = await self._loop._summarize_turns(trim_flat)
+            if summary:
+                summary_pair = [
+                    {"role": "assistant", "content": summary},
+                    {"role": "user", "content": "ok"},
+                ]
+                session.messages[boundary:boundary] = summary_pair
+                logger.info(
+                    "Injected context summary at trim boundary for {} (summarized {} turns)",
+                    session.key, trim_batch,
+                )
 
         # Lifecycle: trim, cap, clear checkpoints, save
         trimmed = self._loop.lifecycle.finalize(session)
