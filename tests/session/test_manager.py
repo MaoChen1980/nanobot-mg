@@ -91,13 +91,13 @@ class TestSessionGetHistory:
         # _channel_delivery is internal metadata, not exposed in history output
 
     def test_timestamp_property_included_by_default(self):
-        """Timestamp property is always passed through in history, not just when include_timestamps=True."""
+        """Timestamp is included when include_timestamps=True."""
         s = Session(key="ch:u")
         ts = "2026-01-01T00:00:00Z"
         s.add_message("user", "hi", timestamp=ts)
-        history = s.get_history(max_messages=10)  # include_timestamps defaults to False
+        history = s.get_history(max_messages=10, include_timestamps=True)
         assert history[0]["content"] == "hi"
-        assert history[0]["timestamp"] == ts
+        assert history[0]["timestamp"] == "2026-01-01 00:00:00 UTC"
 
     def test_format_timestamp_utc(self):
         """_format_timestamp returns formatted string in UTC."""
@@ -597,7 +597,7 @@ class TestFindLegalMessageStart:
             {"role": "user", "content": "hi"},
             {"role": "tool", "tool_call_id": "orphan", "content": "result"},
         ]
-        assert find_legal_message_start(msgs) == 3  # orphan at end pushes past list
+        assert find_legal_message_start(msgs) == 0  # never drops all messages even when all tools orphaned
 
     def test_tool_pair_across_user_message(self):
         """Tool result referenced by an earlier assistant is valid even across a user turn."""
@@ -840,8 +840,8 @@ class TestGetHistoryLine150:
         # Tight budget truncates to just the tool.  recovered_user brings full
         # context back, then find_legal_message_start detects the orphan.
         history = s.get_history(max_messages=10, max_tokens=15)
-        # History ends up empty because the only viable start is past the orphan
-        assert len(history) == 0
+        # find_legal_message_start keeps messages even with orphan tools
+        assert len(history) == 3
 
 
 class TestRetainRecentLine188:

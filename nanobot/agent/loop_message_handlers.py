@@ -238,9 +238,15 @@ class UserMessageHandler:
         if adjusted < 1024:
             adjusted = raw_budget
         history = session.get_history(max_turns=200, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        # Log what get_history actually returned
+        hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
+        hist_turns = sum(1 for m in history if m.get("role") == "assistant")
+        logger.info(
+            "HISTORY_DBG: key={}, budget_adjusted={}, history_msgs={}, history_turns={}, history_tokens={}",
+            key, adjusted, len(history), hist_turns, hist_tokens,
+        )
 
-        # Fix 2: If history is empty but session has messages, it means the token
-        # budget dropped everything. Log warning and fall back to unfiltered history.
+        # Fallback 1: If history is empty but session has messages, try max_tokens=0
         if not history and session.messages:
             logger.warning(
                 "get_history returned empty for session {} ({} msgs, {} turns, {} tokens, budget={}, "

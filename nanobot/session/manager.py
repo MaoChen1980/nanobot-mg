@@ -634,7 +634,12 @@ class SessionManager:
 
 
 def find_legal_message_start(messages: list[dict[str, Any]]) -> int:
-    """Find the first index whose tool results have matching assistant calls."""
+    """Find the first index whose tool results have matching assistant calls.
+
+    Never returns a value that would drop all messages — returning
+    ``len(messages)`` means every tool is orphaned, which is a data-quality
+    issue, not a reason to discard everything.
+    """
     declared: set[str] = set()
     start = 0
     for i, msg in enumerate(messages):
@@ -653,4 +658,6 @@ def find_legal_message_start(messages: list[dict[str, Any]]) -> int:
                         for tc in prev.get("tool_calls") or []:
                             if isinstance(tc, dict) and tc.get("id"):
                                 declared.add(str(tc["id"]))
+    if start >= len(messages):
+        start = 0
     return start

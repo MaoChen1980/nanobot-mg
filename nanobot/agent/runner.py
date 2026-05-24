@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -305,7 +306,7 @@ class AgentRunner:
                         if i < executed_count:
                             res = results[i]
                             content = _normalize(spec, tc.id, tc.name, res)
-                            ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else ""
+                            ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
                             content = self._fmt_tool_metadata(tc.name, content, ts)
                         else:
                             content = f"[ABANDONED] tool call {tc.name} was not executed due to interruption"
@@ -333,7 +334,7 @@ class AgentRunner:
                     if isinstance(fatal_error, AskUserInterrupt) and tool_call.name == "ask_user":
                         continue
                     content = _normalize(spec, tool_call.id, tool_call.name, result)
-                    ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else ""
+                    ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else datetime.now(timezone.utc).isoformat()
                     content = self._fmt_tool_metadata(tool_call.name, content, ts)
                     tool_message = {
                         "role": "tool", "tool_call_id": tool_call.id, "name": tool_call.name,

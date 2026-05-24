@@ -496,7 +496,7 @@ class AgentLoop:
         return f"{channel}:{chat_id}"
 
     def _compute_history_budget(self) -> int:
-        """Budget for history replay — leave room for output, no artificial caps."""
+        """Budget for history replay — cap output reservation so history isn't starved."""
         if self.context_window_tokens <= 0:
             return 0
         max_output = getattr(getattr(self.provider, "generation", None), "max_tokens", 4096)
@@ -504,9 +504,12 @@ class AgentLoop:
             reserved_output = int(max_output)
         except (TypeError, ValueError):
             reserved_output = 4096
-        # Let the model use its actual configured output space.
-        # The provider API enforces the real context limit — we just need
-        # a rough cap so history doesn't crowd out the entire window.
+        # The provider's max_tokens (e.g. 160K) is the *maximum* the API
+        # allows, not the amount we must reserve.  If we reserve the full
+        # max_tokens, history gets ~20K crumbs from a 200K window.  Cap
+        # output reservation at 16K — plenty for any single response —
+        # so history can use the rest.
+        reserved_output = min(reserved_output, 16384)
         budget = self.context_window_tokens - max(1, reserved_output) - 4096
         return budget if budget > 0 else max(4096, self.context_window_tokens // 4)
 
