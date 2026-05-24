@@ -1,6 +1,6 @@
 # Project Card: nanobot
 
-Last scanned: 2026-05-22T00:15:14+0800
+Last scanned: 2026-05-24T04:16:16+0800
 Project root: `E:\claude\nanobot`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~64,484
+- **Approx LOC**: ~65,072
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 290 | ~64,484 |
+| Python | 296 | ~65,072 |
 
 ## Directory Structure
 
@@ -49,6 +49,8 @@ E:\claude\nanobot/
     quick-start.md (2KB)
     README.md (2KB)
     websocket.md (12KB)
+  hooks/
+    write_commit.py (1KB)
   htmlcov/
     class_index.html (176KB)
     coverage_html_cb_188fc9a4.js (26KB)
@@ -133,19 +135,23 @@ E:\claude\nanobot/
         memory_search.py (5KB)
         message.py (7KB)
         notebook.py (7KB)
+        notify_orchestrator.py (2KB)
         output_cache.py (3KB)
         read_files.py (7KB)
         registry.py (8KB)
+        request_input.py (2KB)
+        respond_to_worker.py (2KB)
         sandbox.py (2KB)
-        scan_project.py (3KB)
+        scan_project.py (2KB)
         schema.py (2KB)
         search.py (27KB)
         self.py (20KB)
         semantic_search.py (4KB)
         shell_validators.py (4KB)
-        spawn.py (7KB)
+        spawn.py (8KB)
+        spawn_many.py (5KB)
         tool_call_log.py (3KB)
-        web.py (21KB)
+        web.py (23KB)
       verify/
       __init__.py (584B)
       context.py (28KB)
@@ -158,7 +164,7 @@ E:\claude\nanobot/
       loop_dispatch.py (7KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (17KB)
+      loop_message_handlers.py (19KB)
       loop_utils.py (3KB)
       memory.py (352B)
       memory_extractor.py (27KB)
@@ -172,10 +178,10 @@ E:\claude\nanobot/
       runner_injection.py (5KB)
       runner_llm.py (5KB)
       skills.py (11KB)
-      subagent.py (13KB)
-      subagent_prompt.py (4KB)
+      subagent.py (19KB)
+      subagent_prompt.py (7KB)
       subagent_status.py (2KB)
-      subagent_tools.py (2KB)
+      subagent_tools.py (4KB)
     api/
     bus/
     cli/
@@ -198,6 +204,7 @@ E:\claude\nanobot/
     web/
     __init__.py (1KB)
     __main__.py (147B)
+    _commit.py (56B)
     nanobot.py (4KB)
   tasks/
   tests/
@@ -207,7 +214,7 @@ E:\claude\nanobot/
   Dockerfile (2KB)
   entrypoint.sh (443B)
   LICENSE (1KB)
-  project_card.md (12KB)
+  project_card.md (13KB)
   pyproject.toml (4KB)
   README.md (6KB)
   README_en.md (4KB)
@@ -259,7 +266,7 @@ dependencies = [
     "ddgs>=9.10.0,<10.0.0; python_version >= '3.10'",
     "ddgs>=9.5.5,<9.10.0; python_version < '3.10'",
     "oauth-cli-kit>=0.1.3,<1.0.0; python_version >= '3.11'",
-... (130 more lines)
+... (133 more lines)
 ```
 
 ### .editorconfig
@@ -286,6 +293,9 @@ trim_trailing_whitespace = false
 ### .gitignore
 
 ```text
+# Build-time generated files
+nanobot/_commit.py
+
 # Project-specific
 .worktrees/
 .assets
@@ -323,10 +333,7 @@ dmypy.json
 .hypothesis/
 
 # Build & packaging
-dist/
-build/
-*.manifest
-... (55 more lines)
+... (58 more lines)
 ```
 
 ### Dockerfile

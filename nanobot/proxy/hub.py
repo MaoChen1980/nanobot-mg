@@ -49,6 +49,10 @@ class HubTCPServer:
         # message_id → expiry timestamp; used to drop duplicate messages
         # from proxy reconnections before they reach the agent loop.
         self._seen_message_ids: dict[str, float] = {}
+        # Per-session dispatch locks — serialize concurrent _route_message
+        # tasks for the same session (e.g. when proxy reconnects and delivers
+        # a new message while the previous turn is still processing).
+        self._session_locks: dict[str, asyncio.Lock] = {}
 
     async def start(self) -> None:
         """Start the TCP server and begin accepting proxy connections."""
@@ -285,8 +289,18 @@ class HubTCPServer:
         # Start outbound bridge before processing
         _outbound_bridge_task = asyncio.create_task(_bridge_outbound())
 
+        # Serialize concurrent _route_message tasks for the same session.
+        # Without this, a second message from the same user arriving during
+        # LLM processing (e.g. after proxy reconnect) creates a race condition
+        # where both tasks read/write session state concurrently.
+        session_lock = self._session_locks.get(session_key)
+        if session_lock is None:
+            session_lock = asyncio.Lock()
+            self._session_locks[session_key] = session_lock
+
         try:
-            response = await _process()
+            async with session_lock:
+                response = await _process()
             if response is None:
                 resp = HubResponse(success=True, content="")
             else:

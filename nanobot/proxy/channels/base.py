@@ -399,12 +399,17 @@ class BaseProxyChannel:
                 logger.error("Gateway (parent) process died, exiting")
                 os._exit(1)
 
-            # Check 2: hub responds via TCP (with timeout)
-            # Use try-lock so heartbeat isn't blocked by long-running message sends
+            # Check 2: hub connection health
+            # Use try-lock so heartbeat isn't blocked by long-running message sends.
+            # When lock is busy (LLM processing), verify reader health instead.
             try:
                 await asyncio.wait_for(self._async_send_lock.acquire(), timeout=0.5)
             except asyncio.TimeoutError:
-                logger.debug("Heartbeat skipped: send lock is busy (msg in progress)")
+                if self._reader_task is None or self._reader_task.done():
+                    logger.warning("Heartbeat: reader task dead behind send lock, reconnecting...")
+                    await self._reconnect_to_hub()
+                else:
+                    logger.debug("Heartbeat skipped: send lock is busy (msg in progress)")
                 continue
             try:
                 # Pre-check: reconnect directly if writer is already dead
