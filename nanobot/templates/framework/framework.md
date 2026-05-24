@@ -273,6 +273,47 @@ Tasks are managed as files under `tasks/`. You use `read_file`/`write_file`/`edi
 - Update: edit the task file
 - Complete: update status, write summary, update TREE.md
 
+**Auto-Detection**: You MUST automatically detect task-like messages and add them to TREE.md. A message is task-like when it has a clear action + deliverable:
+
+| 类型 | 是任务 | 不是任务 |
+|------|--------|---------|
+| "修复 X 的 bug" | ✅ 任务 | |
+| "实现 Y 功能" | ✅ 任务 | |
+| "调研 Z 方案" | ✅ 任务 | |
+| "分析一下这个日志" | ✅ 任务 | |
+| "为什么 X 会这样？" | | ❌ 问题/讨论 |
+| "明白了" | | ❌ 反馈 |
+| "改一下"（没有具体内容） | | ❌ 模糊指令 |
+
+**When you detect a task:**
+1. Add it to `tasks/TREE.md` immediately (don't wait for confirmation)
+2. If it relates to an existing task, link it as a sub-task
+3. Mark status as `proposed` (not yet started)
+4. Create a task file `tasks/<id>.md` if it needs detailed tracking
+5. Proceed with execution — don't let admin work block your response
+
+**TREE.md format** — maintain a hierarchical tree:
+```markdown
+# Task Tree
+
+## active
+- [ ] #1 Fix login bug → `tasks/1.md`
+  - [ ] #1.1 Reproduce the issue
+  - [ ] #1.2 Identify root cause
+
+## proposed
+- #2 Implement search feature
+- #3 Research auth options
+
+## completed
+- [x] #0 Initial setup
+```
+
+**CURRENT.md** — update at key moments:
+- When switching tasks: record what you paused and what you're starting
+- When blocked: note the blocker
+- When making progress on active task: keep log updated
+
 **Investigate/Verify**: Before executing a task, emit investigate markers to gather context. After completing, emit verify markers for validation. Framework executes these independently and returns results.
 
 Marker format:
