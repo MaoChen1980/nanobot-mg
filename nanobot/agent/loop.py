@@ -60,6 +60,7 @@ from nanobot.config.schema import AgentDefaults
 from nanobot.providers.base import LLMProvider
 from nanobot.providers.factory import ProviderSnapshot
 from nanobot.session.manager import Session, SessionManager
+from nanobot.session.orchestrator import SessionLifecycle
 from nanobot.utils.document import separate_and_extract_media
 from nanobot.utils.media_decode import image_placeholder_text
 from nanobot.utils.helpers import truncate_text as truncate_text_fn
@@ -200,6 +201,7 @@ class AgentLoop:
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
         self._recovery = RecoveryManager(self)
+        self.lifecycle = SessionLifecycle(self.sessions, self._recovery)
         self._dispatch_manager = DispatchManager(self)
         self._system_handler = SystemMessageHandler(self)
         self._user_handler = UserMessageHandler(self)
@@ -1262,6 +1264,7 @@ class AgentLoop:
         msg = InboundMessage(
             channel=channel, sender_id="user", chat_id=chat_id,
             content=content, media=media or [], metadata=metadata or {},
+            session_key_override=session_key,
         )
         _current_inbound.set(msg)
         self._current_session_key = session_key

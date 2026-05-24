@@ -46,11 +46,7 @@ class SystemMessageHandler:
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         logger.info("Processing system message from {}", msg.sender_id)
         key = msg.session_key_override or f"{channel}:{chat_id}"
-        session = self._loop.sessions.get_or_create(key)
-        if self._loop._recovery.restore_and_clear_checkpoint(session):
-            self._loop.sessions.save(session)
-        if self._loop._recovery.restore_pending_user_turn(session):
-            self._loop.sessions.save(session)
+        session = self._loop.lifecycle.prepare(key)
         pending = None
         is_subagent = msg.sender_id == "subagent"
         if is_subagent and self._loop._persist_subagent_followup(session, msg):
@@ -87,9 +83,7 @@ class SystemMessageHandler:
         final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         msgs_count = len(messages)
         self._loop._append_turn_to_session(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
-        session.enforce_file_cap()
-        self._loop._recovery.clear_runtime_checkpoint(session)
-        self._loop.sessions.save(session)
+        self._loop.lifecycle.finalize(session)
         options = ask_user_options_from_messages(all_msgs) if stop_reason == "ask_user" else []
         import re
         if final_content:
@@ -208,8 +202,7 @@ class UserMessageHandler:
         if msg.ephemeral:
             # Ephemeral messages (e.g. heartbeat) skip history persistence,
             # but still clear any runtime checkpoint the loop may have set.
-            self._loop._recovery.clear_runtime_checkpoint(session)
-            self._loop.sessions.save(session)
+            self._loop.lifecycle.finalize_ephemeral(session)
         else:
             self._finalize_turn(session, all_msgs, initial_msgs_count, user_persisted_early, final_content)
 
@@ -219,13 +212,11 @@ class UserMessageHandler:
     def _prepare_session(self, msg, session_key):
         """Restore checkpoints, return session + derived context."""
         key = session_key or msg.session_key
-        session = self._loop.sessions.get_or_create(key)
+        session = self._loop.lifecycle.prepare(key)
         logger.debug(
             "Session {}: {} messages in store",
             key, len(session.messages),
         )
-        self._loop._recovery.restore_and_clear_checkpoint(session)
-        self._loop._recovery.restore_pending_user_turn(session)
         pending = None
         from nanobot.utils.helpers import estimate_message_tokens
         raw_budget = self._loop._compute_history_budget()
@@ -330,15 +321,7 @@ class UserMessageHandler:
 
     def _persist_user_message_early(self, session, msg, pending_ask_id):
         """Add user message to session before the loop runs (persisted at finalize)."""
-        media_paths = [p for p in (msg.media or []) if isinstance(p, str) and p]
-        has_text = isinstance(msg.content, str) and msg.content.strip()
-        if not pending_ask_id and (has_text or media_paths):
-            extra = {"media": list(media_paths)} if media_paths else {}
-            text = msg.content if isinstance(msg.content, str) else ""
-            session.add_message("user", text, timestamp=msg.timestamp.isoformat(), **extra)
-            self._loop._recovery.mark_pending_user_turn(session)
-            return True
-        return False
+        return self._loop.lifecycle.persist_user_message(session, msg, pending_ask_id)
 
     def _finalize_turn(self, session, all_msgs, initial_msgs_count, user_persisted_early, final_content):
         """Save turn, enforce file cap, clear recovery state."""
@@ -349,18 +332,13 @@ class UserMessageHandler:
         save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
         self._loop._append_turn_to_session(session, all_msgs, save_skip)
 
-        # Turn-based archive: when session exceeds N turns, archive oldest M turns to history
-        max_turns = session.metadata.get("max_turns", 200)
-        trim_batch = session.metadata.get("trim_batch", 50)
-        trimmed = session.trim_old_turns(max_turns, trim_batch)
+        # Lifecycle: trim, cap, clear checkpoints, save
+        trimmed = self._loop.lifecycle.finalize(session)
+
+        # Archive trimmed turns to history store
         if trimmed:
             archived = self._loop.context.memory.condense_session_to_history(trimmed)
-            logger.info("_finalize_turn: archived {} oldest turns (N={}, M={})", archived, max_turns, trim_batch)
-
-        session.enforce_file_cap()
-        self._loop._recovery.clear_pending_user_turn(session)
-        self._loop._recovery.clear_runtime_checkpoint(session)
-        self._loop.sessions.save(session)
+            logger.info("_finalize_turn: archived {} oldest turns", archived)
 
         # .pt save: every N turns (50, 100, 150…), save a snapshot
         turn_count = self._loop._pt_counters.get(session.key, 0) + 1

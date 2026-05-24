@@ -55,10 +55,7 @@ class DispatchManager:
                 # Clean up checkpoint so next turn starts fresh
                 try:
                     key = self._effective_session_key(msg)
-                    session = self._loop.sessions.get_or_create(key)
-                    cleared = self._loop._recovery.clear_pending_user_turn(session)
-                    if cleared:
-                        self._loop.sessions.save(session)
+                    self._loop.lifecycle.cleanup_on_error(key)
                 except Exception as inner:
                     logger.debug("Checkpoint cleanup failed: {}", inner)
                 await self._loop.bus.publish_outbound(OutboundMessage(
