@@ -51,10 +51,9 @@ class BaseProxyChannel:
         self._send_lock = threading.Lock()
         self._msg_send_lock = asyncio.Lock()
         self._write_lock = asyncio.Lock()
-        self._heartbeat_task: asyncio.Task | None = None
         self._reader_task: asyncio.Task | None = None
+        self._parent_watch_task: asyncio.Task | None = None
         self._pending_response: asyncio.Future | None = None
-        self._pong_future: asyncio.Future | None = None
         self._parent_pid: int = 0  # set after TCP connect
         # FIFO send queue — linearizes outbound messages so push deliveries
         # (tool/think events) always arrive before the reply.
@@ -98,7 +97,6 @@ class BaseProxyChannel:
             self._reader, self._writer = await asyncio.open_connection(
                 self.hub_tcp_host, self.hub_tcp_port,
             )
-            self._enable_tcp_keepalive()
             self._parent_pid = os.getppid()
             logger.info(
                 "Connected to Hub via TCP at {}:{}",
@@ -117,7 +115,7 @@ class BaseProxyChannel:
             if resp.get("success"):
                 logger.info("Registered with Hub via TCP")
                 await self._start_background_reader()
-                self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+                self._parent_watch_task = asyncio.create_task(self._parent_watch_loop())
                 # Startup notification is the subclass's responsibility — call
                 # notify_ready() or override _send_startup_notification in start().
             else:
@@ -126,48 +124,6 @@ class BaseProxyChannel:
         future = asyncio.run_coroutine_threadsafe(do_connect(), self._conn_loop)
         future.result()
 
-    @staticmethod
-    def _enable_tcp_keepalive_from_sock(sock: Any) -> None:
-        """Configure TCP keepalive on a socket, cross-platform (best-effort)."""
-        import platform
-        import socket as _socket
-
-        try:
-            sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)
-
-            if platform.system() == "Windows":
-                # Python 3.10+ exposes TCP_KEEPIDLE on Windows 10 1703+;
-                # the ioctl(SIO_KEEPALIVE_VALS) approach fails on asyncio
-                # ProactorEventLoop sockets.
-                keepidle = getattr(_socket, "TCP_KEEPIDLE", None)
-                if keepidle is not None:
-                    sock.setsockopt(_socket.IPPROTO_TCP, keepidle, 5)
-                    keepintvl = getattr(_socket, "TCP_KEEPINTVL", 3)
-                    sock.setsockopt(_socket.IPPROTO_TCP, keepintvl, 3)
-                else:
-                    sock.ioctl(_socket.SIO_KEEPALIVE_VALS, (1, 5000, 3000))
-            else:
-                # Linux: TCP_KEEPIDLE / TCP_KEEPINTVL / TCP_KEEPCNT
-                for name, val in [("TCP_KEEPIDLE", 5), ("TCP_KEEPINTVL", 3), ("TCP_KEEPCNT", 3)]:
-                    opt = getattr(_socket, name, None)
-                    if opt is not None:
-                        sock.setsockopt(_socket.IPPROTO_TCP, opt, val)
-                # macOS: TCP_KEEPALIVE (no TCP_KEEPIDLE)
-                tcp_keepalive = getattr(_socket, "TCP_KEEPALIVE", None)
-                if tcp_keepalive is not None and not hasattr(_socket, "TCP_KEEPIDLE"):
-                    sock.setsockopt(_socket.IPPROTO_TCP, tcp_keepalive, 5)
-        except Exception:
-            logger.debug("Failed to enable TCP keepalive options")  # best-effort
-
-    def _enable_tcp_keepalive(self) -> None:
-        """Configure TCP keepalive on the connection socket."""
-        import socket as _socket
-        try:
-            sock: _socket.socket | None = self._writer.get_extra_info("socket")
-            if sock is not None:
-                self._enable_tcp_keepalive_from_sock(sock)
-        except Exception:
-            logger.debug("Failed to enable TCP keepalive")
 
     async def _do_send(self, msg: dict[str, Any]) -> HubResponse:
         """Raw send to Hub — no retry logic."""
@@ -198,24 +154,21 @@ class BaseProxyChannel:
         """Continuously read TCP messages and dispatch pushes or fulfill pending responses.
 
         Routes responses by type:
-        - ``pong``       → heartbeat's _pong_future (never touches _pending_response)
         - ``deliver``    → message _pending_response (if "success") or _handle_deliver
         - other          → _pending_response (fallback for unexpected data)
+
+        On EOF (hub disconnected), cancels any pending response and exits the process.
         """
         try:
             while True:
                 line = await self._reader.readline()
                 if not line:
+                    # EOF — hub disconnected
+                    logger.error("Hub TCP connection closed, exiting")
                     break
                 data = json.loads(line.decode())
 
-                # 1. Heartbeat pong — dedicated future, separate from message response
-                if data.get("type") == "pong":
-                    if self._pong_future is not None and not self._pong_future.done():
-                        self._pong_future.set_result(data)
-                    continue
-
-                # 2. Deliver from hub — message response (has "success") or progress update
+                # 1. Deliver from hub — message response (has "success") or progress update
                 if data.get("type") == "deliver":
                     if "success" in data and self._pending_response is not None and not self._pending_response.done():
                         self._pending_response.set_result(data)
@@ -224,7 +177,7 @@ class BaseProxyChannel:
                         await self._handle_deliver(data)
                     continue
 
-                # 3. Unexpected response type — fulfill pending response if any
+                # 2. Unexpected response type — fulfill pending response if any
                 if self._pending_response is not None and not self._pending_response.done():
                     logger.trace("Background reader: fulfill pending response")
                     self._pending_response.set_result(data)
@@ -236,9 +189,14 @@ class BaseProxyChannel:
                         has_content, str(data.get("content", ""))[:60],
                     )
         except asyncio.CancelledError:
-            pass
+            return
         except Exception as e:
             logger.error("Background reader error: {}", e)
+        finally:
+            # Cancel any in-flight send before exiting
+            if self._pending_response is not None and not self._pending_response.done():
+                self._pending_response.cancel()
+            os._exit(1)
 
     async def _start_background_reader(self) -> None:
         """Start the background reader on the conn_loop."""
@@ -277,63 +235,6 @@ class BaseProxyChannel:
         Override in subclass to perform the actual outbound send.
         """
         raise NotImplementedError
-
-    async def _reconnect_to_hub(self, max_retries: int = 3) -> bool:
-        """Reconnect to Hub with exponential backoff. Runs on conn_loop."""
-        # Cancel old background reader before reconnecting
-        if self._reader_task is not None and not self._reader_task.done():
-            self._reader_task.cancel()
-            try:
-                await self._reader_task
-            except asyncio.CancelledError:
-                pass
-            self._reader_task = None
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                if self._writer and not self._writer.is_closing():
-                    self._writer.close()
-                    try:
-                        await self._writer.wait_closed()
-                    except Exception:
-                        logger.debug("Failed to close writer during reconnect")
-
-                self._reader, self._writer = await asyncio.open_connection(
-                    self.hub_tcp_host, self.hub_tcp_port,
-                )
-                self._enable_tcp_keepalive()
-                self._parent_pid = os.getppid()
-                logger.info("Reconnected to Hub via TCP (attempt {})", attempt)
-
-                register_msg = {
-                    "type": "register",
-                    "channel": self.channel,
-                    "bot": self.bot,
-                    "pid": os.getpid(),
-                }
-                self._writer.write((json.dumps(register_msg) + "\n").encode())
-                await self._writer.drain()
-
-                resp_line = await self._reader.readline()
-                resp = json.loads(resp_line.decode())
-                if resp.get("success"):
-                    logger.info("Re-registered with Hub via TCP (attempt {})", attempt)
-                    await self._start_background_reader()
-                    return True
-                else:
-                    # Hub explicitly rejected us (stale/orphan proxy from old gateway instance)
-                    logger.error("Registration rejected by Hub — proxy is stale, exiting")
-                    os._exit(1)
-            except Exception as e:
-                logger.warning(
-                    "Reconnect attempt {}/{} failed: {}",
-                    attempt, max_retries, e,
-                )
-
-            if attempt < max_retries:
-                await asyncio.sleep(2 ** (attempt - 1))
-
-        return False
 
     def _parent_alive(self) -> bool:
         """Check if parent (gateway) process is still alive.
@@ -384,81 +285,22 @@ class BaseProxyChannel:
         except Exception as e:
             logger.debug("Failed to read config for {}: {}", self.channel, e)
 
-    async def _heartbeat_loop(self) -> None:
-        """Periodic health check: parent alive + hub connected + config enabled.
+    async def _parent_watch_loop(self) -> None:
+        """Periodically check parent (gateway) is alive and channel is enabled.
 
-        Checks every 5s:
-        1. Parent process (nanobot gateway) is still alive via PPID
-        2. Hub responds to ping via TCP (with 5s timeout — half-open TCP on
-           Windows can hang forever otherwise when gateway is killed)
-        3. Channel is still enabled in config file on disk
-
-        Only acquires ``_write_lock`` (microseconds) — never ``_msg_send_lock``,
-        so heartbeating is never blocked by long-running message processing.
+        No TCP heartbeat — localhost connection doesn't need it.
+        Hub death is detected by the background reader (EOF → proxy exits).
+        Gateway death is detected via OS process table check on a 30s timer.
         """
-        config_check_interval = 0  # counter-based throttle: check every 6th tick (30s)
         while True:
-            await asyncio.sleep(5)
-
-            # Check 1: parent (nanobot gateway) still alive
+            await asyncio.sleep(30)
             if not self._parent_alive():
                 logger.error("Gateway (parent) process died, exiting")
                 os._exit(1)
-
-            # Check 2: hub connection health
-            # Acquire write lock (microseconds — just for TCP write serialization).
-            # If busy, verify reader health instead of silently skipping.
-            try:
-                await asyncio.wait_for(self._write_lock.acquire(), timeout=0.5)
-            except asyncio.TimeoutError:
-                if self._reader_task is None or self._reader_task.done():
-                    logger.warning("Heartbeat: reader task dead behind write lock, reconnecting...")
-                    await self._reconnect_to_hub()
-                else:
-                    logger.debug("Heartbeat skipped: write lock busy (msg write in progress)")
-                continue
-
-            try:
-                if self._writer is None or self._writer.is_closing():
-                    logger.warning("Heartbeat detected dead writer, reconnecting...")
-                    await self._reconnect_to_hub()
-                    continue
-
-                loop = asyncio.get_running_loop()
-                pong_future = loop.create_future()
-                self._pong_future = pong_future
-                self._writer.write((json.dumps({"type": "ping"}) + "\n").encode())
-                await self._writer.drain()
-            except Exception as e:
-                logger.warning("Heartbeat ping write failed ({}), reconnecting...", repr(e))
-                await self._reconnect_to_hub()
-                continue
-            finally:
-                self._write_lock.release()
-
-            # Wait for pong outside any lock — message sends are not blocked
-            try:
-                resp = await asyncio.wait_for(pong_future, timeout=5)
-                if resp.get("type") != "pong":
-                    logger.error("Heartbeat: unexpected pong response, reconnecting...")
-                    await self._reconnect_to_hub()
-            except asyncio.TimeoutError:
-                logger.warning("Heartbeat pong timeout")
-                await self._reconnect_to_hub()
-            except Exception as e:
-                logger.warning("Heartbeat ping failed ({}), reconnecting...", repr(e))
-                await self._reconnect_to_hub()
-            finally:
-                self._pong_future = None
-
-            # Check 3: config file says channel is still enabled (every 30s)
-            config_check_interval += 1
-            if config_check_interval >= 6:
-                config_check_interval = 0
-                self._exit_if_disabled()
+            self._exit_if_disabled()
 
     async def _send_with_reconnect(self, msg: dict[str, Any]) -> HubResponse:
-        """Send with automatic reconnect on failure."""
+        """Send with retry on transient failure.  No reconnect — hub death = proxy exit."""
         async with self._msg_send_lock:
             last_error = None
             for attempt in range(3):
@@ -467,9 +309,7 @@ class BaseProxyChannel:
                 except Exception as e:
                     last_error = e
                     logger.warning("Send attempt {}/3 failed: {}", attempt + 1, e)
-                    if attempt < 2:
-                        if not await self._reconnect_to_hub():
-                            break
+                    await asyncio.sleep(0.5 * (attempt + 1))
             raise RuntimeError(f"Send failed after 3 attempts: {last_error}")
 
     # ------------------------------------------------------------------

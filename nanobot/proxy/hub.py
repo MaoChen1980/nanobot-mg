@@ -111,8 +111,12 @@ class HubTCPServer:
         """Handle a single proxy TCP connection.
 
         All writes to *writer* are serialized through a per-connection lock
-        to prevent interleaving between the main loop (pong, register response)
+        to prevent interleaving between the main loop (register response)
         and concurrently dispatched _route_message tasks.
+
+        No heartbeat — localhost TCP doesn't need it.  The connection is
+        exclusively for message passing; hub or proxy death is detected via
+        EOF on the reader side.
         """
         peername = writer.get_extra_info("peername")
         logger.info("Proxy TCP connection from {}", peername)
@@ -141,10 +145,7 @@ class HubTCPServer:
 
                 msg_type = data.get("type", "")
 
-                if msg_type == "ping":
-                    await _write({"type": "pong"})
-
-                elif msg_type == "register":
+                if msg_type == "register":
                     channel = data.get("channel", "")
                     bot = data.get("bot", "")
                     pid = data.get("pid", 0)

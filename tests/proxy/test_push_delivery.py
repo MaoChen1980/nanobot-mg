@@ -128,7 +128,8 @@ class TestBackgroundReader:
         handle_deliver = AsyncMock()
         channel._handle_deliver = handle_deliver
 
-        await channel._background_reader()
+        with patch("os._exit"):
+            await channel._background_reader()
 
         handle_deliver.assert_awaited_once_with({
             "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
@@ -147,7 +148,8 @@ class TestBackgroundReader:
         future = loop.create_future()
         channel._pending_response = future
 
-        await channel._background_reader()
+        with patch("os._exit"):
+            await channel._background_reader()
 
         assert future.done()
         result = future.result()
@@ -170,57 +172,27 @@ class TestBackgroundReader:
         handle_deliver = AsyncMock()
         channel._handle_deliver = handle_deliver
 
-        await channel._background_reader()
+        with patch("os._exit"):
+            await channel._background_reader()
 
-        # Pending response should NOT be set by a deliver message
-        assert not future.done()
+        # Pending response should NOT be fulfilled by a deliver message,
+        # but IS cancelled by the EOF-handler before exiting
+        assert future.cancelled()
         handle_deliver.assert_awaited_once()
 
-    async def test_reader_task_cancelled_on_reconnect(self, channel):
-        """_reconnect_to_hub cancels old reader task."""
-        loop = asyncio.get_running_loop()
+    async def test_eof_exits_process(self, channel):
+        """EOF on the reader (hub disconnected) triggers os._exit(1)."""
+        channel._reader.readline = AsyncMock(side_effect=[b""])
+        with patch("os._exit") as mock_exit:
+            await channel._background_reader()
+            mock_exit.assert_called_once_with(1)
 
-        old_task = asyncio.create_task(asyncio.sleep(9999))
-        channel._reader_task = old_task
-        channel._writer = MagicMock()
-        channel._writer.is_closing.return_value = True
-
-        with patch.object(channel, "_enable_tcp_keepalive"):
-            with patch.object(asyncio, "open_connection", side_effect=ConnectionError("refused")):
-                result = await channel._reconnect_to_hub(max_retries=1)
-
-        assert result is False
-        assert old_task.cancelled()
-
-    async def test_reconnect_starts_new_reader_on_success(self, channel):
-        """After successful reconnection, a new background reader is started."""
-        loop = asyncio.get_running_loop()
-
-        old_task = asyncio.create_task(asyncio.sleep(9999))
-        channel._reader_task = old_task
-        channel._writer = MagicMock()
-        channel._writer.is_closing.return_value = False
-        channel._writer.close = MagicMock()
-        channel._writer.wait_closed = AsyncMock()
-
-        reader_mock = AsyncMock()
-        writer_mock = MagicMock()
-        writer_mock.drain = AsyncMock()
-
-        async def mock_open_connection(host, port):
-            return reader_mock, writer_mock
-
-        with patch.object(channel, "_enable_tcp_keepalive"):
-            with patch.object(channel, "_start_background_reader", AsyncMock()) as start_bg:
-                with patch.object(asyncio, "open_connection", side_effect=mock_open_connection):
-                    reader_mock.readline = AsyncMock(
-                        side_effect=[json.dumps({"success": True}).encode()],
-                    )
-                    result = await channel._reconnect_to_hub(max_retries=1)
-
-        assert result is True
-        assert old_task.cancelled()
-        start_bg.assert_awaited_once()
+    async def test_reader_error_exits_process(self, channel):
+        """Reader exception triggers os._exit(1)."""
+        channel._reader.readline = AsyncMock(side_effect=ConnectionResetError("connection lost"))
+        with patch("os._exit") as mock_exit:
+            await channel._background_reader()
+            mock_exit.assert_called_once_with(1)
 
 
 # ---------------------------------------------------------------------------
