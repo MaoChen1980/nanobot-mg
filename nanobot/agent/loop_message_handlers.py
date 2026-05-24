@@ -22,9 +22,10 @@ from nanobot.agent.tools.message import MessageTool
 def _has_recent_user_response(session, content):
     """Check if session already has a user message matching *content* with an assistant response."""
     for i in range(len(session.messages) - 1, -1, -1):
-        if session.messages[i].get("role") == "assistant":
+        role = session.messages[i].get("role")
+        if role in ("assistant", "tool"):
             continue
-        if session.messages[i].get("role") == "user":
+        if role == "user":
             stored = session.messages[i].get("content", "")
             if stored.strip() == content.strip():
                 has_assistant = any(
@@ -154,14 +155,16 @@ class UserMessageHandler:
         if result := await self._dispatch_command(msg, session, key):
             return result
 
-        # Stage 1: session preparation
-        session, pending, history, channel, chat_id, key, budget_adjusted, context_window = self._prepare_session(msg, session_key)
-
-        # Fix 3: Re-dispatch guard — skip if session already has this exact message
-        # with a matching assistant response (means prior dispatch already completed).
+        # Stage 0a: Re-dispatch guard — check BEFORE checkpoint restore so we
+        # don't pollute the session with recovered messages on a duplicate dispatch.
+        # Session already has this user message with an assistant response = prior
+        # dispatch completed, skip this one entirely.
         if _has_recent_user_response(session, msg.content):
             logger.info("Re-dispatch detected for session {} (msg='{}...'), skipping", key, msg.content[:40])
             return None
+
+        # Stage 1: session preparation (checkpoint restore & history loading)
+        session, pending, history, channel, chat_id, key, budget_adjusted, context_window = self._prepare_session(msg, session_key)
 
         # Fix 1: Reset iteration counter — each new turn starts at 0
         self._loop._current_iteration = 0
@@ -217,6 +220,10 @@ class UserMessageHandler:
         """Restore checkpoints, return session + derived context."""
         key = session_key or msg.session_key
         session = self._loop.sessions.get_or_create(key)
+        logger.debug(
+            "Session {}: {} messages in store",
+            key, len(session.messages),
+        )
         self._loop._recovery.restore_and_clear_checkpoint(session)
         self._loop._recovery.restore_pending_user_turn(session)
         pending = None
@@ -234,10 +241,25 @@ class UserMessageHandler:
         # budget dropped everything. Log warning and fall back to unfiltered history.
         if not history and session.messages:
             logger.warning(
-                "get_history returned empty for session {} ({} msgs, budget={}), falling back",
-                key, len(session.messages), adjusted,
+                "get_history returned empty for session {} ({} msgs, budget={}, "
+                "sys_tokens={}), falling back to max_tokens=0",
+                key, len(session.messages), adjusted, sys_tokens,
             )
             history = session.get_history(max_turns=200, max_tokens=0, include_timestamps=True, timezone=self._loop.context.timezone)
+
+        if not history and session.messages:
+            logger.error(
+                "get_history returned empty even with max_tokens=0 for session {} "
+                "({} msgs), falling back to raw session.messages",
+                key, len(session.messages),
+            )
+            # Last-resort fallback: manually build history entries from raw messages.
+            for m in session.messages:
+                entry: dict[str, Any] = {"role": m["role"], "content": m.get("content", "")}
+                for k in ("tool_calls", "tool_call_id", "name", "reasoning_content", "reasoning_details", "thinking_blocks"):
+                    if k in m:
+                        entry[k] = m[k]
+                history.append(entry)
 
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key, adjusted, self._loop.context_window_tokens

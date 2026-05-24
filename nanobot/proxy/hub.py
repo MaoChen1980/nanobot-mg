@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any
 
 from loguru import logger
@@ -27,6 +28,8 @@ class HubTCPServer:
     - Connection close = proxy death signal
     """
 
+    _DEDUP_TTL = 300  # seconds to keep a message_id for dedup
+
     def __init__(
         self,
         host: str,
@@ -41,6 +44,9 @@ class HubTCPServer:
         self._proxy_manager = proxy_manager
         self._concurrency_gate = concurrency_gate
         self._server: asyncio.Server | None = None
+        # message_id → expiry timestamp; used to drop duplicate messages
+        # from proxy reconnections before they reach the agent loop.
+        self._seen_message_ids: dict[str, float] = {}
 
     async def start(self) -> None:
         """Start the TCP server and begin accepting proxy connections."""
@@ -156,6 +162,23 @@ class HubTCPServer:
 
         session_key = f"{msg.channel}:{msg.bot}:{msg.sender_id}"
         proxy_key = f"{msg.channel}:{msg.bot}"
+
+        # ── Message dedup ────────────────────────────────────────────────
+        # Proxy reconnections can re-deliver the same message_id over a new
+        # TCP connection.  Drop duplicates here so they never reach the agent
+        # loop and corrupt session state.
+        if msg.message_id:
+            now = time.time()
+            expiry = self._seen_message_ids.get(msg.message_id, 0)
+            if expiry > now:
+                logger.debug("Dropped duplicate message {} from {}", msg.message_id, peername)
+                return
+            self._seen_message_ids[msg.message_id] = now + self._DEDUP_TTL
+            # Prune stale entries when the map grows large enough
+            if len(self._seen_message_ids) > 10000:
+                stale = [mid for mid, exp in self._seen_message_ids.items() if exp <= now]
+                for mid in stale:
+                    del self._seen_message_ids[mid]
         logger.info(
             "TCP proxy message for {}: {} (session={})",
             session_key, msg.content[:50], session_key,

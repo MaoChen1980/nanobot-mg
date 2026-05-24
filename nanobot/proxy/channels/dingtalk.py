@@ -437,14 +437,12 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 return {}
         return raw if isinstance(raw, dict) else {}
 
-    def on_message(self, data: Any) -> None:
-        """Sync callback from DingTalk SDK - forward message to Hub."""
+    async def on_message(self, data: Any) -> None:
+        """Async callback from DingTalk SDK — forward message to Hub without blocking the event loop."""
         try:
             from dingtalk_stream.chatbot import ChatbotMessage
 
             chatbot_msg = ChatbotMessage.from_dict(data)
-            # The SDK normalises ``msgtype`` → ``message_type``; the raw dict
-            # has ``msgtype`` (lowercase), NOT ``msgType``.
             msg_type = chatbot_msg.message_type or data.get("msgtype", "text")
             logger.info("DingTalk on_message called, msg_type={}", msg_type)
             content = ""
@@ -459,13 +457,11 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     content = text_data.get("content", "").strip() if isinstance(text_data, dict) else ""
 
             elif msg_type in ("picture", "image", "sampleImage"):
-                # Image message — use SDK-parsed image_content first
                 download_code = (
                     chatbot_msg.image_content.download_code
                     if chatbot_msg.image_content else None
                 )
                 if not download_code:
-                    # Fallback: parse data.content (JSON string or dict)
                     content_data = self._get_content_field(data)
                     download_code = content_data.get("downloadCode")
                 if download_code:
@@ -478,8 +474,6 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     content = "[收到图片消息]"
 
             elif msg_type in ("file", "sampleFile"):
-                # File message — DingTalk SDK does not parse file content,
-                # so read downloadCode from ``data.content`` directly.
                 content_data = self._get_content_field(data)
                 download_code = content_data.get("downloadCode")
                 file_name = content_data.get("fileName") or content_data.get("name", "")
@@ -493,7 +487,6 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     content = "[收到文件消息]"
 
             elif isinstance(chatbot_msg.extensions.get("content"), dict):
-                # Voice/audio with recognition
                 content = chatbot_msg.extensions["content"].get("recognition", "").strip()
                 if not content:
                     content = "[收到语音消息]"
@@ -510,7 +503,6 @@ class DingTalkProxyChannel(BaseProxyChannel):
             if self.check_duplicate(msg_id):
                 return
 
-            # Skip stale messages (platform sometimes redelivers old messages)
             create_at = chatbot_msg.create_at
             if create_at and self._is_stale_message(create_at / 1000.0, self._max_message_age):
                 return
@@ -523,7 +515,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
 
             # Build message with optional media
             msg_data = self.build_message(sender_id, chat_id, content, msg_id, media=media)
-            response = self.send_to_hub(msg_data)
+            response = await self.async_send_to_hub(msg_data)
 
             if response and response.success and (response.content or response.media):
                 self._enqueue_reply(chat_id, sender_id, is_group, response.content, media=response.media)
@@ -623,7 +615,10 @@ class DingTalkProxyChannel(BaseProxyChannel):
 
         class Handler(CallbackHandler):
             async def process(self, message):
-                _channel.on_message(message.data)
+                # Fire-and-forget: on_message awaits the hub response without
+                # blocking the DingTalk SDK event loop (WebSocket pings, etc.).
+                task = asyncio.create_task(_channel.on_message(message.data))
+                task.add_done_callback(lambda t: logger.error("DingTalk on_message failed: {}", t.exception()) if t.exception() else None)
                 return 0, "OK"
 
         stream_client.register_callback_handler(ChatbotMessage.TOPIC, Handler())

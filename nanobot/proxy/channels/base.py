@@ -203,7 +203,14 @@ class BaseProxyChannel:
                     # will enqueue the response. Progress deliveries (tool events,
                     # think text) lack "success" and still go through _handle_deliver.
                     if "success" in data and self._pending_response is not None and not self._pending_response.done():
-                        self._pending_response.set_result(data)
+                        # Guard: a deliver-with-success is a message response, NOT a pong.
+                        # Fulfilling a ping's future with deliver data causes the heartbeat
+                        # to see type != "pong" and reconnect unnecessarily.
+                        if self._pending_request_type == "ping":
+                            logger.debug("Ignoring deliver during ping wait, routing to _handle_deliver")
+                            await self._handle_deliver(data)
+                        else:
+                            self._pending_response.set_result(data)
                     else:
                         logger.debug("Background reader: deliver msg to chat={}", data.get("chat_id", "")[:20])
                         await self._handle_deliver(data)
@@ -393,18 +400,30 @@ class BaseProxyChannel:
                 os._exit(1)
 
             # Check 2: hub responds via TCP (with timeout)
-            async with self._async_send_lock:
-                try:
-                    resp = await asyncio.wait_for(
-                        self._send_raw({"type": "ping"}),
-                        timeout=5,
-                    )
-                    if resp.get("type") != "pong":
-                        logger.error("Heartbeat: unexpected pong response, reconnecting...")
-                        await self._reconnect_to_hub()
-                except Exception as e:
-                    logger.warning("Heartbeat ping failed ({}), reconnecting...", e)
+            # Use try-lock so heartbeat isn't blocked by long-running message sends
+            try:
+                await asyncio.wait_for(self._async_send_lock.acquire(), timeout=0.5)
+            except asyncio.TimeoutError:
+                logger.debug("Heartbeat skipped: send lock is busy (msg in progress)")
+                continue
+            try:
+                # Pre-check: reconnect directly if writer is already dead
+                if self._writer is None or self._writer.is_closing():
+                    logger.warning("Heartbeat detected dead writer, reconnecting...")
                     await self._reconnect_to_hub()
+                    continue
+                resp = await asyncio.wait_for(
+                    self._send_raw({"type": "ping"}),
+                    timeout=5,
+                )
+                if resp.get("type") != "pong":
+                    logger.error("Heartbeat: unexpected pong response, reconnecting...")
+                    await self._reconnect_to_hub()
+            except Exception as e:
+                logger.warning("Heartbeat ping failed ({}), reconnecting...", repr(e))
+                await self._reconnect_to_hub()
+            finally:
+                self._async_send_lock.release()
 
             # Check 3: config file says channel is still enabled (every 30s)
             config_check_interval += 1
