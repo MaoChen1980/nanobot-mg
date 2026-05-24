@@ -19,6 +19,35 @@ from nanobot.proxy.protocol import HubResponse, ProxyMessage, outbound_to_hub_re
 from nanobot.utils.tool_hints import format_single_tool_hint
 
 
+class _PendingItem:
+    """Queue item for mid-turn injection.
+
+    Duck-types as InboundMessage for the agent loop's _drain_pending,
+    and carries the original data dict + TCP writer handles for
+    re-dispatch when unconsumed after the current turn completes.
+    """
+    __slots__ = ('inbound', 'data', 'write_lock', 'writer', 'peername')
+
+    def __init__(self, inbound: Any, data: dict, write_lock: Any, writer: Any, peername: Any) -> None:
+        self.inbound = inbound
+        self.data = data
+        self.write_lock = write_lock
+        self.writer = writer
+        self.peername = peername
+
+    @property
+    def content(self) -> str:
+        return self.inbound.content
+
+    @property
+    def media(self) -> list[str]:
+        return self.inbound.media
+
+    @property
+    def channel(self) -> str:
+        return self.inbound.channel
+
+
 class HubTCPServer:
     """TCP server that accepts proxy connections and routes messages to AgentLoop.
 
@@ -53,6 +82,10 @@ class HubTCPServer:
         # tasks for the same session (e.g. when proxy reconnects and delivers
         # a new message while the previous turn is still processing).
         self._session_locks: dict[str, asyncio.Lock] = {}
+        # Per-session pending queues for mid-turn injection. When the session
+        # lock is held, new messages are enqueued here instead of blocking,
+        # and consumed between tool calls by the agent loop's _drain_pending.
+        self._session_pending_queues: dict[str, asyncio.Queue] = {}
 
     async def start(self) -> None:
         """Start the TCP server and begin accepting proxy connections."""
@@ -264,28 +297,6 @@ class HubTCPServer:
 
         inbound = msg.to_inbound_message()
 
-        async def _process() -> Any:
-            if self._concurrency_gate:
-                async with self._concurrency_gate:
-                    return await self._agent_loop.process_direct(
-                        content=inbound.content,
-                        session_key=session_key,
-                        channel=inbound.channel,
-                        chat_id=inbound.chat_id,
-                        media=inbound.media or None,
-                        on_progress=_on_progress,
-                    )
-            else:
-                return await self._agent_loop.process_direct(
-                    content=inbound.content,
-                    session_key=session_key,
-                    channel=inbound.channel,
-                    chat_id=inbound.chat_id,
-                    media=inbound.media or None,
-                    metadata=inbound.metadata,
-                    on_progress=_on_progress,
-                )
-
         # Start outbound bridge before processing
         _outbound_bridge_task = asyncio.create_task(_bridge_outbound())
 
@@ -298,9 +309,42 @@ class HubTCPServer:
             session_lock = asyncio.Lock()
             self._session_locks[session_key] = session_lock
 
+        # If the lock is already held, the session is busy.  Enqueue for
+        # mid-turn injection rather than blocking on the lock.
+        if session_lock.locked():
+            logger.debug("Session {} busy, enqueuing for mid-turn injection", session_key)
+            queue = self._session_pending_queues.setdefault(session_key, asyncio.Queue())
+            queue.put_nowait(_PendingItem(inbound, data, write_lock, writer, peername))
+            return
+
+        # Lock is free — create a fresh pending queue for this dispatch.
+        pending_queue: asyncio.Queue = asyncio.Queue()
+        self._session_pending_queues[session_key] = pending_queue
+
         try:
             async with session_lock:
-                response = await _process()
+                if self._concurrency_gate:
+                    async with self._concurrency_gate:
+                        response = await self._agent_loop.process_direct(
+                            content=inbound.content,
+                            session_key=session_key,
+                            channel=inbound.channel,
+                            chat_id=inbound.chat_id,
+                            media=inbound.media or None,
+                            on_progress=_on_progress,
+                            pending_queue=pending_queue,
+                        )
+                else:
+                    response = await self._agent_loop.process_direct(
+                        content=inbound.content,
+                        session_key=session_key,
+                        channel=inbound.channel,
+                        chat_id=inbound.chat_id,
+                        media=inbound.media or None,
+                        metadata=inbound.metadata,
+                        on_progress=_on_progress,
+                        pending_queue=pending_queue,
+                    )
             if response is None:
                 resp = HubResponse(success=True, content="")
             else:
@@ -315,6 +359,28 @@ class HubTCPServer:
                     await _outbound_bridge_task
                 except asyncio.CancelledError:
                     pass
+
+        # After dispatch, re-dispatch any messages that arrived too late
+        # for _drain_pending to consume during the agent loop.
+        remaining_items: list[_PendingItem] = []
+        while not pending_queue.empty():
+            try:
+                remaining_items.append(pending_queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+        if remaining_items:
+            logger.info(
+                "Re-dispatching {} messages for session {}",
+                len(remaining_items), session_key,
+            )
+            for item in remaining_items:
+                # Clear dedup entry so re-dispatch isn't dropped as duplicate
+                pard = ProxyMessage.from_dict(item.data)
+                if pard.message_id:
+                    self._seen_message_ids.pop(pard.message_id, None)
+                asyncio.create_task(self._route_message(
+                    item.write_lock, item.writer, item.data, item.peername,
+                ))
 
         # Route response through proxy_manager so it reaches the CURRENT
         # TCP connection — the proxy may have reconnected during processing.
