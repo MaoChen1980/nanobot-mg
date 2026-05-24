@@ -165,7 +165,7 @@ class AgentDefaults(Base):
     provider: str = (
         "auto"  # Provider name (e.g. "anthropic", "openrouter") or "auto" for auto-detection
     )
-    max_tokens: int = 160_000
+    max_tokens: int = 20_000
     context_window_tokens: int = 200_000
     context_block_limit: Optional[int] = None
     temperature: float = 0.1
