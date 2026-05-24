@@ -218,7 +218,7 @@ class EditFileTool(_FsTool):
                     fp.parent.mkdir(parents=True, exist_ok=True)
                     fp.write_text(new_text, encoding="utf-8")
                     file_state.record_write(fp)
-                    msg = f"Successfully created {fp}"
+                    msg = f"Successfully created {fp.as_posix()}"
                     verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                     if verify_lines:
                         vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
@@ -245,7 +245,7 @@ class EditFileTool(_FsTool):
                     return f"Error: Cannot create file — {path} already exists and is not empty."
                 fp.write_text(new_text, encoding="utf-8")
                 file_state.record_write(fp)
-                msg = f"Successfully edited {fp}"
+                msg = f"Successfully edited {fp.as_posix()}"
                 verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                 if verify_lines:
                     vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
@@ -301,7 +301,7 @@ class EditFileTool(_FsTool):
 
             fp.write_bytes(new_content.encode("utf-8"))
             file_state.record_write(fp)
-            msg = f"Successfully edited {fp}"
+            msg = f"Successfully edited {fp.as_posix()}"
 
             # Auto-verify: check new_text landed in the file
             verify_lines = [l.strip() for l in norm_new.splitlines() if l.strip()]
@@ -411,7 +411,7 @@ class EditFileTool(_FsTool):
 
         fp.write_bytes(new_content.encode("utf-8"))
         file_state.record_write(fp)
-        msg = f"Successfully edited {fp} (replaced lines {first_line}-{last_line})"
+        msg = f"Successfully edited {fp.as_posix()} (replaced lines {first_line}-{last_line})"
         if warning:
             msg = f"{warning}\n{msg}"
         return msg

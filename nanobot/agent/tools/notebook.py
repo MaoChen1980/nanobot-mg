@@ -112,7 +112,7 @@ class NotebookEditTool(_FsTool):
                 nb["cells"].append(cell)
                 fp.parent.mkdir(parents=True, exist_ok=True)
                 fp.write_text(json.dumps(nb, indent=1, ensure_ascii=False), encoding="utf-8")
-                return f"Successfully created {fp} with 1 cell"
+                return f"Successfully created {fp.as_posix()} with 1 cell"
 
             try:
                 nb = json.loads(fp.read_text(encoding="utf-8"))
@@ -129,7 +129,7 @@ class NotebookEditTool(_FsTool):
                 cells.pop(cell_index)
                 nb["cells"] = cells
                 fp.write_text(json.dumps(nb, indent=1, ensure_ascii=False), encoding="utf-8")
-                return f"Successfully deleted cell {cell_index} from {fp}"
+                return f"Successfully deleted cell {cell_index} from {fp.as_posix()}"
 
             if edit_mode == "insert":
                 insert_at = min(cell_index + 1, len(cells))
@@ -137,7 +137,7 @@ class NotebookEditTool(_FsTool):
                 cells.insert(insert_at, cell)
                 nb["cells"] = cells
                 fp.write_text(json.dumps(nb, indent=1, ensure_ascii=False), encoding="utf-8")
-                return f"Successfully inserted cell at index {insert_at} in {fp}"
+                return f"Successfully inserted cell at index {insert_at} in {fp.as_posix()}"
 
             # Default: replace
             if cell_index < 0 or cell_index >= len(cells):
@@ -153,7 +153,7 @@ class NotebookEditTool(_FsTool):
                     cells[cell_index].pop("execution_count", None)
             nb["cells"] = cells
             fp.write_text(json.dumps(nb, indent=1, ensure_ascii=False), encoding="utf-8")
-            return f"Successfully edited cell {cell_index} in {fp}"
+            return f"Successfully edited cell {cell_index} in {fp.as_posix()}"
 
         except PermissionError as e:
             logger.warning("NotebookEdit permission denied: {}", e)

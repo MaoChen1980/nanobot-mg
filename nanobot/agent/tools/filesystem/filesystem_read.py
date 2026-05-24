@@ -74,7 +74,7 @@ class ReadFileTool(_FsTool):
 
             fp = self._resolve(path)
             if _is_blocked_device(fp):
-                return f"Error: Reading {fp} is blocked (device path that could hang or produce infinite output)."
+                return f"Error: Reading {fp.as_posix()} is blocked (device path that could hang or produce infinite output)."
             if not fp.exists():
                 return f"Error: File not found: {path}"
             if not fp.is_file():
@@ -244,7 +244,7 @@ class ReadFileTool(_FsTool):
         doc.close()
 
         if not parts:
-            return f"(PDF has no extractable text: {fp})"
+            return f"(PDF has no extractable text: {fp.as_posix()})"
 
         result = "\n\n".join(parts)
         if end < total_pages - 1:
@@ -265,7 +265,7 @@ class ReadFileTool(_FsTool):
             return f"Error reading {fp.suffix.upper()} file: {result}"
 
         if not result:
-            return f"({fp.suffix.upper().lstrip('.')} has no extractable text: {fp})"
+            return f"({fp.suffix.upper().lstrip('.')} has no extractable text: {fp.as_posix()})"
 
         if len(result) > self._MAX_CHARS:
             result = result[:self._MAX_CHARS] + "\n\n(Document text truncated at ~256K chars)"

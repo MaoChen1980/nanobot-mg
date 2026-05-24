@@ -33,4 +33,4 @@ class DeleteFileTool(_FsTool):
     async def execute(self, path: str = "", **kwargs: Any) -> str:
         resolved = self._resolve(path)
         resolved.unlink()
-        return f"Deleted: {resolved}"
+        return f"Deleted: {resolved.as_posix()}"

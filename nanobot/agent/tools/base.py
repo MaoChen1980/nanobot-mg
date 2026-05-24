@@ -145,7 +145,7 @@ class PathExists(Validator):
         except Exception as e:
             return f"{self._key} cannot be resolved: {e}"
         if not resolved.exists():
-            return f"{self._key} does not exist: {resolved}"
+            return f"{self._key} does not exist: {resolved.as_posix()}"
         return None
 
 
@@ -164,7 +164,7 @@ class PathNotExists(Validator):
         except Exception as e:
             return f"{self._key} cannot be resolved: {e}"
         if resolved.exists():
-            return f"{self._key} already exists: {resolved}"
+            return f"{self._key} already exists: {resolved.as_posix()}"
         return None
 
 
@@ -186,9 +186,9 @@ class PathType(Validator):
         if not resolved.exists():
             return None  # PathExists should catch this first
         if self._kind == "file" and not resolved.is_file():
-            return f"{self._key} is a directory, expected a file: {resolved}"
+            return f"{self._key} is a directory, expected a file: {resolved.as_posix()}"
         if self._kind == "dir" and not resolved.is_dir():
-            return f"{self._key} is a file, expected a directory: {resolved}"
+            return f"{self._key} is a file, expected a directory: {resolved.as_posix()}"
         return None
 
 
@@ -207,7 +207,7 @@ class FileDeleted(Validator):
         except Exception:
             return None
         if resolved.exists():
-            return f"{self._key} still exists after delete: {resolved}"
+            return f"{self._key} still exists after delete: {resolved.as_posix()}"
         return None
 
 
@@ -226,7 +226,7 @@ class FileCreated(Validator):
         except Exception:
             return None
         if not resolved.exists():
-            return f"{self._key} not found after operation: {resolved}"
+            return f"{self._key} not found after operation: {resolved.as_posix()}"
         return None
 
 

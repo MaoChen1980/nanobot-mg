@@ -112,7 +112,7 @@ class TestSpawnUnix:
 class TestSpawnWindows:
 
     @pytest.mark.asyncio
-    async def test_uses_comspec_from_env(self):
+    async def test_uses_powershell_shell(self):
         env = {"COMSPEC": r"C:\Windows\system32\cmd.exe", "PATH": ""}
         with (
             patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
@@ -122,12 +122,12 @@ class TestSpawnWindows:
             await ExecTool._spawn("dir", r"C:\Users", env)
 
         args = mock_exec.call_args[0]
-        assert "cmd.exe" in args[0]
-        assert "/c" in args
+        assert "powershell.exe" in args[0]
+        assert "-Command" in args
         assert "dir" in args
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_default_comspec(self):
+    async def test_uses_powershell(self):
         env = {"PATH": ""}
         with (
             patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
@@ -138,7 +138,7 @@ class TestSpawnWindows:
             await ExecTool._spawn("dir", r"C:\Users", env)
 
         args = mock_exec.call_args[0]
-        assert args[0] == "cmd.exe"
+        assert args[0] == "powershell.exe"
 
 
 # ---------------------------------------------------------------------------

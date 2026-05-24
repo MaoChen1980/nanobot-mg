@@ -44,7 +44,7 @@ class ScanProjectTool(Tool):
 
         project_path = Path(path).expanduser().resolve()
         if not project_path.is_dir():
-            return f"Error: directory not found: {project_path}"
+            return f"Error: directory not found: {project_path.as_posix()}"
 
         try:
             write_project_card(project_path)
@@ -54,4 +54,4 @@ class ScanProjectTool(Tool):
         card_path = project_path / "project_card.md"
         card = card_path.read_text(encoding="utf-8").strip()
 
-        return f"Project scanned: {project_path}\nProject card written to: {card_path}\n\n{card}"
+        return f"Project scanned: {project_path.as_posix()}\nProject card written to: {card_path.as_posix()}\n\n{card}"

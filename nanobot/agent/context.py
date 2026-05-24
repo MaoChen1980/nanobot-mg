@@ -26,6 +26,16 @@ from nanobot.utils.tools_index import rebuild_tools_index as _rebuild_tools_inde
 _template_content_cache: dict[str, tuple[float, str]] = {}
 _MAX_TEMPLATE_CACHE_SIZE = 20
 
+# Regex matching Windows absolute paths with backslashes (e.g. C:\Users\foo)
+_WIN_PATH_RE = re.compile(r"\b[A-Za-z]:\\[^\s\"'|&;<>()$`]*")
+
+
+def normalize_paths(text: str) -> str:
+    """Convert Windows backslash paths to forward slashes so the LLM doesn't
+    misread ``\\u`` / ``\\n`` as escape sequences.
+    """
+    return _WIN_PATH_RE.sub(lambda m: m.group(0).replace("\\", "/"), text)
+
 
 @dataclass
 class ContextState:
@@ -121,7 +131,8 @@ class ContextBuilder:
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 100:
             logger.info("build_system_prompt took {:.0f}ms", _elapsed)
-        return self._SECTION_SEPARATOR.join(parts)
+        result = self._SECTION_SEPARATOR.join(parts)
+        return normalize_paths(result)
 
     def _build_tools_section(self, tool_definitions: list[dict[str, Any]]) -> str:
         """Build the available tools section for the system prompt."""
@@ -185,7 +196,7 @@ class ContextBuilder:
 
     def _get_identity(self, channel: str | None = None) -> str:
         """Get the core identity section."""
-        workspace_path = str(self.workspace.expanduser().resolve())
+        workspace_path = self.workspace.expanduser().resolve().as_posix()
         system = platform.system()
         runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
 

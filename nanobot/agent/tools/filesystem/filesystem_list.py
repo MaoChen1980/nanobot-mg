@@ -72,14 +72,14 @@ class ListDirTool(_FsTool):
                         continue
                     total += 1
                     if len(items) < cap:
-                        items.append(f"{item.resolve()}/" if item.is_dir() else item.resolve().as_posix())
+                        items.append(f"{item.resolve().as_posix()}/" if item.is_dir() else item.resolve().as_posix())
             else:
                 for item in sorted(dp.iterdir()):
                     if item.name in self._IGNORE_DIRS:
                         continue
                     total += 1
                     if len(items) < cap:
-                        items.append(f"{item.resolve()}/" if item.is_dir() else item.resolve().as_posix())
+                        items.append(f"{item.resolve().as_posix()}/" if item.is_dir() else item.resolve().as_posix())
 
             if not items and total == 0:
                 return f"Directory {path} is empty"

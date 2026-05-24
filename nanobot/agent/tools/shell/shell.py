@@ -287,6 +287,9 @@ class ExecTool(Tool):
         effective_timeout = min(timeout or self.timeout, self._MAX_TIMEOUT)
         env = self._build_env()
 
+        if _IS_WINDOWS:
+            cwd = os.path.normpath(cwd)
+
         if self.path_append:
             if _IS_WINDOWS:
                 env["PATH"] = env.get("PATH", "") + os.pathsep + self.path_append
@@ -364,7 +367,7 @@ class ExecTool(Tool):
 
             output_parts.append(f"Exit code: {process.returncode} {'✓' if process.returncode == 0 else '❌'}")
 
-            shell_info = f"[cwd: {cwd}, shell: {'cmd' if _IS_WINDOWS else 'sh'}]"
+            shell_info = f"[cwd: {cwd.replace('\\', '/')}, shell: {'pwsh' if _IS_WINDOWS else 'sh'}]"
             result = shell_info + "\n" + ("\n".join(output_parts) if output_parts else "(no output)")
 
             max_len = self._MAX_OUTPUT
@@ -691,9 +694,8 @@ class ExecTool(Tool):
     ) -> asyncio.subprocess.Process:
         """Launch *command* in a platform-appropriate shell."""
         if _IS_WINDOWS:
-            comspec = env.get("COMSPEC", os.environ.get("COMSPEC", "cmd.exe"))
             return await asyncio.create_subprocess_exec(
-                comspec, "/c", command,
+                "powershell.exe", "-Command", command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
@@ -729,15 +731,15 @@ class ExecTool(Tool):
         On Unix, only HOME/LANG/TERM are passed; ``bash -l`` sources the
         user's profile which sets PATH and other essentials.
 
-        On Windows, ``cmd.exe`` has no login-profile mechanism, so a curated
-        set of system variables (including PATH) is forwarded.  API keys and
-        other secrets are still excluded.
+        On Windows, ``powershell.exe`` is used (no login-profile mechanism);
+        a curated set of system variables (including PATH) is forwarded.
+        API keys and other secrets are still excluded.
         """
         if _IS_WINDOWS:
             sr = os.environ.get("SYSTEMROOT", r"C:\Windows")
             env = {
                 "SYSTEMROOT": sr,
-                "COMSPEC": os.environ.get("COMSPEC", f"{sr}\\system32\\cmd.exe"),
+                "COMSPEC": shutil.which("powershell.exe") or "powershell.exe",
                 "USERPROFILE": os.environ.get("USERPROFILE", ""),
                 "HOMEDRIVE": os.environ.get("HOMEDRIVE", "C:"),
                 "HOMEPATH": os.environ.get("HOMEPATH", "\\"),
@@ -788,3 +790,5 @@ class ExecTool(Tool):
         posix_paths = re.findall(r"(?:^|[\s|>'\"])(/[^\s\"'>;|<]+)", command) # POSIX: /absolute only
         home_paths = re.findall(r"(?:^|[\s|>'\"])(~[^\s\"'>;|<]*)", command) # POSIX/Windows home shortcut: ~
         return win_paths + posix_paths + home_paths
+
+

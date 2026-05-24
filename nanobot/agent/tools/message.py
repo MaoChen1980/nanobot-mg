@@ -158,7 +158,7 @@ class MessageTool(Tool):
                 else:
                     fp = Path(p) if os.path.isabs(p) else self._workspace / p
                     if not fp.exists():
-                        return f"Error: media file not found: {fp}"
+                        return f"Error: media file not found: {fp.as_posix()}"
                     resolved.append(str(fp))
             media = resolved
 

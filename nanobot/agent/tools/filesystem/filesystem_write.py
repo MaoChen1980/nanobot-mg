@@ -75,7 +75,7 @@ class WriteFileTool(_FsTool):
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
             file_state.record_write(fp)
-            write_result = f"Successfully wrote {len(content)} characters to {fp}"
+            write_result = f"Successfully wrote {len(content)} characters to {fp.as_posix()}"
             if warning:
                 write_result = f"{warning}\n{write_result}"
 

@@ -37,7 +37,7 @@ def _resolve_path(
         media_path = gmd().resolve()
         all_dirs = [allowed_dir.resolve()] + [media_path] + [d.resolve() for d in (extra_allowed_dirs or [])]
         if not any(_is_under(resolved, d) for d in all_dirs):
-            raise PermissionError(f"Path {path} is outside allowed directory {allowed_dir}")
+            raise PermissionError(f"Path {path} is outside allowed directory {allowed_dir.as_posix()}")
     return resolved
 
 
