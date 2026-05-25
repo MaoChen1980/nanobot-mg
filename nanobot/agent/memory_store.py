@@ -169,6 +169,8 @@ class MemoryStore:
         turns: list[list[dict]] = []
         current: list[dict] = []
         for msg in messages:
+            if msg.get("status") == "synthetic":
+                continue
             if msg.get("role") == "user" and current:
                 turns.append(current)
                 current = []

@@ -373,10 +373,12 @@ class UserMessageHandler:
             future_context = [m for turn in turns[trim_batch:] for m in turn]
             summary = await self._loop._summarize_turns(trim_flat, future_context)
             if summary:
-                now = datetime.now(timezone.utc).isoformat()
+                # Use the last summarized message's timestamp so the summary pair
+                # stays chronologically consistent if messages are ever sorted by timestamp.
+                ts = trim_flat[-1].get("timestamp", datetime.now(timezone.utc).isoformat())
                 summary_pair = [
-                    {"role": "assistant", "content": summary, "timestamp": now},
-                    {"role": "user", "content": "ok", "timestamp": now},
+                    {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
+                    {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
                 ]
                 session.messages[boundary:boundary] = summary_pair
                 logger.info(
