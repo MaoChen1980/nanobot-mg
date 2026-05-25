@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Awaitable
 
@@ -372,9 +373,10 @@ class UserMessageHandler:
             future_context = [m for turn in turns[trim_batch:] for m in turn]
             summary = await self._loop._summarize_turns(trim_flat, future_context)
             if summary:
+                now = datetime.now(timezone.utc).isoformat()
                 summary_pair = [
-                    {"role": "assistant", "content": summary},
-                    {"role": "user", "content": "ok"},
+                    {"role": "assistant", "content": summary, "timestamp": now},
+                    {"role": "user", "content": "ok", "timestamp": now},
                 ]
                 session.messages[boundary:boundary] = summary_pair
                 logger.info(
