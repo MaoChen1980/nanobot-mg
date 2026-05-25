@@ -140,14 +140,18 @@ def trim_history_to_budget(
         kept_tokens += msg_tokens
     kept.reverse()
 
+    # Remove synthetic user "ok" orphaned when its companion summary was trimmed.
+    while kept and kept[0].get("status") == "synthetic" and kept[0].get("role") == "user":
+        kept.pop(0)
+
     if kept:
         for i, message in enumerate(kept):
-            if message.get("role") == "user":
+            if message.get("role") == "user" and message.get("status") != "synthetic":
                 kept = kept[i:]
                 break
         else:
             for idx in range(len(non_system) - 1, -1, -1):
-                if non_system[idx].get("role") == "user":
+                if non_system[idx].get("role") == "user" and non_system[idx].get("status") != "synthetic":
                     kept = non_system[idx:]
                     break
             else:
