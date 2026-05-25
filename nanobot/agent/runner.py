@@ -307,7 +307,8 @@ class AgentRunner:
                             res = results[i]
                             content = _normalize(spec, tc.id, tc.name, res)
                             ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
-                            content = self._fmt_tool_metadata(tc.name, content, ts)
+                            ev = new_events[i] if i < len(new_events) else {}
+                            content = self._fmt_tool_metadata(tc.name, content, ts, ev.get("duration_ms"))
                         else:
                             content = f"[ABANDONED] tool call {tc.name} was not executed due to interruption"
                             ts = ""
@@ -329,13 +330,13 @@ class AgentRunner:
                     continue
 
                 completed_tool_results = []
-                for tool_call, result in zip(tool_calls, results):
+                for tool_call, result, ev in zip(tool_calls, results, new_events):
                     from nanobot.agent.tools.ask import AskUserInterrupt
                     if isinstance(fatal_error, AskUserInterrupt) and tool_call.name == "ask_user":
                         continue
                     content = _normalize(spec, tool_call.id, tool_call.name, result)
                     ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else datetime.now(timezone.utc).isoformat()
-                    content = self._fmt_tool_metadata(tool_call.name, content, ts)
+                    content = self._fmt_tool_metadata(tool_call.name, content, ts, ev.get("duration_ms"))
                     tool_message = {
                         "role": "tool", "tool_call_id": tool_call.id, "name": tool_call.name,
                         "content": content, "timestamp": ts,
@@ -582,25 +583,26 @@ class AgentRunner:
         messages.append(build_assistant_message(_PERSISTED_MODEL_ERROR_PLACEHOLDER))
 
     @staticmethod
-    @staticmethod
-    def _fmt_tool_metadata(tool_name: str, result: str, timestamp: str = "") -> str:
-        """Prefix tool result with searchable metadata: tool name, size, time.
+    def _fmt_tool_metadata(tool_name: str, result: str, timestamp: str = "", duration_ms: int | None = None) -> str:
+        """Prefix tool result with metadata: name, time, status, duration, size.
 
-        Info-gathering tools (read_file, grep, etc.) get a ``[Source: ...]``
-        label so the LLM can distinguish external facts from its own inferences.
+        Info-gathering tools get a ``[Source: ...]`` label so the LLM can
+        distinguish external facts from its own inferences.
         """
-        from nanobot.utils.helpers import format_message_header
-        header = format_message_header()
         size = len(result) if isinstance(result, str) else 0
         ts = timestamp[:16].replace("T", " ") if timestamp else ""
-        if tool_name in _SOURCE_TOOLS:
-            meta = f"[Source: {tool_name}"
-        else:
-            meta = f"[Tool: {tool_name}"
+        status = "failure" if result.startswith("Error") else "success"
+        duration_str = f"time consumed: {duration_ms / 1000:.1f}s" if duration_ms is not None else ""
+        prefix = "Source" if tool_name in _SOURCE_TOOLS else "Tool"
+        parts = [f"[{prefix}: {tool_name}"]
         if ts:
-            meta += f" | {ts}"
-        meta += f" | {size} chars]"
-        return f"{header}\n{meta}\n{result}"
+            parts.append(ts)
+        parts.append(status)
+        if duration_str:
+            parts.append(duration_str)
+        parts.append(f"result: {size} chars]")
+        meta = " | ".join(parts)
+        return f"{meta}\n{result}"
 
     # Backward compatibility — delegate to module functions
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)

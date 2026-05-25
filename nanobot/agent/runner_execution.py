@@ -157,6 +157,7 @@ async def _run_tool(
             "name": tool_call.name,
             "status": "error",
             "detail": str(exc),
+            "duration_ms": duration_ms,
         }
         if isinstance(exc, AskUserInterrupt):
             event["status"] = "waiting"
@@ -177,6 +178,7 @@ async def _run_tool(
             "name": tool_call.name,
             "status": "error",
             "detail": result.replace("\n", " ").strip()[:120],
+            "duration_ms": duration_ms,
         }
         self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, result, False, result, duration_ms)
         if spec.fail_on_tool_error:
@@ -191,7 +193,7 @@ async def _run_tool(
     elif len(detail) > 120:
         detail = detail[:120] + "..."
     self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, detail_raw, True, None, duration_ms)
-    return result, {"name": tool_call.name, "status": "ok", "detail": detail}, None
+    return result, {"name": tool_call.name, "status": "ok", "detail": detail, "duration_ms": duration_ms}, None
 
 
 async def _batch_run_tools(

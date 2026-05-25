@@ -544,11 +544,11 @@ class ContextBuilder:
         else:
             messages.append({"role": current_role, "content": user_content})
 
-        # Inject Message Time into non-last tool/user messages
+        # Inject Message Time into non-last user messages
         header = format_message_header()
         for i in range(len(messages) - 1):
             role = messages[i].get("role")
-            if role not in ("tool", "user"):
+            if role != "user":
                 continue
             content = messages[i].get("content", "")
             if not content:
