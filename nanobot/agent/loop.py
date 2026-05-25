@@ -638,7 +638,7 @@ class AgentLoop:
                     resp = await self.provider.chat([
                         {"role": "user", "content": prompt}
                     ], model=self.model)
-                    text = resp.get("content", "") or ""
+                    text = resp.content or ""
                     results.append(f"✅ {kind} llm:\n{text[:500]}")
                 except Exception as e:
                     results.append(f"❌ {kind} llm: error — {e}")
@@ -649,7 +649,7 @@ class AgentLoop:
                         {"role": "system", "content": "You are a research assistant. Investigate the task thoroughly and report findings."},
                         {"role": "user", "content": prompt},
                     ], model=self.model)
-                    text = resp.get("content", "") or ""
+                    text = resp.content or ""
                     results.append(f"✅ {kind} agent_loop:\n{text[:500]}")
                 except Exception as e:
                     results.append(f"❌ {kind} agent_loop: error — {e}")
