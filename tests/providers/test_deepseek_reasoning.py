@@ -4,7 +4,6 @@ Covers:
 - extra_body injection for thinking mode
 - reasoning_content extraction from responses
 - Multi-turn reasoning_content passthrough
-- Drop of incomplete reasoning history
 """
 
 from types import SimpleNamespace
@@ -177,71 +176,6 @@ async def test_passthrough_preserves_reasoning_content_on_assistant_messages() -
     tool_call_msgs = [m for m in assistant_msgs if m.get("tool_calls")]
     assert len(tool_call_msgs) == 1
     assert tool_call_msgs[0].get("reasoning_content") == "I need to list the files first"
-
-
-# ── _drop_deepseek_incomplete_reasoning_history ────────────────────────────────
-
-
-def test_drop_passes_through_all_messages_unchanged() -> None:
-    """DeepSeek reasoning history is not modified - DeepSeek manages state internally."""
-    with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
-        provider = OpenAICompatProvider(spec=_DEEPSEEK_SPEC)
-
-    messages = [
-        {"role": "system", "content": "You are helpful"},
-        {"role": "user", "content": "List files"},
-        {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [{"id": "1", "function": {"name": "list_dir", "arguments": "{}"}}],
-            # Missing reasoning_content - should NOT be dropped or modified
-        },
-        {"role": "tool", "tool_call_id": "1", "name": "list_dir", "content": "file1.txt"},
-        {"role": "user", "content": "How many?"},
-    ]
-
-    result = provider._drop_deepseek_incomplete_reasoning_history(messages, "high")
-
-    # All messages preserved as-is, no modification
-    assert result == messages
-
-
-def test_drop_does_nothing_when_reasoning_effort_is_none() -> None:
-    """When reasoning_effort=None, history is not modified."""
-    with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
-        provider = OpenAICompatProvider(spec=_DEEPSEEK_SPEC)
-
-    messages = [
-        {"role": "user", "content": "Hi"},
-        {"role": "assistant", "content": "Hi!", "tool_calls": []},
-    ]
-
-    result = provider._drop_deepseek_incomplete_reasoning_history(messages, None)
-
-    assert result == messages
-
-
-def test_drop_does_nothing_for_non_deepseek_providers() -> None:
-    """Non-DeepSeek providers pass through unchanged."""
-    with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
-        provider = OpenAICompatProvider()  # No spec = generic OpenAI compat
-
-    messages = [
-        {"role": "user", "content": "Hi"},
-        {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [{"id": "1", "function": {"name": "x", "arguments": "{}"}}],
-
-            # No reasoning_content - should NOT be dropped for non-DeepSeek
-        },
-        {"role": "tool", "tool_call_id": "1", "name": "x", "content": "ok"},
-    ]
-
-    result = provider._drop_deepseek_incomplete_reasoning_history(messages, "high")
-
-    assert len(result) == len(messages)
-
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
 

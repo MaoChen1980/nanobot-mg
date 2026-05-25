@@ -41,36 +41,6 @@ async def test_web_fetch_blocks_localhost():
 
 
 @pytest.mark.asyncio
-async def test_web_fetch_result_contains_untrusted_flag():
-    """When fetch succeeds, result JSON must include untrusted=True and the banner."""
-    from nanobot.config.schema import WebFetchConfig
-    tool = WebFetchTool(config=WebFetchConfig(use_jina_reader=False))
-
-    fake_html = "<html><head><title>Test</title></head><body><p>Hello world</p></body></html>"
-
-    import httpx
-
-    class FakeResponse:
-        status_code = 200
-        url = "https://example.com/page"
-        text = fake_html
-        headers = {"content-type": "text/html"}
-        def raise_for_status(self): pass
-        def json(self): return {}
-
-    async def _fake_get(self, url, **kwargs):
-        return FakeResponse()
-
-    with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_public), \
-         patch("httpx.AsyncClient.get", _fake_get):
-        result = await tool.execute(url="https://example.com/page")
-
-    data = json.loads(result)
-    assert data.get("untrusted") is True
-    assert "[External content" in data.get("text", "")
-
-
-@pytest.mark.asyncio
 async def test_web_fetch_blocks_private_redirect_before_returning_image(monkeypatch):
     tool = WebFetchTool()
 

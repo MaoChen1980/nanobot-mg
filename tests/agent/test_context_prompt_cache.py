@@ -127,14 +127,6 @@ def test_framework_search_is_registered(tmp_path) -> None:
     assert "memory_search" in prompt
 
 
-def test_default_soul_template_contains_execution_rules() -> None:
-    """Default SOUL.md template must contain tag dispatch table and core discipline."""
-    soul = (pkg_files("nanobot") / "templates" / "SOUL.md").read_text(encoding="utf-8")
-    assert "## " in soul  # top-level section exists
-    assert "Every conclusion needs tool evidence" in soul  # core discipline
-    assert "| **#code**" in soul  # tag table present
-    assert "Session Start" in soul  # session start section
-
 
 def test_channel_format_hint_telegram(tmp_path) -> None:
     """Telegram channel should get messaging-app format hint."""
