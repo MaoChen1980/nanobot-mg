@@ -1247,51 +1247,63 @@ class AgentLoop:
         finally:
             loop.close()
 
-    async def _summarize_turns(self, turns: list[dict]) -> str:
-        """Summarize a list of conversation turns via LLM for context compression.
+    async def _summarize_turns(self, turns: list[dict], future_context: list[dict] | None = None) -> str:
+        """Summarize oldest turns via LLM, guided by future context.
 
         Called when session turns reach the trim threshold. The summary is
         injected back as an assistant+user pair so trimmed context survives.
+
+        *future_context* — the remaining turns that survive trimming. The LLM
+        uses them to decide what in *turns* is still relevant and what to drop.
         """
-        lines: list[str] = []
-        for msg in turns:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                lines.append(f"<{role}>\n{content}\n</{role}>")
-            elif isinstance(content, list):
-                texts = [
-                    b.get("text", "") for b in content
-                    if isinstance(b, dict) and b.get("type") == "text"
-                ]
-                joined = "\n".join(texts)
-                if joined:
-                    lines.append(f"<{role}>\n{joined}\n</{role}>")
-        turns_text = "\n".join(lines)
+        def _format_turns(msgs: list[dict]) -> str:
+            lines: list[str] = []
+            for msg in msgs:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    lines.append(f"<{role}>\n{content}\n</{role}>")
+                elif isinstance(content, list):
+                    texts = [
+                        b.get("text", "") for b in content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    ]
+                    joined = "\n".join(texts)
+                    if joined:
+                        lines.append(f"<{role}>\n{joined}\n</{role}>")
+            return "\n".join(lines)
+
+        turns_text = _format_turns(turns)
+        future_text = _format_turns(future_context) if future_context else ""
 
         prompt = (
             "你正在总结即将被裁剪的旧对话轮次。\n"
-            "你的任务：提取\"未来的你\"需要知道的上下文。\n"
+            "任务：你**后面**的对话（附在后面）是当前正在进行的上下文。\n"
+            "请根据后面的对话来判断：前面的对话中，哪些信息对后面的对话仍然重要？\n"
             "\n"
-            "## 必须保留（如果在这些轮次中出现）\n"
-            "- 事实: 文件路径、参数名、配置值、API\n"
-            "- 决定: 架构选择、为什么选 A 不选 B\n"
-            "- 话题: 正在做什么、瓶颈、下一步\n"
+            "## 一些可参考的方向（由你判断是否适用）\n"
+            "- 后面还在引用的文件路径、参数名、配置值、API\n"
+            "- 后面还在依赖的架构决策、选择理由\n"
+            "- 后面还在讨论的话题、瓶颈、下一步计划\n"
             "\n"
-            "## 必须丢弃\n"
-            "- 试错过程、中间报错\n"
-            "- 已被替代的值（200→80 只记 80）\n"
+            "## 一些可以考虑丢弃的方向（由你判断）\n"
+            "- 后面的对话已不再使用的试错过程\n"
+            "- 已被后续值替代的旧值\n"
             "- 寒暄\n"
             "\n"
-            "## 你可以并且应该补充任何你觉得重要的内容\n"
-            "以上只是最低要求。如果有重要的上下文不属于这些分类，照样加上。\n"
-            "你的判断比分类更重要。\n"
+            "## 最重要的原则\n"
+            "以上方向仅供参考。你的判断比这些建议更重要。\n"
+            "如果你觉得某个信息在后面还有用，不管它属于哪类，都保留。\n"
+            "如果你觉得某个信息后面已经用不上了，不管它看似多重要，都丢弃。\n"
             "\n"
             "## 输出\n"
             "简洁的要点列表，按主题分组。不要按轮次顺序。\n"
             "\n"
-            "以下是需要总结的对话：\n\n"
-            f"{turns_text}"
+            "以下是即将被裁剪的旧对话：\n\n"
+            f"{turns_text}\n\n"
+            "---\n"
+            "以下是后面（会保留的）对话，请参考它们来判断上面的旧对话中哪些信息仍然重要：\n\n"
+            f"{future_text}"
         )
 
         try:

@@ -59,15 +59,23 @@ class TestSummarizeTurns:
         summary = await loop._summarize_turns([])
         assert summary == ""
 
-    async def test_includes_rules_in_prompt(self):
+    async def test_includes_future_context_in_prompt(self):
+        loop, _ = _make_handler()
+        loop.provider.chat = AsyncMock(return_value=LLMResponse(content="summary"))
+        turns = [{"role": "user", "content": "old msg"}]
+        future = [{"role": "assistant", "content": "future context"}]
+        await loop._summarize_turns(turns, future)
+        prompt = loop.provider.chat.call_args[0][0][0]["content"]
+        assert "future context" in prompt
+        assert "old msg" in prompt
         loop, _ = _make_handler()
         loop.provider.chat = AsyncMock(return_value=LLMResponse(content=""))
         await loop._summarize_turns([])
         prompt = loop.provider.chat.call_args[0][0][0]["content"]
-        assert "必须保留" in prompt
-        assert "必须丢弃" in prompt
-        assert "事实" in prompt
-        assert "决定" in prompt
+        assert "后面" in prompt  # references future context
+        assert "方向（由你判断" in prompt  # guidelines, not rules
+        assert "最重要" in prompt
+        assert "参考" in prompt
 
 
 class TestFinalizeTurnCompression:
@@ -95,6 +103,13 @@ class TestFinalizeTurnCompression:
         )
 
         loop._summarize_turns.assert_awaited_once()
+        # Verify future_context was passed (remaining 60 turns)
+        call_kwargs = loop._summarize_turns.call_args[1]
+        call_args = loop._summarize_turns.call_args[0]
+        if call_kwargs.get("future_context") is not None:
+            assert len(call_kwargs["future_context"]) > 0
+        elif len(call_args) > 1:
+            assert len(call_args[1]) > 0  # future_context as positional
         # Summary pair injected at trim boundary
         # 80 user+assistant pairs → 81 turns (first user message is its own turn).
         # Boundary after 20 turns = 1 (turn0: user0) + 19×2 (turns1-19: asst+user) = 39

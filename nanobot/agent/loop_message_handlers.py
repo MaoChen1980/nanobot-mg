@@ -369,7 +369,8 @@ class UserMessageHandler:
             trim_turns = turns[:trim_batch]
             boundary = sum(len(t) for t in trim_turns)
             trim_flat = [m for turn in trim_turns for m in turn]
-            summary = await self._loop._summarize_turns(trim_flat)
+            future_context = [m for turn in turns[trim_batch:] for m in turn]
+            summary = await self._loop._summarize_turns(trim_flat, future_context)
             if summary:
                 summary_pair = [
                     {"role": "assistant", "content": summary},
