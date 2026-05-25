@@ -1299,7 +1299,7 @@ class AgentLoop:
                 [{"role": "user", "content": prompt}],
                 model=self.model,
             )
-            summary = (resp.get("content") or "").strip()
+            summary = (resp.content or "").strip()
             logger.info("Summarized {} turns ({} chars)", len(turns), len(summary))
             return summary or "(no context to preserve)"
         except Exception as e:
