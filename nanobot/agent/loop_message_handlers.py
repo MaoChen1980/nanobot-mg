@@ -138,9 +138,9 @@ class UserMessageHandler:
                         dest = ws / f"{stem}_{counter}{suffix}"
                         counter += 1
                 shutil.copy2(str(pa), str(dest))
-                labels.append(pa.name)
+                labels.append(f"{pa.name} → {dest}")
 
-            # Inform LLM what was received, no content/vision extraction
+            # Inform LLM what was received, with real paths so it can read them
             ref = f"[用户发送了: {'、'.join(labels)}]"
             new_content = f"{msg.content}\n\n{ref}" if msg.content else ref
             msg = dataclasses.replace(msg, content=new_content, media=[])
