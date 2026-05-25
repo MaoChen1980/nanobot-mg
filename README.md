@@ -20,18 +20,6 @@ This repository is a fork of [HKUDS/nanobot](https://github.com/HKUDS/nanobot) -
 
 ## Install
 
-**Install from PyPI** (stable release):
-
-```bash
-pip install nanobot-ai
-```
-
-**Install with uv** (stable release, fast):
-
-```bash
-uv tool install nanobot-ai
-```
-
 **Install from source** (latest features):
 
 ```bash
