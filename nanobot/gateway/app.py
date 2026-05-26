@@ -98,6 +98,7 @@ class GatewayApplication:
             self._print_startup_status()
             self._register_extractor_job()
             self._register_log_check_job()
+            self._register_self_review_jobs()
         else:
             console.print(
                 "[yellow]Running in setup mode — configure an API key in the "
@@ -517,6 +518,83 @@ class GatewayApplication:
             )
         )
         console.print("[green]✓[/green] Log check: every 2 hours")
+
+    def _register_self_review_jobs(self) -> None:
+        """Register automated self-review and evolution cron jobs."""
+        from nanobot.cron.types import CronJob, CronPayload, CronSchedule
+
+        cfg = self.config.agents.defaults.self_review
+        tz = self.config.agents.defaults.timezone
+        deliver = bool(cfg.channel)
+
+        jobs = [
+            CronJob(
+                id="daily-self-review",
+                name="daily-self-review",
+                schedule=CronSchedule(kind="cron", expr="0 4 * * *", tz=tz),
+                payload=CronPayload(
+                    deliver=deliver,
+                    channel=cfg.channel,
+                    to=cfg.to,
+                    session_key=cfg.session_key,
+                    message=(
+                        "每日自我审视任务\n\n"
+                        "1. 读 ~/.nanobot/agent/self_log.md 最新的 10 条记录，"
+                        "问自己：这周有什么别扭的地方是重复出现的？\n"
+                        "2. 读 ~/.nanobot/agent/session_metrics.json，"
+                        "看 token 使用量、错误率、工具调用模式有没有异常\n"
+                        "3. 如果发现可改进的地方，具体写一行到 "
+                        "~/.nanobot/agent/capacity_notes.md\n"
+                        "4. 把这次审视结论简短附在这条记录后面\n\n"
+                        "不要做太多，一个有价值的发现就够了。"
+                    ),
+                ),
+            ),
+            CronJob(
+                id="daily-tool-optimizer",
+                name="daily-tool-optimizer",
+                schedule=CronSchedule(kind="cron", expr="0 5 * * *", tz=tz),
+                payload=CronPayload(
+                    deliver=deliver,
+                    channel=cfg.channel,
+                    to=cfg.to,
+                    session_key=cfg.session_key,
+                    message=(
+                        "分析最近工具使用情况: "
+                        "python workspace/skills/tool_optimizer/optimizer.py "
+                        "--mode all"
+                    ),
+                ),
+            ),
+            CronJob(
+                id="daily-evolution",
+                name="daily-evolution",
+                schedule=CronSchedule(kind="cron", expr="20 5 * * *", tz=tz),
+                payload=CronPayload(
+                    deliver=deliver,
+                    channel=cfg.channel,
+                    to=cfg.to,
+                    session_key=cfg.session_key,
+                    message=(
+                        "分析 ~/.nanobot/agent/self_log.md，总结近期经验教训，"
+                        "然后：\n"
+                        "1. 识别可以改进的地方\n"
+                        "2. 评估置信度 (>90% 再改)\n"
+                        "3. 有把握就自己改（edit_file/write_file）\n"
+                        "4. 记录改动\n\n"
+                        "不要只用说的，要真改。"
+                    ),
+                ),
+            ),
+        ]
+
+        for job in jobs:
+            self.cron.register_system_job(job)
+
+        console.print(
+            "[green]✓[/green] Self-review: daily-self-review(04:00), "
+            "tool-optimizer(05:00), daily-evolution(05:20)"
+        )
 
     async def _monitor_log_errors(self, deliver_fn) -> None:
         """Check JSONL log for new ERROR/CRITICAL entries and alert active sessions."""
