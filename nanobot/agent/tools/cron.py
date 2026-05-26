@@ -439,18 +439,34 @@ class CronTool(Tool):
             if dry_run:
                 steps.append("  [Mode] Dry run - result will not be delivered")
 
-            # Override deliver based on dry_run
+# Override deliver based on dry_run - with safety check
             if dry_run:
-                job.payload.deliver = False
+                try:
+                    if hasattr(job.payload, "deliver"):
+                        job.payload.deliver = False
+                    else:
+                        # payload is not a proper object - convert it safely
+                        job.payload = type("Payload", (), {
+                            "deliver": False,
+                            "message": str(getattr(job.payload, "message", "")),
+                            "channel": str(getattr(job.payload, "channel", "cli")),
+                            "to": str(getattr(job.payload, "to", "direct")),
+                            "channel_meta": {},
+                            "session_key": str(getattr(job.payload, "session_key", "")),
+                        })()
+                except Exception:
+                    pass  # ignore errors, job will run anyway
 
             try:
                 # Execute the job
                 result = await self._cron.run_job(job_id, force=True)
 
                 steps.append("")  # blank line before result
-                if result:
+                if isinstance(result, str):
                     steps.append(f"✅ Test completed successfully")
                     steps.append(f"Result preview: {result[:200]}{'...' if len(result) > 200 else ''}")
+                elif result:
+                    steps.append(f"✅ Test completed successfully")
                 else:
                     steps.append("⚠️  Test completed but returned empty result")
 

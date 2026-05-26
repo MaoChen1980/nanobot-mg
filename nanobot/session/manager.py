@@ -98,7 +98,12 @@ class Session:
         unconsolidated = [m for m in self.messages if m.get("status") != "excluded"]
         if max_turns > 0:
             turns = self._split_turns_by_assistant(unconsolidated)
-            keep = turns[-max_turns:] if len(turns) > max_turns else turns
+            # Keep synthetic turns (summary pairs) regardless of max_turns limit
+            synthetic = [t for t in turns if any(m.get("status") == "synthetic" for m in t)]
+            regular = [t for t in turns if not any(m.get("status") == "synthetic" for m in t)]
+            keep_regular = regular[-max(max_turns - len(synthetic), 0):] if len(regular) > max_turns else regular
+            # Restore original order: synthetic first, then most recent regular turns
+            keep = synthetic + keep_regular
             sliced = [m for turn in keep for m in turn]
         else:
             sliced = unconsolidated[-max_messages:]
