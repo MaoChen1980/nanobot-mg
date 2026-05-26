@@ -132,7 +132,7 @@ class SelfInsightHook(AgentHook):
     def _inject_insight(self, context: AgentHookContext, insight: str) -> None:
         """Prepend a system reminder to the message list."""
         reminder = {
-            "role": "system",
+            "role": "user",
             "content": (
                 f"[Self-Insight from your history]\n{insight}\n"
                 "— This is a reminder from your self-review system."

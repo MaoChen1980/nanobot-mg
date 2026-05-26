@@ -380,6 +380,7 @@ class LLMProvider(ABC):
         if not messages:
             return messages
 
+        orig_count = len(messages)
         merged: list[dict[str, Any]] = []
         for msg in messages:
             role = msg.get("role")
@@ -396,8 +397,14 @@ class LLMProvider(ABC):
                     curr_has_tools = bool(msg.get("tool_calls"))
                     if curr_has_tools:
                         merged[-1] = dict(msg)
+                        logger.info(
+                            "_enforce_role_alternation: replaced merged[-1] with new assistant tool-call msg"
+                        )
                         continue
                     if prev_has_tools:
+                        logger.info(
+                            "_enforce_role_alternation: dropped consecutive assistant msg (prev has tool_calls)"
+                        )
                         continue
                 prev_content = prev.get("content") or ""
                 curr_content = msg.get("content") or ""

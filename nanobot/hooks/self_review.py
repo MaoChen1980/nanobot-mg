@@ -1,8 +1,12 @@
 """
 SelfReviewHook: lightweight per-iteration self-review.
 
-Logs basic execution metrics after each turn. This is phase 1:
-minimal data capture. Phase 2 will add LLM-powered self-reflection.
+Phase 1: minimal data capture — logs metrics to self_review_log.jsonl.
+Phase 2 (SelfReflectHook) adds LLM self-reflection.
+Phase 3 (SelfInsightHook) injects insights back into agent context.
+
+Together they form the self-evolution feedback loop:
+  SelfReviewHook (capture) → SelfReflectHook (reflect) → SelfInsightHook (inject)
 
 Log file: ~/.nanobot/agent/self_review_log.jsonl
 """
@@ -22,8 +26,7 @@ class SelfReviewHook(AgentHook):
 
     Captures: tool call counts, errors, empty results, usage stats.
     No LLM calls — all captured from hook context.
-
-    Phase 2 will add LLM-powered self-reflection prompts.
+    Phase 2 (SelfReflectHook) and Phase 3 (SelfInsightHook) complete the loop.
     """
 
     LOG_FILE = Path.home() / ".nanobot" / "agent" / "self_review_log.jsonl"

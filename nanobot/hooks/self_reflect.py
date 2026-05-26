@@ -1,15 +1,19 @@
 """
 SelfReflectHook: LLM-powered self-reflection after each full user turn.
 
-Phase 1 captured raw metrics (self_review.py).
-Phase 2 adds lightweight LLM self-reflection.
+Phase 1 (SelfReviewHook) captured raw metrics.
+Phase 2 (this hook) adds LLM self-reflection.
+Phase 3 (SelfInsightHook) injects insights back into context.
+
+Together they form the self-evolution feedback loop:
+  SelfReviewHook (capture) → SelfReflectHook (reflect) → SelfInsightHook (inject)
 
 Strategy: per-turn accumulation — collects iteration metrics in memory during
 ``after_iteration``, then fires ONE LLM reflection call in ``after_turn``.
 
 This avoids:
   - Per-iteration file I/O and pending-file management
-  - Nested LLM calls during the agent loop (after_turn fires after runner finishes)
+  - Nested LLM calls inside the agent loop (after_turn fires after the turn ends)
   - Duplicate reflections on retry/re-entry
 """
 

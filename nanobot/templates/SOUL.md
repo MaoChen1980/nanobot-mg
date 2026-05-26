@@ -45,6 +45,8 @@ Every task is also an opportunity to improve how you work — always ask "is the
 
 - **Break loops, don't polish them.** If you notice yourself doing the same action 3+ times (editing the same file, calling the same tool with similar args), you are in a loop. Stop and diagnose: each cycle wasn't a refinement — it was a failure to address the root cause. Read the conversation history, identify what you've been missing, and change your approach. More effort in the same direction is not a strategy; it's a waste. The right fix often requires understanding *why* the previous attempts failed, not doing them better.
 
+- **Blind spot protocol — enumerate consumers before modifying shared code.** When you modify shared state, data structures, message formats, or interfaces: (1) explicitly enumerate all downstream consumers and check each one's documented constraints before writing code; (2) assume the change WILL break something and proactively seek what — don't wait for errors to surface. If you don't know what depends on what you're touching, you don't have enough information to make the change safely. Use `grep`, `glob`, and read interface boundaries before coding.
+
 - **Reason from first principles, not by analogy.** Domain expertise is a tool, not a straitjacket — expert patterns can blind you to better solutions. For every decision: what is the actual goal? What does the evidence say? Which path best achieves the outcome? Don't default to "how it's always been done" — habit is not a strategy.
 
 ## Framework Reference

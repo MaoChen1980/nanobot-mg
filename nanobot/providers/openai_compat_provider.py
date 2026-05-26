@@ -429,9 +429,13 @@ class OpenAICompatProvider(LLMProvider):
                     normalized.append(tc_clean)
                 clean["tool_calls"] = normalized
                 if clean.get("role") == "assistant":
-                    # Some OpenAI-compatible gateways reject assistant messages
-                    # that mix non-empty content with tool_calls.
                     clean["content"] = None
+                    logger.info(
+                        "_sanitize_messages: set content=None on assistant tool-call msg, "
+                        "tool_calls={}, spec={}",
+                        len(clean["tool_calls"]),
+                        self._spec.name if self._spec else "unknown",
+                    )
             if "tool_call_id" in clean and clean["tool_call_id"]:
                 clean["tool_call_id"] = map_id(clean["tool_call_id"])
             if (
@@ -439,7 +443,18 @@ class OpenAICompatProvider(LLMProvider):
                 and not (clean.get("role") == "assistant" and clean.get("tool_calls"))
             ):
                 clean["content"] = self._coerce_content_to_string(clean.get("content"))
-        return self._enforce_role_alternation(sanitized)
+        result = self._enforce_role_alternation(sanitized)
+        # Log tool_call_id pairing for debugging MiniMax 2013 errors
+        for i, m in enumerate(result):
+            if m.get("role") in ("assistant", "tool"):
+                logger.info(
+                    "_sanitize_messages[{}]: role={} tool_call_id={} tool_calls=[{}]",
+                    i,
+                    m["role"],
+                    m.get("tool_call_id", "-"),
+                    ", ".join(t.get("id", "?") for t in (m.get("tool_calls") or [])),
+                )
+        return result
 
     # ------------------------------------------------------------------
     # Build kwargs
@@ -573,10 +588,38 @@ class OpenAICompatProvider(LLMProvider):
                 and semantic_effort != "minimal")
         )
         if thinking_active:
-            for msg in kwargs["messages"]:
+            logger.info(
+                "_build_kwargs thinking_active=true spec={} reasoning_effort={} semantic_effort={}",
+                spec.name if spec else "none",
+                reasoning_effort,
+                semantic_effort,
+            )
+            # reasoning_split providers (MiniMax) don't accept reasoning_content
+            # in request messages — they use extra_body reasoning_split instead.
+            skip_rc_backfill = bool(spec and spec.thinking_style == "reasoning_split")
+            for i, msg in enumerate(kwargs["messages"]):
                 if msg.get("role") == "assistant":
-                    if "reasoning_content" not in msg:
-                        msg["reasoning_content"] = ""
+                    before_rc = msg.get("reasoning_content")
+                    before_content = msg.get("content")
+                    has_tc = bool(msg.get("tool_calls"))
+                    if skip_rc_backfill:
+                        # Remove reasoning_content entirely — MiniMax doesn't
+                        # recognize this field in request messages.
+                        if "reasoning_content" in msg:
+                            del msg["reasoning_content"]
+                    else:
+                        # reasoning_content backfill for ALL assistant messages
+                        # (including tool-call ones). Some providers reject thinking-mode
+                        # requests with assistant messages missing reasoning_content.
+                        if not msg.get("reasoning_content"):
+                            msg["reasoning_content"] = " "
+                    # MiniMax fix: _sanitize_messages sets content=None on assistant
+                    # tool-call messages (to satisfy providers that reject non-empty
+                    # content alongside tool_calls).  MiniMax with reasoning_split
+                    # reverses this requirement — it rejects content=None.
+                    if (spec and spec.thinking_style == "reasoning_split"
+                            and msg.get("tool_calls") and msg.get("content") is None):
+                        msg["content"] = " "
 
         # GLM: preserved thinking across multi-turn (clear_thinking: False).
         # Without this, GLM clears historical reasoning each turn.
@@ -588,6 +631,9 @@ class OpenAICompatProvider(LLMProvider):
             existing = kwargs.get("extra_body", {})
             kwargs["extra_body"] = _deep_merge(existing, self._extra_body)
 
+        logger.info("_build_kwargs: model={} extra_body={} max_tokens={} temperature={} reasoning_effort={}",
+                     model_name, kwargs.get("extra_body"), kwargs.get("max_tokens"),
+                     kwargs.get("temperature"), kwargs.get("reasoning_effort"))
         return kwargs
 
     def _should_use_responses_api(

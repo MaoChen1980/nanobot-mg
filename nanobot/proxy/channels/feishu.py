@@ -264,11 +264,17 @@ class FeishuProxyChannel(BaseProxyChannel):
     # ------------------------------------------------------------------
 
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Enqueue push delivery from hub to Feishu chat."""
+        """Enqueue push delivery from hub to Feishu chat.
+
+        Used for both progress updates (cron / think / tool events) and Bot
+        responses.  When *reply_to* is present the message is sent as a
+        threaded reply; otherwise it's a standalone message.
+        """
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         media = data.get("media", [])
         buttons = data.get("buttons", [])
+        reply_to = data.get("reply_to", "")
         if not chat_id or (not content and not media):
             return
         # Convert structured buttons to ---quick-replies format for _send_formatted_reply
@@ -279,13 +285,13 @@ class FeishuProxyChannel(BaseProxyChannel):
                     qr_lines.append(str(btn))
             if qr_lines:
                 content = content.rstrip() + "\n\n---quick-replies\n" + "\n".join(qr_lines)
-        item: dict[str, Any] = {"chat_id": chat_id, "root_id": None}
+        item: dict[str, Any] = {"chat_id": chat_id, "root_id": reply_to or None}
         if content:
             item["content"] = content
         if media:
             item["media"] = media
         self._enqueue_send(item)
-        logger.info("Enqueued deliver to {}: content={} media={} buttons={}", chat_id, content[:60] if content else "", len(media), len(buttons))
+        logger.info("Enqueued deliver to {}: content={} media={} buttons={} reply_to={}", chat_id, content[:60] if content else "", len(media), len(buttons), reply_to[:20] if reply_to else "")
 
     def _process_send(self, item: dict) -> None:
         """Send queued message to Feishu."""

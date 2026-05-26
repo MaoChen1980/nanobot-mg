@@ -171,10 +171,16 @@ class BaseProxyChannel:
                 # 1. Deliver from hub — message response (has "success") or progress update
                 if data.get("type") == "deliver":
                     if "success" in data and self._pending_response is not None and not self._pending_response.done():
-                        self._pending_response.set_result(data)
+                        try:
+                            self._pending_response.set_result(data)
+                        except Exception as e:
+                            logger.warning("Background reader: set_result failed: {}", e)
                     else:
                         logger.debug("Background reader: deliver msg to chat={}", data.get("chat_id", "")[:20])
-                        await self._handle_deliver(data)
+                        try:
+                            await self._handle_deliver(data)
+                        except Exception as e:
+                            logger.error("Background reader: _handle_deliver failed: {}", e)
                     continue
 
                 # 2. Unexpected response type — fulfill pending response if any

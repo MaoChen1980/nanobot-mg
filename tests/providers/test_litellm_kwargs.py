@@ -628,7 +628,7 @@ def test_deepseek_thinking_preserves_tool_history_backfills_reasoning_content() 
     # Assistant message backfilled with empty reasoning_content
     assert msgs[2]["role"] == "assistant"
     assert msgs[2]["content"] is None
-    assert msgs[2]["reasoning_content"] == ""
+    assert msgs[2]["reasoning_content"] == " "
     assert msgs[2]["tool_calls"][0]["function"]["name"] == "my"
     # Tool message preserved
     assert msgs[3]["role"] == "tool"
@@ -671,7 +671,7 @@ def test_deepseek_thinking_preserves_orphan_tool_turn() -> None:
     # Assistant message backfilled with empty reasoning_content
     assert msgs[2]["role"] == "assistant"
     assert msgs[2]["content"] is None
-    assert msgs[2]["reasoning_content"] == ""
+    assert msgs[2]["reasoning_content"] == " "
     assert msgs[2]["tool_calls"][0]["function"]["name"] == "my"
     # Tool message preserved
     assert msgs[3]["role"] == "tool"
@@ -920,7 +920,7 @@ def test_deepseek_backfills_reasoning_content_on_legacy_tool_call_messages() -> 
     for msg in kw["messages"]:
         if msg.get("role") == "assistant":
             assert "reasoning_content" in msg, "legacy assistant message missing reasoning_content"
-            assert msg["reasoning_content"] == ""
+            assert msg["reasoning_content"] == " "
 
 
 def test_backfill_touches_messages_when_thinking_uses_default() -> None:
@@ -945,7 +945,7 @@ def test_backfill_touches_messages_when_thinking_uses_default() -> None:
     for msg in kw["messages"]:
         if msg.get("role") == "assistant" and msg.get("tool_calls"):
             assert "reasoning_content" in msg
-            assert msg["reasoning_content"] == ""
+            assert msg["reasoning_content"] == " "
 
     # reasoning_effort="minimal" → thinking disabled → no backfill
     kw = p._build_kwargs(
