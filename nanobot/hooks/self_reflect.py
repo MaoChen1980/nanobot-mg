@@ -1,19 +1,20 @@
 """
-SelfReflectHook: LLM-powered self-reflection after each session turn.
+SelfReflectHook: LLM-powered self-reflection after each full user turn.
 
 Phase 1 captured raw metrics (self_review.py).
 Phase 2 adds lightweight LLM self-reflection.
 
-Strategy: deferred execution — writes a "reflection trigger" file after each
-iteration.  The NEXT before_iteration fires the reflection so that:
-  - It runs between turns (no blocking of current turn)
-  - No nested LLM calls inside an already-running LLM call
-  - The hook stays async-safe and fast
+Strategy: per-turn accumulation — collects iteration metrics in memory during
+``after_iteration``, then fires ONE LLM reflection call in ``after_turn``.
+
+This avoids:
+  - Per-iteration file I/O and pending-file management
+  - Nested LLM calls during the agent loop (after_turn fires after runner finishes)
+  - Duplicate reflections on retry/re-entry
 """
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,7 +23,6 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 
 
 # ─── Reflection questions ────────────────────────────────────────────────────
-# The four core self-perception questions (from our design discussion).
 REFLECTION_QUESTIONS = [
     "这次有没有让我觉得别扭的地方？",
     "我有没有遇到工具调用出错，但不确定是工具的问题还是我调用的问题？",
@@ -51,63 +51,52 @@ REFLECTION_PROMPT_TEMPLATE = """\
 4. [你的回答]
 """
 
+SELF_AWARENESS_PROMPT = """
+## 自我感知
 
-# ─── Trigger file (written after each turn) ──────────────────────────────────
-def _pending_file(workspace: Path | None) -> Path:
-    base = workspace or Path.home() / ".nanobot" / "workspace"
-    return base / ".agent" / "_pending_reflection.jsonl"
+在整个对话过程中保持自我觉察。在每次工具调用之前，快速审视：
+- 我正在调用哪个工具？这是第几次？
+- 我的行为模式看起来像什么？（进步、卡住、转圈？）
+- 如果从外部观察，我会怎么评价自己当前的行动？
+
+特别警惕以下模式：
+- **重复编辑同一个文件**：如果你连续两次修改同一文件，停下来思考之前的修改为什么没解决问题
+- **重复执行同一工具**：如果同一个工具被反复调用且结果相似，可能是方法不对，换一种方式
+- **忽视工具错误信息**：工具返回的错误不是让你重试，而是告诉你当前的思路有问题
+"""
 
 
 # ─── Main hook ────────────────────────────────────────────────────────────────
 class SelfReflectHook(AgentHook):
-    """Write a deferred self-reflection trigger after each iteration.
+    """Accumulate per-iteration metrics and fire one LLM reflection per turn."""
 
-    The trigger is picked up by the NEXT before_iteration call, which
-    fires a lightweight LLM call to answer the four self-perception questions.
-    Results are appended to self_log.md.
-    """
-
-    # Workspace subdirectory for agent files
-    AGENT_DIR = ".agent"
     LOG_FILE = Path.home() / ".nanobot" / "agent" / "self_log.md"
-    METRICS_FILE = Path.home() / ".nanobot" / "agent" / "session_metrics.json"
 
     def __init__(self, reraise: bool = False) -> None:
         super().__init__(reraise)
-        self._pending_reflection_triggered_this_session = False
+        self._iteration_entries: list[dict] = []
         self._iteration_count = 0
 
-    # ── after_iteration: write a trigger for the NEXT turn ──────────────────
+    # ── after_iteration: accumulate metrics in memory ───────────────────────
 
     async def after_iteration(self, context: AgentHookContext) -> None:
         self._iteration_count += 1
         try:
-            self._write_trigger(context)
+            self._iteration_entries.append(self._build_entry(context))
         except Exception:
             logger.debug("SelfReflectHook.after_iteration failed silently")
 
-    def _write_trigger(self, context: AgentHookContext) -> None:
-        """Write a JSONL trigger line for the next before_iteration."""
-        workspace = self._resolve_workspace(context)
-        pf = _pending_file(workspace)
-        pf.parent.mkdir(parents=True, exist_ok=True)
-
+    def _build_entry(self, context: AgentHookContext) -> dict:
         tool_calls_data = [
             {"name": tc.name, "arguments": tc.arguments}
             for tc in (context.tool_calls or [])
         ]
-        tool_results_data = [
-            {"name": r.get("name", "?") if isinstance(r, dict) else "?", "str": str(r)[:200]}
-            for r in (context.tool_results or [])
-        ]
         usage = context.usage or {}
-        error_str = context.error if context.error else None
-
-        entry = {
+        return {
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "iteration": self._iteration_count,
             "tool_calls": tool_calls_data,
-            "tool_results": tool_results_data,
+            "tool_count": len(tool_calls_data),
             "usage": {
                 "prompt_tokens": usage.get("prompt_tokens", 0),
                 "completion_tokens": usage.get("completion_tokens", 0),
@@ -115,112 +104,74 @@ class SelfReflectHook(AgentHook):
             },
             "message_count": len(context.messages),
             "final_content_len": len(context.final_content or ""),
-            "error": error_str,
+            "error": context.error,
         }
 
-        with open(pf, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-        # Keep a running metrics summary for the session
-        self._update_session_metrics(entry, context)
-
-    def _update_session_metrics(self, entry: dict, context: AgentHookContext) -> None:
-        """Maintain a rolling session metrics file."""
-        metrics_path = Path.home() / ".nanobot" / "agent" / "session_metrics.json"
-        existing = {}
-        if metrics_path.exists():
-            try:
-                existing = json.loads(metrics_path.read_text(encoding="utf-8"))
-            except Exception:
-                existing = {}
-
-        # Sum up token counts
-        total_tokens = sum(e.get("usage", {}).get("total_tokens", 0) for e in existing.get("iterations", []))
-        total_tokens += entry.get("usage", {}).get("total_tokens", 0)
-        total_tool_calls = sum(len(e.get("tool_calls", [])) for e in existing.get("iterations", []))
-        total_tool_calls += len(entry.get("tool_calls", []))
-        total_errors = existing.get("total_errors", 0) + (1 if entry.get("error") else 0)
-
-        summary = {
-            "session_start": existing.get("session_start") or entry["time"],
-            "total_iterations": existing.get("total_iterations", 0) + 1,
-            "total_tokens": total_tokens,
-            "total_tool_calls": total_tool_calls,
-            "total_errors": total_errors,
-            "last_time": entry["time"],
-        }
-        summary["iterations"] = (existing.get("iterations") or []) + [entry]
-
-        metrics_path.parent.mkdir(parents=True, exist_ok=True)
-        metrics_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # ── before_iteration: fire pending reflections ─────────────────────────
+    # ── before_iteration: no-op (reflection fires in after_turn) ────────────
 
     async def before_iteration(self, context: AgentHookContext) -> None:
-        workspace = self._resolve_workspace(context)
-        pf = _pending_file(workspace)
+        pass
 
-        if not pf.exists():
+    # ── after_turn: fire one reflection for the entire turn ─────────────────
+
+    async def after_turn(self) -> None:
+        if not self._iteration_entries:
             return
+
+        entries = self._iteration_entries
+        self._iteration_entries = []  # reset for next turn
 
         try:
-            lines = pf.read_text(encoding="utf-8").strip().split("\n")
-            pending = [json.loads(l) for l in lines if l.strip()]
+            await self._run_turn_reflection(entries)
         except Exception:
-            logger.debug("SelfReflectHook: could not read pending file")
-            return
+            logger.debug("SelfReflectHook.after_turn failed")
 
-        if not pending:
-            return
+    async def _run_turn_reflection(self, entries: list[dict]) -> None:
+        """Build a summary from all iterations and fire one LLM reflection."""
+        total_tokens = sum(e.get("usage", {}).get("total_tokens", 0) for e in entries)
+        total_tool_calls = sum(e.get("tool_count", 0) for e in entries)
+        errors = [e for e in entries if e.get("error")]
+        iteration_range = f"#{entries[0]['iteration']}–#{entries[-1]['iteration']}"
+        time_str = entries[-1]["time"]
 
-        # Clear pending file immediately to avoid double-firing
-        pf.unlink(missing_ok=True)
+        # Detect repeated tool patterns
+        tool_name_counts: dict[str, int] = {}
+        for e in entries:
+            for tc in e.get("tool_calls", []):
+                tool_name_counts[tc["name"]] = tool_name_counts.get(tc["name"], 0) + 1
+        repeated = {name: cnt for name, cnt in tool_name_counts.items() if cnt >= 3}
+        rep_summary = ""
+        if repeated:
+            parts = [f"    {name} × {cnt}" for name, cnt in sorted(repeated.items())]
+            rep_summary = "  重复工具调用:\n" + "\n".join(parts) + "\n"
 
-        for entry in pending:
-            try:
-                await self._run_reflection(entry, workspace)
-            except Exception:
-                logger.debug("SelfReflectHook: _run_reflection failed for entry {}", entry.get("iteration"))
+        # Detect same-file edits
+        file_edit_targets: dict[str, int] = {}
+        for e in entries:
+            for tc in e.get("tool_calls", []):
+                if tc["name"] == "edit_file":
+                    path = (
+                        tc.get("arguments", {}).get("file_path")
+                        or tc.get("arguments", {}).get("path")
+                        or ""
+                    )
+                    if path:
+                        file_edit_targets[path] = file_edit_targets.get(path, 0) + 1
+        edit_summary = ""
+        repeated_edits = {p: c for p, c in file_edit_targets.items() if c >= 3}
+        if repeated_edits:
+            parts = [f"    {p} × {cnt}次编辑" for p, cnt in sorted(repeated_edits.items())]
+            edit_summary = "  重复编辑:\n" + "\n".join(parts) + "\n"
 
-        # Re-write any entries that failed so they can be retried next time
-        try:
-            if pf.exists():
-                return  # already cleared
-            failed = [e for e in pending if not e.get("_reflected", False)]
-            if failed:
-                pf.parent.mkdir(parents=True, exist_ok=True)
-                with open(pf, "w", encoding="utf-8") as f:
-                    for e in failed:
-                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
-        except Exception:
-            logger.debug("SelfReflectHook: could not re-write pending file")
-
-    async def _run_reflection(self, entry: dict, workspace: Path | None) -> None:
-        """Fire an LLM call to answer the four self-perception questions."""
-        entry["_reflected"] = True
-        iteration = entry.get("iteration", "?")
-        time_str = entry.get("time", "?")
-        usage = entry.get("usage", {})
-        tool_calls = entry.get("tool_calls", [])
-        tool_results = entry.get("tool_results", [])
-        error = entry.get("error")
-
-        # Build metrics summary
-        tool_summary_parts = []
-        for tc in tool_calls:
-            arg_str = str(tc.get("arguments", {}))[:80]
-            tool_summary_parts.append(f"  - {tc['name']}({arg_str})")
-        tool_summary = "\n".join(tool_summary_parts) if tool_summary_parts else "  (no tool calls)"
-
-        error_summary = f"  Error: {error}" if error else "  No errors"
-
-        metrics_text = f"""\
- Iteration #{iteration} @ {time_str}
-  Token usage: prompt={usage.get('prompt_tokens',0)} completion={usage.get('completion_tokens',0)} total={usage.get('total_tokens',0)}
-  Tool calls made:
-{tool_summary}
-{error_summary}
-"""
+        metrics_text = (
+            f"  Turns: {iteration_range} @ {time_str}\n"
+            f"  Total iterations: {len(entries)}\n"
+            f"  Total token usage: {total_tokens}\n"
+            f"  Total tool calls: {total_tool_calls}\n"
+            f"  Errors: {len(errors)}\n"
+            f"{rep_summary}"
+            f"{edit_summary}"
+        )
 
         prompt = REFLECTION_PROMPT_TEMPLATE.format(
             metrics_summary=metrics_text,
@@ -230,15 +181,14 @@ class SelfReflectHook(AgentHook):
             q3=REFLECTION_QUESTIONS[3],
         )
 
-        # Call the LLM — use the same provider setup as nanobot
         try:
             reflection_text = await self._call_llm_for_reflection(prompt)
         except Exception as exc:
             logger.debug("SelfReflectHook: LLM call failed: {}", exc)
             reflection_text = f"[reflection unavailable: {exc}]"
 
-        # Append to self_log.md
-        self._append_to_self_log(iteration, time_str, tool_calls, reflection_text, error)
+        combined = SELF_AWARENESS_PROMPT + "\n\nTurn reflection:\n\n" + reflection_text
+        self._append_to_log(iteration_range, time_str, total_tool_calls, errors, combined)
 
     async def _call_llm_for_reflection(self, prompt: str) -> str:
         """Make a minimal LLM call for self-reflection (no tools, no history)."""
@@ -247,12 +197,6 @@ class SelfReflectHook(AgentHook):
             {"role": "user", "content": prompt},
         ]
 
-        # Use the public LLM interface the same way nanobot does
-        # Import here to avoid circular deps — runner handles the provider
-        from nanobot.agent.runner import AgentRunner
-
-        # We need a provider to call.  The cleanest way without access to the
-        # running session's provider is to create a minimal one from config.
         from nanobot.config.loader import load_config
         from nanobot.providers.factory import make_provider
 
@@ -260,48 +204,32 @@ class SelfReflectHook(AgentHook):
         provider = make_provider(config)
         response = await provider.chat(
             messages=messages,
-            tools=None,  # reflection is text-only, no tools
+            tools=None,
             max_tokens=512,
             temperature=0.3,
         )
         return response.content or ""
 
-    def _append_to_self_log(
+    def _append_to_log(
         self,
-        iteration: int | str,
+        iteration_range: str,
         time_str: str,
-        tool_calls: list[dict],
+        total_tool_calls: int,
+        errors: list[dict],
         reflection_text: str,
-        error: str | None,
     ) -> None:
-        """Append one self-reflection block to self_log.md."""
         self.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-        # Detect discomfort signals
-        has_error = bool(error)
-        has_discomfort = "别扭" in reflection_text or "不对" in reflection_text or "错误" in reflection_text
-
+        has_error = bool(errors)
+        has_discomfort = any(
+            kw in reflection_text for kw in ("别扭", "不对", "错误", "重复")
+        )
         header = (
-            f"## Iteration {iteration} — {time_str}\n"
+            f"## Turn {iteration_range} — {time_str}\n"
             f"> Status: {'⚠️ discomfort' if has_discomfort else '✅'} | "
             f"{'❌ error' if has_error else '✅ no error'} | "
-            f"tools: {len(tool_calls)}\n"
+            f"tools: {total_tool_calls}\n"
         )
-        body = f"\n{reflection_text}\n\n"
-
         with open(self.LOG_FILE, "a", encoding="utf-8") as f:
             f.write(header)
-            f.write(body)
+            f.write(f"\n{reflection_text}\n\n")
 
-    def _resolve_workspace(self, context: AgentHookContext) -> Path | None:
-        if context.workspace:
-            return context.workspace
-        p = Path.cwd()
-        for _ in range(6):
-            if (p / "SOUL.md").exists():
-                return p
-            parent = p.parent
-            if parent == p:
-                break
-            p = parent
-        return Path.home() / ".nanobot" / "workspace"

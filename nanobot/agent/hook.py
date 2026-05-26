@@ -60,6 +60,14 @@ class AgentHook:
     async def after_iteration(self, context: AgentHookContext) -> None:
         pass
 
+    async def after_turn(self) -> None:
+        """Called after a full user-message turn completes.
+
+        Unlike ``after_iteration`` (fires per LLM call), this fires once
+        per user message, after all tool-call cycles are done.
+        """
+        pass
+
     def finalize_content(self, context: AgentHookContext, content: str | None) -> str | None:
         return content
 
@@ -132,6 +140,9 @@ class CompositeHook(AgentHook):
 
     async def after_iteration(self, context: AgentHookContext) -> None:
         await self._for_each_hook_safe("after_iteration", context)
+
+    async def after_turn(self) -> None:
+        await self._for_each_hook_safe("after_turn")
 
     def finalize_content(self, context: AgentHookContext, content: str | None) -> str | None:
         for h in self._hooks:

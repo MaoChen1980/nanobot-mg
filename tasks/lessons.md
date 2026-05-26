@@ -1,5 +1,29 @@
 # Lessons Learned
 
+## 2026-05-26: Hook lifecycle granularity — per-iteration vs per-turn
+
+**Context**: SelfReflectHook originally wrote a reflection trigger file in `after_iteration` (fires per LLM call), which the NEXT `before_iteration` would pick up and fire an LLM reflection call. This caused:
+- Per-iteration file I/O for every single LLM call in a multi-iteration turn
+- Nested LLM calls inside the agent loop (deferred to next iteration to avoid, but still messy)
+- The "pending file" mechanism was fragile — dict vs object attribute bug (`entry._reflected` doesn't work on dicts)
+- Self-edit infinite loops weren't detected until the runner guard caught them at 4 iterations
+
+**Correction**: The user asked "我看他就一直在改某个文件，就是改不完" — the agent can't see its own repetitive behavior because there was no per-turn lifecycle hook.
+
+**Fix**: 
+1. Added `after_turn()` to the hook lifecycle (`hook.py`, `loop_hook.py`, `loop.py`) — fires once per user message, after all tool-call cycles finish
+2. Rewrote SelfReflectHook to accumulate metrics in memory during `after_iteration`, then fire ONE LLM reflection in `after_turn`
+3. Added repeated-tool and same-file-edit detection to the reflection prompt
+4. Removed the fragile pending-file mechanism entirely
+
+**Rule**: Hook methods must match their granularity to the event they observe:
+- `after_iteration` → per-LLM-call (accumulate data, but don't fire expensive operations)
+- `after_turn` → per-user-message (synthesize, persist, reflect)
+- Never write file-based IPC between hook methods — use instance state
+- Always check types: dict keys vs object attributes are different
+
+**How to apply**: When designing hook behavior, ask "what's the natural scope?" If you're collecting per-call data to report per-turn, use in-memory accumulation in `after_iteration` and flush in `after_turn`. Never defer work to the next `before_iteration` — use the correct lifecycle method.
+
 ## 2026-05-17: MiniMax 2013 = multiple system messages
 
 **Context**: MiniMax returned 2013 "invalid chat setting" for every request after a session had accumulated error messages. I spent a long time debugging thinking/reasoning parameters, message content, and API call format.

@@ -212,6 +212,10 @@ class _LoopHook(AgentHook):
     ) -> list[dict]:
         return messages
 
+    async def after_turn(self) -> None:
+        """Called after a full user-message turn completes."""
+        pass
+
     def filter_tool_calls(
         self, context: AgentHookContext, tool_calls: list[ToolCallRequest]
     ) -> list[ToolCallRequest]:

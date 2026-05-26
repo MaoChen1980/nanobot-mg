@@ -96,37 +96,19 @@ class ReadFileTool(_FsTool):
             if mime and mime.startswith("image/"):
                 return build_image_content_blocks(raw, mime, str(fp), f"(Image file: {path})")
 
-            # Read dedup: same path + offset + limit + unchanged mtime → stub
-            # Always check for external modifications before dedup
+            # Read dedup: same path + offset + limit + unchanged mtime + unchanged hash → stub
             entry = file_state._default_manager._state.get(str(fp.resolve()))
             try:
                 current_mtime = os.path.getmtime(fp)
             except OSError:
                 current_mtime = 0.0
             if entry and entry.can_dedup and entry.offset == offset and entry.limit == limit:
-                if current_mtime != entry.mtime:
-                    # File was modified externally - force full read and mark as not dedupable
-                    entry.can_dedup = False
-                    file_state.record_read(fp, offset=offset, limit=limit)  # Update state with new mtime
-                    # Continue to read full content (don't return dedup message)
-                else:
-                    # File unchanged - return dedup message
-                    # But only if content is actually unchanged (not just mtime)
+                if current_mtime == entry.mtime:
                     current_hash = file_state._hash_file(str(fp))
                     if current_hash == entry.content_hash:
                         return f"[File unchanged since last read: {path}]"
-                    else:
-                        # Content changed despite same mtime - force full read
-                        entry.can_dedup = False
-                        file_state.record_read(fp, offset=offset, limit=limit)
-            else:
-                # No previous state or marked as not dedupable - read full content
-                file_state.record_read(fp, offset=offset, limit=limit)
-                # Force full read by setting can_dedup to False for this read
-                if entry:
-                    entry.can_dedup = False
 
-            # Read the file content after dedup check
+            # Read the file content (no dedup or file changed)
             raw = fp.read_bytes()
             try:
                 text_content = raw.decode("utf-8")

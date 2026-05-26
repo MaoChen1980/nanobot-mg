@@ -373,7 +373,8 @@ class EditFileTool(_FsTool):
         raw = fp.read_bytes()
         uses_crlf = b"\r\n" in raw
         content = raw.decode("utf-8").replace("\r\n", "\n")
-        lines = content.split("\n")
+        has_trailing_newline = content.endswith("\n")
+        lines = content.splitlines()
 
         # 1-indexed → 0-indexed
         start_idx = first_line - 1
@@ -383,7 +384,7 @@ class EditFileTool(_FsTool):
             return f"Error: first_line must be >= 1, got {first_line}"
         if end_idx < start_idx:
             return f"Error: last_line ({last_line}) must be >= first_line ({first_line})"
-        if end_idx >= len(lines):
+        if start_idx >= len(lines) or end_idx >= len(lines):
             return f"Error: last_line ({last_line}) exceeds file length ({len(lines)} lines)"
 
         # Verify line tag if provided
@@ -406,6 +407,8 @@ class EditFileTool(_FsTool):
         # Replace the line range
         new_lines = lines[:start_idx] + [norm_new] + lines[end_idx + 1:]
         new_content = "\n".join(new_lines)
+        if has_trailing_newline:
+            new_content += "\n"
         if uses_crlf:
             new_content = new_content.replace("\n", "\r\n")
 
