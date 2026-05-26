@@ -112,6 +112,41 @@ class FileStateManager:
             return True
         return True
 
+    def check_content_hash(self, path: str | Path) -> str | None:
+        """Return a warning if file content has changed since last read.
+
+        Returns None if file unchanged, or a warning string with diff info.
+        This uses the full-file SHA256 stored by record_read().
+        """
+        p = str(Path(path).resolve())
+        entry = self._state.get(p)
+        if entry is None:
+            return "Warning: file has not been read yet. Read it first to verify content before editing."
+        if entry.content_hash is None:
+            return None  # No hash recorded — no check possible
+        current_hash = self._hash_file(p)
+        if current_hash is None:
+            return None
+        if current_hash == entry.content_hash:
+            return None
+        # File changed — return warning with details
+        try:
+            size = os.path.getsize(p)
+        except OSError:
+            size = -1
+        return (
+            f"Warning: file content has changed since last read "
+            f"(expected hash: {entry.content_hash[:16]}..., current hash: {current_hash[:16]}..., "
+            f"size: {size} bytes). "
+            f"Use read_file to refresh content before editing."
+        )
+
+    def get_content_hash(self, path: str | Path) -> str | None:
+        """Return the content hash stored for this file (from last read)."""
+        p = str(Path(path).resolve())
+        entry = self._state.get(p)
+        return entry.content_hash if entry else None
+
     def clear(self) -> None:
         """Clear all tracked state (useful for testing)."""
         self._state.clear()
@@ -149,6 +184,16 @@ def check_read(path: str | Path) -> str | None:
 def is_unchanged(path: str | Path, offset: int = 1, limit: int | None = None) -> bool:
     """Return True if file was previously read with same params and content is unchanged."""
     return _default_manager.is_unchanged(path, offset, limit)
+
+
+def check_content_hash(path: str | Path) -> str | None:
+    """Return a warning if file content has changed since last read."""
+    return _default_manager.check_content_hash(path)
+
+
+def get_content_hash(path: str | Path) -> str | None:
+    """Return the content hash stored for this file (from last read)."""
+    return _default_manager.get_content_hash(path)
 
 
 def clear() -> None:

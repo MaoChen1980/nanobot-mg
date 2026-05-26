@@ -9,8 +9,9 @@ from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
-from .filesystem_base import _FsTool, _normalize_quotes, _line_tag
+from .filesystem_base import _FsTool, _normalize_quotes
 from nanobot.agent.tools import file_state
+
 
 @dataclass(slots=True)
 class _MatchSpan:
@@ -75,7 +76,6 @@ def _first_lines_window(old_text: str, content: str) -> tuple[list[str], list[st
     old_lines = old_text.splitlines(keepends=True)
     window = max(1, len(old_lines))
 
-    start = 0
     window_lines = lines[:window] if len(lines) >= window else lines
 
     actual_text = "".join(window_lines).replace("\r\n", "\n").rstrip("\n")
@@ -95,41 +95,6 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
     return matches[0].text, len(matches)
 
 
-@tool_parameters(
-    build_parameters_schema(
-        path=p("string", "Absolute path to a file to edit. Directories and special files are rejected."),
-        old_text=p("string", "Text to find and replace. Must match EXACTLY and be UNIQUE in the file — include surrounding lines for disambiguation, or set replace_all=true. "
-            "Leave empty (or omit) to prepend new_text at file beginning. Pair with first_line+last_line for line-range mode instead of text matching."),
-        new_text=p("string", "Replacement text for old_text. Pass empty string to delete old_text. "
-            "When used with first_line+last_line (no old_text), replaces the entire line range with this text."),
-        replace_all=p("boolean",
-            "Replace all occurrences (default false). "
-            "When old_text appears multiple times and replace_all=false, "
-            "the tool returns a warning listing the line numbers of each match. "
-            "If you only want to replace one specific occurrence, add more surrounding "
-            "context to old_text to make it unique.",
-            default=False,
-        ),
-        first_line=p("integer", "Line number to start replacing from (1-indexed). When set with last_line, replaces that line range with new_text directly — no fuzzy matching needed.",
-            minimum=1,
-        ),
-        last_line=p("integer", "Line number to end replacing at (1-indexed, inclusive). Must be >= first_line.",
-            minimum=1,
-        ),
-        line_tag=p("string",
-            "Tag from read_file output for the line at first_line (e.g. 'Q8fA'). "
-            "When set with first_line+last_line, the tool verifies the tag matches "
-            "the actual file content before editing. Prevents editing the wrong line "
-            "when the file has changed since you read it."
-        ),
-        then_grep=p("string",
-            "If set, searches the edited file for this exact substring (not a regex) after saving, "
-            "and returns matching line numbers and content. "
-            "Helps verify the edit landed correctly."
-        ),
-        required=["path", "new_text"],
-    )
-)
 class EditFileTool(_FsTool):
     """Edit a file by replacing text (exact substring match only)."""
 
@@ -142,26 +107,18 @@ class EditFileTool(_FsTool):
         "**用途**: 通过文本匹配或行号范围修改文件内容。\n\n"
         "**两种模式**:\n"
         "- **old_text/new_text**（默认）— 精确文本匹配替换，适合小段替换\n"
-        "- **first_line/last_line**（行号范围）— 按行号替换，支持传入 read_file 输出的 line_tag 做校验\n\n"
-        "**行号 + line_tag**:\n"
-        "read_file 输出格式为 `LINENO:TAG| CONTENT`（如 `42:Q8fA| def foo():`）。\n"
-        "编辑时传入 `first_line=42, line_tag='Q8fA'`，工具会自动校验该行内容是否已被修改。\n"
-        "推荐用这种方式编辑已知行号范围的内容，避免输出大段 old_text。\n\n"
-        "**自动验证**:\n"
-        "编辑后会自动搜索 new_text 的第一行内容是否写入成功。\n"
-        "也可用 `then_grep` 参数指定一个字符串来验证写入结果。\n\n"
+        "- **first_line/last_line**（行号范围）— 按行号替换，直接传入行号即可\n\n"
+        "**自动保护**:\n"
+        "编辑前检查文件是否在读取后被外部修改（SHA256 全文件 hash）。\n"
+        "如果文件已变化，工具会在结果中包含警告（不影响编辑执行）。\n\n"
         "**限制**:\n"
         "- 不支持跨文件的查找替换\n"
         "- 文本匹配容忍空格差异，但不能跨越函数/类重组\n\n"
         "**错误应对**:\n"
         "- old_text 找不到 → 显示 diff 辅助定位\n"
-        "- old_text 出现多次且 replace_all=false → 显示每处匹配的行号，要求提供更多上下文或设置 replace_all=true\n"
-        "- line_tag 不匹配 → 说明文件已改变，要求重新 read_file\n"
+        "- old_text 出现多次且 replace_all=false → 显示每处匹配的行号\n"
         "- 文件不存在 → 返回错误\n\n"
-        "**边界条件**:\n"
-        "- 需要创建新文件 → 用 write_file\n"
-        "- 需要跨文件查找替换 → 用 exec sed\n\n"
-        "**极简案例**: edit_file(path='main.py', first_line=42, last_line=45, line_tag='Q8fA', new_text='def bar():')\n"
+        "**极简案例**: edit_file(path='main.py', first_line=42, last_line=45, new_text='def bar():')\n"
         "→ 替换文件中 42-45 行为新内容"
     )
 
@@ -171,12 +128,14 @@ class EditFileTool(_FsTool):
         return "\n".join(line.rstrip() for line in text.split("\n"))
 
     async def execute(
-        self, path: str | None = None, old_text: str | None = None,
+        self,
+        path: str | None = None,
+        old_text: str | None = None,
         new_text: str | None = None,
         replace_all: bool = False,
         first_line: int | None = None,
         last_line: int | None = None,
-        line_tag: str | None = None,
+        line_tag: str | None = None,  # deprecated, ignored
         then_grep: str | None = None,
         **kwargs: Any,
     ) -> str:
@@ -190,10 +149,9 @@ class EditFileTool(_FsTool):
             if first_line is not None or last_line is not None:
                 if first_line is None or last_line is None:
                     raise ValueError("Both first_line and last_line must be provided (or neither)")
-                result = await self._edit_by_lines(path, new_text, first_line, last_line, line_tag=line_tag)
+                result = await self._edit_by_lines(path, new_text, first_line, last_line)
                 if result.startswith("Successfully"):
                     fp = self._resolve(path)
-                    # Auto-verify: use then_grep if provided, otherwise first line of new_text
                     verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                     if then_grep:
                         result += f"\n{self._find_in_file(fp, then_grep)}"
@@ -212,7 +170,7 @@ class EditFileTool(_FsTool):
 
             fp = self._resolve(path)
 
-            # Create-file semantics: old_text='' + file doesn't exist → create
+            # Create-file semantics: old_text='' + file doesn't exist -> create
             if not fp.exists():
                 if old_text == "":
                     fp.parent.mkdir(parents=True, exist_ok=True)
@@ -237,7 +195,7 @@ class EditFileTool(_FsTool):
             if fsize > self._MAX_EDIT_FILE_SIZE:
                 return f"Error: File too large to edit ({fsize / (1024**3):.1f} GiB). Maximum is 1 GiB."
 
-            # Create-file: old_text='' but file exists and not empty → reject
+            # Create-file: old_text='' but file exists and not empty -> reject
             if old_text == "":
                 raw = fp.read_bytes()
                 content = raw.decode("utf-8")
@@ -255,8 +213,8 @@ class EditFileTool(_FsTool):
                     msg += f"\n{self._find_in_file(fp, then_grep)}"
                 return msg
 
-            # Read-before-edit check
-            warning = file_state.check_read(fp)
+            # Staleness warning (informational -- does not block edit)
+            hash_warning = file_state.check_content_hash(fp)
 
             raw = fp.read_bytes()
             uses_crlf = b"\r\n" in raw
@@ -280,7 +238,7 @@ class EditFileTool(_FsTool):
 
             norm_new = new_text.replace("\r\n", "\n")
 
-            # Trailing whitespace stripping (skip markdown to preserve double-space line breaks)
+            # Trailing whitespace stripping (skip markdown)
             if fp.suffix.lower() not in self._MARKDOWN_EXTS:
                 norm_new = self._strip_trailing_ws(norm_new)
 
@@ -289,8 +247,7 @@ class EditFileTool(_FsTool):
             for match in reversed(selected):
                 replacement = norm_new
 
-                # Delete-line cleanup: when deleting text (new_text=''), consume trailing
-                # newline to avoid leaving a blank line
+                # Delete-line cleanup: when deleting text (new_text=''), consume trailing newline
                 end = match.end
                 if replacement == "" and not match.text.endswith("\n") and content[end:end + 1] == "\n":
                     end += 1
@@ -303,14 +260,14 @@ class EditFileTool(_FsTool):
             file_state.record_write(fp)
             msg = f"Successfully edited {fp.as_posix()}"
 
-            # Auto-verify: check new_text landed in the file
+            # Auto-verify
             verify_lines = [l.strip() for l in norm_new.splitlines() if l.strip()]
             verify_result = ""
             if verify_lines:
                 verify_pattern = verify_lines[0]
                 verify_result = self._find_in_file(fp, verify_pattern, max_matches=3)
-            if warning:
-                msg = f"{warning}\n{msg}"
+            if hash_warning:
+                msg = f"{hash_warning}\n{msg}"
             if verify_result:
                 msg += f"\nVerified:\n{verify_result}"
             if then_grep:
@@ -324,7 +281,6 @@ class EditFileTool(_FsTool):
             return f"Error editing file: {e}"
 
     def _file_not_found_msg(self, path: str, fp: Path) -> str:
-        """Build an error message for file-not-found."""
         return f"Error: File not found: {path}"
 
     @staticmethod
@@ -356,27 +312,24 @@ class EditFileTool(_FsTool):
 
     async def _edit_by_lines(
         self, path: str, new_text: str, first_line: int, last_line: int,
-        line_tag: str | None = None,
     ) -> str:
-        """Replace lines first_line through last_line (1-indexed) with new_text.
-
-        When *line_tag* is provided, verifies that the tag of the existing
-        content at *first_line* matches before editing.
-        """
+        """Replace lines first_line through last_line (1-indexed) with new_text."""
         fp = self._resolve(path)
         if not fp.exists():
             return self._file_not_found_msg(path, fp)
         if path.endswith(".ipynb"):
             return "Error: This is a Jupyter notebook. Use the notebook_edit tool instead of edit_file."
 
-        warning = file_state.check_read(fp)
+        # Staleness warning (informational -- does not block edit)
+        hash_warning = file_state.check_content_hash(fp)
+
         raw = fp.read_bytes()
         uses_crlf = b"\r\n" in raw
         content = raw.decode("utf-8").replace("\r\n", "\n")
         has_trailing_newline = content.endswith("\n")
         lines = content.splitlines()
 
-        # 1-indexed → 0-indexed
+        # 1-indexed -> 0-indexed
         start_idx = first_line - 1
         end_idx = last_line - 1
 
@@ -387,24 +340,11 @@ class EditFileTool(_FsTool):
         if start_idx >= len(lines) or end_idx >= len(lines):
             return f"Error: last_line ({last_line}) exceeds file length ({len(lines)} lines)"
 
-        # Verify line tag if provided
-        if line_tag:
-            actual_tag = _line_tag(lines[start_idx])
-            if line_tag != actual_tag:
-                return (
-                    f"Error: line tag mismatch at line {first_line}. "
-                    f"Expected tag '{line_tag}', got '{actual_tag}'. "
-                    f"The file content has changed since you read it. "
-                    f"Use read_file to get the current content and tags."
-                )
-
         norm_new = new_text.replace("\r\n", "\n")
-        # Strip trailing whitespace (skip markdown)
         if fp.suffix.lower() not in self._MARKDOWN_EXTS:
             norm_new = self._strip_trailing_ws(norm_new)
         norm_new = norm_new.rstrip("\n")
 
-        # Replace the line range
         new_lines = lines[:start_idx] + [norm_new] + lines[end_idx + 1:]
         new_content = "\n".join(new_lines)
         if has_trailing_newline:
@@ -415,12 +355,6 @@ class EditFileTool(_FsTool):
         fp.write_bytes(new_content.encode("utf-8"))
         file_state.record_write(fp)
         msg = f"Successfully edited {fp.as_posix()} (replaced lines {first_line}-{last_line})"
-        if warning:
-            msg = f"{warning}\n{msg}"
+        if hash_warning:
+            msg = f"{hash_warning}\n{msg}"
         return msg
-
-
-# ---------------------------------------------------------------------------
-# list_dir
-# ---------------------------------------------------------------------------
-
