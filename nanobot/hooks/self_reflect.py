@@ -186,7 +186,7 @@ class SelfReflectHook(AgentHook):
         try:
             if pf.exists():
                 return  # already cleared
-            failed = [e for e in pending if not getattr(e, "_reflected", False)]
+            failed = [e for e in pending if not e.get("_reflected", False)]
             if failed:
                 pf.parent.mkdir(parents=True, exist_ok=True)
                 with open(pf, "w", encoding="utf-8") as f:
@@ -197,6 +197,7 @@ class SelfReflectHook(AgentHook):
 
     async def _run_reflection(self, entry: dict, workspace: Path | None) -> None:
         """Fire an LLM call to answer the four self-perception questions."""
+        entry["_reflected"] = True
         iteration = entry.get("iteration", "?")
         time_str = entry.get("time", "?")
         usage = entry.get("usage", {})
