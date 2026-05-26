@@ -106,7 +106,7 @@ class Session:
         # Avoid starting mid-turn when possible, except for proactive
         # assistant deliveries that the user may be replying to.
         for i, message in enumerate(sliced):
-            if message.get("role") == "user":
+            if message.get("role") == "user" and message.get("status") != "synthetic":
                 start = i
                 if i > 0 and sliced[i - 1].get("_channel_delivery"):
                     start = i - 1
@@ -133,7 +133,7 @@ class Session:
                 )
                 content = f"{content}\n{breadcrumbs}" if content else breadcrumbs
             entry: dict[str, Any] = {"role": message["role"], "content": content}
-            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "reasoning_details", "thinking_blocks"):
+            for key in ("tool_calls", "tool_call_id", "name", "reasoning_content", "reasoning_details", "thinking_blocks", "status"):
                 if key in message:
                     entry[key] = message[key]
             if include_timestamps:
