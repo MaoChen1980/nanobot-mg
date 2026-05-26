@@ -76,12 +76,12 @@ class SelfRestartTool(Tool):
             return False, result.stderr[:200]
         except Exception as e:
             return False, str(e)
-    async def _graceful_restart_via_shutdown(self, gateway_url: str = "http://localhost:18789") -> None:
+    async def _graceful_restart_via_shutdown(self, gateway_port: int = 18790) -> None:
         """Call /api/shutdown to trigger a clean gateway restart."""
         import httpx
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(f"{gateway_url}/api/shutdown")
+                resp = await client.post(f"http://localhost:{gateway_port}/api/shutdown")
                 logger.info("self_restart: /api/shutdown → {}", resp.status_code)
         except Exception as e:
             logger.warning("self_restart: /api/shutdown failed ({}), flag file will handle restart", e)
