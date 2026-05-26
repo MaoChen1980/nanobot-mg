@@ -888,9 +888,6 @@ class AgentLoop:
         await self._connect_mcp()
         logger.info("Agent loop started")
 
-        # Check for self-restart flag from SelfRestartTool
-        _check_self_restart_flag()
-
         while self._running:
             try:
                 msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
