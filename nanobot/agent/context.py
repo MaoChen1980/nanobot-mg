@@ -68,7 +68,7 @@ class ContextBuilder:
         self.timezone = timezone
         self.memory = MemoryStore(workspace, db=db)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
-        self._bootstrap_cache: dict[str, tuple[float, str]] = {}
+        self._bootstrap_cache: dict[str, tuple[float, str | None]] = {}
 
 
     def warmup(self) -> None:
@@ -391,19 +391,20 @@ class ContextBuilder:
                 continue
 
             cached = self._bootstrap_cache.get(filename)
-            if cached is None or cached[0] != mtime:
+            if cached is not None and cached[0] == mtime:
+                if cached[1] is None:
+                    continue  # cached as skipped, still default
+                content_str: str = cached[1]
+            else:
                 content = file_path.read_text(encoding="utf-8")
                 # Skip if user hasn't customized this file (still default template)
                 if filename in self._SKIP_IF_DEFAULT and self._is_default_template_content(content, filename):
                     self._bootstrap_cache[filename] = (mtime, None)  # sentinel: skipped
                     continue
                 self._bootstrap_cache[filename] = (mtime, content)
-                cached = (mtime, content)
-            else:
-                if cached[1] is None:
-                    continue  # cached as skipped, still default
+                content_str = content
 
-            parts.append(f"## {filename}\n\n{self._shift_headings(cached[1], offset=1)}")
+            parts.append(f"## {filename}\n\n{self._shift_headings(content_str, offset=1)}")
 
         return "\n\n".join(parts) if parts else ""
 
@@ -469,7 +470,7 @@ class ContextBuilder:
             tpl = pkg_files("nanobot") / "templates" / template_path
             if not tpl.is_file():
                 return False
-            mtime = tpl.stat().st_mtime
+            mtime = tpl.stat().st_mtime  # type: ignore[attr-defined]
             cached = _template_content_cache.get(template_path)
             if cached is None or cached[0] != mtime:
                 if len(_template_content_cache) >= _MAX_TEMPLATE_CACHE_SIZE:
