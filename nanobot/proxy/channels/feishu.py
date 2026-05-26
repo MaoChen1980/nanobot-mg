@@ -512,43 +512,42 @@ class FeishuProxyChannel(BaseProxyChannel):
             media_paths: List of local file paths.
             msg_type: Feishu message type — ``image`` or ``file``.
         """
-        with self._api_lock:
-            for path in media_paths:
-                path = path.strip()
-                if not os.path.exists(path):
-                    logger.warning("Feishu media send: file not found: {}", path)
-                    continue
-                file_key = self._upload_media_to_feishu(path, msg_type)
-                if not file_key:
-                    logger.error("Feishu media send failed: could not upload {}", path)
-                    continue
+        for path in media_paths:
+            path = path.strip()
+            if not os.path.exists(path):
+                logger.warning("Feishu media send: file not found: {}", path)
+                continue
+            file_key = self._upload_media_to_feishu(path, msg_type)
+            if not file_key:
+                logger.error("Feishu media send failed: could not upload {}", path)
+                continue
 
-                try:
-                    from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
+            try:
+                from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
-                    receive_id_type = self.config.get("receiveIdType", "chat_id")
-                    key_field = "image_key" if msg_type == "image" else "file_key"
-                    request = (
-                        CreateMessageRequest.builder()
-                        .receive_id_type(receive_id_type)
-                        .request_body(
-                            CreateMessageRequestBody.builder()
-                            .receive_id(chat_id)
-                            .msg_type(msg_type)
-                            .content(json.dumps({key_field: file_key}))
-                            .build()
-                        )
+                receive_id_type = self.config.get("receiveIdType", "chat_id")
+                key_field = "image_key" if msg_type == "image" else "file_key"
+                request = (
+                    CreateMessageRequest.builder()
+                    .receive_id_type(receive_id_type)
+                    .request_body(
+                        CreateMessageRequestBody.builder()
+                        .receive_id(chat_id)
+                        .msg_type(msg_type)
+                        .content(json.dumps({key_field: file_key}))
                         .build()
                     )
-                    if root_id:
-                        request.builder().root_id(root_id)
-                    resp = self._client.im.v1.message.create(request)
-                    if resp.code != 0:
-                        logger.error("Feishu send media failed: code={} msg={}", resp.code, resp.msg)
-                    else:
-                        logger.info("Feishu media sent: {} → chat={}", os.path.basename(path), chat_id)
-                except Exception as e:
-                    logger.error("Feishu media send error: {}", e)
+                    .build()
+                )
+                if root_id:
+                    request.builder().root_id(root_id)
+                resp = self._client.im.v1.message.create(request)
+                if resp.code != 0:
+                    logger.error("Feishu send media failed: code={} msg={}", resp.code, resp.msg)
+                else:
+                    logger.info("Feishu media sent: {} → chat={}", os.path.basename(path), chat_id)
+            except Exception as e:
+                logger.error("Feishu media send error: {}", e)
 
     # ------------------------------------------------------------------
     # Reply / reaction helpers
@@ -822,7 +821,12 @@ class FeishuProxyChannel(BaseProxyChannel):
         forced and buttons are rendered from the parsed labels.
 
         Falls back through the chain: card → post → plain text.
+
+        Note: ``_api_lock`` is only held for the strategy decision (pure Python,
+        no I/O), NOT during the HTTP calls. This prevents a single Feishu API
+        timeout from stalling the entire send queue.
         """
+        # Strategy decision — fast, no I/O
         with self._api_lock:
             cleaned, qrs = self._parse_quick_replies(content)
             render_mode = self.config.get("renderMode", "card")
@@ -830,15 +834,16 @@ class FeishuProxyChannel(BaseProxyChannel):
                 render_mode == "auto" and self._has_rich_content(cleaned)
             )
 
-            if use_card:
-                if self._send_card_reply(chat_id, cleaned, quick_replies=qrs):
-                    return
-
-            processed = self._wrap_tables_in_code_fences(cleaned)
-            if self._send_post_reply(chat_id, processed):
+        # Execute chosen strategy — HTTP calls happen outside the lock
+        if use_card:
+            if self._send_card_reply(chat_id, cleaned, quick_replies=qrs):
                 return
 
-            self._send_plain_text(chat_id, processed)
+        processed = self._wrap_tables_in_code_fences(cleaned)
+        if self._send_post_reply(chat_id, processed):
+            return
+
+        self._send_plain_text(chat_id, processed)
 
     def _add_reaction(self, message_id: str, emoji: str) -> None:
         """Add reaction emoji to message."""

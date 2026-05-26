@@ -193,6 +193,8 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
+        self._context_max_turns = context_max_turns
+        self._context_trim_batch = context_trim_batch
         self.project_root = project_root
         self._extra_hooks: list[AgentHook] = hooks or []
         self._extra_hooks.extend(self._discover_hooks())
@@ -245,8 +247,6 @@ class AgentLoop:
         from nanobot.utils.helpers import ensure_dir
         self.prompts_dir = ensure_dir(workspace / "prompts")
         self._pt_save_interval = pt_save_interval
-        self._context_max_turns = context_max_turns
-        self._context_trim_batch = context_trim_batch
         self.extractor = MemoryExtractor(
             store=self.context.memory,
             provider=provider,

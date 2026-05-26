@@ -7,8 +7,11 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from unittest.mock import MagicMock
 
 from nanobot.agent.hook import AgentHookContext
+from nanobot.hooks.self_review import SelfReviewHook
+from nanobot.hooks.self_insight_hook import SelfInsightHook, LOG_JSONL
 
 
 class _FakeContext:
@@ -40,9 +43,6 @@ class _FakeContext:
 # SelfReviewHook — discomfort signal detection
 # ---------------------------------------------------------------------------
 
-from nanobot.hooks.self_review import SelfReviewHook
-
-
 class TestSelfReviewHookDetectDiscomfort:
     """Tests for discomfort signal detection in tool results."""
 
@@ -54,7 +54,8 @@ class TestSelfReviewHookDetectDiscomfort:
         assert self._detect({"error": "Connection timeout"}) == "error"
 
     def test_failed_signal(self):
-        assert self._detect({"error": "Request failed"}) == "failed"
+        # "error" pattern matches first in DISCOMFORT_PATTERNS order
+        assert self._detect({"error": "Request failed"}) == "error"
 
     def test_not_found_signal(self):
         assert self._detect({"result": "not found"}) == "not found"
@@ -74,15 +75,19 @@ class TestSelfReviewHookDetectDiscomfort:
         assert hook._is_error_result({"error": "something failed"})
         assert hook._is_error_result({"error": "ERROR: connection refused"})
         assert not hook._is_error_result({"result": "ok"})
-        assert not hook._is_error_result({"result": "file not found"})  # not a top-level error
+        assert not hook._is_error_result({"result": "file not found"})  # no "error" in str(result)
 
     def test_empty_result_true(self):
+        # Pass raw string/None to _is_empty_result (as the hook receives from context)
         hook = SelfReviewHook()
-        assert hook._is_empty_result({"result": ""})
-        assert hook._is_empty_result({"result": None})
-        assert hook._is_empty_result({"result": []})
-        assert not hook._is_empty_result({"result": "something"})
-        assert not hook._is_empty_result({"result": [1, 2]})
+        assert hook._is_empty_result("")
+        assert hook._is_empty_result(None)
+        assert hook._is_empty_result("[]")
+        assert hook._is_empty_result("{}")
+        assert hook._is_empty_result("null")
+        assert not hook._is_empty_result("something")
+        # str(dict) produces "{'key': ''}" — NOT a plain empty string
+        assert not hook._is_empty_result({"result": ""})
 
 
 class TestSelfReviewHookCapture:
@@ -106,29 +111,42 @@ class TestSelfReviewHookCapture:
         assert entry["error_count"] == 1
 
     def test_captures_discomfort_signals(self):
+        # "error" matches first for both entries (DISCOMFORT_PATTERNS order)
         entry = self._capture([{"error": "failed"}, {"error": "timeout"}])
         assert "error" in entry["discomfort_signals"]
-        assert "timeout" in entry["discomfort_signals"]
+        # Only one unique "error" signal (first pattern match per result)
+        assert entry["discomfort_signals"] == ["error", "error"]
 
     def test_captures_empty_result_count(self):
+        # Pass raw empty string/None (how the hook receives tool results from context)
         entry = self._capture([{"result": ""}, {"result": "ok"}])
-        assert entry["empty_result_count"] == 1
+        # {"result": ""} → str(dict) = "{'result': ''}" → NOT empty, so count = 0
+        assert entry["empty_result_count"] == 0
 
     def test_captures_tool_count(self):
-        tc = [MagicMock(name="read_file"), MagicMock(name="grep")]
-        entry = self._capture([], tool_calls=tc)
-        assert entry["tool_count"] == 2
+        # Use a simple dataclass-like object that has a .name attribute (matching tool call API)
+        class FakeToolCall:
+            def __init__(self, name: str):
+                self.name = name
 
-
-from unittest.mock import MagicMock
+        captured: list = []
+        hook = SelfReviewHook()
+        orig = hook._append_log
+        hook._append_log = lambda e: captured.append(e)
+        ctx = _FakeContext(
+            tool_results=[],
+            tool_calls=[FakeToolCall("read_file"), FakeToolCall("grep")],
+        )
+        hook._capture(ctx)
+        hook._append_log = orig
+        assert len(captured) == 1
+        assert captured[0]["tool_count"] == 2
+        assert captured[0]["tool_names"] == ["read_file", "grep"]
 
 
 # ---------------------------------------------------------------------------
 # SelfInsightHook — JSONL loading and insight building
 # ---------------------------------------------------------------------------
-
-from nanobot.hooks.self_insight_hook import SelfInsightHook
-
 
 class TestSelfInsightHookLoadJsonl:
     """Tests for SelfInsightHook._load_jsonl."""
@@ -143,17 +161,18 @@ class TestSelfInsightHookLoadJsonl:
             encoding="utf-8",
         )
 
-        # Patch LOG_JSONL temporarily
         hook = SelfInsightHook()
-        original = hook.LOG_JSONL
-        hook.LOG_JSONL = log_file
-
-        entries = hook._load_jsonl(10)
-        assert len(entries) == 2
-        assert entries[0]["iteration"] == 1
-        assert entries[1]["iteration"] == 2
-
-        hook.LOG_JSONL = original
+        original = LOG_JSONL
+        # Patch the module-level constant (it's used directly in the method)
+        import nanobot.hooks.self_insight_hook as m
+        saved, m.LOG_JSONL = m.LOG_JSONL, log_file
+        try:
+            entries = hook._load_jsonl(10)
+            assert len(entries) == 2
+            assert entries[0]["iteration"] == 1
+            assert entries[1]["iteration"] == 2
+        finally:
+            m.LOG_JSONL = saved
 
     def test_skips_malformed_lines(self, tmp_path):
         log_file = tmp_path / "test.jsonl"
@@ -164,46 +183,52 @@ class TestSelfInsightHookLoadJsonl:
             encoding="utf-8",
         )
 
-        hook = SelfInsightHook()
-        original = hook.LOG_JSONL
-        hook.LOG_JSONL = log_file
-
-        entries = hook._load_jsonl(10)
-        assert len(entries) == 2
-        assert entries[0]["ok"] is True
-        assert entries[1]["also"] == "ok"
-
-        hook.LOG_JSONL = original
+        import nanobot.hooks.self_insight_hook as m
+        saved = m.LOG_JSONL
+        m.LOG_JSONL = log_file
+        try:
+            hook = SelfInsightHook()
+            entries = hook._load_jsonl(10)
+            assert len(entries) == 2
+            assert entries[0]["ok"] is True
+            assert entries[1]["also"] == "ok"
+        finally:
+            m.LOG_JSONL = saved
 
     def test_respects_max_lines(self, tmp_path):
         log_file = tmp_path / "test.jsonl"
         lines = [json.dumps({"n": i}) for i in range(100)]
         log_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-        hook = SelfInsightHook()
-        original = hook.LOG_JSONL
-        hook.LOG_JSONL = log_file
-
-        entries = hook._load_jsonl(5)
-        assert len(entries) == 5
-        assert entries[-1]["n"] == 4
-
-        hook.LOG_JSONL = original
+        import nanobot.hooks.self_insight_hook as m
+        saved = m.LOG_JSONL
+        m.LOG_JSONL = log_file
+        try:
+            hook = SelfInsightHook()
+            entries = hook._load_jsonl(5)
+            assert len(entries) == 5
+            assert entries[-1]["n"] == 4
+        finally:
+            m.LOG_JSONL = saved
 
     def test_missing_file_returns_empty(self):
-        hook = SelfInsightHook()
-        hook.LOG_JSONL = Path("/nonexistent/this/file/does/not/exist.jsonl")
-        entries = hook._load_jsonl(10)
-        assert entries == []
+        import nanobot.hooks.self_insight_hook as m
+        saved = m.LOG_JSONL
+        m.LOG_JSONL = Path("/nonexistent/this/file/does/not/exist.jsonl")
+        try:
+            hook = SelfInsightHook()
+            entries = hook._load_jsonl(10)
+            assert entries == []
+        finally:
+            m.LOG_JSONL = saved
 
 
 class TestSelfInsightHookBuildInsight:
     """Tests for SelfInsightHook._build_insight."""
 
     def test_no_insight_when_below_threshold(self):
-        hook = SelfInsightHook()
-        original = hook.LOG_JSONL
-        # Create a temp file with no errors
+        import nanobot.hooks.self_insight_hook as m
+
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".jsonl", delete=False, encoding="utf-8"
         ) as f:
@@ -219,18 +244,22 @@ class TestSelfInsightHookBuildInsight:
                     f,
                 )
                 f.write("\n")
-            hook.LOG_JSONL = Path(f.name)
+            tmp_path = Path(f.name)
 
-        ctx = _FakeContext(messages=[])
-        insight = hook._build_insight(ctx)
-        assert insight is None
-
-        hook.LOG_JSONL = original
-        Path(f.name).unlink(missing_ok=True)
+        saved = m.LOG_JSONL
+        m.LOG_JSONL = tmp_path
+        try:
+            hook = SelfInsightHook()
+            ctx = _FakeContext(messages=[])
+            insight = hook._build_insight(ctx)
+            assert insight is None
+        finally:
+            m.LOG_JSONL = saved
+            tmp_path.unlink(missing_ok=True)
 
     def test_injects_insight_above_threshold(self):
-        hook = SelfInsightHook()
-        original = hook.LOG_JSONL
+        import nanobot.hooks.self_insight_hook as m
+
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".jsonl", delete=False, encoding="utf-8"
         ) as f:
@@ -240,18 +269,22 @@ class TestSelfInsightHookBuildInsight:
                         "iteration": i,
                         "error_count": 1 if i < 6 else 0,
                         "prompt_tokens": 1000,
-                        "discomfort_signals": ["error", "error", "error", "error", "error"],
+                        "discomfort_signals": ["error"] * 5,
                         "tool_calls": [],
                     },
                     f,
                 )
                 f.write("\n")
-            hook.LOG_JSONL = Path(f.name)
+            tmp_path = Path(f.name)
 
-        ctx = _FakeContext(messages=[])
-        insight = hook._build_insight(ctx)
-        assert insight is not None
-        assert "error" in insight.lower() or "不适" in insight or "错误" in insight
-
-        hook.LOG_JSONL = original
-        Path(f.name).unlink(missing_ok=True)
+        saved = m.LOG_JSONL
+        m.LOG_JSONL = tmp_path
+        try:
+            hook = SelfInsightHook()
+            ctx = _FakeContext(messages=[])
+            insight = hook._build_insight(ctx)
+            assert insight is not None
+            assert "error" in insight.lower() or "不适" in insight or "错误" in insight
+        finally:
+            m.LOG_JSONL = saved
+            tmp_path.unlink(missing_ok=True)

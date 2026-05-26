@@ -430,12 +430,6 @@ class OpenAICompatProvider(LLMProvider):
                 clean["tool_calls"] = normalized
                 if clean.get("role") == "assistant":
                     clean["content"] = None
-                    logger.info(
-                        "_sanitize_messages: set content=None on assistant tool-call msg, "
-                        "tool_calls={}, spec={}",
-                        len(clean["tool_calls"]),
-                        self._spec.name if self._spec else "unknown",
-                    )
             if "tool_call_id" in clean and clean["tool_call_id"]:
                 clean["tool_call_id"] = map_id(clean["tool_call_id"])
             if (
@@ -444,16 +438,6 @@ class OpenAICompatProvider(LLMProvider):
             ):
                 clean["content"] = self._coerce_content_to_string(clean.get("content"))
         result = self._enforce_role_alternation(sanitized)
-        # Log tool_call_id pairing for debugging MiniMax 2013 errors
-        for i, m in enumerate(result):
-            if m.get("role") in ("assistant", "tool"):
-                logger.info(
-                    "_sanitize_messages[{}]: role={} tool_call_id={} tool_calls=[{}]",
-                    i,
-                    m["role"],
-                    m.get("tool_call_id", "-"),
-                    ", ".join(t.get("id", "?") for t in (m.get("tool_calls") or [])),
-                )
         return result
 
     # ------------------------------------------------------------------
