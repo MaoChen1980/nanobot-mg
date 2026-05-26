@@ -113,13 +113,14 @@ class TestFinalizeTurnCompression:
             assert len(call_kwargs["future_context"]) > 0
         elif len(call_args) > 1:
             assert len(call_args[1]) > 0  # future_context as positional
-        # Summary pair injected at trim boundary
-        # 80 user+assistant pairs → 81 turns (first user message is its own turn).
-        # Boundary after 20 turns = 1 (turn0: user0) + 19×2 (turns1-19: asst+user) = 39
-        assert session.messages[39]["role"] == "assistant"
-        assert "compressed context" in session.messages[39]["content"]
-        assert session.messages[40]["role"] == "user"
-        assert session.messages[40]["content"] == "ok"
+        # Summary pair replaces the first `boundary` messages (39 msgs = 20 turns).
+        # After replacement: [summary_asst, summary_user, remaining 121 msgs]
+        assert session.messages[0]["role"] == "assistant"
+        assert "compressed context" in session.messages[0]["content"]
+        assert session.messages[1]["role"] == "user"
+        assert session.messages[1]["content"] == "ok"
+        # Remaining content (turns 21+) should still be present
+        assert len(session.messages) == 2 + (160 - 39)
 
     async def test_skips_when_below_threshold(self, tmp_path):
         loop, handler = _make_handler(tmp_path)

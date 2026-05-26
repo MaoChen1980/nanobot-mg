@@ -166,8 +166,12 @@ class Session:
             kept = [m for turn in kept_turns for m in turn]
 
             # Keep history aligned to the first visible user turn.
+            # Mirror the max_turns path: include the synthetic assistant
+            # message (summary content) when the first user is synthetic.
             first_user = next((i for i, m in enumerate(kept) if m.get("role") == "user"), None)
             if first_user is not None:
+                if kept[first_user].get("status") == "synthetic" and first_user > 0:
+                    first_user -= 1
                 kept = kept[first_user:]
             else:
                 # Tight token budgets can otherwise leave assistant-only tails.
@@ -250,6 +254,9 @@ class Session:
     def trim_old_turns(self, max_turns: int = 200, trim_batch: int = 50) -> list[dict]:
         """When total turn count exceeds *max_turns*, remove oldest *trim_batch* turns.
 
+        Skips synthetic turns (summary pairs) when trimming — they represent
+        already-compressed content and should be preserved rather than discarded.
+
         Returns the removed messages (flat) for the caller to archive to history.
         Each turn starts with an assistant message.
         """
@@ -259,19 +266,34 @@ class Session:
             return []
 
         trim_count = min(trim_batch, len(turns) - 1)  # keep at least 1 turn
-        trim_turns = turns[:trim_count]
-        keep = turns[trim_count:]
+
+        # Collect trim_count regular turns to trim, preserving synthetic turns.
+        trim_turns: list[list[dict]] = []
+        keep_turns: list[list[dict]] = []
+        for turn in turns:
+            is_synth = any(m.get("status") == "synthetic" for m in turn)
+            if is_synth or len(trim_turns) >= trim_count:
+                keep_turns.append(turn)
+            else:
+                trim_turns.append(turn)
+
+        if not trim_turns:
+            return []
+
+        # Maintain the at-least-1-turn guarantee
+        if not keep_turns:
+            keep_turns.append(trim_turns.pop())
 
         trim_msg_count = sum(len(t) for t in trim_turns)
-        keep_msg_count = sum(len(t) for t in keep)
+        keep_msg_count = sum(len(t) for t in keep_turns)
 
-        self.messages = [m for turn in keep for m in turn]
+        self.messages = [m for turn in keep_turns for m in turn]
         self.updated_at = datetime.now(timezone.utc)
 
         logger.info(
             "Session {} turn-trim: archiving {} turns ({} msgs), keeping {} turns ({} msgs)",
-            self.key, trim_count, trim_msg_count,
-            len(keep), keep_msg_count,
+            self.key, len(trim_turns), trim_msg_count,
+            len(keep_turns), keep_msg_count,
         )
 
         return [m for turn in trim_turns for m in turn]

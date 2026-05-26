@@ -393,10 +393,10 @@ class UserMessageHandler:
                         {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
                         {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
                     ]
-                    session.messages[boundary:boundary] = summary_pair
+                    session.messages[:boundary] = summary_pair
                     logger.info(
-                        "Injected context summary at trim boundary for {} (summarized {} turns)",
-                        session.key, trim_batch,
+                        "Replaced {} oldest messages with context summary for {} (summarized {} turns)",
+                        boundary, session.key, len(trim_turns),
                     )
 
         # Lifecycle: trim, cap, clear checkpoints, save
