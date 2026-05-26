@@ -111,10 +111,13 @@ class Session:
         # Avoid starting mid-turn when possible, except for proactive
         # assistant deliveries that the user may be replying to.
         for i, message in enumerate(sliced):
-            if message.get("role") == "user" and message.get("status") != "synthetic":
-                start = i
-                if i > 0 and sliced[i - 1].get("_channel_delivery"):
-                    start = i - 1
+            if message.get("role") == "user":
+                if message.get("status") == "synthetic":
+                    start = i - 1 if i > 0 else 0
+                else:
+                    start = i
+                    if i > 0 and sliced[i - 1].get("_channel_delivery"):
+                        start = i - 1
                 sliced = sliced[start:]
                 break
 
