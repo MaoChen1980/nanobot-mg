@@ -309,7 +309,7 @@ class AgentLoop:
             content=content,
             metadata=metadata,
         )
-        self.bus.publish_outbound(msg)
+        await self.bus.publish_outbound(msg)
 
     def _apply_provider_snapshot(self, snapshot: ProviderSnapshot) -> None:
         """Swap model/provider for future turns without disturbing an active one."""
@@ -424,17 +424,20 @@ class AgentLoop:
         else:
             effective_key = f"{channel}:{chat_id}"
         for name in ("message", "spawn", "spawn_many", "cron", "my"):
-            if tool := self.tools.get(name):
-                if hasattr(tool, "set_context"):
-                    if name == "spawn":
-                        tool.set_context(channel, chat_id, effective_key=effective_key)
-                    elif name == "cron":
-                        tool.set_context(channel, chat_id, metadata=metadata, session_key=session_key)
-                    elif name == "message":
-                        tool.set_context(channel, chat_id, message_id, metadata=metadata)
-                    else:
-                        tool.set_context(channel, chat_id)
-
+            tool = self.tools.get(name)
+            if tool is None:
+                continue
+            sc = getattr(tool, "set_context", None)
+            if not sc:
+                continue
+            if name == "spawn":
+                sc(channel, chat_id, effective_key=effective_key)
+            elif name == "cron":
+                sc(channel, chat_id, metadata=metadata, session_key=session_key)
+            elif name == "message":
+                sc(channel, chat_id, message_id, metadata=metadata)
+            else:
+                sc(channel, chat_id)
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
         """Remove <think>…</think> blocks that some models embed in content."""
@@ -686,9 +689,9 @@ class AgentLoop:
 
         Returns (final_content, tools_used, messages, stop_reason, had_injections).
         """
-        observe_think = self._session_observe["_observe_think"].get(session_key, True)
-        observe_tool = self._session_observe["_observe_tool"].get(session_key, True)
-        if self._session_observe["_observe_debug"].get(session_key, False):
+        observe_think = self._session_observe["_observe_think"].get(session_key or "", True)
+        observe_tool = self._session_observe["_observe_tool"].get(session_key or "", True)
+        if self._session_observe["_observe_debug"].get(session_key or "", False):
             _current_debug_enabled.set(True)
         loop_hook = _LoopHook(
             self,
@@ -896,7 +899,7 @@ class AgentLoop:
             except asyncio.CancelledError:
                 # Preserve real task cancellation so shutdown can complete cleanly.
                 # Only ignore non-task CancelledError signals that may leak from integrations.
-                if not self._running or asyncio.current_task().cancelling():
+                if not self._running or (asyncio.current_task() and asyncio.current_task().cancelling()):
                     raise
                 continue
             except Exception as e:
@@ -1165,8 +1168,9 @@ class AgentLoop:
                     attr = getattr(module, attr_name)
                     if isinstance(attr, type) and issubclass(attr, AgentHook) and attr is not AgentHook:
                         instance = attr()
-                        if hasattr(instance, "HOOK_CLASSES"):
-                            for cls in instance.HOOK_CLASSES:
+                        hook_classes: tuple[type[AgentHook], ...] | None = getattr(instance, "HOOK_CLASSES", None)
+                        if hook_classes:
+                            for cls in hook_classes:
                                 if isinstance(cls, type) and issubclass(cls, AgentHook):
                                     discovered.append(cls())
                         else:
@@ -1224,9 +1228,9 @@ class AgentLoop:
         channel: str = "cli",
         chat_id: str = "direct",
         media: list[str] | None = None,
-        on_progress: Callable[..., None] | None = None,
-        on_stream: Callable[[str], None] | None = None,
-        on_stream_end: Callable[..., None] | None = None,
+        on_progress: Callable[..., Awaitable[None]] | None = None,
+        on_stream: Callable[[str], Awaitable[None]] | None = None,
+        on_stream_end: Callable[..., Awaitable[None]] | None = None,
     ) -> OutboundMessage | None:
         """Synchronous wrapper for process_direct, for use in thread pool.
 

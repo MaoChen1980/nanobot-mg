@@ -40,15 +40,6 @@ _TOOL_SUGGESTIONS: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r'^(?:Clear-Content|Set-Content|Add-Content|sc|ac)\s+', re.IGNORECASE), "write_file(path=..., content=...)", "write content to a file"),
 ]
 
-# Error keyword patterns for always-on auto-verify.
-# Case-sensitive patterns matching only capitalised forms (e.g. "Error" not "error")
-# to reduce false positives on everyday language.
-_AUTO_VERIFY_ERROR_PATTERNS: list[tuple[str, re.Pattern]] = [
-    ("Error", re.compile(r'\bError\b')),
-    ("Exception", re.compile(r'\bException\b')),
-    ("Traceback", re.compile(r'Traceback \(most recent call last\)')),
-    ("FAILED", re.compile(r'\bFAILED\b')),
-]
 
 
 def _extract_powershell_inner(command: str) -> str | None:
@@ -370,7 +361,7 @@ class ExecTool(Tool):
                 if stderr_text.strip():
                     output_parts.append(f"STDERR:\n{stderr_text}")
 
-            output_parts.append(f"Exit code: {process.returncode} {'✓' if process.returncode == 0 else '❌'}")
+            output_parts.append(f"Exit code: {process.returncode}")
 
             shell_info = f"[cwd: {cwd.replace('\\', '/')}, shell: {'pwsh' if _IS_WINDOWS else 'sh'}]"
             result = shell_info + "\n" + ("\n".join(output_parts) if output_parts else "(no output)")
@@ -387,9 +378,6 @@ class ExecTool(Tool):
             # Save full output to cache
             cache_path = self._save_to_cache(command, stdout_text, stderr_text, process.returncode)
 
-            # Always-on auto-verify — scans output for error keywords
-            auto_verify_block = self._run_auto_verify(stdout_text, stderr_text, process.returncode)
-
             # Post-execution verification (verify + check)
             verification = ""
             if verify or check:
@@ -400,15 +388,15 @@ class ExecTool(Tool):
 
             # Route through grep/extract modes
             if grep:
-                return suggestion + self._format_grep_result(stdout_text, stderr_text, process.returncode, grep) + auto_verify_block + verification
+                return suggestion + self._format_grep_result(stdout_text, stderr_text, process.returncode, grep) + verification
             if extract:
                 return suggestion + (await self._format_extract_result(
                     cache_path, stdout_text, stderr_text, process.returncode, extract,
-                )) + auto_verify_block + verification
+                )) + verification
 
             # Default: append cache path to result
             result += f"\n[Full output cached: {cache_path}]"
-            return suggestion + result + auto_verify_block + verification
+            return suggestion + result + verification
 
         except Exception as e:
             logger.exception("Command execution failed")
@@ -479,7 +467,7 @@ class ExecTool(Tool):
         tail = lines[-tail_lines:] if len(lines) > tail_lines else lines
         tail_text = "\n".join(tail)
 
-        result = f"[Loaded from cache: {cache_path}]\nExit code: {exit_code} {'✓' if exit_code == 0 else '❌'}"
+        result = f"[Loaded from cache: {cache_path}]\nExit code: {exit_code}"
         if tail_text:
             result += f"\n\nLast {len(tail)} lines:\n{tail_text}"
         return result
@@ -498,14 +486,14 @@ class ExecTool(Tool):
         matched = [(i + 1, line) for i, line in enumerate(lines) if pattern in line]
 
         if not matched:
-            return f"[No lines matched {pattern!r}]\nExit code: {exit_code} {'✓' if exit_code == 0 else '❌'}"
+            return f"[No lines matched {pattern!r}]\nExit code: {exit_code}"
 
         result_lines = [f"[Filtered: {len(matched)} of {len(lines)} lines matching {pattern!r}]"]
         for line_no, text in matched:
             display = text if len(text) <= 200 else text[:197] + "..."
             result_lines.append(f"  {line_no}:{display}")
 
-        result_lines.append(f"Exit code: {exit_code} {'✓' if exit_code == 0 else '❌'}")
+        result_lines.append(f"Exit code: {exit_code}")
         return "\n".join(result_lines)
 
     # ------------------------------------------------------------------
@@ -576,41 +564,6 @@ class ExecTool(Tool):
         joined = "\n".join(parts)
         header = "[Verification]" + (" ❌" if has_fail else " ✓")
         return "\n" + header + "\n" + joined
-
-    @staticmethod
-    def _run_auto_verify(stdout: str, stderr: str, exit_code: int) -> str:
-        """Always-on post-execution error scan — no LLM opt-in required.
-
-        Scans stdout/stderr for common error keywords and reports findings.
-        Runs unconditionally for every exec call (except from_cache mode).
-        """
-        stderr_counts: dict[str, int] = {}
-        stdout_counts: dict[str, int] = {}
-        for name, pat in _AUTO_VERIFY_ERROR_PATTERNS:
-            stderr_counts[name] = len(pat.findall(stderr))
-            stdout_counts[name] = len(pat.findall(stdout))
-
-        stderr_total = sum(stderr_counts.values())
-        stdout_total = sum(stdout_counts.values())
-
-        if exit_code == 0 and stderr_total == 0 and stdout_total == 0:
-            return "\n\n── Auto-Verify ✓──\n  ✓ exit: 0\n  ✓ stderr: clean"
-
-        lines: list[str] = []
-        lines.append(f"  {'✓' if exit_code == 0 else '❌'} exit: {exit_code}")
-
-        err_matches = [f'{n} "{name}"' for name, n in stderr_counts.items() if n > 0]
-        if err_matches:
-            lines.append(f"  ❌ stderr: {', '.join(err_matches)}")
-        else:
-            lines.append("  ✓ stderr: clean")
-
-        out_matches = [f'{n} "{name}"' for name, n in stdout_counts.items() if n > 0]
-        if out_matches:
-            lines.append(f"  ⚠ stdout: {', '.join(out_matches)}")
-
-        status = "⚠" if exit_code != 0 or stderr_total > 0 or stdout_total > 0 else "✓"
-        return f"\n\n── Auto-Verify {status}──\n" + "\n".join(lines)
 
     @staticmethod
     def _run_verify(verify: str, stdout: str, stderr: str, exit_code: int) -> tuple[str, bool]:
