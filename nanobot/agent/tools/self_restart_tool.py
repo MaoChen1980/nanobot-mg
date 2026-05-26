@@ -76,6 +76,15 @@ class SelfRestartTool(Tool):
             return False, result.stderr[:200]
         except Exception as e:
             return False, str(e)
+    async def _graceful_restart_via_shutdown(self, gateway_url: str = "http://localhost:18789") -> None:
+        """Call /api/shutdown to trigger a clean gateway restart."""
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(f"{gateway_url}/api/shutdown")
+                logger.info("self_restart: /api/shutdown → {}", resp.status_code)
+        except Exception as e:
+            logger.warning("self_restart: /api/shutdown failed ({}), flag file will handle restart", e)
 
     async def _do_restart_check(self) -> str:
         ts = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -95,14 +104,12 @@ class SelfRestartTool(Tool):
             lines.append("restart aborted — fix the error first")
             return "\n".join(lines)
 
-        # Write restart flag — gateway checks this at next iteration
+        # Write flag as backup, then call /api/shutdown for immediate graceful restart
         flag_file = Path.home() / ".nanobot" / "workspace" / ".agent" / "_restart_flag.json"
         flag_file.parent.mkdir(parents=True, exist_ok=True)
-        flag_file.write_text(
-            json.dumps({"requested_at": ts}, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        lines.append(f"restart flag written: {flag_file}")
-        lines.append("nanobot will restart at next safe point — no action needed from you")
+        flag_file.write_text(json.dumps({"requested_at": ts}, ensure_ascii=False), encoding="utf-8")
+        lines.append(f"flag: {flag_file.name}")
 
+        await self._graceful_restart_via_shutdown()
+        lines.append("/api/shutdown called — gateway will restart gracefully")
         return "\n".join(lines)
