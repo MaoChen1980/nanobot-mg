@@ -40,78 +40,63 @@ class SelfInsightHook(AgentHook):
 
     def __init__(self, reraise: bool = False) -> None:
         super().__init__(reraise)
-        self._last_inject_iteration = -1
+        self._last_injected = ""  # dedup: skip if insight string unchanged
 
     async def before_iteration(self, context: AgentHookContext) -> None:
-        # Only inject once per iteration (in case multiple hooks call this)
-        if context.iteration == self._last_inject_iteration:
-            return
-
         try:
             insight = self._build_insight(context)
-            if insight:
+            if insight and insight != self._last_injected:
                 self._inject_insight(context, insight)
-                self._last_inject_iteration = context.iteration
+                self._last_injected = insight
         except Exception:
             logger.debug("SelfInsightHook.before_iteration failed")
 
     def _build_insight(self, context: AgentHookContext) -> str | None:
-        """Analyze logs and return an insight string, or None if nothing significant."""
+        """Return a concise signal for the LLM to investigate, or None."""
         entries = self._load_jsonl(200)
         if not entries:
             return None
 
-        warnings: list[str] = []
+        recent = entries[-50:]
+        items: list[str] = []
 
-        # 1. Token growth rate
+        # 1. Error tools — which tools had errors recently
+        error_tools: dict[str, int] = defaultdict(int)
+        error_count = 0
+        for e in recent:
+            if e.get("error_count", 0) > 0:
+                error_count += 1
+                for name in (e.get("tool_names") or []):
+                    error_tools[name] += 1
+        if error_count >= ERROR_COUNT_THRESHOLD and error_tools:
+            tool_str = ", ".join(
+                f"{n}×{c}" for n, c in
+                sorted(error_tools.items(), key=lambda x: -x[1])[:3]
+            )
+            items.append(f"⚠️ {error_count}次错误({tool_str})")
+
+        # 2. Token trend — concrete numbers
         if len(entries) >= 10:
-            recent = entries[-20:]
-            prompt_tokens = [e.get("prompt_tokens", 0) for e in recent]
-            if prompt_tokens[0] > 0 and prompt_tokens[-1] > prompt_tokens[0]:
-                growth = (prompt_tokens[-1] - prompt_tokens[0]) // max(len(recent) - 1, 1)
-                if growth > TOKEN_GROWTH_THRESHOLD:
-                    warnings.append(
-                        f"⚠️ 上下文增长率 {growth} tokens/轮，注意压缩历史"
-                    )
+            pts = [e.get("prompt_tokens", 0) for e in entries[-20:] if e.get("prompt_tokens", 0) > 0]
+            if len(pts) >= 2 and pts[-1] > pts[0] + TOKEN_GROWTH_THRESHOLD:
+                items.append(f"context {pts[0]//1000}K→{pts[-1]//1000}K")
 
-        # 2. Error cluster detection
-        error_count = sum(1 for e in entries[-50:] if e.get("error_count", 0) > 0)
-        if error_count >= ERROR_COUNT_THRESHOLD:
-            warnings.append(f"⚠️ 近期 {error_count} 次错误，注意工具调用准确性")
-
-        # 3. Repeated file edits (from tool_calls embedded in entries)
-        edit_counts: dict[str, int] = defaultdict(int)
-        for e in entries:
-            for tc in e.get("tool_calls", []) or []:
-                if tc.get("name") == "edit_file":
-                    args = tc.get("arguments") or {}
-                    path = args.get("file_path") or args.get("path") or ""
-                    if path:
-                        edit_counts[path] += 1
-
-        for path, count in edit_counts.items():
-            if count >= REPEAT_EDIT_THRESHOLD:
-                short = path.split("/")[-1]
-                warnings.append(f"⚠️ {short} 被编辑 {count} 次，注意避免循环修改")
-
-        # 4. Discomfort themes
+        # 3. Discomfort signals — what went wrong
         discomfort: dict[str, int] = defaultdict(int)
-        for e in entries:
+        for e in recent:
             for sig in e.get("discomfort_signals", []):
                 discomfort[sig] += 1
-        top_discomfort = sorted(discomfort.items(), key=lambda x: -x[1])[:2]
-        if top_discomfort and top_discomfort[0][1] >= 5:
-            themes = ", ".join(k for k, _ in top_discomfort)
-            warnings.append(f"⚠️ 高频不适信号: {themes}")
+        top = sorted(discomfort.items(), key=lambda x: -x[1])[:2]
+        if top and top[0][1] >= ERROR_COUNT_THRESHOLD:
+            items.append("signal: " + ", ".join(f"{k}({c})" for k, c in top))
 
-        if not warnings:
+        if not items:
             return None
 
-        # Truncate to avoid context bloat
-        full = " | ".join(warnings)
-        if len(full) > MAX_INSIGHT_CHARS:
-            full = full[:MAX_INSIGHT_CHARS] + "…"
-        return full
+        result = " | ".join(items)
+        if len(result) > MAX_INSIGHT_CHARS:
+            result = result[:MAX_INSIGHT_CHARS] + "…"
+        return result
 
     def _load_jsonl(self, max_lines: int = 200) -> list[dict[str, Any]]:
         if not LOG_JSONL.exists():
@@ -131,6 +116,12 @@ class SelfInsightHook(AgentHook):
 
     def _inject_insight(self, context: AgentHookContext, insight: str) -> None:
         """Prepend a system reminder to the message list."""
+        # Remove stale SelfInsightHook entries from previous turns so they
+        # don't accumulate in session history and bloat context.
+        context.messages[:] = [
+            m for m in context.messages
+            if m.get("_source") != "self_insight_hook"
+        ]
         reminder = {
             "role": "user",
             "content": (
@@ -139,10 +130,10 @@ class SelfInsightHook(AgentHook):
             ),
             "_source": "self_insight_hook",
             "_iteration": context.iteration,
+            "status": "excluded",
         }
         # Inject as second message (after any existing system message)
         if context.messages and context.messages[0].get("role") == "system":
-            # Insert after first system message
             context.messages.insert(1, reminder)
         else:
             context.messages.insert(0, reminder)
