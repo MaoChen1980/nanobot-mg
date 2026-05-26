@@ -77,6 +77,7 @@ class SelfReviewHook(AgentHook):
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "iteration": context.iteration,
             "tool_count": tool_count,
+            "tool_names": [tc.name for tc in (context.tool_calls or [])],
             "error_count": error_count,
             "empty_result_count": empty_result_count,
             "discomfort_signals": discomfort_signals,
