@@ -1,4 +1,4 @@
-"""Tests for lesson injection in system prompts."""
+"""Tests confirming Past Lessons is no longer injected in system prompts."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ def _make_workspace(tmp_path: Path) -> Path:
     return workspace
 
 
-def test_lessons_are_included_when_file_exists(tmp_path) -> None:
-    """When tasks/lessons.md exists with content, it should appear in system prompt."""
+def test_lessons_never_injected(tmp_path) -> None:
+    """Past Lessons should never appear in system prompt, even if file exists."""
     workspace = _make_workspace(tmp_path)
     tasks_dir = workspace / "tasks"
     tasks_dir.mkdir()
@@ -26,26 +26,12 @@ def test_lessons_are_included_when_file_exists(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     prompt = builder.build_system_prompt()
 
-    assert "## Past Lessons" in prompt
-    assert "Always check error codes" in prompt
-
-
-def test_lessons_omitted_when_file_missing(tmp_path) -> None:
-    """When tasks/lessons.md does not exist, no lessons section should appear."""
-    workspace = _make_workspace(tmp_path)
-
-    builder = ContextBuilder(workspace)
-    prompt = builder.build_system_prompt()
-
     assert "## Past Lessons" not in prompt
 
 
-def test_lessons_omitted_when_file_is_empty(tmp_path) -> None:
-    """When tasks/lessons.md is empty, no lessons section should appear."""
+def test_lessons_omitted_when_file_missing(tmp_path) -> None:
+    """Sanity check: no Past Lessons when file doesn't exist."""
     workspace = _make_workspace(tmp_path)
-    tasks_dir = workspace / "tasks"
-    tasks_dir.mkdir()
-    (tasks_dir / "lessons.md").write_text("", encoding="utf-8")
 
     builder = ContextBuilder(workspace)
     prompt = builder.build_system_prompt()

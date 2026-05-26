@@ -115,10 +115,6 @@ class ContextBuilder:
         if framework_doc:
             parts.append(framework_doc)
 
-        lessons = self._load_lessons()
-        if lessons:
-            parts.append(lessons)
-
         always_skills = self.skills.get_always_skills()
         if always_skills:
             always_content = self.skills.format_skills_for_context(always_skills)
@@ -448,20 +444,6 @@ class ContextBuilder:
             lines.append("\n".join(wf_lines))
 
         return f"## Framework Doc\n\n{self._shift_headings('\n\n'.join(lines), offset=1)}"
-
-    def _load_lessons(self) -> str:
-        """Load past lessons from tasks/lessons.md into the system prompt."""
-        lessons_path = self.workspace / "tasks" / "lessons.md"
-        if not lessons_path.exists():
-            return ""
-        try:
-            content = lessons_path.read_text(encoding="utf-8").strip()
-            if not content:
-                return ""
-            return f"## Past Lessons\n\n{self._shift_headings(content, offset=1)}"
-        except Exception as e:
-            logger.warning("Failed to load lessons: {}", e)
-            return ""
 
     @staticmethod
     def _is_default_template_content(content: str, template_path: str) -> bool:
