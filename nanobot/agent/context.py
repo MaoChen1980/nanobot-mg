@@ -144,6 +144,8 @@ class ContextBuilder:
             fn = schema.get("function", {})
             name = fn.get("name", "unknown")
             desc = fn.get("description", "")
+            # Strip "什么时候不用" section — saves ~2K tokens per call
+            desc = re.sub(r'\n\s*\*\*什么时候不用\*\*[\s\S]*', '', desc)
             # Keep up to 2500 chars so LLM sees detailed "when to use / how to
             # act / failure modes" guidance.  Truncate at \n\n boundary when
             # possible to keep whole sections.
