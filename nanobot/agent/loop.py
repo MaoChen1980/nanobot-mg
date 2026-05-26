@@ -892,6 +892,17 @@ class AgentLoop:
         logger.info("Agent loop started")
 
         while self._running:
+            # Check for restart flag at safe point (start of each iteration)
+            restart_flag = Path.home() / ".nanobot" / "workspace" / ".agent" / "_restart_flag.json"
+            if restart_flag.exists():
+                try:
+                    restart_flag.unlink()
+                    logger.info("Restart flag detected — initiating graceful restart")
+                except OSError:
+                    pass
+                self._running = False
+                break
+
             try:
                 msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
             except asyncio.TimeoutError:
