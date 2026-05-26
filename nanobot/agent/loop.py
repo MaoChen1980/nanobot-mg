@@ -52,6 +52,7 @@ from nanobot.agent.tools.git_inspect import GitInspectTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.diagnose_tool import DiagnoseTool
 from nanobot.agent.tools.scan_project import ScanProjectTool
+from nanobot.agent.tools.self_restart_tool import SelfRestartTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.agent.context_vars import _current_agent_loop, _current_debug_enabled
@@ -384,6 +385,7 @@ class AgentLoop:
             self.tools.register(
                 CronTool(self.cron_service, default_timezone=self.context.timezone or "UTC")
             )
+        self.tools.register(SelfRestartTool())
         # Exec is registered LAST so workspace interaction tools (read_file,
         # grep, glob, etc.) appear first in the LLM's tool list. When the LLM
         # reaches for a task, it sees workspace tools before exec — nudging it
@@ -876,6 +878,8 @@ class AgentLoop:
                 await on_stream_end(resuming=False)
         elif result.stop_reason == "error":
             logger.error("LLM returned error: {}", (result.final_content or "")[:200])
+
+        await hook.after_turn()
         return result.final_content, result.tools_used, result.messages, result.stop_reason, result.had_injections
 
     async def run(self) -> None:
