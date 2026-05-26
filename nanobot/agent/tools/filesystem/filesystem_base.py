@@ -132,8 +132,6 @@ class _FsTool(Tool):
     @staticmethod
     def _verify_write(fp: Path, pattern: str | None) -> str:
         """Verify a written file is correct: pattern check + syntax check for Python."""
-        issues: list[str] = []
-
         # 1. Pattern check
         if pattern:
             result = _FsTool._find_in_file(fp, pattern)

@@ -25,7 +25,11 @@ DANGEROUS_PATTERNS: list[str] = [
     r"(?:^|[;&|]\s*)shutdown\b",  # system power — command-start only (not in args/messages)
     r"(?:^|[;&|]\s*)reboot\b",    # system reboot — command-start only
     r"(?:^|[;&|]\s*)poweroff\b",  # system power-off — command-start only
-    r":\(\)\s*\{.*\};\s*:",          # fork bomb
+    r":\(\)\s*\{.*\};\s*:",       # fork bomb
+    r"(?:^|[;&|]\s*)git\s+push\s+--force\b",  # force push — loses remote history
+    r"(?:^|[;&|]\s*)git\s+reset\s+--hard\b",  # hard reset — loses uncommitted changes
+    r"(?:^|[;&|]\s*)git\s+clean\s+-f",        # clean — deletes untracked files
+    r"(?:^|[;&|]\s*)pip\s+uninstall\b",       # uninstall packages
 ]
 
 
