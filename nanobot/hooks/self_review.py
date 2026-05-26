@@ -101,6 +101,11 @@ class SelfReviewHook(AgentHook):
         s = str(result).lower()
         return any(p in s for p in ["error", "exception", "failed", "timeout"])
 
+    # ⚠️ NOTE: `_is_empty_result` checks `str(result).strip()` against literal
+    # strings like `""` and `"[]"`. When `result` is a dict like `{"result": ""}`,
+    # `str(dict)` produces `"{'result': ''}"` — NOT an empty string.
+    # The discomfort-signal detection (`_detect_discomfort`) is the meaningful
+    # signal here; `_is_empty_result` is secondary.
     def _is_empty_result(self, result: object) -> bool:
         """Check if a tool result is empty or null."""
         if result is None:
