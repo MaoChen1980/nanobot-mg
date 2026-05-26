@@ -41,13 +41,12 @@ class MemoryExtractor:
         store: MemoryStore,
         provider: LLMProvider,
         model: str,
-        max_tool_result_chars: int = 16_000,
+        max_tool_result_chars: int = 32_000,
         timezone: str | None = None,
     ):
         self.store = store
         self.provider = provider
         self.model = model
-        self.max_tool_result_chars = max_tool_result_chars
         self.timezone = timezone
         self.prompts_dir = ensure_dir(store.workspace / "prompts")
         self.failed_dir = ensure_dir(self.prompts_dir / "failed")
