@@ -11,16 +11,20 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nanobot.security.network import targets_internal_address
 
-# Dangerous command patterns that should be blocked
+# Dangerous command patterns that should be blocked.
+# Each pattern must be specific enough to avoid false positives
+# in legitimate commands (e.g. git commit messages, filenames).
 DANGEROUS_PATTERNS: list[str] = [
     r"\brm\s+-[rf]{1,2}\b",          # rm -r, rm -rf, rm -fr
-    r"\bdel\s+/[fq]\b",              # del /f, del /q
-    r"\brmdir\s+/s\b",               # rmdir /s
-    r"(?:^|[;&|]\s*)format\b",       # format (as standalone command only)
+    r"\bdel\s+/[fq]\b",              # del /f, del /q (Windows force/quiet)
+    r"\brmdir\s+/s\b",               # rmdir /s (Windows recursive)
+    r"(?:^|[;&|]\s*)format\b",       # format as standalone command
     r"\b(mkfs|diskpart)\b",          # disk operations
-    r"\bdd\s+if=",                   # dd
-    r">\s*/dev/sd",                  # write to disk
-    r"\b(shutdown|reboot|poweroff)\b",  # system power
+    r"\bdd\s+if=",                   # dd input redirection
+    r">\s*/dev/sd",                  # write to block device
+    r"(?:^|[;&|]\s*)shutdown\b",  # system power — command-start only (not in args/messages)
+    r"(?:^|[;&|]\s*)reboot\b",    # system reboot — command-start only
+    r"(?:^|[;&|]\s*)poweroff\b",  # system power-off — command-start only
     r":\(\)\s*\{.*\};\s*:",          # fork bomb
 ]
 
