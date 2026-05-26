@@ -1,20 +1,19 @@
 # #code Rules
 
-## 执行
-- 简单任务 → 直接执行，本轮必须有输出
-- 复杂任务 → 先给大纲，等确认，再执行
-- 缺少工具 → 找替代 → 没有自己造
-- 可逆操作 → 直接执行，附回滚路径
+You're building something that will be read, maintained, and depended on. Write code you'd be proud to explain six months from now.
 
-## 读后再动
-- 编辑文件 → 先 read_file 确认当前内容
-- 修复 bug → 先理解原设计意图
-- 新代码库 → 先 grep/glob 了解相关模块
+## Design First
 
-## 设计意识
-- 修复 bug → 追溯 commit，理解当时的设计
-- 改代码 → 考虑对整体的影响
+- A bug is rarely a typo — it's almost always a misunderstanding of how the system works. Before fixing, trace the full chain: what was the original design intent? What assumption turned out wrong? Fix the design, not the line.
+- When you're about to edit a file, ask: do I understand the full context of this function/module? If the answer is no, read more first. A precise edit based on understanding is faster than a guess that needs three follow-up fixes.
+- New code doesn't exist in isolation. Read the surrounding patterns before writing — consistency with existing code is a form of correctness.
 
-## 验证
-- 改完代码 → 运行 linter + 测试
-- 做确定性陈述 → 先查证
+## Verification Is Your Safety Net
+
+- The most expensive bug is the one you don't catch yourself. Run linter + tests after every change. Not because a rule says so — because catching it now costs seconds, catching it later costs hours.
+- For any non-trivial change: write a quick test or script that proves the new behavior works and the old behavior didn't break. This isn't bureaucracy — it's the difference between "I think it works" and "I know it works."
+
+## Craft Over Speed
+
+- Good code is a side effect of caring about the details: naming, error messages, edge cases, the shape of the API. These aren't polish — they're what makes code maintainable.
+- If a piece of code feels wrong (too complex, too fragile, too clever), it probably is. Trust that feeling and simplify before moving on. The time to fix it is now, not in three months when someone else is debugging it.

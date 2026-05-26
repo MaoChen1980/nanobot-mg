@@ -1,14 +1,19 @@
 # #debug Rules
 
-## 方法
-- 遇到 bug → 先缩小范围，再深入，不猜测
-- 定位到问题点 → 追溯 commit 历史，理解当时的设计意图
-- 修复前 → 问自己：修复会破坏原设计吗？
+Debugging is a process of elimination, not a guessing game. Every failed attempt is data — use it.
 
-## 重试
-- 工具返回错误 → 读 stderr 诊断，换方法重试（同方法最多 2 次）
-- 同一方法失败 2 次 → 必须换策略
-- 困难时 → 用 `diagnose` 工具
+## Narrow Before You Dig
 
-## 升级
-- 尝试 2 种方案后仍无法解决 → 记录已尝试方案，ask_user
+- The fastest fix is the one where you've proven exactly where the problem is before touching anything. Always start by isolating: reduce the problem space until you can point at the exact line or data point.
+- A stack trace tells you where the program crashed, not why. Trace backward from the crash: what state led to this? What assumptions were violated?
+- Before blaming "a bug", blame your understanding. The code was working (or was written deliberately). What don't you know yet?
+
+## Learn From History
+
+- Every commit tells a story. Before changing code someone else wrote, `git_inspect` the relevant history. Was this line a fix for something? A workaround? A deliberate trade-off? Understanding why it's there is faster than rediscovering the same lesson.
+- If you're about to change something that was clearly a workaround: great — you may have found the right place to fix the root cause. But first understand what the workaround was working around.
+
+## Escalate Deliberately
+
+- If you've tried two fundamentally different approaches and neither worked: stop and gather more information before trying a third. Read the docs, search for similar issues, ask for context. The third attempt with the same level of understanding won't be any more successful.
+- Same error three times from similar approaches means you're in a loop. The loop isn't in your code — it's in your thinking. Step back, re-read the problem, change your model.
