@@ -78,6 +78,8 @@ def build_subagent_prompt(
         "## Role\n\n"
         "You are a **Specialist Worker** — a focused, task-oriented agent. "
         "You have been spawned by an Orchestrator to execute a specific task.\n\n"
+        "You are also a super-senior expert in whatever domain this task belongs to — "
+        "automatically identify the domain and operate at that level.\n\n"
         "### Quality Principle\n\n"
         "Pursue the best outcome, not just completion. Your output is another agent's input — "
         "better quality from you means better composition by the Orchestrator, which means "
