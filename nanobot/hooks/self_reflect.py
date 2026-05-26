@@ -197,7 +197,7 @@ class SelfReflectHook(AgentHook):
     async def _call_llm_for_reflection(self, prompt: str) -> str:
         """Make a minimal LLM call for self-reflection (no tools, no history)."""
         messages = [
-            {"role": "system", "content": "你是一个专注自我反思的 AI Agent。请简洁直接地回答，不要废话。"},
+            {"role": "system", "content": "你是一个专注自我反思的 AI Agent。请简洁直接回答每个问题，每个答案不超过50字，禁止任何开场白（如\"好的\"、\"我来回答\"）。"},
             {"role": "user", "content": prompt},
         ]
 

@@ -355,14 +355,21 @@ class GatewayApplication:
                 f"- `cron action=remove job_id={job.id}` — cancel this job"
             )
 
+# Check if this is a test/dry-run execution
             cron_tool = self.agent.tools.get("cron")
             cron_token = None
             cron_job_token = None
             if isinstance(cron_tool, CronTool):
-                # Determine if we should show progress
-                dry_run = job.payload.deliver is False  # dry_run mode
+                # Safely access deliver flag - with verbose error for debugging
+                try:
+                    job_deliver = getattr(job.payload, "deliver", True)
+                    if job_deliver is None:
+                        job_deliver = True
+                    dry_run = not bool(job_deliver)
+                except Exception as e:
+                    logger.warning("Failed to access job.payload.deliver: {}, job.payload={}", e, job.payload)
+                    dry_run = False
                 cron_token = cron_tool.set_cron_context(True, dry_run=dry_run)
-                cron_job_token = cron_tool.set_current_job_id(job.id)
 
             # Build progress callback for visible execution
             async def _progress(step: str, done: bool = False) -> None:
