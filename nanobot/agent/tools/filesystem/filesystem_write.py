@@ -82,9 +82,11 @@ class WriteFileTool(_FsTool):
             # Auto-verify: extract first meaningful line from content as verification
             content_lines = [l.strip() for l in content.splitlines() if l.strip() and not l.strip().startswith("#")]
             verify_pattern = content_lines[0] if content_lines else None
+
+            # Robust verify: pattern check + syntax check for Python files
             verify_result = ""
             if verify_pattern:
-                verify_result = self._find_in_file(fp, verify_pattern, max_matches=3)
+                verify_result = self._verify_write(fp, verify_pattern)
 
             # Type-check before exec (if requested)
             check_result = ""

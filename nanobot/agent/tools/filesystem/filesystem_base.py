@@ -5,16 +5,20 @@ from __future__ import annotations
 import difflib
 import mimetypes
 import os
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p
 from nanobot.agent.tools import file_state
 from nanobot.utils.media_decode import build_image_content_blocks, detect_image_mime
 from nanobot.config.paths import get_media_dir as _get_media_dir
+
 
 # Allow test-time override (set by test via filesystem module)
 _get_media_dir_override: "Callable[[], Path] | None" = None
@@ -92,6 +96,57 @@ class _FsTool(Tool):
             result += f"\n  {line_no}:{text}"
         if len(matches) > max_matches:
             result += f"\n  … and {len(matches) - max_matches} more"
+        return result
+
+    @staticmethod
+    def _check_syntax(fp: Path, timeout: float = 10.0) -> str | None:
+        """Run a syntax/import check on a file. Returns None if OK, error string if broken."""
+        if fp.suffix.lower() != ".py":
+            return None  # Only check Python files
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", f"import {fp.stem}"],
+                cwd=fp.parent,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if result.returncode != 0:
+                # Try pyright for better diagnostics
+                pyright_result = subprocess.run(
+                    ["pyright", str(fp)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if pyright_result.returncode != 0:
+                    errors = pyright_result.stdout.strip()
+                    return f"Syntax/import check failed:\n{errors or result.stderr}"
+                return f"Import check failed:\n{result.stderr}"
+        except subprocess.TimeoutExpired:
+            return "Syntax check timed out"
+        except FileNotFoundError:
+            pass  # pyright or python not available — skip
+        return None
+
+    @staticmethod
+    def _verify_write(fp: Path, pattern: str | None) -> str:
+        """Verify a written file is correct: pattern check + syntax check for Python."""
+        issues: list[str] = []
+
+        # 1. Pattern check
+        if pattern:
+            result = _FsTool._find_in_file(fp, pattern)
+            if result.startswith("Verification FAILED"):
+                return result  # Pattern not found is fatal
+        else:
+            result = "Verification: write succeeded (no pattern to check)"
+
+        # 2. Syntax check for Python files
+        syntax_error = _FsTool._check_syntax(fp)
+        if syntax_error:
+            return f"SYNTAX ERROR in {fp.name}:\n{syntax_error}"
+
         return result
 
 
@@ -173,7 +228,8 @@ def _normalize_quotes(s: str) -> str:
 def _line_tag(line: str) -> str:
     """Generate a 4-char hex tag for a line based on its content.
 
-    Used by read_file (tagged output) and edit_file (verification).
+    Used by read_file (tagged output). Note: edit_file no longer uses this
+    for verification — it uses SHA256 content hash instead.
     Deterministic — same line always produces the same tag.
     """
     import hashlib

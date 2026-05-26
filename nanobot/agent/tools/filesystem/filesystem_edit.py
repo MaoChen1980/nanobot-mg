@@ -156,9 +156,9 @@ class EditFileTool(_FsTool):
                     if then_grep:
                         result += f"\n{self._find_in_file(fp, then_grep)}"
                     elif verify_lines:
-                        vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
+                        vr = self._verify_write(fp, verify_lines[0])
                         if vr:
-                            result += f"\nVerified:\n{vr}"
+                            result += f"\n{vr}"
                 return result
 
             if old_text is None:
@@ -179,9 +179,9 @@ class EditFileTool(_FsTool):
                     msg = f"Successfully created {fp.as_posix()}"
                     verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                     if verify_lines:
-                        vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
+                        vr = self._verify_write(fp, verify_lines[0])
                         if vr:
-                            msg += f"\nVerified:\n{vr}"
+                            msg += f"\n{vr}"
                     if then_grep:
                         msg += f"\n{self._find_in_file(fp, then_grep)}"
                     return msg
@@ -206,9 +206,9 @@ class EditFileTool(_FsTool):
                 msg = f"Successfully edited {fp.as_posix()}"
                 verify_lines = [l.strip() for l in new_text.splitlines() if l.strip()]
                 if verify_lines:
-                    vr = self._find_in_file(fp, verify_lines[0], max_matches=3)
+                    vr = self._verify_write(fp, verify_lines[0])
                     if vr:
-                        msg += f"\nVerified:\n{vr}"
+                        msg += f"\n{vr}"
                 elif then_grep:
                     msg += f"\n{self._find_in_file(fp, then_grep)}"
                 return msg
@@ -260,16 +260,15 @@ class EditFileTool(_FsTool):
             file_state.record_write(fp)
             msg = f"Successfully edited {fp.as_posix()}"
 
-            # Auto-verify
+            # Auto-verify: pattern check + syntax check for Python files
             verify_lines = [l.strip() for l in norm_new.splitlines() if l.strip()]
             verify_result = ""
             if verify_lines:
-                verify_pattern = verify_lines[0]
-                verify_result = self._find_in_file(fp, verify_pattern, max_matches=3)
+                verify_result = self._verify_write(fp, verify_lines[0])
             if hash_warning:
                 msg = f"{hash_warning}\n{msg}"
             if verify_result:
-                msg += f"\nVerified:\n{verify_result}"
+                msg += f"\n{verify_result}"
             if then_grep:
                 msg += f"\n{self._find_in_file(fp, then_grep)}"
             return msg
