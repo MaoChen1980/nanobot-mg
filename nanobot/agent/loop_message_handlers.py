@@ -367,24 +367,37 @@ class UserMessageHandler:
         trim_batch = session.metadata.get("trim_batch", self._loop._context_trim_batch)
         turns = Session._split_turns_by_assistant(session.messages)
         if len(turns) >= max_turns:
-            trim_turns = turns[:trim_batch]
-            boundary = sum(len(t) for t in trim_turns)
-            trim_flat = [m for turn in trim_turns for m in turn]
-            future_context = [m for turn in turns[trim_batch:] for m in turn]
-            summary = await self._loop._summarize_turns(trim_flat, future_context)
-            if summary:
-                # Use the last summarized message's timestamp so the summary pair
-                # stays chronologically consistent if messages are ever sorted by timestamp.
-                ts = trim_flat[-1].get("timestamp", datetime.now(timezone.utc).isoformat())
-                summary_pair = [
-                    {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
-                    {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
-                ]
-                session.messages[boundary:boundary] = summary_pair
-                logger.info(
-                    "Injected context summary at trim boundary for {} (summarized {} turns)",
-                    session.key, trim_batch,
-                )
+            # Skip synthetic turns (already-summarized pairs) so they aren't re-summarized
+            trim_turns = []
+            boundary = 0
+            consumed = 0
+            for turn in turns:
+                if any(m.get("status") == "synthetic" for m in turn):
+                    boundary += len(turn)
+                    consumed += 1
+                    continue
+                if len(trim_turns) >= trim_batch:
+                    break
+                trim_turns.append(turn)
+                boundary += len(turn)
+                consumed += 1
+            if trim_turns:
+                trim_flat = [m for turn in trim_turns for m in turn]
+                future_context = [m for turn in turns[consumed:] for m in turn]
+                summary = await self._loop._summarize_turns(trim_flat, future_context)
+                if summary:
+                    # Use the last summarized message's timestamp so the summary pair
+                    # stays chronologically consistent if messages are ever sorted by timestamp.
+                    ts = trim_flat[-1].get("timestamp", datetime.now(timezone.utc).isoformat())
+                    summary_pair = [
+                        {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
+                        {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
+                    ]
+                    session.messages[boundary:boundary] = summary_pair
+                    logger.info(
+                        "Injected context summary at trim boundary for {} (summarized {} turns)",
+                        session.key, trim_batch,
+                    )
 
         # Lifecycle: trim, cap, clear checkpoints, save
         trimmed = self._loop.lifecycle.finalize(session)
