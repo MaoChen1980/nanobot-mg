@@ -14,7 +14,7 @@ from loguru import logger
 # ----------------------------------------------------------------------
 
 
-def _emit_observe_event(event_type: str, content: str, metadata: dict | None = None) -> None:
+async def _emit_observe_event(event_type: str, content: str, metadata: dict | None = None) -> None:
     """Emit a /think or /tool observe event to the proxy channel via context var.
 
     Safe to call even when no loop is active (no-op).
@@ -23,7 +23,7 @@ def _emit_observe_event(event_type: str, content: str, metadata: dict | None = N
 
     loop = _current_agent_loop.get()
     if loop is not None:
-        loop._emit_observe_event(event_type, content, metadata or {})
+        await loop._emit_observe_event(event_type, content, metadata or {})
 
 
 # ----------------------------------------------------------------------
@@ -79,11 +79,11 @@ async def process_tool_events_and_progress(
             if isinstance(te, dict):
                 phase = te.get("phase", "start")
                 if phase == "start":
-                    _emit_observe_event("tool_start", content, te)
+                    await _emit_observe_event("tool_start", content, te)
                 elif phase == "end":
-                    _emit_observe_event("tool_end", content, te)
+                    await _emit_observe_event("tool_end", content, te)
                 elif phase == "error":
-                    _emit_observe_event("tool_error", content, te)
+                    await _emit_observe_event("tool_error", content, te)
 
     if on_progress is not None:
         try:

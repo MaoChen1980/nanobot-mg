@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 
 _cb_loop_ref: "AgentLoop | None" = None  # Set by loop before runner.run()
 
-def _get_emit_callback() -> callable | None:
+def _get_emit_callback():  # returns Awaitable[[str, str, dict], None] | None
     loop = _cb_loop_ref
     if loop is None:
         from nanobot.agent.context_vars import _current_agent_loop
         loop = _current_agent_loop.get()
     if loop is None:
         return None
-    return loop._emit_observe_event
+    return loop._emit_observe_event  # async method; caller must await

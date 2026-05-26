@@ -276,7 +276,7 @@ class AgentLoop:
     # Observe events — /think and /tool
     # ------------------------------------------------------------------
 
-    def _emit_observe_event(
+    async def _emit_observe_event(
         self,
         event_type: str,
         content: str,
@@ -899,7 +899,8 @@ class AgentLoop:
             except asyncio.CancelledError:
                 # Preserve real task cancellation so shutdown can complete cleanly.
                 # Only ignore non-task CancelledError signals that may leak from integrations.
-                if not self._running or (asyncio.current_task() and asyncio.current_task().cancelling()):
+                task = asyncio.current_task()
+                if not self._running or (task is not None and task.cancelling()):
                     raise
                 continue
             except Exception as e:
