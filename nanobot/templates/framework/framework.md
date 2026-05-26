@@ -314,27 +314,6 @@ Tasks are managed as files under `tasks/`. You use `read_file`/`write_file`/`edi
 - When blocked: note the blocker
 - When making progress on active task: keep log updated
 
-**Investigate/Verify**: Before executing a task, emit investigate markers to gather context. After completing, emit verify markers for validation. Framework executes these independently and returns results.
-
-Marker format:
-```
-✅ investigate: file_exists('path/to/file')
-✅ investigate: grep('pattern', 'file')
-✅ investigate: exit_zero('command')
-✅ investigate: llm('research question')
-✅ verify: file_exists('path')
-✅ verify: grep('pattern', 'file')
-✅ verify: exit_zero('command')
-✅ verify: llm('verify question')
-```
-
-Supported types:
-- `file_exists(path)` — check if a file exists
-- `grep(pattern, file)` — search file content
-- `exit_zero(command)` — run shell command, check exit code
-- `llm(prompt)` — independent LLM call (separate context)
-- `agent_loop(prompt)` — full agent loop for complex verification
-
 ---
 
 ## Quick Replies

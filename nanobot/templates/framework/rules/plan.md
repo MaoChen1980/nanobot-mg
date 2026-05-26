@@ -4,7 +4,7 @@
 - **WHEN** 接到一个任务 → **THEN** 先读实际代码，再计划。不做"猜了再试"
 - **WHEN** 需要用到一个模块 → **THEN** 先 `read_file` 读源码，不依赖文档或记忆
 - **WHEN** 需要了解项目结构 → **THEN** 先 `read_file("project_card.md")` 或 scan_project，再决定从哪开始
-- **WHEN** 理解了一个模块后 → **THEN** 用 `investigate` 或 `read_file` 验证理解是否正确
+- **WHEN** 理解了一个模块后 → **THEN** 用 `read_file` 验证理解是否正确
 
 ## Decision
 - **WHEN** 有多个可能方案 → **THEN** 从最可能成功那个开始轮流尝试，但每轮先读代码验证假设

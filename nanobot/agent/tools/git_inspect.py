@@ -66,9 +66,9 @@ class GitInspectTool(_FsTool):
                     pass
 
             if commit:
-                return self._show_commit(git_dir, commit)
+                return await self._show_commit(git_dir, commit)
 
-            return self._show_log(git_dir, since, resolved_path, max_commits)
+            return await self._show_log(git_dir, since, resolved_path, max_commits)
 
         except PermissionError as e:
             return f"Error: {e}"
