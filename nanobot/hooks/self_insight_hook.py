@@ -18,9 +18,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from functools import partial
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
+from nanobot.hooks.executor import Executor
 
 
 LOG_JSONL = Path.home() / ".nanobot" / "agent" / "self_review_log.jsonl"
@@ -38,9 +40,11 @@ MAX_INSIGHT_CHARS = 600
 class SelfInsightHook(AgentHook):
     """Read self-review logs and inject actionable reminders before iteration."""
 
-    def __init__(self, reraise: bool = False) -> None:
+    def __init__(self, reraise: bool = False, auto_execute: bool = False) -> None:
         super().__init__(reraise)
         self._last_injected = ""  # dedup: skip if insight string unchanged
+        self.auto_execute = auto_execute
+        self._executor = None if not auto_execute else Executor(dry_run=True)
 
     async def before_iteration(self, context: AgentHookContext) -> None:
         try:
@@ -48,6 +52,10 @@ class SelfInsightHook(AgentHook):
             if insight and insight != self._last_injected:
                 self._inject_insight(context, insight)
                 self._last_injected = insight
+
+                # Auto-execute simple fixes if enabled
+                if self.auto_execute and self._executor:
+                    self._maybe_execute(insight)
         except Exception:
             logger.debug("SelfInsightHook.before_iteration failed")
 
@@ -137,3 +145,17 @@ class SelfInsightHook(AgentHook):
             context.messages.insert(1, reminder)
         else:
             context.messages.insert(0, reminder)
+
+    def _maybe_execute(self, insight: str) -> None:
+        """Try to auto-execute simple fixes based on insight patterns."""
+        # Pattern: "⚠️ X次错误(tool)" → suggest checking tool definition
+        import re
+
+        error_match = re.search(r"⚠️ (\d+)次错误\(([^)]+)\)", insight)
+        if error_match:
+            count = int(error_match.group(1))
+            tool = error_match.group(2)
+            if count >= 3:
+                # Could suggest: check tool definition, simplify prompt, etc.
+                # For now, just log
+                logger.info(f"Auto-execute: detected {count}x errors on {tool}")
