@@ -14,6 +14,8 @@ from loguru import logger
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import build_parameters_schema
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
 if TYPE_CHECKING:
     pass
 
@@ -52,8 +54,7 @@ class SelfRestartTool(Tool):
     def _check_git_diff(self) -> bool:
         try:
             result = subprocess.run(
-                ["git", "status", "--porcelain"],
-                cwd="E:/claude/nanobot",
+                ["git", "-C", str(_PROJECT_ROOT), "status", "--porcelain"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -66,7 +67,7 @@ class SelfRestartTool(Tool):
     def _pip_install(self) -> tuple[bool, str]:
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-e", "E:/claude/nanobot"],
+                [sys.executable, "-m", "pip", "install", "-e", str(_PROJECT_ROOT)],
                 capture_output=True,
                 text=True,
                 timeout=60,
@@ -97,14 +98,9 @@ class SelfRestartTool(Tool):
             lines.append("no changes — nothing to do")
             return "\n".join(lines)
 
-        lines.append("changes detected — running pip install -e .")
-        ok, err = self._pip_install()
-        if not ok:
-            lines.append(f"pip install failed: {err}")
-            lines.append("restart aborted — fix the error first")
-            return "\n".join(lines)
+        lines.append("changes detected — writing restart flag")
 
-        # Write flag as backup, then call /api/shutdown for immediate graceful restart
+        # Write flag, then call /api/shutdown for immediate graceful restart
         flag_file = Path.home() / ".nanobot" / "workspace" / ".agent" / "_restart_flag.json"
         flag_file.parent.mkdir(parents=True, exist_ok=True)
         flag_file.write_text(json.dumps({"requested_at": ts}, ensure_ascii=False), encoding="utf-8")

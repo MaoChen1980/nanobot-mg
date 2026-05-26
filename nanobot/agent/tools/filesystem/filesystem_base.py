@@ -100,33 +100,26 @@ class _FsTool(Tool):
 
     @staticmethod
     def _check_syntax(fp: Path, timeout: float = 10.0) -> str | None:
-        """Run a syntax/import check on a file. Returns None if OK, error string if broken."""
+        """Syntax-check a Python file via py_compile (no code execution)."""
         if fp.suffix.lower() != ".py":
-            return None  # Only check Python files
+            return None
         try:
-            result = subprocess.run(
-                [sys.executable, "-c", f"import {fp.stem}"],
-                cwd=fp.parent,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-            if result.returncode != 0:
-                # Try pyright for better diagnostics
+            import py_compile
+            py_compile.compile(fp, doraise=True)
+        except py_compile.PyCompileError as e:
+            try:
                 pyright_result = subprocess.run(
-                    ["pyright", str(fp)],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
+                    ["pyright", "--", str(fp)],
+                    capture_output=True, text=True, timeout=30,
                 )
                 if pyright_result.returncode != 0:
                     errors = pyright_result.stdout.strip()
-                    return f"Syntax/import check failed:\n{errors or result.stderr}"
-                return f"Import check failed:\n{result.stderr}"
-        except subprocess.TimeoutExpired:
-            return "Syntax check timed out"
+                    return f"Syntax check failed:\n{errors or str(e)}"
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+            return f"Syntax check failed:\n{e}"
         except FileNotFoundError:
-            pass  # pyright or python not available — skip
+            pass
         return None
 
     @staticmethod
