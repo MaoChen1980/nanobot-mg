@@ -363,8 +363,8 @@ class UserMessageHandler:
         self._loop._append_turn_to_session(session, all_msgs, save_skip)
 
         # Context compression: before trimming, summarize oldest turns via LLM
-        max_turns = session.metadata.get("max_turns", 80)
-        trim_batch = session.metadata.get("trim_batch", 20)
+        max_turns = session.metadata.get("max_turns") or self._loop._context_max_turns
+        trim_batch = session.metadata.get("trim_batch") or self._loop._context_trim_batch
         turns = Session._split_turns_by_assistant(session.messages)
         if len(turns) >= max_turns:
             trim_turns = turns[:trim_batch]

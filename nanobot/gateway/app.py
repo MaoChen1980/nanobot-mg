@@ -197,6 +197,8 @@ class GatewayApplication:
             unified_session=self.config.agents.defaults.unified_session,
             disabled_skills=self.config.agents.defaults.disabled_skills,
             session_idle_timeout_minutes=self.config.agents.defaults.session_idle_timeout_minutes,
+            context_max_turns=self.config.agents.defaults.context_max_turns,
+            context_trim_batch=self.config.agents.defaults.context_trim_batch,
             tools_config=self.config.tools,
             pt_save_interval=self.config.agents.defaults.extractor.save_interval,
             provider_snapshot_loader=load_provider_snapshot,

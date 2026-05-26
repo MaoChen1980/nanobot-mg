@@ -25,9 +25,13 @@ class SessionLifecycle:
         self,
         session_manager: SessionManager,
         recovery: RecoveryManager,
+        context_max_turns: int = 80,
+        context_trim_batch: int = 20,
     ) -> None:
         self._sm = session_manager
         self._recovery = recovery
+        self._context_max_turns = context_max_turns
+        self._context_trim_batch = context_trim_batch
 
     # ── low-level pass-through ──────────────────────────────────────────
 
@@ -78,8 +82,8 @@ class SessionLifecycle:
 
         Returns any trimmed messages for the caller to archive to history.
         """
-        max_turns = session.metadata.get("max_turns", 80)
-        trim_batch = session.metadata.get("trim_batch", 20)
+        max_turns = session.metadata.get("max_turns") or self._context_max_turns
+        trim_batch = session.metadata.get("trim_batch") or self._context_trim_batch
         trimmed = session.trim_old_turns(max_turns, trim_batch)
         session.enforce_file_cap()
         self._recovery.clear_pending_user_turn(session)

@@ -129,8 +129,8 @@ class SelfReviewHook(AgentHook):
         with open(self.LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    def _count_tool_call(self, context: AgentHookContext, name: str) -> int:
-        """Count how many times a specific tool was called this iteration."""
-        if not context.tool_calls:
-            return 0
-        return sum(1 for tc in context.tool_calls if tc.name == name)
+    # def _count_tool_call(self, context: AgentHookContext, name: str) -> int:
+    #     """Count how many times a specific tool was called this iteration."""
+    #     if not context.tool_calls:
+    #         return 0
+    #     return sum(1 for tc in context.tool_calls if tc.name == name)

@@ -182,6 +182,14 @@ class AgentDefaults(Base):
         validation_alias=AliasChoices("idleCompactAfterMinutes", "sessionTtlMinutes"),
         serialization_alias="idleCompactAfterMinutes",
     )  # Auto-compact idle threshold in minutes (0 = disabled)
+    context_max_turns: int = Field(
+        default=80,
+        ge=10,
+    )  # Trigger LLM summarization after this many turns (0 = disabled)
+    context_trim_batch: int = Field(
+        default=20,
+        ge=1,
+    )  # How many oldest turns to compress in one batch
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
 
 

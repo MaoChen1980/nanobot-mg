@@ -157,6 +157,8 @@ class AgentLoop:
         provider_signature: tuple[object, ...] | None = None,
         db=None,
         pt_save_interval: int = 30,
+        context_max_turns: int = 80,
+        context_trim_batch: int = 20,
     ):
         from nanobot.config.schema import ExecToolConfig, ToolsConfig, WebToolsConfig
 
@@ -202,7 +204,12 @@ class AgentLoop:
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
         self._recovery = RecoveryManager(self)
-        self.lifecycle = SessionLifecycle(self.sessions, self._recovery)
+        self.lifecycle = SessionLifecycle(
+            self.sessions,
+            self._recovery,
+            context_max_turns=self._context_max_turns,
+            context_trim_batch=self._context_trim_batch,
+        )
         self._dispatch_manager = DispatchManager(self)
         self._system_handler = SystemMessageHandler(self)
         self._user_handler = UserMessageHandler(self)
@@ -238,6 +245,8 @@ class AgentLoop:
         from nanobot.utils.helpers import ensure_dir
         self.prompts_dir = ensure_dir(workspace / "prompts")
         self._pt_save_interval = pt_save_interval
+        self._context_max_turns = context_max_turns
+        self._context_trim_batch = context_trim_batch
         self.extractor = MemoryExtractor(
             store=self.context.memory,
             provider=provider,
