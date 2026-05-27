@@ -256,6 +256,7 @@ class SelfInsightHook(AgentHook):
 
     def _queue_fix_prompt(self, prompt: str) -> None:
         """Queue a fix prompt for the agent's next iteration."""
+        FIX_QUEUE.parent.mkdir(parents=True, exist_ok=True)
         entry = {
             "prompt": prompt,
             "timestamp": datetime.now(timezone.utc).isoformat()
