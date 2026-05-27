@@ -18,7 +18,7 @@ DANGEROUS_PATTERNS: list[str] = [
     r"\brm\s+-[rf]{1,2}\b",          # rm -r, rm -rf, rm -fr
     r"\bdel\s+/[fq]\b",              # del /f, del /q (Windows force/quiet)
     r"\brmdir\s+/s\b",               # rmdir /s (Windows recursive)
-    r"(?:^|[;&|]\s*)format\b",       # format as standalone command
+    r"(?:^|[;&|]\s*)format\b(?!-)",  # format as standalone command (exclude PowerShell Format-* cmdlets)
     r"\b(mkfs|diskpart)\b",          # disk operations
     r"\bdd\s+if=",                   # dd input redirection
     r">\s*/dev/sd",                  # write to block device

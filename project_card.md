@@ -1,6 +1,6 @@
 # Project Card: nanobot
 
-Last scanned: 2026-05-24T04:16:16+0800
+Last scanned: 2026-05-27T12:29:33+0800
 Project root: `E:\claude\nanobot`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~65,072
+- **Approx LOC**: ~66,918
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 296 | ~65,072 |
+| Python | 305 | ~66,918 |
 
 ## Directory Structure
 
@@ -125,10 +125,10 @@ E:\claude\nanobot/
         base.py (16KB)
         check_subagent.py (2KB)
         conversation_search.py (7KB)
-        cron.py (19KB)
+        cron.py (20KB)
         diagnose_tool.py (7KB)
         explore_module.py (19KB)
-        file_state.py (5KB)
+        file_state.py (7KB)
         framework_search.py (3KB)
         git_inspect.py (9KB)
         list_subagents.py (1KB)
@@ -146,34 +146,35 @@ E:\claude\nanobot/
         schema.py (2KB)
         search.py (27KB)
         self.py (20KB)
+        self_restart_tool.py (4KB)
         semantic_search.py (4KB)
-        shell_validators.py (4KB)
+        shell_validators.py (5KB)
         spawn.py (8KB)
         spawn_many.py (5KB)
         tool_call_log.py (3KB)
         web.py (23KB)
       verify/
       __init__.py (584B)
-      context.py (28KB)
+      context.py (25KB)
       context_vars.py (1KB)
       db.py (16KB)
-      hook.py (5KB)
-      loop.py (57KB)
+      hook.py (6KB)
+      loop.py (55KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (199B)
-      loop_dispatch.py (7KB)
+      loop_dispatch.py (6KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (19KB)
+      loop_message_handlers.py (22KB)
       loop_utils.py (3KB)
       memory.py (352B)
       memory_extractor.py (27KB)
       memory_store.py (10KB)
       memory_vector.py (11KB)
       project_scanner.py (21KB)
-      runner.py (26KB)
+      runner.py (28KB)
       runner_constants.py (1KB)
-      runner_context.py (6KB)
+      runner_context.py (7KB)
       runner_execution.py (7KB)
       runner_injection.py (5KB)
       runner_llm.py (5KB)
@@ -200,6 +201,7 @@ E:\claude\nanobot/
     session/
     skills/
     templates/
+    tools/
     utils/
     web/
     __init__.py (1KB)
@@ -218,6 +220,7 @@ E:\claude\nanobot/
   pyproject.toml (4KB)
   README.md (6KB)
   README_en.md (4KB)
+  restart_gateway.py (700B)
   SECURITY.md (8KB)
   THIRD_PARTY_NOTICES.md (6KB)
 

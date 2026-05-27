@@ -101,6 +101,8 @@ class AnalyzeTool(_FsTool):
                 fp = self._resolve(path)
                 if not fp.exists():
                     return f"Error: File not found: {path}"
+                if fp.is_dir():
+                    return f"Error: Path is a directory, not a file: {path}"
                 if fp.stat().st_size > self.MAX_TEXT_SIZE:
                     return f"Error: File too large ({fp.stat().st_size:,} bytes)"
                 raw = fp.read_bytes()
