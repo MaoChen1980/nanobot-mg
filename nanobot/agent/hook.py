@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from nanobot.providers.base import LLMResponse, ToolCallRequest
+from nanobot.utils.compat import dataclass
 
 
 @dataclass(slots=True)

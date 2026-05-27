@@ -7,7 +7,7 @@ import threading
 from collections import Counter
 from typing import Any
 
-import numpy as np
+# numpy is imported lazily inside functions that need it (not available on all setups)
 
 _MODEL: Any = None
 _MODEL_LOCK = threading.Lock()
@@ -202,6 +202,7 @@ def compute_similarity(
     """
     if not chunks or model is None:
         return []
+    import numpy as np
 
     texts = [c["text"] for c in chunks]
     query_vec = model.encode([query], normalize_embeddings=True)
@@ -306,6 +307,7 @@ def segment_unstructured(
     if not text or model is None:
         return [{"start_char": 0, "end_char": len(text), "text": text,
                  "representative": "", "keywords": [], "score": 0.0}]
+    import numpy as np
 
     # -- split into small window-sized blocks with ~50% overlap --------------
     step = window_chars // 2
@@ -390,6 +392,7 @@ def segment_unstructured(
 
 def _find_representative(text: str, model: Any) -> str:
     """Find the single sentence most representative of *text*."""
+    import numpy as np
     sentences = re.split(r"(?<=[。！？.!?\n])\s*", text)
     sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
     if not sentences:

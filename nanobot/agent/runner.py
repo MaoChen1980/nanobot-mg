@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-from dataclasses import dataclass, field
+from dataclasses import field
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +16,7 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.providers.base import LLMProvider
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.session.manager import find_legal_message_start
+from nanobot.utils.compat import dataclass
 from nanobot.utils.helpers import (
     build_assistant_message,
     estimate_message_tokens,

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import difflib
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import field
 from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.tools import file_state
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
+from nanobot.utils.compat import dataclass
 from .filesystem_base import _FsTool, _normalize_quotes
-from nanobot.agent.tools import file_state
 
 
 _EDIT_FILE_SCHEMA = build_parameters_schema(
