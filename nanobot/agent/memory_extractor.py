@@ -80,8 +80,6 @@ class MemoryExtractor:
             logger.debug("MemoryExtractor: no .pt files to process")
             return False
 
-        existing_skills = self._list_existing_skills()
-
         for pt_path in pt_files:
             processing_path = pt_path.with_suffix(".pt.processing")
             try:
@@ -92,7 +90,7 @@ class MemoryExtractor:
 
             try:
                 content = json.loads(processing_path.read_text(encoding="utf-8"))
-                analysis = await self._analysis_llm(content, existing_skills)
+                analysis = await self._analysis_llm(content)
                 if analysis:
                     findings = analysis.get("findings", [])
                     if findings:
@@ -122,49 +120,16 @@ class MemoryExtractor:
     # Step 1 — LLM analysis
     # ------------------------------------------------------------------
 
-    def _list_existing_skills(self) -> list[str]:
-        """List existing skills for analysis-LLM dedup."""
-        import re as _re
-        from nanobot.agent.skills import BUILTIN_SKILLS_DIR
-
-        _DESC_RE = _re.compile(r"^description:\s*(.+)$", _re.MULTILINE | _re.IGNORECASE)
-        entries: dict[str, str] = {}
-        for base in (self.store.workspace / "skills", BUILTIN_SKILLS_DIR):
-            if not base.exists():
-                continue
-            for d in base.iterdir():
-                if not d.is_dir():
-                    continue
-                skill_md = d / "SKILL.md"
-                if not skill_md.exists():
-                    continue
-                if d.name in entries and base == BUILTIN_SKILLS_DIR:
-                    continue
-                content = skill_md.read_text(encoding="utf-8")[:500]
-                m = _DESC_RE.search(content)
-                desc = m.group(1).strip().strip('"').strip("'") if m else "(no description)"
-                entries[d.name] = desc
-        return [f"{name} — {desc}" for name, desc in sorted(entries.items())]
-
     async def _analysis_llm(
-        self, pt_content: dict, existing_skills: list[str]
+        self, pt_content: dict
     ) -> dict[str, Any] | None:
         """Call LLM to analyze a saved prompt, return parsed JSON."""
-        skills_section = (
-            "\n".join(f"- {s}" for s in existing_skills)
-            if existing_skills
-            else "(none)"
-        )
-
         # Serialize for LLM consumption. Truncate from front if too large.
         pt_text = json.dumps(pt_content, ensure_ascii=False, indent=2)
         if len(pt_text) > _ANALYSIS_MAX_CHARS:
             pt_text = "... (conversation start truncated)\n" + pt_text[-_ANALYSIS_MAX_CHARS:]
 
-        prompt = render_template(
-            "agent/extractor_analysis.md",
-            existing_skills_section=skills_section,
-        )
+        prompt = render_template("agent/extractor_analysis.md")
 
         try:
             response = await self.provider.chat_with_retry(
@@ -233,30 +198,23 @@ class MemoryExtractor:
             if not content:
                 continue
 
-            if ftype == "soul_rule":
-                condition = (finding.get("condition") or "").strip()
-                action = (finding.get("action") or "").strip()
-                if condition and action:
-                    paragraph = f"- **WHEN** {condition} **THEN** {action} — {content}"
-                else:
-                    paragraph = f"- {content}"
-                topic_files.setdefault("system.md", []).append(paragraph)
-
-            elif ftype == "user_preference":
+            if ftype == "preference":
                 topic_files.setdefault("user.md", []).append(f"- {content}")
 
-            elif ftype in ("knowledge", "decision"):
+            elif ftype in ("knowledge", "pitfall", "pattern"):
                 topic = (finding.get("topic") or "").strip()
                 if not topic:
                     continue
                 rel_path = self._topic_to_filepath(topic) + ".md"
-                paragraph = content
-                if ftype == "decision" and finding.get("rationale"):
-                    paragraph += f"\n  > 理由：{finding['rationale']}"
-                topic_files.setdefault(rel_path, []).append(paragraph)
 
-            elif ftype == "reusable_pattern":
-                skills_to_create.append(finding)
+                if ftype == "pitfall":
+                    paragraph = f"- ⚠️ {content}"
+                elif ftype == "pattern":
+                    paragraph = f"- 💡 {content}"
+                else:
+                    paragraph = f"- {content}"
+
+                topic_files.setdefault(rel_path, []).append(paragraph)
 
         # ── Flush additions to files ──
         changed = bool(topic_files or skills_to_create)
@@ -313,37 +271,19 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def _create_skills(self, skills: list[dict[str, Any]]) -> None:
-        """Generate SKILL.md for each reusable_pattern via LLM using skill-manager template."""
-        from nanobot.agent.skills import BUILTIN_SKILLS_DIR
-
-        sm_path = BUILTIN_SKILLS_DIR / "skill-manager" / "SKILL.md"
-        if not sm_path.exists():
-            logger.warning(
-                "MemoryExtractor: skill-manager SKILL.md not found, skipping skill creation"
-            )
-            return
-
-        manager_template = sm_path.read_text(encoding="utf-8")
-
+        """Generate SKILL.md for each pattern finding."""
         for sk in skills:
-            name = (sk.get("name") or "").strip()
-            steps = sk.get("steps") or []
             content = (sk.get("content") or "").strip()
+            name = (sk.get("name") or "").strip()
             if not name:
+                name = sk.get("topic", "").strip().replace("/", "-").lower()
+            if not name or not content:
                 continue
 
-            steps_text = (
-                "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
-                if steps
-                else content
-            )
             prompt = (
-                f"Create a SKILL.md file for a new skill named '{name}'.\n\n"
-                f"## Pattern Description\n{content}\n\n"
-                f"## Steps\n{steps_text}\n\n"
-                f"Use the following template as reference for SKILL.md format:\n\n"
-                f"{manager_template}\n\n"
-                f"Output ONLY the content of SKILL.md — start with `---` frontmatter."
+                f"Create a SKILL.md for a skill named '{name}'.\n\n"
+                f"## Description\n{content}\n\n"
+                f"Output ONLY the SKILL.md content, starting with `---` frontmatter."
             )
 
             try:
