@@ -145,7 +145,6 @@ class AgentLoop:
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
         timezone: str | None = None,
-        session_idle_timeout_minutes: int = 0,
         hooks: list[AgentHook] | None = None,
         unified_session: bool = False,
         disabled_skills: list[str] | None = None,
@@ -155,8 +154,8 @@ class AgentLoop:
         provider_signature: tuple[object, ...] | None = None,
         db=None,
         pt_save_interval: int = 30,
-        context_max_turns: int = 80,
-        context_trim_batch: int = 20,
+        output_token_reserve_cap: int | None = None,
+        history_safety_margin: int | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig, ToolsConfig, WebToolsConfig
 
@@ -191,10 +190,16 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
-        # context_max_turns / context_trim_batch kept for gateway signature compatibility
-        # (session trim is now handled entirely by _compress_if_needed)
-        self._context_max_turns = context_max_turns
-        self._context_trim_batch = context_trim_batch
+        self._output_token_reserve_cap = (
+            output_token_reserve_cap
+            if output_token_reserve_cap is not None
+            else defaults.output_token_reserve_cap
+        )
+        self._history_safety_margin = (
+            history_safety_margin
+            if history_safety_margin is not None
+            else defaults.history_safety_margin
+        )
         self.project_root = project_root
         self._extra_hooks: list[AgentHook] = hooks or []
         self._extra_hooks.extend(self._discover_hooks())
@@ -519,14 +524,9 @@ class AgentLoop:
             reserved_output = int(max_output)
         except (TypeError, ValueError):
             reserved_output = 4096
-        # The provider's max_tokens (e.g. 160K) is the *maximum* the API
-        # allows, not the amount we must reserve.  If we reserve the full
-        # max_tokens, history gets ~20K crumbs from a 200K window.  Cap
-        # output reservation at 16K — plenty for any single response —
-        # so history can use the rest.
-        reserved_output = min(reserved_output, 16384)
-        budget = self.context_window_tokens - max(1, reserved_output) - 4096
-        return budget if budget > 0 else max(4096, self.context_window_tokens // 4)
+        reserved_output = min(reserved_output, self._output_token_reserve_cap)
+        budget = self.context_window_tokens - max(1, reserved_output) - self._history_safety_margin
+        return budget if budget > 0 else max(self._history_safety_margin, self.context_window_tokens // 4)
 
     # (IV markers and completion detection removed)
 

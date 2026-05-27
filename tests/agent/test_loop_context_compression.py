@@ -19,8 +19,6 @@ def _make_handler(workspace: Path | None = None) -> tuple[AgentLoop, UserMessage
     from nanobot.config.schema import AgentDefaults
     defaults = AgentDefaults()
     loop.max_tool_result_chars = defaults.max_tool_result_chars
-    loop._context_max_turns = defaults.context_max_turns
-    loop._context_trim_batch = defaults.context_trim_batch
     loop.provider = provider
     loop.model = "test-model"
     loop.workspace = workspace or Path("/tmp")

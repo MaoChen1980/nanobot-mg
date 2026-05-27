@@ -474,7 +474,6 @@ function renderAgent() {
     </div>
     <div class="card">
       <div class="card-header">Session</div>
-      ${field('session_idle_timeout_minutes', 'Session Idle Timeout (min)', a.session_idle_timeout_minutes ?? 0, 'number', 'agents.defaults.session_idle_timeout_minutes')}
       ${selectField('timezone', 'Timezone', a.timezone, 'agents.defaults.timezone', TIMEZONES.map(t => ({v:t,l:t})))}
       ${field('unified_session', 'Unified Session', a.unified_session, 'checkbox', 'agents.defaults.unified_session')}
       ${field('disabled_skills', 'Disabled Skills', Array.isArray(a.disabled_skills) ? a.disabled_skills.join(', ') : '', 'text', 'agents.defaults.disabled_skills')}
@@ -485,7 +484,6 @@ function renderAgent() {
       ${field('model_override', 'Model Override', a.extractor.model_override || '', 'text', 'agents.defaults.extractor.model_override')}
       ${field('interval_h', 'Interval (h)', a.extractor.interval_h, 'number', 'agents.defaults.extractor.interval_h')}
       ${field('save_interval', 'Save Interval (turns)', a.extractor.save_interval, 'number', 'agents.defaults.extractor.save_interval')}
-      ${field('annotate_line_ages', 'Annotate Line Ages', a.extractor.annotate_line_ages, 'checkbox', 'agents.defaults.extractor.annotate_line_ages')}
     </div>
   `;
   loadModelsForProvider(a.provider, a.model);

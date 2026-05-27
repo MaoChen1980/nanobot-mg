@@ -141,7 +141,6 @@ class ExtractorConfig(Base):
         validation_alias=AliasChoices("modelOverride", "model", "model_override"),
     )  # Optional extractor-specific model override
     save_interval: int = Field(default=30, ge=1)  # M: save .pt every N turns per-session
-    annotate_line_ages: bool = True  # Per-line git-blame age annotation in cleanup prompt
 
     def build_schedule(self, timezone: str) -> CronSchedule:
         """Build the runtime schedule, preferring the legacy cron override if present."""
@@ -163,7 +162,6 @@ class SelfReviewConfig(Base):
     channel: Optional[str] = Field(default=None)  # e.g. "proxy:feishu:feishu1"
     to: Optional[str] = Field(default=None)       # e.g. chat/group ID
     session_key: Optional[str] = Field(default=None)
-    auto_execute: bool = Field(default=False)        # auto-execute fixes without human approval
 
 
 class AgentDefaults(Base):
@@ -185,20 +183,14 @@ class AgentDefaults(Base):
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
     unified_session: bool = False  # Share one session across all channels (single-user multi-device)
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
-    session_idle_timeout_minutes: int = Field(
-        default=0,
+    output_token_reserve_cap: int = Field(
+        default=16384,
+        ge=1024,
+    )  # Max tokens reserved for LLM output when computing history budget
+    history_safety_margin: int = Field(
+        default=4096,
         ge=0,
-        validation_alias=AliasChoices("idleCompactAfterMinutes", "sessionTtlMinutes"),
-        serialization_alias="idleCompactAfterMinutes",
-    )  # Auto-compact idle threshold in minutes (0 = disabled)
-    context_max_turns: int = Field(
-        default=80,
-        ge=10,
-    )  # Trigger LLM summarization after this many turns (0 = disabled)
-    context_trim_batch: int = Field(
-        default=20,
-        ge=1,
-    )  # How many oldest turns to compress in one batch
+    )  # Safety margin subtracted from context window for history budget
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
     self_review: SelfReviewConfig = Field(default_factory=SelfReviewConfig)
 
