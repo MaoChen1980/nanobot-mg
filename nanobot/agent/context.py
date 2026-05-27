@@ -111,9 +111,9 @@ class ContextBuilder:
         if bootstrap:
             parts.append(bootstrap)
 
-        framework_doc = self._load_framework_doc()
-        if framework_doc:
-            parts.append(framework_doc)
+        workflow_routing = self._build_workflow_routing()
+        if workflow_routing:
+            parts.append(workflow_routing)
 
         always_skills = self.skills.get_always_skills()
         if always_skills:
@@ -204,6 +204,8 @@ class ContextBuilder:
             workspace_path=workspace_path,
             runtime=runtime,
             channel=channel,
+            subagent_max_iterations=100,
+            heartbeat_interval_minutes=30,
         )
 
     @staticmethod
@@ -406,46 +408,32 @@ class ContextBuilder:
 
         return "\n\n".join(parts) if parts else ""
 
-    def _load_framework_doc(self) -> str:
-        """Load framework.md — the core framework operating manual (auto-injected, must follow).
-        Appends the workflow routing table so workflows are discoverable via framework_search.
-        """
-        fw_path = self.workspace / "framework" / "framework.md"
-        if not fw_path.exists():
-            return ""
-        try:
-            content = fw_path.read_text(encoding="utf-8").strip()
-        except Exception as e:
-            logger.warning("Failed to load framework doc: {}", e)
-            return ""
-        if not content:
-            return ""
-
-        lines = [content]
-
-        # Append workflow routing table
+    def _build_workflow_routing(self) -> str:
+        """Build workflow routing table from workspace/framework/workflows/ so
+        workflows are discoverable via framework_search."""
         wf_dir = self.workspace / "framework" / "workflows"
-        if wf_dir.is_dir():
-            wf_lines = ["", "## Workflows", "", "Search with framework_search when scenario matches:"]
-            for f in sorted(wf_dir.iterdir()):
-                if not f.name.endswith(".md"):
-                    continue
-                try:
-                    c = f.read_text(encoding="utf-8").strip()
-                except Exception:
-                    continue
-                if not c:
-                    continue
-                trigger = ""
-                for line in c.split("\n"):
-                    line = line.strip()
-                    if line and not line.startswith("#"):
-                        trigger = line[:120]
-                        break
-                wf_lines.append(f"- **{f.stem}**: {trigger} — `framework_search(query=\"{f.stem}\")`")
-            lines.append("\n".join(wf_lines))
-
-        return f"## Framework Doc\n\n{self._shift_headings('\n\n'.join(lines), offset=1)}"
+        if not wf_dir.is_dir():
+            return ""
+        lines: list[str] = []
+        for f in sorted(wf_dir.iterdir()):
+            if not f.name.endswith(".md"):
+                continue
+            try:
+                c = f.read_text(encoding="utf-8").strip()
+            except Exception:
+                continue
+            if not c:
+                continue
+            trigger = ""
+            for line in c.split("\n"):
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    trigger = line[:120]
+                    break
+            lines.append(f"- **{f.stem}**: {trigger} — `framework_search(query=\"{f.stem}\")`")
+        if not lines:
+            return ""
+        return "## Workflows\n\nSearch with framework_search when scenario matches:\n" + "\n".join(lines)
 
     @staticmethod
     def _is_default_template_content(content: str, template_path: str) -> bool:
