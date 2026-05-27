@@ -34,11 +34,14 @@ async def test_exec_blocks_curl_metadata():
 
 
 @pytest.mark.asyncio
-async def test_exec_blocks_wget_localhost():
-    tool = ExecTool()
+async def test_exec_allows_wget_localhost():
+    """localhost is allowed — agent needs to reach local services."""
+    tool = ExecTool(timeout=3)
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_localhost):
         result = await tool.execute(command="wget http://localhost:8080/secret -O /tmp/out")
-    assert "Error" in result
+    # Guard passes (no internal/private error), execution may still fail
+    # (e.g. wget not found, connection refused) — just check it's not a guard block
+    assert "blocked by safety guard" not in result
 
 
 @pytest.mark.asyncio

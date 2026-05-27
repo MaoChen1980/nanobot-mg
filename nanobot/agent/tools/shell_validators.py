@@ -43,9 +43,13 @@ def _check_dangerous_patterns(command: str, deny_patterns: list[str]) -> str | N
 
 
 def _check_internal_url(command: str) -> str | None:
-    """Check for internal/private URLs. Returns error message or None."""
+    """Check for internal/private URLs. Returns error message or None.
+
+    Loopback (localhost) is allowed — the agent often needs to reach
+    services it spawned locally (health checks, dev servers).
+    """
     from nanobot.security.network import targets_internal_address
-    if targets_internal_address(command):
+    if targets_internal_address(command, allow_loopback=True):
         return "Error: Command blocked by safety guard (internal/private URL detected)"
     return None
 

@@ -128,8 +128,19 @@ async def validate_resolved_url(url: str) -> tuple[bool, str]:
     return True, ""
 
 
-def targets_internal_address(command: str) -> bool:
-    """Return True if the command string contains a URL targeting an internal/private address."""
+_LOOPBACK_NETWORKS = {
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+}
+
+
+def targets_internal_address(command: str, allow_loopback: bool = False) -> bool:
+    """Return True if the command string contains a URL targeting an internal/private address.
+
+    When *allow_loopback* is True (default False), 127.0.0.0/8 and ::1 are
+    considered safe — useful for shell commands that need to reach local
+    services spawned by the agent itself.
+    """
     for m in _URL_RE.finditer(command):
         url = m.group(0)
         try:
@@ -150,6 +161,8 @@ def targets_internal_address(command: str) -> bool:
             try:
                 addr = ipaddress.ip_address(info[4][0])
             except ValueError:
+                continue
+            if allow_loopback and any(addr in net for net in _LOOPBACK_NETWORKS):
                 continue
             if _is_blocked(addr):
                 return True
