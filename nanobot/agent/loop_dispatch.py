@@ -7,6 +7,8 @@ import dataclasses
 import time
 from typing import TYPE_CHECKING, Any
 
+from datetime import datetime, timezone
+
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -126,13 +128,24 @@ class DispatchManager:
         try:
             key = self._effective_session_key(msg)
             session = self._loop.sessions.get_or_create(key)
-            if self._loop._recovery.restore_and_clear_checkpoint(session):
-                self._loop._recovery.clear_pending_user_turn(session)
-                self._loop.sessions.save(session)
-                logger.info(
-                    "Restored partial context for cancelled session {}",
-                    key,
-                )
+
+            # Restore checkpoint with [STOPPED BY USER] for pending tools
+            self._loop._recovery.restore_and_clear_checkpoint(
+                session,
+                pending_tool_content="[STOPPED BY USER]",
+            )
+            self._loop._recovery.clear_pending_user_turn(session)
+
+            # Insert /stop as a user message so the LLM understands what happened
+            session.messages.append({
+                "role": "user",
+                "content": "/stop",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            if hasattr(session, "updated_at"):
+                session.updated_at = datetime.now(timezone.utc)
+            self._loop.sessions.save(session)
+            logger.info("Restored partial context for cancelled session {}", key)
         except Exception:
             logger.debug(
                 "Could not restore checkpoint for cancelled session {}",

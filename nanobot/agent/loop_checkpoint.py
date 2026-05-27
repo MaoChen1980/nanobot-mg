@@ -45,8 +45,15 @@ def clear_pending_user_turn(session: Any) -> None:
     session.metadata.pop(_PENDING_USER_TURN_KEY, None)
 
 
-def restore_and_clear_checkpoint(loop: Any, session: Any) -> bool:
-    """Materialize an unfinished turn into session history before a new request."""
+def restore_and_clear_checkpoint(
+    loop: Any, session: Any, *,
+    pending_tool_content: str | None = None,
+) -> bool:
+    """Materialize an unfinished turn into session history before a new request.
+
+    *pending_tool_content* — custom content for interrupted tool messages
+    (used by /stop to write ``[STOPPED BY USER]`` instead of error text).
+    """
     checkpoint = session.metadata.get(_RUNTIME_CHECKPOINT_KEY)
     if not isinstance(checkpoint, dict):
         return False
@@ -54,6 +61,9 @@ def restore_and_clear_checkpoint(loop: Any, session: Any) -> bool:
     assistant_message = checkpoint.get("assistant_message")
     completed_tool_results = checkpoint.get("completed_tool_results") or []
     pending_tool_calls = checkpoint.get("pending_tool_calls") or []
+
+    from nanobot.utils.helpers import format_message_header
+    default_pending = f"{format_message_header()}\nError: Task interrupted before this tool finished."
 
     restored_messages: list[dict[str, Any]] = []
     if isinstance(assistant_message, dict):
@@ -70,13 +80,12 @@ def restore_and_clear_checkpoint(loop: Any, session: Any) -> bool:
             continue
         tool_id = tool_call.get("id")
         name = ((tool_call.get("function") or {}).get("name")) or "tool"
-        from nanobot.utils.helpers import format_message_header
         restored_messages.append(
             {
                 "role": "tool",
                 "tool_call_id": tool_id,
                 "name": name,
-                "content": f"{format_message_header()}\nError: Task interrupted before this tool finished.",
+                "content": pending_tool_content or default_pending,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -144,9 +153,9 @@ class RecoveryManager:
         """Clear the pending-user-turn flag from session metadata."""
         clear_pending_user_turn(session)
 
-    def restore_and_clear_checkpoint(self, session: Session) -> bool:
+    def restore_and_clear_checkpoint(self, session: Session, *, pending_tool_content: str | None = None) -> bool:
         """Materialize an unfinished turn into session history before a new request."""
-        return restore_and_clear_checkpoint(self._loop, session)
+        return restore_and_clear_checkpoint(self._loop, session, pending_tool_content=pending_tool_content)
 
     def restore_pending_user_turn(self, session: Session) -> bool:
         """Close a turn that only persisted the user message before crashing."""

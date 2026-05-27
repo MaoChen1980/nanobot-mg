@@ -151,9 +151,12 @@ async def test_dispatch_cancellation_restores_checkpoint():
         await loop._dispatch(msg)
 
     roles = [m.get("role") for m in session.messages]
-    assert roles == ["user", "assistant", "tool"], (
-        "Expected the assistant message and completed tool result from the "
-        f"interrupted turn to be materialized into session.messages; got {roles}"
+    assert roles == ["user", "assistant", "tool", "user"], (
+        "Expected assistant + tool from checkpoint + /stop user message; "
+        f"got {roles}"
+    )
+    assert session.messages[-1]["content"] == "/stop", (
+        "Last user message should be /stop"
     )
     assert checkpoint_key not in session.metadata, \
         "Checkpoint metadata should be cleared after restore"
