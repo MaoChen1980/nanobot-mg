@@ -244,12 +244,12 @@ class SessionManager:
         return messages
 
     @staticmethod
-    def _strip_abandoned_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Remove tool messages that start with [ABANDONED].
+    def _strip_bypassed_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Remove tool messages that start with [BYPASSED].
 
         These are transient state from was_interrupted that should not be
         persisted or replayed — they cause duplicate tool_call_id errors.
-        Handles both direct [ABANDONED] prefix and [Message Time: ...]\n[ABANDONED]
+        Handles both direct [BYPASSED] prefix and [Message Time: ...]\n[BYPASSED]
         format (the prefix is added by session manager annotation).
         """
         original_count = len(messages)
@@ -257,12 +257,12 @@ class SessionManager:
         for msg in messages:
             if msg.get("role") == "tool":
                 content = msg.get("content", "")
-                if isinstance(content, str) and ("[ABANDONED]" in content or "[PENDING]" in content):
+                if isinstance(content, str) and ("[BYPASSED]" in content or "[PENDING]" in content):
                     continue
             filtered.append(msg)
         dropped = original_count - len(filtered)
         if dropped:
-            logger.info("Dropped {} abandoned/pending tool messages from session", dropped)
+            logger.info("Dropped {} bypassed/pending tool messages from session", dropped)
         return filtered
 
     def _load(self, key: str) -> Session | None:
@@ -273,7 +273,7 @@ class SessionManager:
         if session is None:
             return None
         session.messages = self._fix_tool_protocol_violations(session.messages)
-        session.messages = self._strip_abandoned_tool_messages(session.messages)
+        session.messages = self._strip_bypassed_tool_messages(session.messages)
         self._saved_msg_count[key] = len(session.messages)
         return session
 

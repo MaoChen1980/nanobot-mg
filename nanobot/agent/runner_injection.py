@@ -62,7 +62,7 @@ def build_unfinished_tool_status_messages(
 
     Returns tool messages for pending/in-progress tool calls:
     - Completed: excluded (already have tool results in messages)
-    - Abandoned: [ABANDONED] status (when has_new_injections=True)
+    - Bypassed: [BYPASSED] status (when has_new_injections=True)
     - Pending: [PENDING] status (when has_new_injections=False)
     """
     if not messages:
@@ -92,7 +92,7 @@ def build_unfinished_tool_status_messages(
             continue
         name = tc.get("function", {}).get("name", "unknown")
         content = (
-            f"{_header}\n[ABANDONED] Tool '{name}' (id: {tid}) was interrupted by new user instruction."
+            f"{_header}\n[BYPASSED] Tool '{name}' (id: {tid}) was interrupted by new user instruction."
             if has_new_injections else
             f"{_header}\n[PENDING] Tool '{name}' (id: {tid}) is still in progress, waiting for result."
         )
@@ -113,7 +113,7 @@ def append_injected_messages(
 ) -> None:
     """Append injected user messages while preserving role alternation.
 
-    Also injects standardized tool messages for pending/abandoned tool calls.
+    Also injects standardized tool messages for pending/bypassed tool calls.
     Tool status messages are only generated when we have an active
     assistant_message (i.e. during an active tool-call round).
     """

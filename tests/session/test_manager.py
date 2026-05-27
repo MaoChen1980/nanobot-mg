@@ -201,13 +201,13 @@ class TestFixToolProtocolViolations:
         assert "tool_calls" not in fixed[1]
 
 
-class TestStripAbandonedToolMessages:
-    def test_removes_abandoned_prefix(self):
+class TestStripBypassedToolMessages:
+    def test_removes_bypassed_prefix(self):
         msgs = [
-            {"role": "tool", "content": "[ABANDONED] cancelled", "tool_call_id": "c1"},
+            {"role": "tool", "content": "[BYPASSED] cancelled", "tool_call_id": "c1"},
             {"role": "user", "content": "hello"},
         ]
-        stripped = SessionManager._strip_abandoned_tool_messages(msgs)
+        stripped = SessionManager._strip_bypassed_tool_messages(msgs)
         assert len(stripped) == 1
         assert stripped[0]["role"] == "user"
 
@@ -215,30 +215,30 @@ class TestStripAbandonedToolMessages:
         msgs = [
             {"role": "tool", "content": "[PENDING] waiting", "tool_call_id": "c1"},
         ]
-        stripped = SessionManager._strip_abandoned_tool_messages(msgs)
+        stripped = SessionManager._strip_bypassed_tool_messages(msgs)
         assert len(stripped) == 0
 
     def test_keeps_normal_tool_messages(self):
         msgs = [
             {"role": "tool", "content": "normal result", "tool_call_id": "c1"},
         ]
-        stripped = SessionManager._strip_abandoned_tool_messages(msgs)
+        stripped = SessionManager._strip_bypassed_tool_messages(msgs)
         assert len(stripped) == 1
 
-    def test_removes_abandoned_without_timestamp_prefix(self):
-        stripped = SessionManager._strip_abandoned_tool_messages([
-            {"role": "tool", "content": "[ABANDONED] cancelled", "tool_call_id": "c1"},
+    def test_removes_bypassed_without_timestamp_prefix(self):
+        stripped = SessionManager._strip_bypassed_tool_messages([
+            {"role": "tool", "content": "[BYPASSED] cancelled", "tool_call_id": "c1"},
         ])
         assert len(stripped) == 0
 
-    def test_handles_backward_compat_timestamp_prefix_with_abandoned(self):
-        stripped = SessionManager._strip_abandoned_tool_messages([
-            {"role": "tool", "content": "[Message Time: ...]\n[ABANDONED] cancelled", "tool_call_id": "c1"},
+    def test_handles_backward_compat_timestamp_prefix_with_bypassed(self):
+        stripped = SessionManager._strip_bypassed_tool_messages([
+            {"role": "tool", "content": "[Message Time: ...]\n[BYPASSED] cancelled", "tool_call_id": "c1"},
         ])
         assert len(stripped) == 0
 
     def test_handles_non_string_content(self):
-        stripped = SessionManager._strip_abandoned_tool_messages([
+        stripped = SessionManager._strip_bypassed_tool_messages([
             {"role": "tool", "content": 42, "tool_call_id": "c1"},
         ])
         assert len(stripped) == 1

@@ -315,7 +315,7 @@ class AgentRunner:
                             ev = new_events[i] if i < len(new_events) else {}
                             content = self._fmt_tool_metadata(tc.name, content, ts, ev.get("duration_ms"))
                         else:
-                            content = f"[ABANDONED] tool call {tc.name} was not executed due to interruption"
+                            content = f"[BYPASSED] tool call {tc.name} was not executed due to interruption"
                             ts = ""
                         tool_message = {
                             "role": "tool", "tool_call_id": tc.id, "name": tc.name,
