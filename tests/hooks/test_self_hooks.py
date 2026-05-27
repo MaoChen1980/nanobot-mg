@@ -251,7 +251,7 @@ class TestSelfInsightHookBuildInsight:
         try:
             hook = SelfInsightHook()
             ctx = _FakeContext(messages=[])
-            insight = hook._build_insight(ctx)
+            insight = hook._build_metric_insight(ctx)
             assert insight is None
         finally:
             m.LOG_JSONL = saved
@@ -282,7 +282,7 @@ class TestSelfInsightHookBuildInsight:
         try:
             hook = SelfInsightHook()
             ctx = _FakeContext(messages=[])
-            insight = hook._build_insight(ctx)
+            insight = hook._build_metric_insight(ctx)
             assert insight is not None
             assert "error" in insight.lower() or "不适" in insight or "错误" in insight
         finally:

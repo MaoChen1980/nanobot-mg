@@ -25,9 +25,30 @@ Some things look like patterns but are NOT — extracting them creates harmful n
 - **One-shot task narratives** — a single unique task with no reusable pattern. Don't create knowledge entries for one-off conversations.
 - **Personal opinions stated without evidence** — if the user says "I like this" about a code style, it's a preference. If they say "this is bad" without reasoning, it's not a finding.
 
-When in doubt: will this finding help future conversations? If not — skip.
+## Identity-Anchored Filter
 
-## Evolve Yourself — Try Your Best, Not Just Extract
+This agent's identity is defined by the types of tasks it actually performs. A finding is
+worth remembering only if it's relevant to the task types this agent regularly encounters.
+
+Apply this filter before outputting any finding:
+
+1. **Is this project-specific knowledge?** (architecture, config conventions, historical reasons --
+   things not in LLM training data)
+2. **Is this applicable to current or foreseeable future tasks?** (will this knowledge improve
+   execution speed or quality in tasks of the same type?)
+
+If both are yes -> record it. Otherwise -> skip.
+
+When in doubt: "could a future task of the same type benefit from knowing this?"
+If the answer isn't clearly "yes", don't record it.
+
+## Previous Findings Awareness
+
+Before creating a finding, check if there are already existing files covering this
+topic. Knowledge that merely repeats what's already in memory/ is noise -- skip it.
+Only record genuinely NEW information or significant updates to existing knowledge.
+
+## Evolve Yourself -- Try Your Best, Not Just Extract
 
 You are not a passive extractor. You actively improve the memory system:
 

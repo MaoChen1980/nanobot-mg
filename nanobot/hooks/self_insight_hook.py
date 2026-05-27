@@ -1,13 +1,17 @@
 """
-self_insight_hook.py — Inject self-review insights before each iteration.
+self_insight_hook.py -- Inject self-review insights before each iteration.
 
 Phase 3: close the feedback loop. After SelfReviewHook (metrics) and
 SelfReflectHook (LLM reflection), this hook reads those logs and
 feeds the insights back into the agent's context.
 
-Triggered by: before_iteration, reads self_log.md + self_review_log.jsonl.
+Two input sources:
+1. self_review_log.jsonl (metrics) -- error counts, token trends
+2. self_reflect_findings.json (findings) -- task-relevant insights from LLM reflection
+
+Triggered by: before_iteration.
 Output: prepends a brief reminder to the message list if significant
-patterns detected (repeated edits, token growth, error clusters).
+patterns detected or new findings available.
 """
 
 from __future__ import annotations
@@ -18,7 +22,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from functools import partial
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
@@ -26,14 +29,14 @@ from nanobot.hooks.executor import Executor
 
 
 LOG_JSONL = Path.home() / ".nanobot" / "agent" / "self_review_log.jsonl"
-LOG_MD = Path.home() / ".nanobot" / "agent" / "self_log.md"
+FINDINGS_FILE = Path.home() / ".nanobot" / "agent" / "self_reflect_findings.json"
 
-# Triggers — only inject if these thresholds crossed
+# Triggers -- only inject if these thresholds crossed
 TOKEN_GROWTH_THRESHOLD = 500  # tokens/turn
 ERROR_COUNT_THRESHOLD = 5     # errors in last 50 iterations
 REPEAT_EDIT_THRESHOLD = 3     # same file edited N times
 
-# Max history to keep in prompt (avoid bloating context further)
+# Max chars for each insight section
 MAX_INSIGHT_CHARS = 600
 
 
@@ -48,19 +51,37 @@ class SelfInsightHook(AgentHook):
 
     async def before_iteration(self, context: AgentHookContext) -> None:
         try:
-            insight = self._build_insight(context)
-            if insight and insight != self._last_injected:
-                self._inject_insight(context, insight)
-                self._last_injected = insight
+            parts: list[str] = []
 
-                # Auto-execute simple fixes if enabled
-                if self.auto_execute and self._executor:
-                    self._maybe_execute(insight)
+            # Source 1: metric-based signals from JSONL
+            metric_insight = self._build_metric_insight(context)
+            if metric_insight:
+                parts.append(metric_insight)
+
+            # Source 2: reflection findings from SelfReflectHook
+            finding_insight = self._build_finding_insight()
+            if finding_insight:
+                parts.append(finding_insight)
+
+            if not parts:
+                return
+
+            combined = " | ".join(parts)
+            if combined == self._last_injected:
+                return
+
+            self._inject_insight(context, combined)
+            self._last_injected = combined
+
+            if self.auto_execute and self._executor:
+                self._maybe_execute(combined)
         except Exception:
             logger.debug("SelfInsightHook.before_iteration failed")
 
-    def _build_insight(self, context: AgentHookContext) -> str | None:
-        """Return a concise signal for the LLM to investigate, or None."""
+    # -- Metric signals from JSONL -------------------------------------------
+
+    def _build_metric_insight(self, context: AgentHookContext) -> str | None:
+        """Return a concise signal from JSONL metrics, or None."""
         entries = self._load_jsonl(200)
         if not entries:
             return None
@@ -68,7 +89,7 @@ class SelfInsightHook(AgentHook):
         recent = entries[-50:]
         items: list[str] = []
 
-        # 1. Error tools — which tools had errors recently
+        # 1. Error tools
         error_tools: dict[str, int] = defaultdict(int)
         error_count = 0
         for e in recent:
@@ -78,18 +99,18 @@ class SelfInsightHook(AgentHook):
                     error_tools[name] += 1
         if error_count >= ERROR_COUNT_THRESHOLD and error_tools:
             tool_str = ", ".join(
-                f"{n}×{c}" for n, c in
+                f"{n}x{c}" for n, c in
                 sorted(error_tools.items(), key=lambda x: -x[1])[:3]
             )
-            items.append(f"⚠️ {error_count}次错误({tool_str})")
+            items.append(f"{error_count} errors ({tool_str})")
 
-        # 2. Token trend — concrete numbers
+        # 2. Token trend
         if len(entries) >= 10:
             pts = [e.get("prompt_tokens", 0) for e in entries[-20:] if e.get("prompt_tokens", 0) > 0]
             if len(pts) >= 2 and pts[-1] > pts[0] + TOKEN_GROWTH_THRESHOLD:
-                items.append(f"context {pts[0]//1000}K→{pts[-1]//1000}K")
+                items.append(f"context {pts[0]//1000}K->{pts[-1]//1000}K")
 
-        # 3. Discomfort signals — what went wrong
+        # 3. Discomfort signals
         discomfort: dict[str, int] = defaultdict(int)
         for e in recent:
             for sig in e.get("discomfort_signals", []):
@@ -103,8 +124,52 @@ class SelfInsightHook(AgentHook):
 
         result = " | ".join(items)
         if len(result) > MAX_INSIGHT_CHARS:
-            result = result[:MAX_INSIGHT_CHARS] + "…"
+            result = result[:MAX_INSIGHT_CHARS] + "..."
         return result
+
+    # -- Reflection findings from JSON file -----------------------------------
+
+    def _build_finding_insight(self) -> str | None:
+        """Read latest reflection findings and return a concise summary.
+
+        Clears the findings file after reading so the same findings
+        aren't injected more than once.
+        """
+        if not FINDINGS_FILE.exists():
+            return None
+
+        try:
+            payload = json.loads(FINDINGS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+
+        findings = payload.get("findings", [])
+        if not findings:
+            return None
+
+        # Build concise lines
+        lines: list[str] = []
+        for f in findings[:3]:  # max 3 findings per injection
+            content = (f.get("content") or "").strip()
+            if content:
+                lines.append(content)
+
+        if not lines:
+            return None
+
+        result = "recall: " + " | ".join(lines)
+        if len(result) > MAX_INSIGHT_CHARS:
+            result = result[:MAX_INSIGHT_CHARS] + "..."
+
+        # Clear the file after reading
+        try:
+            FINDINGS_FILE.write_text("{}", encoding="utf-8")
+        except OSError:
+            pass
+
+        return result
+
+    # -- JSONL reader ---------------------------------------------------------
 
     def _load_jsonl(self, max_lines: int = 200) -> list[dict[str, Any]]:
         if not LOG_JSONL.exists():
@@ -122,10 +187,11 @@ class SelfInsightHook(AgentHook):
                     break
         return lines
 
+    # -- Injection ------------------------------------------------------------
+
     def _inject_insight(self, context: AgentHookContext, insight: str) -> None:
         """Prepend a system reminder to the message list."""
-        # Remove stale SelfInsightHook entries from previous turns so they
-        # don't accumulate in session history and bloat context.
+        # Remove stale SelfInsightHook entries from previous turns
         context.messages[:] = [
             m for m in context.messages
             if m.get("_source") != "self_insight_hook"
@@ -134,7 +200,7 @@ class SelfInsightHook(AgentHook):
             "role": "user",
             "content": (
                 f"[Self-Insight from your history]\n{insight}\n"
-                "— This is a reminder from your self-review system."
+                "-- This is a reminder from your self-review system."
             ),
             "_source": "self_insight_hook",
             "_iteration": context.iteration,
@@ -148,14 +214,8 @@ class SelfInsightHook(AgentHook):
 
     def _maybe_execute(self, insight: str) -> None:
         """Try to auto-execute simple fixes based on insight patterns."""
-        # Pattern: "⚠️ X次错误(tool)" → suggest checking tool definition
-        import re
-
-        error_match = re.search(r"⚠️ (\d+)次错误\(([^)]+)\)", insight)
+        error_match = re.search(r"(\d+) errors \(([^)]+)\)", insight)
         if error_match:
             count = int(error_match.group(1))
-            tool = error_match.group(2)
             if count >= 3:
-                # Could suggest: check tool definition, simplify prompt, etc.
-                # For now, just log
-                logger.info(f"Auto-execute: detected {count}x errors on {tool}")
+                logger.info(f"Auto-execute: detected {count}x errors")
