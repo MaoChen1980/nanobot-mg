@@ -9,7 +9,7 @@ _MAX_LENGTH_RECOVERIES = 3
 _MAX_INJECTIONS_PER_TURN = 50
 _MAX_INJECTION_CYCLES = 20
 _SNIP_SAFETY_BUFFER = 4096
-_MAX_SELF_EDIT_CYCLES = 4
+_MAX_SELF_EDIT_CYCLES = 20
 _BACKFILL_CONTENT = "[Tool result unavailable — call was interrupted or lost]"
 
 # ----------------------------------------------------------------------

@@ -40,7 +40,6 @@ from .runner_constants import (
     _MAX_INJECTION_CYCLES,
     _MAX_INJECTIONS_PER_TURN,
     _MAX_LENGTH_RECOVERIES,
-    _MAX_SELF_EDIT_CYCLES,
     _PERSISTED_MODEL_ERROR_PLACEHOLDER,
     _SNIP_SAFETY_BUFFER,
 )
@@ -51,7 +50,6 @@ __all__ = [
     "_BACKFILL_CONTENT",
     "_MAX_EMPTY_RETRIES", "_MAX_INJECTION_CYCLES",
     "_MAX_INJECTIONS_PER_TURN", "_MAX_LENGTH_RECOVERIES",
-    "_MAX_SELF_EDIT_CYCLES",
     "_PERSISTED_MODEL_ERROR_PLACEHOLDER", "_SNIP_SAFETY_BUFFER",
 ]
 from .runner_context import (
@@ -203,8 +201,6 @@ class AgentRunner:
         length_recovery_count = 0
         had_injections = False
         injection_cycles = 0
-        _self_edit_target: str | None = None
-        _self_edit_count = 0
 
         _current_messages_for_subagent.set(messages)
 
@@ -390,25 +386,6 @@ class AgentRunner:
                 empty_content_retries = 0
                 length_recovery_count = 0
                 await hook.after_iteration(context)
-                # Guard: break if editing the same file repeatedly (environment issue, not code bug)
-                for tc in tool_calls:
-                    if tc.name == "edit_file":
-                        path = (tc.arguments.get("file_path") or tc.arguments.get("path") or "")
-                        if path and path == _self_edit_target:
-                            _self_edit_count += 1
-                        elif path:
-                            _self_edit_target = path
-                            _self_edit_count = 1
-                        break
-                else:
-                    _self_edit_count = 0
-                    _self_edit_target = None
-                if _self_edit_count >= _MAX_SELF_EDIT_CYCLES:
-                    logger.warning("Self-edit loop detected: {} edited {} times", _self_edit_target, _MAX_SELF_EDIT_CYCLES)
-                    stop_reason = "self_edit_loop"
-                    final_content = f"I notice I've been editing `{_self_edit_target}` repeatedly — verification keeps failing, which is likely a test environment issue, not a code bug. Stopping the edit loop."
-                    self._append_final_message(messages, final_content)
-                    break
                 continue
 
             if response.has_tool_calls:
