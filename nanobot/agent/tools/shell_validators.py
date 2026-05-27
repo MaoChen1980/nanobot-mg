@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 # Each pattern must be specific enough to avoid false positives
 # in legitimate commands (e.g. git commit messages, filenames).
 DANGEROUS_PATTERNS: list[str] = [
-    r"\brm\s+-[rf]{1,2}\b",          # rm -r, rm -rf, rm -fr
+    r"\brm\s+-(?:rf|fr)\b",          # rm -rf / rm -fr (recursive + force, not solo -f or -r)
     r"\bdel\s+/[fq]\b",              # del /f, del /q (Windows force/quiet)
     r"\brmdir\s+/s\b",               # rmdir /s (Windows recursive)
     r"(?:^|[;&|]\s*)format\b(?!-)",  # format as standalone command (exclude PowerShell Format-* cmdlets)
