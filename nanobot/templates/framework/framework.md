@@ -205,9 +205,6 @@ Composition leads to one of two outcomes: deliver the result, or re-enter the st
 
 ---
 
-## Framework Evolution
-
-发现重复模式缺失能力、摩擦点、优化机会时，向 `tasks/framework_proposals.md` 提交提案，格式：**观察 → 方案 → 理由**。
 
 ---
 

@@ -62,13 +62,14 @@ class ContextBuilder:
     _RUNTIME_CONTEXT_END = "## /Runtime Context"
 
     def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None,
-                 project_root: Path | None = None):
+                 project_root: Path | None = None, framework_config: dict[str, int] | None = None):
         self.workspace = workspace
         self.project_root = project_root
         self.timezone = timezone
         self.memory = MemoryStore(workspace, db=db)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
         self._bootstrap_cache: dict[str, tuple[float, str | None]] = {}
+        self._framework_config = framework_config or {}
 
 
     def warmup(self) -> None:
@@ -204,12 +205,12 @@ class ContextBuilder:
             workspace_path=workspace_path,
             runtime=runtime,
             channel=channel,
-            max_iterations=200,
-            context_window_tokens=200_000,
-            max_tool_result_chars=32_000,
-            exec_timeout=60,
-            subagent_max_iterations=100,
-            heartbeat_interval_minutes=30,
+            max_iterations=self._framework_config.get("max_iterations", 200),
+            context_window_tokens=self._framework_config.get("context_window_tokens", 200_000),
+            max_tool_result_chars=self._framework_config.get("max_tool_result_chars", 32_000),
+            exec_timeout=self._framework_config.get("exec_timeout", 60),
+            subagent_max_iterations=self._framework_config.get("subagent_max_iterations", 100),
+            heartbeat_interval_minutes=self._framework_config.get("heartbeat_interval_minutes", 30),
         )
 
     @staticmethod

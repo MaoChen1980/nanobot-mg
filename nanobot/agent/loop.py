@@ -201,7 +201,14 @@ class AgentLoop:
 
         self._init_framework_dir(workspace)
         self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db,
-                                       project_root=project_root)
+                                       project_root=project_root, framework_config={
+                                           "max_iterations": self.max_iterations,
+                                           "context_window_tokens": self.context_window_tokens,
+                                           "max_tool_result_chars": self.max_tool_result_chars,
+                                           "exec_timeout": self.exec_config.timeout,
+                                           "subagent_max_iterations": 100,
+                                           "heartbeat_interval_minutes": 30,
+                                       })
         self.sessions = session_manager or SessionManager()
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
