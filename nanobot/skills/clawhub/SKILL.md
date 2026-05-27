@@ -52,3 +52,7 @@ npx --yes clawhub@latest list --workdir ~/.nanobot/workspace
 - Login (`npx --yes clawhub@latest login`) is only required for publishing.
 - `--workdir ~/.nanobot/workspace` is critical — without it, skills install to the current directory instead of the nanobot workspace.
 - After install, remind the user to start a new session to load the skill.
+
+---
+
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.

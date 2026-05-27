@@ -44,3 +44,7 @@ The system automatically matches based on the number of questions and your respo
 - According to USER.md conventions, users understand the meaning of "1/2" and "a/b"
 - No need to explain which option you chose; just provide the number/letter
 - If user explicitly specifies the option content, just confirm ("okay")
+
+---
+
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.

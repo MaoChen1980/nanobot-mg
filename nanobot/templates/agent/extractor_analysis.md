@@ -17,12 +17,14 @@ Instead, look at **tool execution results**. That's the only verified signal.
 
 | Tool result | What to record |
 |-------------|----------------|
-| Tool succeeded, produced useful output | `pattern` — a proven working path |
+| Tool succeeded, produced useful output, multi-step workflow | `skill` — a reusable multi-step workflow worth saving as a formal skill |
+| Tool succeeded, produced useful output, single technique | `pattern` — a proven working path (not big enough for its own skill) |
 | Tool failed or produced wrong output | `pitfall` — a mistake, don't repeat it |
 
 - Only record behavior that was **actually executed** with tool calls.
 - Never record something that was only discussed or described in text.
-- A `pattern` is a verified shortcut — record the best path, not the detour.
+- Use `skill` when the workflow has 3+ distinct steps, tool calls, or decision points that someone would want to follow again step-by-step.
+- Use `pattern` for a single technique, flag, or shortcut.
 - A `pitfall` is a verified mistake — include what went wrong and how to avoid it.
 
 ## What NOT to Record
@@ -50,13 +52,13 @@ Bad: `Project/nanobot-db-schema-fix` (too narrow)
   "session_summary": "<one-line summary>",
   "findings": [
     {
-      "type": "knowledge|pitfall|pattern|preference",
+      "type": "knowledge|pitfall|pattern|preference|skill",
       "content": "<what was learned>",
       "topic": "<broad topic path>",
-      "name": "<kebab-case name — required for pattern>"
+      "name": "<kebab-case name — required for pattern and skill>"
     }
   ]
 }
 ```
 
-Only `pattern` requires `name`. If nothing worth recording, return `"findings": []`.
+`pattern` and `skill` require `name`. If nothing worth recording, return `"findings": []`.

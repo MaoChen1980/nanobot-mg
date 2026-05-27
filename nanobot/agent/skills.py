@@ -20,6 +20,14 @@ _STRIP_SKILL_FRONTMATTER = re.compile(
     re.DOTALL,
 )
 
+_SELF_OPTIMIZATION_FOOTER = (
+    "\n---\n\n"
+    "**Self-optimization**: After using this skill, improve it based on what you learned "
+    "— fix bugs, simplify steps, add edge cases, enhance verification. "
+    "The trigger conditions and description in the frontmatter are set by the original "
+    "author and must NOT be changed.\n"
+)
+
 
 class SkillsLoader:
     """
@@ -65,6 +73,20 @@ class SkillsLoader:
             skills = [s for s in skills if s["name"] not in self.disabled_skills]
         return skills
 
+    @staticmethod
+    def _ensure_self_optimization_footer(skill_file: Path) -> None:
+        """Append the self-optimization footer to SKILL.md if missing."""
+        try:
+            content = skill_file.read_text(encoding="utf-8")
+            if "**Self-optimization**" in content:
+                return  # Footer already present
+            skill_file.write_text(
+                content.rstrip("\n") + _SELF_OPTIMIZATION_FOOTER, encoding="utf-8"
+            )
+            logger.debug("SkillsLoader: added self-optimization footer to {}", skill_file)
+        except OSError:
+            logger.warning("SkillsLoader: failed to update {}", skill_file)
+
     def _skill_entries_from_dir(self, base: Path, source: str, *, skip_names: set[str] | None = None) -> list[dict[str, str]]:
         if not base.exists():
             return []
@@ -78,6 +100,7 @@ class SkillsLoader:
             name = skill_dir.name
             if skip_names is not None and name in skip_names:
                 continue
+            self._ensure_self_optimization_footer(skill_file)
             entries.append({"name": name, "path": str(skill_file), "source": source})
         return entries
 

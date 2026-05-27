@@ -58,7 +58,7 @@ Since you manage skills using your standard file tools, here's how each operatio
 
 ### Create a skill
 1. **Create directory**: `mkdir -p workspace/skills/<name>/`
-2. **Write SKILL.md** with `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`
+2. **Write SKILL.md** with `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`. Include the self-optimization footer at the end of every SKILL.md you create (see [Self-Optimization Footer](#self-optimization-footer)).
 3. **Verify trigger (finalizes contract)**: Read the skill's description from SKILL.md frontmatter, then check it appears correctly in the skills index: `exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`. Confirm the description is specific enough that you'd load this skill when a matching task arrives. If not, edit the description now — this is the last chance. After creation, description and trigger are frozen and owned by skill-manager.
 4. **Validate**: `exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)`
 5. Fix any validation errors
@@ -169,3 +169,7 @@ Do NOT create: `README.md`, `INSTALLATION_GUIDE.md`, `CHANGELOG.md`. These bloat
 - `scripts/ab_test_template.py` — A/B test template
 - `references/hermes_triggers.md` — Full Hermes trigger reference
 - `references/ab_test_reference.md` — A/B test execution guide
+
+---
+
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.

@@ -106,6 +106,10 @@ Files not intended to be loaded into context, but rather used within the output 
 ---
 
 **Not every skill requires all three types of resources.**
+
+---
+
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
 """
 
 EXAMPLE_SCRIPT = '''#!/usr/bin/env python3

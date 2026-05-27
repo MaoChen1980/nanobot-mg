@@ -71,3 +71,7 @@ always: false
 | Permanent config change | Edit config file | Yes |
 
 **Rule of thumb:** Tomorrow? Memory. This turn only? My.
+
+---
+
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.

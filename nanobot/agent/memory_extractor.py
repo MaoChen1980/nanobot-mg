@@ -201,6 +201,15 @@ class MemoryExtractor:
             if ftype == "preference":
                 topic_files.setdefault("user.md", []).append(f"- {content}")
 
+            elif ftype == "skill":
+                name = (finding.get("name") or "").strip()
+                if name:
+                    skills_to_create.append(finding)
+                else:
+                    logger.warning(
+                        "MemoryExtractor: skill finding without name, skipping"
+                    )
+
             elif ftype in ("knowledge", "pitfall", "pattern"):
                 topic = (finding.get("topic") or "").strip()
                 if not topic:
