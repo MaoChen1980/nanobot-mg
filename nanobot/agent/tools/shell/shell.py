@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 import asyncio
 import hashlib
 import json
@@ -707,7 +708,7 @@ class ExecTool(Tool):
                 if val is not None:
                     env[key] = val
             return env
-        home = os.environ.get("HOME", "/tmp")
+        home = os.environ.get("HOME") or tempfile.gettempdir()
         env = {
             "HOME": home,
             "LANG": os.environ.get("LANG", "C.UTF-8"),

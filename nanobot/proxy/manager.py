@@ -144,18 +144,26 @@ class ProxyManager:
                             if pid.isdigit():
                                 pids.append(int(pid))
             else:
+                # Use -o to get only PID and COMMAND columns, avoiding locale issues
                 result = subprocess.run(
-                    ["ps", "aux"],
-                    capture_output=True, text=True, timeout=10,
+                    ["ps", "-eo", "pid,comm", "--no-headers"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 for line in result.stdout.splitlines():
-                    if "nanobot.proxy.channels" in line and "grep" not in line:
-                        parts = line.split()
-                        if parts:
-                            try:
-                                pids.append(int(parts[1]))
-                            except (ValueError, IndexError):
-                                pass
+                    line = line.strip()
+                    if not line:
+                        continue
+                    parts = line.split(None, 1)
+                    if len(parts) < 2:
+                        continue
+                    pid_str, comm = parts[0], parts[1]
+                    if "nanobot.proxy.channels" in comm:
+                        try:
+                            pids.append(int(pid_str))
+                        except ValueError:
+                            pass
         except Exception:
             logger.warning("Failed to enumerate proxy processes")
 
