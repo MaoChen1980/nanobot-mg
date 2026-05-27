@@ -88,22 +88,29 @@ SELF_AWARENESS_PROMPT = """
 # --- Hook ---------------------------------------------------------------------
 
 class SelfReflectHook(AgentHook):
-    """Accumulate per-iteration metrics and fire one LLM reflection per turn."""
+    """Accumulate per-iteration metrics and fire one LLM reflection every N turns.
+
+    Instead of one reflection per turn, batch across multiple turns to:
+    - Reduce LLM cost (1 call per N turns vs 1 call per turn)
+    - Accumulate more data for better pattern detection
+    """
 
     LOG_FILE = Path.home() / ".nanobot" / "agent" / "self_log.md"
     FINDINGS_FILE = Path.home() / ".nanobot" / "agent" / "self_reflect_findings.json"
+    DEFAULT_INTERVAL = 15  # fire once every N turns
 
-    def __init__(self, reraise: bool = False) -> None:
+    def __init__(self, reraise: bool = False, interval: int | None = None) -> None:
         super().__init__(reraise)
-        self._iteration_entries: list[dict] = []
-        self._iteration_count = 0
+        self._turn_count = 0
+        self._entries_accumulated = []
+        self._interval = interval if interval is not None else self.DEFAULT_INTERVAL
 
     # -- after_iteration: accumulate metrics in memory ------------------------
 
     async def after_iteration(self, context: AgentHookContext) -> None:
-        self._iteration_count += 1
+        self._turn_count += 1
         try:
-            self._iteration_entries.append(self._build_entry(context))
+            self._entries_accumulated.append(self._build_entry(context))
         except Exception:
             logger.debug("SelfReflectHook.after_iteration failed silently")
 
@@ -115,7 +122,7 @@ class SelfReflectHook(AgentHook):
         usage = context.usage or {}
         return {
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "iteration": self._iteration_count,
+            "iteration": self._turn_count,
             "tool_calls": tool_calls_data,
             "tool_count": len(tool_calls_data),
             "usage": {
@@ -133,14 +140,20 @@ class SelfReflectHook(AgentHook):
     async def before_iteration(self, context: AgentHookContext) -> None:
         pass
 
-    # -- after_turn: fire one reflection for the entire turn ------------------
+    # -- after_turn: batch reflection every N turns --------------------------------
 
     async def after_turn(self) -> None:
-        if not self._iteration_entries:
+        if not self._entries_accumulated:
             return
 
-        entries = self._iteration_entries
-        self._iteration_entries = []  # reset for next turn
+        self._turn_count += 1
+        if self._turn_count < self._interval:
+            return  # keep accumulating
+
+        # Fire reflection and reset
+        entries = self._entries_accumulated
+        self._entries_accumulated = []
+        self._turn_count = 0
 
         try:
             await self._run_turn_reflection(entries)
