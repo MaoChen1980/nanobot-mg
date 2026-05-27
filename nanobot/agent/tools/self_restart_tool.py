@@ -32,7 +32,7 @@ class SelfRestartTool(Tool):
 
     async def _do_restart(self) -> str:
         ts = time.strftime("%Y-%m-%dT%H:%M:%S")
-        flag_file = Path.home() / ".nanobot" / "workspace" / ".agent" / "_restart_flag.json"
+        flag_file = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
         flag_file.parent.mkdir(parents=True, exist_ok=True)
         flag_file.write_text(json.dumps({"requested_at": ts}, ensure_ascii=False), encoding="utf-8")
 

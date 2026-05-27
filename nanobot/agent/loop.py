@@ -686,7 +686,7 @@ class AgentLoop:
 
         while self._running:
             # Check for restart flag at safe point (start of each iteration)
-            restart_flag = Path.home() / ".nanobot" / "workspace" / ".agent" / "_restart_flag.json"
+            restart_flag = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
             if restart_flag.exists():
                 try:
                     restart_flag.unlink()

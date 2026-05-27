@@ -83,7 +83,7 @@ def restart_gateway() -> bool:
     The gateway checks this flag at a safe point (start of each iteration)
     and triggers a clean restart when it sees the flag.
     """
-    flag_file = WORKSPACE / ".agent" / "_restart_flag.json"
+    flag_file = WORKSPACE / "_restart_flag.json"
     flag_file.parent.mkdir(parents=True, exist_ok=True)
     flag_file.write_text(
         json.dumps({"requested_at": time.strftime("%Y-%m-%dT%H:%M:%S")}, ensure_ascii=False),
