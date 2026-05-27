@@ -80,7 +80,6 @@ class SessionLifecycle:
         archiving to history happens only after the background summary
         completes. Returns empty list (legacy signature).
         """
-        session.enforce_file_cap()
         self._recovery.clear_pending_user_turn(session)
         self._recovery.clear_runtime_checkpoint(session)
         self._sm.save(session)

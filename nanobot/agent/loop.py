@@ -202,7 +202,7 @@ class AgentLoop:
         self._init_framework_dir(workspace)
         self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db,
                                        project_root=project_root)
-        self.sessions = session_manager or SessionManager(workspace)
+        self.sessions = session_manager or SessionManager()
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
         self._recovery = RecoveryManager(self)

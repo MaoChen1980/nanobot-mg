@@ -205,6 +205,7 @@ class NanobotDB:
     # --------------------------------------------------------------------------
 
     def save_session(self, session: Session) -> None:
+        """Full save: upsert session metadata, delete and re-insert all messages."""
         with self._conn:
             self._conn.execute(
                 """INSERT OR REPLACE INTO sessions
@@ -218,18 +219,38 @@ class NanobotDB:
                 ),
             )
             self._conn.execute("DELETE FROM messages WHERE session_key = ?", (session.key,))
-            for msg in session.messages:
-                extra = {k: v for k, v in msg.items() if k not in ("role", "content", "timestamp")}
-                self._conn.execute(
-                    "INSERT INTO messages (session_key, role, content, timestamp, extra) VALUES (?, ?, ?, ?, ?)",
-                    (
-                        session.key,
-                        msg["role"],
-                        msg["content"],
-                        msg["timestamp"],
-                        json.dumps(extra) if extra else None,
-                    ),
-                )
+            self._insert_messages(session.key, session.messages)
+
+    def append_messages(self, session_key: str, messages: list[dict[str, Any]]) -> None:
+        """Incremental append: insert only the new messages, no delete."""
+        with self._conn:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO sessions
+                   (key, created_at, updated_at, metadata)
+                   VALUES (?, ?, ?, ?)""",
+                (
+                    session_key,
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
+                    "{}",
+                ),
+            )
+            self._insert_messages(session_key, messages)
+
+    def _insert_messages(self, session_key: str, messages: list[dict[str, Any]]) -> None:
+        """Batch-insert messages (no commit — caller owns the transaction)."""
+        for msg in messages:
+            extra = {k: v for k, v in msg.items() if k not in ("role", "content", "timestamp")}
+            self._conn.execute(
+                "INSERT INTO messages (session_key, role, content, timestamp, extra) VALUES (?, ?, ?, ?, ?)",
+                (
+                    session_key,
+                    msg["role"],
+                    msg["content"],
+                    msg["timestamp"],
+                    json.dumps(extra) if extra else None,
+                ),
+            )
 
     def load_session(self, key: str) -> Session | None:
         from dataclasses import replace

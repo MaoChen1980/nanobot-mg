@@ -166,9 +166,7 @@ class GatewayApplication:
             Path.home() / ".nanobot" / "nanobot.db",
             workspace=self.config.workspace_path,
         )
-        self.session_manager = SessionManager(
-            self.config.workspace_path, db=self.nanobot_db
-        )
+        self.session_manager = SessionManager(db=self.nanobot_db)
 
         # Preserve existing single-workspace installs, but keep custom workspaces clean.
         if is_default_workspace(self.config.workspace_path):
