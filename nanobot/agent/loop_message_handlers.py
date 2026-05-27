@@ -77,7 +77,10 @@ class SystemMessageHandler:
         adjusted = raw_budget - sys_tokens
         if adjusted < 1024:
             adjusted = raw_budget
-        history = session.get_history(max_turns=80, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        self._loop._last_adjusted_budget = adjusted
+        # Compress session if over budget before building LLM prompt
+        self._loop._compress_if_needed(session)
+        history = session.get_history(max_turns=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
@@ -250,7 +253,10 @@ class UserMessageHandler:
         adjusted = raw_budget - sys_tokens
         if adjusted < 1024:
             adjusted = raw_budget
-        history = session.get_history(max_turns=80, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        self._loop._last_adjusted_budget = adjusted
+        # Compress session if over budget before building LLM prompt
+        self._loop._compress_if_needed(session)
+        history = session.get_history(max_turns=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         # Log what get_history actually returned
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns = sum(1 for m in history if m.get("role") == "assistant")
@@ -362,42 +368,25 @@ class UserMessageHandler:
         save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
         self._loop._append_turn_to_session(session, all_msgs, save_skip)
 
-        # Context compression: before trimming, summarize oldest turns via LLM
-        max_turns = session.metadata.get("max_turns", self._loop._context_max_turns)
-        trim_batch = session.metadata.get("trim_batch", self._loop._context_trim_batch)
-        turns = Session._split_turns_by_assistant(session.messages)
-        if len(turns) >= max_turns:
-            # Skip synthetic turns (already-summarized pairs) so they aren't re-summarized
-            trim_turns = []
-            boundary = 0
-            consumed = 0
-            for turn in turns:
-                if any(m.get("status") == "synthetic" for m in turn):
-                    boundary += len(turn)
-                    consumed += 1
-                    continue
-                if len(trim_turns) >= trim_batch:
-                    break
-                trim_turns.append(turn)
-                boundary += len(turn)
-                consumed += 1
-            if trim_turns:
-                trim_flat = [m for turn in trim_turns for m in turn]
-                future_context = [m for turn in turns[consumed:] for m in turn]
-                summary = await self._loop._summarize_turns(trim_flat, future_context)
+        # Apply pending compression summary if background task completed
+        pending = getattr(self._loop, '_pending_compression', None)
+        if pending is not None and pending.done():
+            try:
+                summary = pending.result()
                 if summary:
-                    # Use the last summarized message's timestamp so the summary pair
-                    # stays chronologically consistent if messages are ever sorted by timestamp.
-                    ts = trim_flat[-1].get("timestamp", datetime.now(timezone.utc).isoformat())
+                    synth_count = getattr(self._loop, '_pending_compression_synth_count', 2)
+                    ts = session.messages[0].get("timestamp", datetime.now(timezone.utc).isoformat()) if session.messages else datetime.now(timezone.utc).isoformat()
                     summary_pair = [
                         {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
                         {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
                     ]
-                    session.messages[:boundary] = summary_pair
-                    logger.info(
-                        "Replaced {} oldest messages with context summary for {} (summarized {} turns)",
-                        boundary, session.key, len(trim_turns),
-                    )
+                    session.messages[:synth_count] = summary_pair
+                    logger.info("Applied background summary for session {}", session.key)
+            except Exception as e:
+                logger.warning("Background summary task failed: {}", e)
+            finally:
+                self._loop._pending_compression = None
+                self._loop._pending_compression_synth_count = 0
 
         # Lifecycle: trim, cap, clear checkpoints, save
         trimmed = self._loop.lifecycle.finalize(session)

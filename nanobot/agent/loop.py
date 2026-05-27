@@ -1127,6 +1127,87 @@ class AgentLoop:
             logger.warning("Failed to summarize turns: {}", e)
             return ""
 
+    def _compress_if_needed(self, session: Session) -> bool:
+        """Check if session exceeds token budget and compress if needed.
+
+        Strips oldest non-synthetic content from the session immediately
+        (archive to history DB), then starts a background task to generate
+        a merged summary (old summary + stripped content). Called sync before
+        building the LLM prompt, so the main LLM call always sees a
+        budget-fitting context.
+
+        The background summary result is picked up in ``_finalize_turn``
+        (or the start of the next turn) and inserted as a synthetic pair.
+        """
+        adjusted_budget: int = getattr(self, "_last_adjusted_budget", 0)
+        if adjusted_budget <= 0:
+            return False
+
+        # Don't start a new compression while one is still pending
+        if hasattr(self, "_pending_compression") and self._pending_compression is not None:
+            return False
+
+        from nanobot.utils.helpers import estimate_message_tokens
+        total_tokens = sum(estimate_message_tokens(m) for m in session.messages)
+        if total_tokens <= adjusted_budget:
+            return False
+
+        turns = Session._split_turns_by_assistant(session.messages)
+
+        # Count leading synthetic turns (old summaries)
+        synth_turn_count = 0
+        synth_message_count = 0
+        for turn in turns:
+            if any(m.get("status") == "synthetic" for m in turn):
+                synth_turn_count += 1
+                synth_message_count += len(turn)
+            else:
+                break
+
+        # 25% target based on non-synthetic tokens only
+        non_synthetic_tokens = sum(
+            sum(estimate_message_tokens(m) for m in turn)
+            for turn in turns[synth_turn_count:]
+        )
+        target_save = int(non_synthetic_tokens * 0.25) or 1
+
+        # Take oldest non-synthetic turns until target is met
+        trim_turns: list[list[dict]] = []
+        boundary = 0
+        saved = 0
+        for turn in turns[synth_turn_count:]:
+            if saved >= target_save:
+                break
+            trim_turns.append(turn)
+            boundary += len(turn)
+            saved += sum(estimate_message_tokens(m) for m in turn)
+
+        if not trim_turns:
+            return False
+
+        synth_messages = [m for turn in turns[:synth_turn_count] for m in turn]
+        trim_flat = [m for turn in trim_turns for m in turn]
+        future_context = [m for turn in turns[synth_turn_count + len(trim_turns):] for m in turn]
+
+        # Archive non-synth content immediately
+        self.context.memory.condense_session_to_history(trim_flat)
+
+        # Remove compressible content from session immediately
+        del session.messages[synth_message_count:synth_message_count + boundary]
+
+        # Start background summary generation (old summary + compressible -> merged summary)
+        summary_input = synth_messages + trim_flat
+        self._pending_compression = asyncio.create_task(
+            self._summarize_turns(summary_input, future_context)
+        )
+        self._pending_compression_synth_count = synth_message_count
+
+        logger.info(
+            "Compressed {} tokens from {} non-synth turns for session {} (bg summary)",
+            saved, len(trim_turns), session.key,
+        )
+        return True
+
     async def process_direct(
         self,
         content: str,

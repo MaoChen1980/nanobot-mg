@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -81,90 +82,210 @@ class TestSummarizeTurns:
         assert "参考" in prompt
 
 
-class TestFinalizeTurnCompression:
-    """_finalize_turn injects summary pair when session turns >= max_turns."""
+class TestCompressIfNeeded:
+    """_compress_if_needed trims session and starts bg summary when over budget."""
 
-    async def test_injects_summary_pair_when_over_threshold(self, tmp_path):
-        loop, handler = _make_handler(tmp_path)
-        lifecycle = MagicMock()
-        loop.lifecycle = lifecycle
-        lifecycle.finalize.return_value = []
+    async def test_trims_and_starts_bg_task(self):
+        loop, _ = _make_handler()
+        loop._last_adjusted_budget = 100
         loop._summarize_turns = AsyncMock(return_value="compressed context")
-        loop._append_turn_to_session = MagicMock()
         loop.context = MagicMock()
-        loop.prompts_dir = tmp_path / "prompts"
-        loop.prompts_dir.mkdir()
 
-        session = Session(key="test:compression")
+        session = Session(key="test:compress")
         for i in range(80):
             session.messages.append({"role": "user", "content": f"msg {i}"})
             session.messages.append({"role": "assistant", "content": f"resp {i}"})
 
-        await handler._finalize_turn(
-            session, [], initial_msgs_count=1,
-            user_persisted_early=False, final_content="ok",
-        )
+        original_len = len(session.messages)
+        result = loop._compress_if_needed(session)
 
-        loop._summarize_turns.assert_awaited_once()
-        # Verify future_context was passed (remaining 60 turns)
-        call_kwargs = loop._summarize_turns.call_args[1]
-        call_args = loop._summarize_turns.call_args[0]
-        if call_kwargs.get("future_context") is not None:
-            assert len(call_kwargs["future_context"]) > 0
-        elif len(call_args) > 1:
-            assert len(call_args[1]) > 0  # future_context as positional
-        # Summary pair replaces the first `boundary` messages (39 msgs = 20 turns).
-        # After replacement: [summary_asst, summary_user, remaining 121 msgs]
-        assert session.messages[0]["role"] == "assistant"
-        assert "compressed context" in session.messages[0]["content"]
-        assert session.messages[1]["role"] == "user"
-        assert session.messages[1]["content"] == "ok"
-        # Remaining content (turns 21+) should still be present
-        assert len(session.messages) == 2 + (160 - 39)
+        assert result is True
+        assert len(session.messages) < original_len  # trimmed
+        assert loop._pending_compression is not None
 
-    async def test_skips_when_below_threshold(self, tmp_path):
-        loop, handler = _make_handler(tmp_path)
-        lifecycle = MagicMock()
-        loop.lifecycle = lifecycle
-        lifecycle.finalize.return_value = []
+        # Background task should complete
+        await asyncio.sleep(0)
+        assert loop._pending_compression.done()
+        assert loop._pending_compression.result() == "compressed context"
+
+        # Content was archived
+        loop.context.memory.condense_session_to_history.assert_called_once()
+
+    async def test_skips_when_below_threshold(self):
+        loop, _ = _make_handler()
+        loop._last_adjusted_budget = 10000
         loop._summarize_turns = AsyncMock()
-        loop._append_turn_to_session = MagicMock()
         loop.context = MagicMock()
-        loop.prompts_dir = tmp_path / "prompts"
-        loop.prompts_dir.mkdir()
 
         session = Session(key="test:nocompress")
         for i in range(5):
             session.messages.append({"role": "user", "content": f"msg {i}"})
             session.messages.append({"role": "assistant", "content": f"resp {i}"})
 
-        await handler._finalize_turn(
-            session, [], initial_msgs_count=1,
-            user_persisted_early=False, final_content="ok",
-        )
+        result = loop._compress_if_needed(session)
+        assert result is False
+        loop._summarize_turns.assert_not_called()
+        assert not hasattr(loop, '_pending_compression') or loop._pending_compression is None
 
+    async def test_skips_when_pending_exists(self):
+        """Don't start a new compression while one is already pending."""
+        loop, _ = _make_handler()
+        loop._last_adjusted_budget = 100
+        loop._summarize_turns = AsyncMock()
+        loop.context = MagicMock()
+
+        pending = asyncio.Future()
+        loop._pending_compression = pending
+
+        session = Session(key="test:pending")
+        for i in range(80):
+            session.messages.append({"role": "user", "content": f"msg {i}"})
+            session.messages.append({"role": "assistant", "content": f"resp {i}"})
+
+        result = loop._compress_if_needed(session)
+        assert result is False  # skipped — pending already exists
         loop._summarize_turns.assert_not_called()
 
-    async def test_empty_summary_skips_injection(self, tmp_path):
+    async def test_returns_false_when_no_budget_set(self):
+        loop, _ = _make_handler()
+        loop.context = MagicMock()
+
+        session = Session(key="test:nobudget")
+        result = loop._compress_if_needed(session)
+        assert result is False
+
+    async def test_preserves_old_summary_and_injects_trim(self):
+        """Leading synthetic turns are counted but not included in 25% trim target."""
+        loop, _ = _make_handler()
+        loop._last_adjusted_budget = 100
+        loop._summarize_turns = AsyncMock(return_value="merged summary")
+        loop.context = MagicMock()
+
+        session = Session(key="test:withsynth")
+        # Pre-existing synthetic summary pair
+        session.messages.append({"role": "assistant", "content": "old summary", "status": "synthetic"})
+        session.messages.append({"role": "user", "content": "ok", "status": "synthetic"})
+        # Some non-synthetic content that should be trimmed
+        for i in range(20):
+            session.messages.append({"role": "user", "content": f"msg {i}"})
+            session.messages.append({"role": "assistant", "content": f"resp {i}"})
+
+        result = loop._compress_if_needed(session)
+
+        assert result is True
+        # Old synthetic pair should remain temporarily (will be replaced when bg task completes)
+        assert session.messages[0]["status"] == "synthetic"
+        assert session.messages[1]["status"] == "synthetic"
+
+
+class TestFinalizeTurnAppliesPendingSummary:
+    """_finalize_turn applies the completed background summary task."""
+
+    async def test_applies_completed_summary(self, tmp_path):
         loop, handler = _make_handler(tmp_path)
-        lifecycle = MagicMock()
-        loop.lifecycle = lifecycle
-        lifecycle.finalize.return_value = []
-        loop._summarize_turns = AsyncMock(return_value="")
+        loop.lifecycle = MagicMock()
+        loop.lifecycle.finalize.return_value = []
         loop._append_turn_to_session = MagicMock()
         loop.context = MagicMock()
         loop.prompts_dir = tmp_path / "prompts"
         loop.prompts_dir.mkdir()
 
-        session = Session(key="test:emptysummary")
-        for i in range(80):
-            session.messages.append({"role": "user", "content": f"msg {i}"})
-            session.messages.append({"role": "assistant", "content": f"resp {i}"})
+        fut = asyncio.Future()
+        fut.set_result("compressed context")
+        loop._pending_compression = fut
+        loop._pending_compression_synth_count = 2
+
+        session = Session(key="test:apply")
+        session.messages.append({"role": "assistant", "content": "old summary", "status": "synthetic"})
+        session.messages.append({"role": "user", "content": "ok", "status": "synthetic"})
 
         await handler._finalize_turn(
             session, [], initial_msgs_count=1,
             user_persisted_early=False, final_content="ok",
         )
 
-        loop._summarize_turns.assert_awaited_once()
-        assert len(session.messages) == 160  # unchanged — no injection
+        # Old synthetic pair replaced with new summary pair
+        assert session.messages[0]["role"] == "assistant"
+        assert "compressed context" in session.messages[0]["content"]
+        assert session.messages[0].get("status") == "synthetic"
+        assert session.messages[1]["role"] == "user"
+        assert session.messages[1].get("status") == "synthetic"
+        # Pending cleared
+        assert loop._pending_compression is None
+
+    async def test_skips_when_no_pending(self, tmp_path):
+        loop, handler = _make_handler(tmp_path)
+        loop.lifecycle = MagicMock()
+        loop.lifecycle.finalize.return_value = []
+        loop._append_turn_to_session = MagicMock()
+        loop.context = MagicMock()
+        loop.prompts_dir = tmp_path / "prompts"
+        loop.prompts_dir.mkdir()
+
+        session = Session(key="test:nopending")
+        session.messages.append({"role": "user", "content": "hello"})
+
+        await handler._finalize_turn(
+            session, [], initial_msgs_count=1,
+            user_persisted_early=False, final_content="ok",
+        )
+
+        assert len(session.messages) == 1  # unchanged (append is mocked)
+
+    async def test_empty_summary_skips_injection(self, tmp_path):
+        loop, handler = _make_handler(tmp_path)
+        loop.lifecycle = MagicMock()
+        loop.lifecycle.finalize.return_value = []
+        loop._append_turn_to_session = MagicMock()
+        loop.context = MagicMock()
+        loop.prompts_dir = tmp_path / "prompts"
+        loop.prompts_dir.mkdir()
+
+        fut = asyncio.Future()
+        fut.set_result("")
+        loop._pending_compression = fut
+        loop._pending_compression_synth_count = 2
+
+        session = Session(key="test:empty")
+        session.messages.append({"role": "assistant", "content": "old summary", "status": "synthetic"})
+        session.messages.append({"role": "user", "content": "ok", "status": "synthetic"})
+
+        await handler._finalize_turn(
+            session, [], initial_msgs_count=1,
+            user_persisted_early=False, final_content="ok",
+        )
+
+        # Messages unchanged — empty summary skipped injection
+        assert session.messages[0]["content"] == "old summary"
+        assert session.messages[1]["content"] == "ok"
+        # Pending cleared
+        assert loop._pending_compression is None
+
+    async def test_failed_task_clears_pending(self, tmp_path):
+        loop, handler = _make_handler(tmp_path)
+        loop.lifecycle = MagicMock()
+        loop.lifecycle.finalize.return_value = []
+        loop._append_turn_to_session = MagicMock()
+        loop.context = MagicMock()
+        loop.prompts_dir = tmp_path / "prompts"
+        loop.prompts_dir.mkdir()
+
+        fut = asyncio.Future()
+        fut.set_exception(RuntimeError("LLM down"))
+        loop._pending_compression = fut
+        loop._pending_compression_synth_count = 2
+
+        session = Session(key="test:fail")
+        session.messages.append({"role": "assistant", "content": "old", "status": "synthetic"})
+        session.messages.append({"role": "user", "content": "ok", "status": "synthetic"})
+
+        await handler._finalize_turn(
+            session, [], initial_msgs_count=1,
+            user_persisted_early=False, final_content="ok",
+        )
+
+        # Session unchanged
+        assert session.messages[0]["content"] == "old"
+        assert len(session.messages) == 2
+        # Pending cleared
+        assert loop._pending_compression is None
