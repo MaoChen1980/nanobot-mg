@@ -644,7 +644,7 @@ class AgentLoop:
             max_tool_result_chars=self.max_tool_result_chars,
             hook=hook,
             error_message="Sorry, I encountered an error calling the AI model.",
-            concurrent_tools=True,
+            concurrent_tools=False,
             workspace=self.workspace,
             session_key=session.key if session else None,
             context_window_tokens=self.context_window_tokens,
