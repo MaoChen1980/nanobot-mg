@@ -163,6 +163,7 @@ class SelfReviewConfig(Base):
     channel: Optional[str] = Field(default=None)  # e.g. "proxy:feishu:feishu1"
     to: Optional[str] = Field(default=None)       # e.g. chat/group ID
     session_key: Optional[str] = Field(default=None)
+    auto_execute: bool = Field(default=False)        # auto-execute fixes without human approval
 
 
 class AgentDefaults(Base):

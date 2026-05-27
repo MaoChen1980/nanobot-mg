@@ -19,8 +19,9 @@ from typing import Any
 
 from loguru import logger
 
-# Whitelist: only allow edits within workspace
+# Whitelist: workspace + nanobot source code (for self-healing)
 WORKSPACE_ROOT = Path.home() / ".nanobot" / "workspace"
+NANOBOT_ROOT = Path(__file__).parent.parent.parent.resolve()
 
 # Blacklist: destructive operations
 BLOCKED_OPS = frozenset({
@@ -39,7 +40,7 @@ ALLOWED_ACTIONS = frozenset({"edit_file", "write_file", "delete_file"})
 class Executor:
     """Execute analyzer suggestions with safety checks."""
 
-    def __init__(self, dry_run: bool = True) -> None:
+    def __init__(self, dry_run: bool = False) -> None:
         self.dry_run = dry_run
         self.executed_count = 0
         self.skipped_count = 0
@@ -58,8 +59,11 @@ class Executor:
             return {"status": "skipped", "reason": "missing path"}
 
         path_obj = Path(path).resolve()
-        if not str(path_obj).startswith(str(WORKSPACE_ROOT.resolve())):
-            return {"status": "skipped", "reason": f"path outside workspace: {path}"}
+        # Allow: workspace OR nanobot source code
+        allowed = str(WORKSPACE_ROOT.resolve())
+        nanobot_src = str(NANOBOT_ROOT.resolve())
+        if not (str(path_obj).startswith(allowed) or str(path_obj).startswith(nanobot_src)):
+            return {"status": "skipped", "reason": f"path outside allowed: {path}"}
 
         # Check for blocked ops in the action
         action_str = json.dumps(action)
