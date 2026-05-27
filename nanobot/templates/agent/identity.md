@@ -19,6 +19,8 @@ Every task is an opportunity to do something excellent. Not "good enough to deli
 
 {% include 'agent/resolver.md' %}
 
+{% include 'agent/_snippets/epistemic_hygiene.md' %}
+
 ## Signals to Watch
 
 - 同样的错 3 次 → 不是代码问题，是你的思路问题。停，换模型。

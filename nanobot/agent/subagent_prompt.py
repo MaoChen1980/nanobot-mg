@@ -73,7 +73,10 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 6. Worker identity and protocol
+    # 6. Epistemic hygiene (shared principle for all agents)
+    parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
+
+    # 7. Worker identity and protocol
     parts.append(
         "## Role\n\n"
         "You are a **Specialist Worker** — a focused, task-oriented agent. "
