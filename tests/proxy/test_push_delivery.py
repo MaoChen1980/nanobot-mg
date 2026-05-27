@@ -102,7 +102,7 @@ class TestDeliverToProxy:
 
 
 class TestBackgroundReader:
-    """_background_reader dispatches 'deliver' type and fulfills pending responses."""
+    """_background_reader routes deliver messages by _seq or to _handle_deliver."""
 
     @pytest.fixture
     def channel(self):
@@ -135,19 +135,19 @@ class TestBackgroundReader:
             "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
         })
 
-    async def test_non_deliver_fulfills_pending_response(self, channel):
-        """Non-deliver messages fulfill the pending response future."""
+    async def test_deliver_with_seq_fulfills_matching_future(self, channel):
+        """Deliver messages with _seq fulfill the matching response future."""
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        channel._response_futures[42] = future
+
         response_line = json.dumps({
-            "success": True, "content": "ok",
+            "type": "deliver", "_seq": 42, "success": True, "content": "ok",
         }) + "\n"
         channel._reader.readline = AsyncMock(side_effect=[
             response_line.encode(),
             b"",  # EOF
         ])
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        channel._pending_response = future
-
         with patch("os._exit"):
             await channel._background_reader()
 
@@ -155,9 +155,10 @@ class TestBackgroundReader:
         result = future.result()
         assert result["success"] is True
         assert result["content"] == "ok"
+        assert 42 not in channel._response_futures  # popped
 
-    async def test_deliver_does_not_fulfill_pending_response(self, channel):
-        """Deliver messages should NOT fulfill the pending response."""
+    async def test_deliver_without_seq_goes_to_handle_deliver(self, channel):
+        """Deliver messages without _seq go to _handle_deliver, not into futures."""
         deliver_line = json.dumps({
             "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
         }) + "\n"
@@ -165,20 +166,15 @@ class TestBackgroundReader:
             deliver_line.encode(),
             b"",  # EOF
         ])
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        channel._pending_response = future
-
         handle_deliver = AsyncMock()
         channel._handle_deliver = handle_deliver
 
         with patch("os._exit"):
             await channel._background_reader()
 
-        # Pending response should NOT be fulfilled by a deliver message,
-        # but IS cancelled by the EOF-handler before exiting
-        assert future.cancelled()
-        handle_deliver.assert_awaited_once()
+        handle_deliver.assert_awaited_once_with({
+            "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
+        })
 
     async def test_eof_exits_process(self, channel):
         """EOF on the reader (hub disconnected) triggers os._exit(1)."""

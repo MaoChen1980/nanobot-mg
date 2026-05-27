@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import time
 from typing import Any
 
@@ -103,6 +104,34 @@ class HubTCPServer:
             await self._server.wait_closed()
             logger.info("Proxy TCP server stopped")
 
+    @staticmethod
+    def _setup_keepalive(transport: asyncio.Transport) -> None:
+        """Enable TCP keepalive with sensible defaults (cross-platform)."""
+        sock = transport.get_extra_info("socket")
+        if sock is None:
+            return
+        try:
+            import platform as _platform
+            if _platform.system() == "Windows":
+                sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 30000, 10000))
+            else:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                for opt, val in [
+                    (socket.TCP_KEEPIDLE, 30),
+                    (socket.TCP_KEEPINTVL, 10),
+                    (socket.TCP_KEEPCNT, 3),
+                ]:
+                    try:
+                        sock.setsockopt(socket.IPPROTO_TCP, opt, val)
+                    except AttributeError:
+                        pass
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except AttributeError:
+                pass
+        except (OSError, AttributeError) as e:
+            logger.debug("Could not set TCP keepalive: {}", e)
+
     async def _handle_client(
         self,
         reader: asyncio.StreamReader,
@@ -114,16 +143,26 @@ class HubTCPServer:
         to prevent interleaving between the main loop (register response)
         and concurrently dispatched _route_message tasks.
 
-        No heartbeat — localhost TCP doesn't need it.  The connection is
-        exclusively for message passing; hub or proxy death is detected via
-        EOF on the reader side.
+        Connection liveness is detected via TCP keepalive and EOF.
         """
         peername = writer.get_extra_info("peername")
         logger.info("Proxy TCP connection from {}", peername)
-        write_lock = asyncio.Lock()
+        self._setup_keepalive(writer.transport)
+        # Use the shared per-proxy write lock so deliver_to_proxy and
+        # register/error writes are serialized through the same lock.
+        proxy_key: str | None = None  # set on register
+        proxy_write_lock: asyncio.Lock = asyncio.Lock()  # fallback before register
+        # Track in-flight _route_message tasks so they can be cancelled when
+        # the TCP connection drops — prevents zombie tasks from completing
+        # on a dead connection and delivering responses into the void.
+        _pending_tasks: set[asyncio.Task] = set()
+
+        def _track_task(task: asyncio.Task) -> None:
+            _pending_tasks.add(task)
+            task.add_done_callback(_pending_tasks.discard)
 
         async def _write(data: dict) -> None:
-            async with write_lock:
+            async with proxy_write_lock:
                 writer.write((json.dumps(data) + "\n").encode())
                 await writer.drain()
 
@@ -150,6 +189,7 @@ class HubTCPServer:
                     bot = data.get("bot", "")
                     pid = data.get("pid", 0)
                     key = f"{channel}:{bot}"
+                    proxy_key = key
 
                     accepted = self._proxy_manager.register_via_tcp(
                         key, reader, writer,
@@ -163,12 +203,17 @@ class HubTCPServer:
                         break
 
                     logger.info("Proxy registered: {}:{} (pid={})", channel, bot, pid)
+                    # Switch to the shared per-proxy write lock so all writes
+                    # to this proxy go through the same serialization.
+                    proxy_write_lock = self._proxy_manager.get_write_lock(proxy_key)
                     await _write(HubResponse(success=True).to_dict())
 
                 elif msg_type == "message":
-                    # Process asynchronously so heartbeats and other messages
-                    # from the same proxy are still serviced during long LLM calls.
-                    asyncio.create_task(self._route_message(write_lock, writer, data, peername))
+                    seq = data.get("_seq")
+                    # Process asynchronously so other messages from the same
+                    # proxy are still serviced during long LLM calls.
+                    task = asyncio.create_task(self._route_message(proxy_write_lock, writer, data, peername, seq=seq))
+                    _track_task(task)
 
         except asyncio.CancelledError:
             pass
@@ -182,6 +227,22 @@ class HubTCPServer:
                 await writer.wait_closed()
             except Exception:
                 logger.warning("Error closing proxy TCP writer")
+            # Cancel any in-flight route_message tasks — they're running on
+            # a dead connection and would deliver responses into the void.
+            for task in list(_pending_tasks):
+                task.cancel()
+            if _pending_tasks:
+                logger.debug("Cancelled {} zombie tasks for {}", len(_pending_tasks), peername)
+            # Clean up session locks for this proxy — prevents memory leak
+            if proxy_key:
+                prefix = f"{proxy_key}:"
+                for k in list(self._session_locks.keys()):
+                    if k.startswith(prefix):
+                        del self._session_locks[k]
+                for k in list(self._session_pending_queues.keys()):
+                    if k.startswith(prefix):
+                        del self._session_pending_queues[k]
+                logger.debug("Cleaned up session state for proxy {}", proxy_key)
 
     async def _route_message(
         self,
@@ -189,6 +250,7 @@ class HubTCPServer:
         writer: asyncio.StreamWriter,
         data: dict[str, Any],
         peername: Any,
+        seq: int | None = None,
     ) -> None:
         """Deserialize a ProxyMessage, process it through the agent, and reply."""
         try:
@@ -386,10 +448,10 @@ class HubTCPServer:
         # TCP connection — the proxy may have reconnected during processing.
         proxy_key = f"{msg.channel}:{msg.bot}"
         resp_dict = resp.to_dict()
-        # Tag as deliver so proxy routes it to the user even when
-        # _pending_response has been cleared (e.g. after reconnect).
         resp_dict["type"] = "deliver"
         resp_dict["chat_id"] = msg.chat_id
+        if seq is not None:
+            resp_dict["_seq"] = seq  # echo back for waiter matching
         delivered = await self._proxy_manager.deliver_to_proxy(
             proxy_key, resp_dict,
         )

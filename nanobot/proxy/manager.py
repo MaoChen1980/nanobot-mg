@@ -367,6 +367,17 @@ class ProxyManager:
                     proxy.running = False
             logger.debug("Proxy {} unregistered (TCP disconnected)", key)
 
+    def get_write_lock(self, proxy_key: str) -> asyncio.Lock:
+        """Return the per-proxy write lock used by deliver_to_proxy.
+
+        Exposed so hub's ``_handle_client`` can share the same lock and
+        avoid interleaving writes from the register/error path with
+        progress deliveries.
+        """
+        if proxy_key not in self._deliver_locks:
+            self._deliver_locks[proxy_key] = asyncio.Lock()
+        return self._deliver_locks[proxy_key]
+
     async def deliver_to_proxy(self, proxy_key: str, data: dict[str, Any]) -> bool:
         """Deliver a JSON message to a proxy via its TCP connection.
 
@@ -423,7 +434,7 @@ class ProxyManager:
             return
 
         # Step 1: close all proxy TCP writers — this causes any proxy
-        # currently inside _do_send() to get a connection error and
+        # currently inside _send_message() to get a connection error and
         # self-terminate via os._exit(1) in send_to_hub / async_send_to_hub.
         for _, proxy in proxies:
             if proxy.writer and not proxy.writer.is_closing():
