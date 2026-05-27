@@ -100,7 +100,11 @@ class TestCompressIfNeeded:
         result = loop._compress_if_needed(session)
 
         assert result is True
-        assert len(session.messages) < original_len  # trimmed
+        # Messages tagged, not deleted — data preserved
+        assert len(session.messages) == original_len
+        pending_count = sum(1 for m in session.messages if m.get("status") == "pending_compress")
+        assert pending_count > 0  # oldest turns tagged
+        assert pending_count < original_len  # but not all — future context preserved
         assert loop._pending_compression is not None
 
         # Background task should complete
@@ -108,8 +112,8 @@ class TestCompressIfNeeded:
         assert loop._pending_compression.done()
         assert loop._pending_compression.result() == "compressed context"
 
-        # Content was archived
-        loop.context.memory.condense_session_to_history.assert_called_once()
+        # Content archived in _finalize_turn, not here
+        loop.context.memory.condense_session_to_history.assert_not_called()
 
     async def test_skips_when_below_threshold(self):
         loop, _ = _make_handler()
@@ -173,9 +177,9 @@ class TestCompressIfNeeded:
         result = loop._compress_if_needed(session)
 
         assert result is True
-        # Old synthetic pair should remain temporarily (will be replaced when bg task completes)
-        assert session.messages[0]["status"] == "synthetic"
-        assert session.messages[1]["status"] == "synthetic"
+        # Old synthetic pair tagged as pending_compress (consolidated into new bg summary)
+        assert session.messages[0]["status"] == "pending_compress"
+        assert session.messages[1]["status"] == "pending_compress"
 
 
 class TestFinalizeTurnAppliesPendingSummary:
@@ -193,23 +197,26 @@ class TestFinalizeTurnAppliesPendingSummary:
         fut = asyncio.Future()
         fut.set_result("compressed context")
         loop._pending_compression = fut
-        loop._pending_compression_synth_count = 2
 
         session = Session(key="test:apply")
-        session.messages.append({"role": "assistant", "content": "old summary", "status": "synthetic"})
-        session.messages.append({"role": "user", "content": "ok", "status": "synthetic"})
+        session.messages.append({"role": "assistant", "content": "old summary", "status": "pending_compress"})
+        session.messages.append({"role": "user", "content": "ok", "status": "pending_compress"})
+        session.messages.append({"role": "user", "content": "remaining msg", "status": None})
 
         await handler._finalize_turn(
             session, [], initial_msgs_count=1,
             user_persisted_early=False, final_content="ok",
         )
 
-        # Old synthetic pair replaced with new summary pair
+        # Old pending_compress replaced with new summary pair
         assert session.messages[0]["role"] == "assistant"
         assert "compressed context" in session.messages[0]["content"]
         assert session.messages[0].get("status") == "synthetic"
         assert session.messages[1]["role"] == "user"
         assert session.messages[1].get("status") == "synthetic"
+        # Remaining messages preserved after summary pair
+        assert len(session.messages) == 3
+        assert session.messages[2]["content"] == "remaining msg"
         # Pending cleared
         assert loop._pending_compression is None
 
@@ -244,20 +251,21 @@ class TestFinalizeTurnAppliesPendingSummary:
         fut = asyncio.Future()
         fut.set_result("")
         loop._pending_compression = fut
-        loop._pending_compression_synth_count = 2
 
         session = Session(key="test:empty")
-        session.messages.append({"role": "assistant", "content": "old summary", "status": "synthetic"})
-        session.messages.append({"role": "user", "content": "ok", "status": "synthetic"})
+        session.messages.append({"role": "assistant", "content": "old summary", "status": "pending_compress"})
+        session.messages.append({"role": "user", "content": "ok", "status": "pending_compress"})
 
         await handler._finalize_turn(
             session, [], initial_msgs_count=1,
             user_persisted_early=False, final_content="ok",
         )
 
-        # Messages unchanged — empty summary skipped injection
+        # Empty summary — pending_compress flags cleared, messages preserved
         assert session.messages[0]["content"] == "old summary"
+        assert session.messages[0].get("status") is None
         assert session.messages[1]["content"] == "ok"
+        assert session.messages[1].get("status") is None
         # Pending cleared
         assert loop._pending_compression is None
 
@@ -273,19 +281,21 @@ class TestFinalizeTurnAppliesPendingSummary:
         fut = asyncio.Future()
         fut.set_exception(RuntimeError("LLM down"))
         loop._pending_compression = fut
-        loop._pending_compression_synth_count = 2
 
         session = Session(key="test:fail")
-        session.messages.append({"role": "assistant", "content": "old", "status": "synthetic"})
-        session.messages.append({"role": "user", "content": "ok", "status": "synthetic"})
+        session.messages.append({"role": "assistant", "content": "old", "status": "pending_compress"})
+        session.messages.append({"role": "user", "content": "ok", "status": "pending_compress"})
 
         await handler._finalize_turn(
             session, [], initial_msgs_count=1,
             user_persisted_early=False, final_content="ok",
         )
 
-        # Session unchanged
+        # Session unchanged, pending flags cleared — data preserved
         assert session.messages[0]["content"] == "old"
+        assert session.messages[0].get("status") is None
+        assert session.messages[1]["content"] == "ok"
+        assert session.messages[1].get("status") is None
         assert len(session.messages) == 2
         # Pending cleared
         assert loop._pending_compression is None

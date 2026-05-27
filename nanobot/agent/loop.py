@@ -191,6 +191,8 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
+        # context_max_turns / context_trim_batch kept for gateway signature compatibility
+        # (session trim is now handled entirely by _compress_if_needed)
         self._context_max_turns = context_max_turns
         self._context_trim_batch = context_trim_batch
         self.project_root = project_root
@@ -204,12 +206,7 @@ class AgentLoop:
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider, db=db)
         self._recovery = RecoveryManager(self)
-        self.lifecycle = SessionLifecycle(
-            self.sessions,
-            self._recovery,
-            context_max_turns=self._context_max_turns,
-            context_trim_batch=self._context_trim_batch,
-        )
+        self.lifecycle = SessionLifecycle(self.sessions, self._recovery)
         self._dispatch_manager = DispatchManager(self)
         self._system_handler = SystemMessageHandler(self)
         self._user_handler = UserMessageHandler(self)
@@ -1130,15 +1127,23 @@ class AgentLoop:
     def _compress_if_needed(self, session: Session) -> bool:
         """Check if session exceeds token budget and compress if needed.
 
-        Strips oldest non-synthetic content from the session immediately
-        (archive to history DB), then starts a background task to generate
-        a merged summary (old summary + stripped content). Called sync before
-        building the LLM prompt, so the main LLM call always sees a
-        budget-fitting context.
+        Tags the oldest turns as ``pending_compress`` and starts a background
+        summary task. The actual removal happens only after the summary is
+        complete (in ``_finalize_turn``), so no data is lost if the background
+        task fails.
 
-        The background summary result is picked up in ``_finalize_turn``
-        (or the start of the next turn) and inserted as a synthetic pair.
+        Called sync before building the LLM prompt. The tagged messages are
+        filtered out by ``get_history``, so the LLM call sees a budget-fitting
+        context without any data being deleted yet.
         """
+        # Safety: clear stale pending_compress tags if no background task (crash recovery)
+        if not hasattr(self, "_pending_compression") or self._pending_compression is None:
+            stale = [m for m in session.messages if m.get("status") == "pending_compress"]
+            if stale:
+                for m in stale:
+                    m.pop("status", None)
+                logger.warning("Cleared {} stale pending_compress tags on session {} (restart)", len(stale), session.key)
+
         adjusted_budget: int = getattr(self, "_last_adjusted_budget", 0)
         if adjusted_budget <= 0:
             return False
@@ -1148,11 +1153,14 @@ class AgentLoop:
             return False
 
         from nanobot.utils.helpers import estimate_message_tokens
-        total_tokens = sum(estimate_message_tokens(m) for m in session.messages)
+
+        # Exclude already-pending messages from budget check
+        pending_filter = [m for m in session.messages if m.get("status") != "pending_compress"]
+        total_tokens = sum(estimate_message_tokens(m) for m in pending_filter)
         if total_tokens <= adjusted_budget:
             return False
 
-        turns = Session._split_turns_by_assistant(session.messages)
+        turns = Session._split_turns_by_assistant(pending_filter)
 
         # Count leading synthetic turns (old summaries)
         synth_turn_count = 0
@@ -1189,22 +1197,24 @@ class AgentLoop:
         trim_flat = [m for turn in trim_turns for m in turn]
         future_context = [m for turn in turns[synth_turn_count + len(trim_turns):] for m in turn]
 
-        # Archive non-synth content immediately
-        self.context.memory.condense_session_to_history(trim_flat)
-
-        # Remove compressible content from session immediately
-        del session.messages[synth_message_count:synth_message_count + boundary]
+        # Tag as pending_compress instead of deleting — data preserved if summary fails
+        compress_ids = {id(m) for m in synth_messages + trim_flat}
+        pending_count = 0
+        for m in session.messages:
+            if id(m) in compress_ids:
+                m["status"] = "pending_compress"
+                pending_count += 1
 
         # Start background summary generation (old summary + compressible -> merged summary)
         summary_input = synth_messages + trim_flat
         self._pending_compression = asyncio.create_task(
             self._summarize_turns(summary_input, future_context)
         )
-        self._pending_compression_synth_count = synth_message_count
 
         logger.info(
-            "Compressed {} tokens from {} non-synth turns for session {} (bg summary)",
-            saved, len(trim_turns), session.key,
+            "Tagged {} oldest msgs as pending_compress ({} tokens, {} non-synth turns) "
+            "for session {} — bg summary started",
+            pending_count, saved, len(trim_turns), session.key,
         )
         return True
 

@@ -374,33 +374,45 @@ class UserMessageHandler:
         save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
         self._loop._append_turn_to_session(session, all_msgs, save_skip)
 
-        # Apply pending compression summary if background task completed
+        # Safety: clear stale pending_compress tags if no background task running
         pending = getattr(self._loop, '_pending_compression', None)
+        if pending is None:
+            stale = [m for m in session.messages if m.get("status") == "pending_compress"]
+            if stale:
+                for m in stale:
+                    m.pop("status", None)
+                logger.warning("Cleared {} stale pending_compress tags in finalize (no bg task)", len(stale))
+
+        # Apply pending compression summary if background task completed
         if pending is not None and pending.done():
             try:
                 summary = pending.result()
-                if summary:
-                    synth_count = getattr(self._loop, '_pending_compression_synth_count', 2)
-                    ts = session.messages[0].get("timestamp", datetime.now(timezone.utc).isoformat()) if session.messages else datetime.now(timezone.utc).isoformat()
+                pending_msgs = [m for m in session.messages if m.get("status") == "pending_compress"]
+                if summary and pending_msgs:
+                    # Archive originals to history, then replace with summary pair
+                    self._loop.context.memory.condense_session_to_history(pending_msgs)
+                    ts = pending_msgs[0].get("timestamp", datetime.now(timezone.utc).isoformat())
                     summary_pair = [
                         {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
                         {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
                     ]
-                    session.messages[:synth_count] = summary_pair
-                    logger.info("Applied background summary for session {}", session.key)
+                    remaining = [m for m in session.messages if m.get("status") != "pending_compress"]
+                    session.messages = list(summary_pair) + remaining
+                    logger.info("Applied background summary, archived {} pending msgs for session {}", len(pending_msgs), session.key)
+                elif not summary:
+                    logger.warning("Background summary returned empty, clearing pending_compress flags")
+                    for m in session.messages:
+                        m.pop("status", None) if m.get("status") == "pending_compress" else None
             except Exception as e:
-                logger.warning("Background summary task failed: {}", e)
+                logger.warning("Background summary task failed, restoring messages: {}", e)
+                for m in session.messages:
+                    if m.get("status") == "pending_compress":
+                        m.pop("status", None)
             finally:
                 self._loop._pending_compression = None
-                self._loop._pending_compression_synth_count = 0
 
-        # Lifecycle: trim, cap, clear checkpoints, save
-        trimmed = self._loop.lifecycle.finalize(session)
-
-        # Archive trimmed turns to history store
-        if trimmed:
-            archived = self._loop.context.memory.condense_session_to_history(trimmed)
-            logger.info("_finalize_turn: archived {} oldest turns", archived)
+        # Lifecycle: cap, clear checkpoints, save (trim handled by _compress_if_needed)
+        self._loop.lifecycle.finalize(session)
 
         # .pt save: every N turns, using session assistant count (persists across restarts)
         assistant_count = sum(1 for m in session.messages if m.get("role") == "assistant")

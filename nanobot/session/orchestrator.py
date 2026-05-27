@@ -25,13 +25,9 @@ class SessionLifecycle:
         self,
         session_manager: SessionManager,
         recovery: RecoveryManager,
-        context_max_turns: int = 80,
-        context_trim_batch: int = 20,
     ) -> None:
         self._sm = session_manager
         self._recovery = recovery
-        self._context_max_turns = context_max_turns
-        self._context_trim_batch = context_trim_batch
 
     # ── low-level pass-through ──────────────────────────────────────────
 
@@ -78,18 +74,17 @@ class SessionLifecycle:
     # ── finalize phase ──────────────────────────────────────────────────
 
     def finalize(self, session: Session) -> list[dict]:
-        """Complete a turn: trim, enforce cap, clear checkpoints, save.
+        """Complete a turn: enforce cap, clear checkpoints, save.
 
-        Returns any trimmed messages for the caller to archive to history.
+        Session size management is handled by ``_compress_if_needed`` —
+        archiving to history happens only after the background summary
+        completes. Returns empty list (legacy signature).
         """
-        max_turns = session.metadata.get("max_turns", self._context_max_turns)
-        trim_batch = session.metadata.get("trim_batch", self._context_trim_batch)
-        trimmed = session.trim_old_turns(max_turns, trim_batch)
         session.enforce_file_cap()
         self._recovery.clear_pending_user_turn(session)
         self._recovery.clear_runtime_checkpoint(session)
         self._sm.save(session)
-        return trimmed
+        return []
 
     def finalize_ephemeral(self, session: Session) -> None:
         """Lightweight finalize for ephemeral messages (no history)."""
