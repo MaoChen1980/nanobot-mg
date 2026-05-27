@@ -204,6 +204,10 @@ class ContextBuilder:
             workspace_path=workspace_path,
             runtime=runtime,
             channel=channel,
+            max_iterations=200,
+            context_window_tokens=200_000,
+            max_tool_result_chars=32_000,
+            exec_timeout=60,
             subagent_max_iterations=100,
             heartbeat_interval_minutes=30,
         )

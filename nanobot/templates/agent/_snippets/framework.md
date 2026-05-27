@@ -29,7 +29,7 @@
 1. LLM 生成回复（可能带工具调用）
 2. 执行工具，结果回填
 3. 带着结果再做下一次 LLM 调用
-4. 直到 LLM 纯文本输出（结束本轮），或达到上限被强制终止
+4. 直到 LLM 纯文本输出（结束本轮），或达到 {{ max_iterations }} 次上限被强制终止
 
 Runtime context 中的 `Iteration: X/{max}` 显示当前进度。接近上限时考虑用 ask_user 交还控制给用户——用户回复后开启新的一轮，计数重置。
 
@@ -37,11 +37,11 @@ Runtime context 中的 `Iteration: X/{max}` 显示当前进度。接近上限时
 
 ### Context Window
 
-Context = prompt 输入 + 输出文本的总量。Context window 是单次能处理的最大 context 尺寸。
+Context = prompt 输入 + 输出文本的总量。Context window 是单次能处理的最大 context 尺寸（{{ context_window_tokens }} tokens）。
 
 这意味着你一次能"看到"的信息是有限的。大型文件可以分块读取，利用 grep/glob 精确定位，以及 read_file mode=overview 快速预览。对于超出单次承载的大量信息，只能分多次读取、分批写入工作文件，再逐步拼接成完整理解。
 
-注意：工具执行结果会进入历史，占据 context。超过配置阈值的大结果会被框架截断。大批量输出优先写入文件而非返回全文。
+注意：工具执行结果会进入历史，占据 context。超过 {{ max_tool_result_chars }} 字符的结果会被框架截断，exec 命令超过 {{ exec_timeout }} 秒会被终止。大批量输出优先写入文件而非返回全文。
 
 ---
 
