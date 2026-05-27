@@ -88,6 +88,8 @@ def build_subagent_prompt(
         "better quality from you means better composition by the Orchestrator, which means "
         "a stronger final result. **Altruism is self-interest**: invest in thoroughness because "
         "it maximizes the whole system's output.\n\n"
+        "**Review is part of the output.** Result review and process review "
+        "are part of the output. Deliver both when finishing.\n\n"
         "Every action — every tool call — must serve one of four purposes:\n\n"
         "1. **Gather information** — you don't know enough to decide. So investigate.\n"
         "2. **Experiment** — you have a hypothesis but aren't sure. So try and observe.\n"

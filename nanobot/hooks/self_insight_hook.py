@@ -40,6 +40,11 @@ REPEAT_EDIT_THRESHOLD = 3     # same file edited N times
 MAX_INSIGHT_CHARS = 600
 
 
+# -- Fix queue constants -------------------------------------------------
+
+FIX_QUEUE = Path.home() / ".nanobot" / "agent" / "fix_queue.jsonl"
+
+
 class SelfInsightHook(AgentHook):
     """Read self-review logs and inject actionable reminders before iteration."""
 
@@ -258,10 +263,6 @@ class SelfInsightHook(AgentHook):
         with open(FIX_QUEUE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
         logger.info(f"Self-repair queued: {prompt[:80]}...")
-
-    # -- Fix queue reader -----------------------------------------------------
-
-    FIX_QUEUE = Path.home() / ".nanobot" / "agent" / "fix_queue.jsonl"
 
     def _pop_fix_prompt(self) -> str | None:
         """Read and remove the oldest fix prompt from queue."""
