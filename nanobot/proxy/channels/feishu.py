@@ -276,6 +276,7 @@ class FeishuProxyChannel(BaseProxyChannel):
         buttons = data.get("buttons", [])
         reply_to = data.get("reply_to", "")
         if not chat_id or (not content and not media):
+            logger.warning("Feishu _handle_deliver: dropped (no chat_id or empty content+media)")
             return
         # Convert structured buttons to ---quick-replies format for _send_formatted_reply
         if buttons and content:
@@ -743,10 +744,11 @@ class FeishuProxyChannel(BaseProxyChannel):
             )
             resp = self._client.im.v1.message.create(request)
             if resp.success():
+                logger.info("Feishu card sent OK to chat={} content_len={}", chat_id, len(content))
                 return True
-            logger.warning("Card send failed ({}): {} - will fall back", resp.code, resp.msg)
+            logger.warning("Feishu card send failed ({}): {} - will fall back", resp.code, resp.msg)
         except Exception as e:
-            logger.error("Card send exception: {}", e)
+            logger.error("Feishu card send exception: {}", e)
         return False
 
     def _send_post_reply(self, chat_id: str, content: str) -> bool:
@@ -780,8 +782,9 @@ class FeishuProxyChannel(BaseProxyChannel):
             )
             resp = self._client.im.v1.message.create(request)
             if resp.success():
+                logger.info("Feishu post sent OK to chat={} content_len={}", chat_id, len(content))
                 return True
-            logger.warning("Post send failed ({}): {} - will fall back", resp.code, resp.msg)
+            logger.warning("Feishu post send failed ({}): {} - will fall back", resp.code, resp.msg)
         except Exception as e:
             logger.error("Post send exception: {}", e)
         return False
@@ -803,9 +806,13 @@ class FeishuProxyChannel(BaseProxyChannel):
                 )
                 .build()
             )
-            self._client.im.v1.message.create(request)
+            resp = self._client.im.v1.message.create(request)
+            if resp.success():
+                logger.info("Feishu plain text sent OK to chat={} content_len={}", chat_id, len(content))
+            else:
+                logger.error("Feishu plain text send failed ({}): {}", resp.code, resp.msg)
         except Exception as e:
-            logger.error("Plain-text fallback failed: {}", e)
+            logger.error("Feishu plain-text fallback exception: {}", e)
 
     # ── Public send ────────────────────────────────────────────────────
 
