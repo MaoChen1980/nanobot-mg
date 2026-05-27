@@ -195,12 +195,21 @@ class BaseProxyChannel:
         Reconnects only when the TCP write itself fails (stale connection).
         A timeout waiting for the response simply means the LLM is still
         processing — reconnecting would create duplicate work.
+
+        Caught CancelledError means another concurrent caller triggered
+        a reconnect and cancelled all pending futures — retry once on
+        the fresh connection.
         """
         msg["type"] = "message"
         for attempt in range(2):
             try:
                 resp = await self._send_raw(msg)
                 return HubResponse.from_dict(resp)
+            except asyncio.CancelledError:
+                # Another concurrent caller's reconnect cancelled our future
+                if attempt == 0:
+                    continue
+                raise
             except (ConnectionError, OSError) as e:
                 if attempt == 0:
                     logger.warning("Send failed (attempt {}), reconnecting: {}", attempt + 1, e)
@@ -426,20 +435,21 @@ class BaseProxyChannel:
     # ------------------------------------------------------------------
 
     def send_to_hub(
-        self, msg_data: dict[str, Any], timeout: int = 300,
+        self, msg_data: dict[str, Any], timeout: int | None = None,
     ) -> HubResponse | None:
         """Thread-safe blocking send.  Returns None on permanent failure.
 
-        Intended for callback/polling-based channels (feishu, dingtalk, …).
+        No timeout and no serialization lock — multiple callers can send
+        concurrently, each with their own seq-numbered future.  The hub
+        always accepts messages regardless of how many are in flight.
         """
         try:
-            with self._send_lock:
-                future = asyncio.run_coroutine_threadsafe(
-                    self._send_message(msg_data),
-                    self._conn_loop,
-                )
-                return future.result(timeout=timeout)
-        except Exception as e:
+            future = asyncio.run_coroutine_threadsafe(
+                self._send_message(msg_data),
+                self._conn_loop,
+            )
+            return future.result(timeout=timeout)
+        except BaseException as e:
             logger.error("Failed to forward message: {}", e)
             return None
 
@@ -458,7 +468,7 @@ class BaseProxyChannel:
                 self._send_message(msg_data), self._conn_loop,
             )
             return await asyncio.wrap_future(future)
-        except Exception as e:
+        except BaseException as e:
             logger.error("Failed to forward message: {}", e)
             return None
 
