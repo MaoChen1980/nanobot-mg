@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -75,14 +76,40 @@ class GatewayApplication:
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        """Synchronous entry point — creates services, starts gateway, blocks until shutdown."""
-        asyncio.run(self._async_run())
+        """Synchronous entry point — creates services, starts gateway, blocks until shutdown.
+
+        When a restart was requested (via self_restart tool), the agent loop stops
+        gracefully and this method re-invokes _async_run() to restart the gateway.
+        """
+        restart_flag_path = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
+        while True:
+            asyncio.run(self._async_run())
+            logger.info("RESTART_DBG: _async_run returned, flag_exists={}, path={}",
+                        restart_flag_path.exists(), restart_flag_path)
+            if not restart_flag_path.exists():
+                break
+            # Agent loop exited due to restart flag — clean up and restart
+            try:
+                restart_flag_path.unlink()
+            except OSError:
+                pass
+            logger.info("Restart flag detected — restarting gateway services")
+        logger.info("Gateway exited")
 
     # ------------------------------------------------------------------
     # Async main
     # ------------------------------------------------------------------
 
     async def _async_run(self) -> None:
+        # Clear stale restart flag from a previous crash/restart so the agent
+        # loop doesn't stop immediately on startup.
+        _stale_flag = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
+        try:
+            if _stale_flag.exists():
+                _stale_flag.unlink()
+        except OSError:
+            pass
+
         display_host = "127.0.0.1" if self.config.gateway.host in {"0.0.0.0", "::"} else self.config.gateway.host
         url = f"http://{display_host}:{self.port}"
         console.print(
@@ -221,7 +248,6 @@ class GatewayApplication:
         )
         ProxyManager.cleanup_orphans()
         ProxyManager._save_gateway_pid()
-        self._spawn_proxy_processes()
 
         hb_cfg = self.config.gateway.heartbeat
         self.heartbeat = HeartbeatService(
@@ -805,15 +831,33 @@ class GatewayApplication:
         )
         await self.hub_server.start()
 
-        tasks = [
-            self.agent.run(),
-            self.proxy_manager.start_monitoring(),
-            self._run_api_server(self.config.gateway.host, self.port),
-        ]
-        if self.open_browser_url:
-            tasks.append(self._poll_and_open_browser())
+        # Spawn proxy processes AFTER the hub is listening — otherwise proxies
+        # connect before the hub is ready and get connection refused.
+        self._spawn_proxy_processes()
 
-        await asyncio.gather(*tasks)
+        # Only await the agent task — all other services run as fire-and-forget
+        # background tasks. When the agent exits (e.g. restart flag detected),
+        # _shutdown() in _async_run()'s finally block cleans everything up.
+        agent_task = asyncio.create_task(self.agent.run())
+        # All other setup functions launch their own internal background tasks
+        # and return immediately — create them as fire-and-forget.
+        asyncio.create_task(self.proxy_manager.start_monitoring())
+        api_setup_task = asyncio.create_task(
+            self._run_api_server(self.config.gateway.host, self.port),
+        )
+        api_setup_task.add_done_callback(
+            lambda t: logger.error("API server setup failed: {}", t.exception())
+            if not t.cancelled() and t.exception() else None
+        )
+        if self.open_browser_url:
+            asyncio.create_task(self._poll_and_open_browser())
+
+        # Wait for the agent to complete (e.g. restart flag detected).
+        # _shutdown() in _async_run()'s finally block handles cleanup.
+        try:
+            await agent_task
+        except asyncio.CancelledError:
+            pass
 
     async def _run_api_server(self, host: str, api_port: int) -> None:
         """Run the settings server via uvicorn on the gateway port."""
@@ -875,26 +919,53 @@ class GatewayApplication:
 
     async def _shutdown(self) -> None:
         """Graceful shutdown of all services."""
+        _t0 = time.monotonic()
         if self.agent is not None:
-            await self.agent.close_mcp()
+            try:
+                await self.agent.close_mcp()
+            except Exception:
+                logger.debug("Error closing MCP connections during shutdown")
             self.agent.stop()
-            flushed = self.agent.sessions.flush_all()
-            if flushed:
-                logger.info("Shutdown: flushed {} session(s) to disk", flushed)
-        if self.heartbeat is not None:
-            self.heartbeat.stop()
-        if self.cron is not None:
-            self.cron.stop()
-        if self.hub_server is not None:
-            await self.hub_server.stop()
-        if self.proxy_manager is not None:
-            await self.proxy_manager.stop()
+            try:
+                flushed = self.agent.sessions.flush_all()
+                if flushed:
+                    logger.info("Shutdown: flushed {} session(s) to disk", flushed)
+            except Exception:
+                logger.debug("Error flushing sessions during shutdown")
+        try:
+            if self.heartbeat is not None:
+                self.heartbeat.stop()
+        except Exception:
+            logger.debug("Error stopping heartbeat during shutdown")
+        try:
+            if self.cron is not None:
+                self.cron.stop()
+        except Exception:
+            logger.debug("Error stopping cron during shutdown")
+        _t1 = time.monotonic()
+        logger.info("SHUTDOWN_DBG: agent cleanup done in {:.1f}s", _t1 - _t0)
+        try:
+            if self.proxy_manager is not None:
+                await self.proxy_manager.stop()
+        except Exception:
+            logger.debug("Error stopping proxy manager during shutdown")
+        _t2 = time.monotonic()
+        logger.info("SHUTDOWN_DBG: proxy_manager.stop done in {:.1f}s (cum={:.1f}s)", _t2 - _t1, _t2 - _t0)
+        try:
+            if self.hub_server is not None:
+                await self.hub_server.stop()
+        except Exception:
+            logger.debug("Error stopping hub server during shutdown")
+        _t3 = time.monotonic()
+        logger.info("SHUTDOWN_DBG: hub_server.stop done in {:.1f}s (cum={:.1f}s)", _t3 - _t2, _t3 - _t0)
         if self.api_server is not None:
             self.api_server.should_exit = True
             try:
                 await self.api_server.shutdown()
             except Exception:
                 logger.debug("Error waiting for API server shutdown")
+        _t4 = time.monotonic()
+        logger.info("SHUTDOWN_DBG: api_server.shutdown done in {:.1f}s (cum={:.1f}s)", _t4 - _t3, _t4 - _t0)
 
     # ------------------------------------------------------------------
     # Helpers (shared with CLI but kept here for self-containment)

@@ -618,7 +618,9 @@ class AgentLoop:
             items: list[dict[str, Any]] = []
             while len(items) < limit:
                 try:
-                    items.append(_to_user_message(pending_queue.get_nowait()))
+                    msg = pending_queue.get_nowait()
+                    items.append(_to_user_message(msg))
+                    logger.debug("INJECT_DBG: drained {} item(s) from pending_queue, content='{}'", len(items), (msg.content or "")[:60])
                 except asyncio.QueueEmpty:
                     break
 
@@ -684,84 +686,84 @@ class AgentLoop:
         await self._connect_mcp()
         logger.info("Agent loop started")
 
-        while self._running:
-            # Check for restart flag at safe point (start of each iteration)
-            restart_flag = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
-            if restart_flag.exists():
+        try:
+            while self._running:
+                # Check for restart flag at safe point (start of each iteration)
+                restart_flag = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
+                if restart_flag.exists():
+                    logger.info("Restart flag detected — stopping agent loop for graceful restart")
+                    self._running = False
+                    break
+
                 try:
-                    restart_flag.unlink()
-                    logger.info("Restart flag detected — initiating graceful restart")
-                except OSError:
-                    pass
-                self._running = False
-                break
+                    msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                except asyncio.CancelledError:
+                    # Preserve real task cancellation so shutdown can complete cleanly.
+                    # Only ignore non-task CancelledError signals that may leak from integrations.
+                    task = asyncio.current_task()
+                    if not self._running or (task is not None and task.cancelling()):
+                        raise
+                    continue
+                except Exception as e:
+                    logger.warning("Error consuming inbound message: {}, continuing...", e)
+                    continue
 
-            try:
-                msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                # Preserve real task cancellation so shutdown can complete cleanly.
-                # Only ignore non-task CancelledError signals that may leak from integrations.
-                task = asyncio.current_task()
-                if not self._running or (task is not None and task.cancelling()):
-                    raise
-                continue
-            except Exception as e:
-                logger.warning("Error consuming inbound message: {}, continuing...", e)
-                continue
-
-            raw = msg.content.strip()
-            if self.commands.is_priority(raw):
-                await self._dispatch_command_inline(
-                    msg, msg.session_key, raw,
-                    self.commands.dispatch_priority,
-                )
-                continue
-            effective_key = self._dispatch_manager._effective_session_key(msg)
-            # If this session already has an active pending queue (i.e. a task
-            # is processing this session), route the message there for mid-turn
-            # injection instead of creating a competing task.
-            if effective_key in self._session_dispatch:
-                # Non-priority commands must not be queued for injection;
-                # dispatch them directly (same pattern as priority commands).
-                if self.commands.is_dispatchable_command(raw):
+                raw = msg.content.strip()
+                if self.commands.is_priority(raw):
                     await self._dispatch_command_inline(
-                        msg, effective_key, raw,
-                        self.commands.dispatch,
+                        msg, msg.session_key, raw,
+                        self.commands.dispatch_priority,
                     )
                     continue
-                pending_msg = msg
-                if effective_key != msg.session_key:
-                    pending_msg = dataclasses.replace(
-                        msg,
-                        session_key_override=effective_key,
+                effective_key = self._dispatch_manager._effective_session_key(msg)
+                # If this session already has an active pending queue (i.e. a task
+                # is processing this session), route the message there for mid-turn
+                # injection instead of creating a competing task.
+                if effective_key in self._session_dispatch:
+                    # Non-priority commands must not be queued for injection;
+                    # dispatch them directly (same pattern as priority commands).
+                    if self.commands.is_dispatchable_command(raw):
+                        await self._dispatch_command_inline(
+                            msg, effective_key, raw,
+                            self.commands.dispatch,
+                        )
+                        continue
+                    pending_msg = msg
+                    if effective_key != msg.session_key:
+                        pending_msg = dataclasses.replace(
+                            msg,
+                            session_key_override=effective_key,
+                        )
+                    try:
+                        self._session_dispatch[effective_key].pending.put_nowait(pending_msg)
+                    except asyncio.QueueFull:
+                        logger.warning(
+                            "Pending queue full for session {}, creating queued task instead",
+                            effective_key,
+                        )
+                    else:
+                        logger.info(
+                            "Routed follow-up message to pending queue for session {}",
+                            effective_key,
+                        )
+                        continue
+                # Compute the effective session key before dispatching
+                # This ensures /stop command can find tasks correctly when unified session is enabled
+                task = asyncio.create_task(self._dispatch(msg))
+                state = self._session_dispatch.setdefault(effective_key, _SessionDispatchState(tasks=[], pending=asyncio.Queue(maxsize=20)))
+                state.tasks.append(task)
+                task.add_done_callback(
+                    lambda t, k=effective_key: (
+                        self._session_dispatch[k].tasks.remove(t)
+                        if k in self._session_dispatch and t in self._session_dispatch[k].tasks
+                        else None
                     )
-                try:
-                    self._session_dispatch[effective_key].pending.put_nowait(pending_msg)
-                except asyncio.QueueFull:
-                    logger.warning(
-                        "Pending queue full for session {}, creating queued task instead",
-                        effective_key,
-                    )
-                else:
-                    logger.info(
-                        "Routed follow-up message to pending queue for session {}",
-                        effective_key,
-                    )
-                    continue
-            # Compute the effective session key before dispatching
-            # This ensures /stop command can find tasks correctly when unified session is enabled
-            task = asyncio.create_task(self._dispatch(msg))
-            state = self._session_dispatch.setdefault(effective_key, _SessionDispatchState(tasks=[], pending=asyncio.Queue(maxsize=20)))
-            state.tasks.append(task)
-            task.add_done_callback(
-                lambda t, k=effective_key: (
-                    self._session_dispatch[k].tasks.remove(t)
-                    if k in self._session_dispatch and t in self._session_dispatch[k].tasks
-                    else None
                 )
-            )
+        except BaseException:
+            logger.exception("run() exiting due to unhandled exception")
+            raise
 
     async def _dispatch(self, msg: InboundMessage) -> None:
         """Process a message: per-session serial, cross-session concurrent."""

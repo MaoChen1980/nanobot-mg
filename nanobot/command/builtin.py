@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 import time
 
 from nanobot import __version__
@@ -28,7 +26,7 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
 
 
 async def cmd_restart(ctx: CommandContext) -> OutboundMessage:
-    """Restart the process (os.execv on Unix, subprocess.Popen + sys.exit on Windows)."""
+    """Write restart flag so the gateway restart loop re-invokes the process."""
     msg = ctx.msg
     write_restart_notice_env_vars(
         channel=msg.channel,
@@ -36,16 +34,17 @@ async def cmd_restart(ctx: CommandContext) -> OutboundMessage:
         metadata=dict(msg.metadata or {}),
     )
 
-    async def _do_restart():
-        await asyncio.sleep(1)
-        args = [sys.executable, "-m", "nanobot"] + sys.argv[1:]
-        if sys.platform == "win32":
-            subprocess.Popen(args)
-            sys.exit(0)
-        else:
-            os.execv(sys.executable, args)
+    # Write the same flag file that self_restart tool uses — the gateway
+    # restart loop detects it, calls _shutdown(), and re-invokes _async_run().
+    from pathlib import Path
+    flag_file = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
+    flag_file.parent.mkdir(parents=True, exist_ok=True)
+    import json, time
+    flag_file.write_text(
+        json.dumps({"requested_at": time.strftime("%Y-%m-%dT%H:%M:%S")}, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
-    asyncio.create_task(_do_restart())
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id, content="Restarting...",
         metadata=dict(msg.metadata or {})

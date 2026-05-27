@@ -35,14 +35,5 @@ class SelfRestartTool(Tool):
         flag_file = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
         flag_file.parent.mkdir(parents=True, exist_ok=True)
         flag_file.write_text(json.dumps({"requested_at": ts}, ensure_ascii=False), encoding="utf-8")
-
-        # Try graceful shutdown via /api/shutdown
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post("http://localhost:18790/api/shutdown")
-                logger.info("self_restart: /api/shutdown → {}", resp.status_code)
-        except Exception as e:
-            logger.warning("self_restart: /api/shutdown failed ({}), flag file will handle restart", e)
-
+        logger.info("self_restart: restart flag written, gateway will restart on next iteration")
         return "Restart requested."

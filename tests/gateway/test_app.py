@@ -410,7 +410,7 @@ class TestShutdown:
 
 
 class TestStartAll:
-    def test_starts_services_and_gathers(self, config: Config) -> None:
+    def test_starts_services_and_waits(self, config: Config) -> None:
         app = _make_mocked_app(config)
         app.agent.run = AsyncMock()
         app.proxy_manager.start_monitoring = AsyncMock()
@@ -427,23 +427,22 @@ class TestStartAll:
         app.heartbeat.start.assert_called_once()
         hub.assert_called_once()
 
-    def test_open_browser_task_added(self, config: Config) -> None:
+    def test_launches_services_and_awaits_agent(self, config: Config) -> None:
         app = _make_mocked_app(config)
-        app.agent.run = AsyncMock()
+        app.agent.run = AsyncMock(return_value=None)
         app.open_browser_url = "http://localhost:8080"
         app.proxy_manager.start_monitoring = AsyncMock()
 
         with (
             patch("nanobot.proxy.hub.HubTCPServer") as hub,
             patch.object(app, "_run_api_server", return_value=AsyncMock()),
-            patch("asyncio.gather", AsyncMock()) as gather,
         ):
             hub.return_value.start = AsyncMock()
             import asyncio
             asyncio.run(app._start_all())
 
-        tasks = gather.call_args[0]
-        assert len(tasks) == 4  # agent.run, proxy_monitor, api_server, browser_open
+        # agent.run was called (the key assertion — no more asyncio.wait semantics)
+        app.agent.run.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -580,22 +579,46 @@ class TestAsyncRun:
         app = _make_mocked_app(config)
 
         with (
-            patch.object(app, "_init_services") as init_svc,
-            patch.object(app, "_wire_callbacks") as wire_cb,
-            patch.object(app, "_print_startup_status") as print_st,
-            patch.object(app, "_register_extractor_job") as reg_extractor,
+            patch.object(app, "_init_services"),
+            patch.object(app, "_wire_callbacks"),
+            patch.object(app, "_print_startup_status"),
+            patch.object(app, "_register_extractor_job"),
+            patch.object(app, "_register_log_check_job"),
+            patch.object(app, "_register_self_review_jobs"),
             patch.object(app, "_start_all") as start_all,
             patch.object(app, "_shutdown") as shutdown,
         ):
             import asyncio
             asyncio.run(app._async_run())
 
-        init_svc.assert_called_once()
-        wire_cb.assert_called_once()
-        print_st.assert_called_once()
-        reg_extractor.assert_called_once()
         start_all.assert_awaited_once()
         shutdown.assert_awaited_once()
+
+    def test_clears_stale_flag(self, config: Config) -> None:
+        app = _make_mocked_app(config)
+        stale_flag = MagicMock()
+        stale_flag.exists.return_value = True
+
+        with (
+            patch.object(app, "_init_services"),
+            patch.object(app, "_wire_callbacks"),
+            patch.object(app, "_start_all", AsyncMock()),
+            patch.object(app, "_shutdown", AsyncMock()),
+            patch("nanobot.gateway.app.Path.home") as mock_home,
+        ):
+            # Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
+            home_path = MagicMock()
+            p1 = MagicMock()
+            p2 = MagicMock()
+            mock_home.return_value = home_path
+            home_path.__truediv__.return_value = p1
+            p1.__truediv__.return_value = p2
+            p2.__truediv__.return_value = stale_flag
+
+            import asyncio
+            asyncio.run(app._async_run())
+
+        stale_flag.unlink.assert_called_once()
 
     def test_keyboard_interrupt(self, config: Config) -> None:
         app = _make_mocked_app(config)

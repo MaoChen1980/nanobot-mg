@@ -87,13 +87,54 @@ class HubTCPServer:
         # lock is held, new messages are enqueued here instead of blocking,
         # and consumed between tool calls by the agent loop's _drain_pending.
         self._session_pending_queues: dict[str, asyncio.Queue] = {}
+        # Per-session running task — tracked so /stop can cancel the current
+        # processing instead of being queued for mid-turn injection.
+        self._session_tasks: dict[str, asyncio.Task] = {}
 
     async def start(self) -> None:
-        """Start the TCP server and begin accepting proxy connections."""
+        """Start the TCP server and begin accepting proxy connections.
+
+        Retries on Windows WSAEADDRINUSE / WSAEACCES which occur when the
+        previous instance's port is still in TIME_WAIT (typically 30-60s).
+        SO_REUSEADDR alone is insufficient on Windows — the *original* socket
+        must also have had it set, which asyncio.start_server's default socket
+        does not.  Retrying with a delay is the reliable workaround.
+        """
+        import socket as _socket
+
+        # Windows TIME_WAIT is 2 * MSL = ~60s; retries give a 75s window.
+        max_attempts = 25
+        retry_delay = 3.0  # seconds
+
+        for attempt in range(1, max_attempts + 1):
+            sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((self._host, self._port))
+                break  # bind succeeded
+            except OSError as e:
+                sock.close()
+                # Windows TIME_WAIT errors: WSAEADDRINUSE (10048) or
+                # WSAEACCES (10013) — the latter occurs when the original
+                # socket didn't have SO_REUSEADDR set.
+                win_err = getattr(e, "winerror", 0)
+                if win_err in (10048, 10013) and attempt < max_attempts:
+                    logger.warning(
+                        "Port {}:{} busy (winerror={}), retrying in {:.0f}s "
+                        "(attempt {}/{})",
+                        self._host, self._port, win_err, retry_delay,
+                        attempt, max_attempts,
+                    )
+                    await asyncio.sleep(retry_delay)
+                    continue
+                raise
+
+        sock.listen(100)
+        sock.setblocking(False)
+
         self._server = await asyncio.start_server(
             self._handle_client,
-            host=self._host,
-            port=self._port,
+            sock=sock,
         )
         logger.info("Proxy TCP server listening on {}:{}", self._host, self._port)
 
@@ -373,16 +414,39 @@ class HubTCPServer:
             self._session_locks[session_key] = session_lock
 
         # If the lock is already held, the session is busy.  Enqueue for
-        # mid-turn injection rather than blocking on the lock.
+        # mid-turn injection rather than blocking on the lock — except /stop
+        # which cancels the running task immediately.
         if session_lock.locked():
+            if msg.content.strip() == "/stop":
+                # Lock held — the running task registered itself via
+                # _session_tasks when it acquired the lock.  Read (not
+                # overwrite) that reference so we cancel the right task.
+                task = self._session_tasks.get(session_key)
+                if task and not task.done():
+                    task.cancel()
+                    logger.info("Stopped session {} via /stop", session_key)
+                # Deliver confirmation back to the user
+                asyncio.create_task(self._proxy_manager.deliver_to_proxy(
+                    proxy_key, {
+                        "type": "deliver",
+                        "chat_id": msg.chat_id,
+                        "content": "✅ 已停止",
+                    }
+                ))
+                return
             logger.debug("Session {} busy, enqueuing for mid-turn injection", session_key)
             queue = self._session_pending_queues.setdefault(session_key, asyncio.Queue())
             queue.put_nowait(_PendingItem(inbound, data, write_lock, writer, peername))
             return
 
-        # Lock is free — create a fresh pending queue for this dispatch.
-        pending_queue: asyncio.Queue = asyncio.Queue()
-        self._session_pending_queues[session_key] = pending_queue
+        # Lock is free — register this task so /stop can find it.
+        self._session_tasks[session_key] = asyncio.current_task()
+
+        # Use existing pending queue (setdefault is atomic,
+        # preventing the race where two concurrent _route_message tasks each
+        # create their own queue, and a third message's mid-turn injection
+        # ends up in the wrong one).
+        pending_queue = self._session_pending_queues.setdefault(session_key, asyncio.Queue())
 
         try:
             async with session_lock:
@@ -411,10 +475,14 @@ class HubTCPServer:
             if response is None:
                 return
             resp = outbound_to_hub_response(response, reply_to=msg.message_id)
+        except asyncio.CancelledError:
+            logger.info("Session {} processing cancelled", session_key)
+            raise
         except Exception as e:
             logger.exception("Error processing proxy TCP message: {}", e)
             resp = HubResponse(success=False, error=str(e))
         finally:
+            self._session_tasks.pop(session_key, None)
             if _outbound_bridge_task is not None and not _outbound_bridge_task.done():
                 _outbound_bridge_task.cancel()
                 try:
