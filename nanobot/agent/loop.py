@@ -686,8 +686,19 @@ class AgentLoop:
         await self._connect_mcp()
         logger.info("Agent loop started")
 
+        _iter_count = 0
+        _hb_count = 0
+        _wd_path = Path.home() / ".nanobot" / "agent_watchdog.txt"
         try:
             while self._running:
+                _iter_count += 1
+                _hb_count += 1
+                if _hb_count % 5 == 0:
+                    try:
+                        _wd_path.write_text(f"AGENT_ALIVE: iteration {_iter_count} at {__import__('time').time()}\n")
+                    except Exception:
+                        pass
+                    logger.info("AGENT_HB: iteration {}, _running={}", _iter_count, self._running)
                 # Check for restart flag at safe point (start of each iteration)
                 restart_flag = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
                 if restart_flag.exists():
@@ -698,13 +709,20 @@ class AgentLoop:
                 try:
                     msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
                 except asyncio.TimeoutError:
+                    try:
+                        Path.home().joinpath(".nanobot","loop_hb.txt").write_text(f"{__import__('time').time()}\n")
+                    except Exception:
+                        pass
                     continue
                 except asyncio.CancelledError:
                     # Preserve real task cancellation so shutdown can complete cleanly.
                     # Only ignore non-task CancelledError signals that may leak from integrations.
                     task = asyncio.current_task()
-                    if not self._running or (task is not None and task.cancelling()):
+                    cancelling = task.cancelling() if task is not None else 0
+                    if not self._running or cancelling:
+                        logger.info("LOOP_TRACE: CancelledError re-raised (_running={}, cancelling={})", self._running, cancelling)
                         raise
+                    logger.info("LOOP_TRACE: CancelledError swallowed from wait_for (_running={}, cancelling={})", self._running, cancelling)
                     continue
                 except Exception as e:
                     logger.warning("Error consuming inbound message: {}, continuing...", e)
@@ -761,6 +779,7 @@ class AgentLoop:
                         else None
                     )
                 )
+            logger.info("LOOP_EXIT: while _running loop ended (_running={}, iterations={})", self._running, _iter_count)
         except BaseException:
             logger.exception("run() exiting due to unhandled exception")
             raise

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -70,6 +71,8 @@ class GatewayApplication:
         self.heartbeat = None
         self.api_server = None
         self.hub_server = None
+        # Strong references to background tasks (prevent GC on Python 3.14+)
+        self._bg_tasks: list[asyncio.Task] = []
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -81,9 +84,32 @@ class GatewayApplication:
         When a restart was requested (via self_restart tool), the agent loop stops
         gracefully and this method re-invokes _async_run() to restart the gateway.
         """
+        import atexit as _atexit
+        _wd = Path.home() / ".nanobot" / "gateway_watchdog.txt"
+        _wd.write_text(f"run() entered at {time.time()}\n")
+        _atexit.register(lambda: (
+            print(f"ATEXIT_TRAP: process exiting at {time.time()}", flush=True),
+            _wd.write_text(f"ATEXIT_TRAP: process exiting at {time.time()}\n")
+        ))
+
         restart_flag_path = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
         while True:
-            asyncio.run(self._async_run())
+            print("RUN_DBG: before asyncio.run", flush=True)
+            try:
+                asyncio.run(self._async_run())
+                print("RUN_DBG: after asyncio.run (normal return)", flush=True)
+            except KeyboardInterrupt:
+                print("RUN_DBG: KeyboardInterrupt from asyncio.run", flush=True)
+                logger.info("RUN_DBG: KeyboardInterrupt from asyncio.run")
+                break
+            except SystemExit as e:
+                print(f"RUN_DBG: SystemExit({e.code}) from asyncio.run", flush=True)
+                logger.info("RUN_DBG: SystemExit({}) from asyncio.run", e.code)
+                break
+            except BaseException:
+                print("RUN_DBG: unexpected exception from asyncio.run", flush=True)
+                logger.exception("RUN_DBG: unexpected exception from asyncio.run")
+                break
             logger.info("RESTART_DBG: _async_run returned, flag_exists={}, path={}",
                         restart_flag_path.exists(), restart_flag_path)
             if not restart_flag_path.exists():
@@ -94,6 +120,7 @@ class GatewayApplication:
             except OSError:
                 pass
             logger.info("Restart flag detected — restarting gateway services")
+        print("RUN_DBG: Gateway exited", flush=True)
         logger.info("Gateway exited")
 
     # ------------------------------------------------------------------
@@ -101,6 +128,7 @@ class GatewayApplication:
     # ------------------------------------------------------------------
 
     async def _async_run(self) -> None:
+        logger.info("ASYNC_RUN_BEGIN")
         # Clear stale restart flag from a previous crash/restart so the agent
         # loop doesn't stop immediately on startup.
         _stale_flag = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
@@ -793,6 +821,8 @@ class GatewayApplication:
 
     async def _start_all(self) -> None:
         """Start all services and block until one exits."""
+        _swd = Path.home() / ".nanobot" / "start_watchdog.txt"
+        _swd.write_text(f"{time.time()} _start_all entered\n")
         if self.agent is None:
             # Setup mode — only the API server
             import uvicorn
@@ -841,23 +871,36 @@ class GatewayApplication:
         agent_task = asyncio.create_task(self.agent.run())
         # All other setup functions launch their own internal background tasks
         # and return immediately — create them as fire-and-forget.
-        asyncio.create_task(self.proxy_manager.start_monitoring())
-        api_setup_task = asyncio.create_task(
-            self._run_api_server(self.config.gateway.host, self.port),
-        )
-        api_setup_task.add_done_callback(
+        self._bg_tasks = [
+            asyncio.create_task(self.proxy_manager.start_monitoring()),
+            asyncio.create_task(
+                self._run_api_server(self.config.gateway.host, self.port),
+            ),
+        ]
+        self._bg_tasks[1].add_done_callback(
             lambda t: logger.error("API server setup failed: {}", t.exception())
             if not t.cancelled() and t.exception() else None
         )
         if self.open_browser_url:
-            asyncio.create_task(self._poll_and_open_browser())
+            self._bg_tasks.append(
+                asyncio.create_task(self._poll_and_open_browser())
+            )
 
         # Wait for the agent to complete (e.g. restart flag detected).
         # _shutdown() in _async_run()'s finally block handles cleanup.
+        _swd.write_text(f"{time.time()} before await agent_task\n")
         try:
             await agent_task
+            _swd.write_text(f"{time.time()} after await agent_task (normal)\n")
+            logger.info("GATEWAY_TRACE: agent_task completed normally")
         except asyncio.CancelledError:
+            _swd.write_text(f"{time.time()} after await agent_task (CancelledError)\n")
+            logger.info("GATEWAY_TRACE: agent_task was cancelled")
             pass
+        except BaseException:
+            _swd.write_text(f"{time.time()} after await agent_task (BaseException)\n")
+            logger.exception("GATEWAY_TRACE: agent_task raised unexpected exception")
+            raise
 
     async def _run_api_server(self, host: str, api_port: int) -> None:
         """Run the settings server via uvicorn on the gateway port."""
@@ -878,7 +921,7 @@ class GatewayApplication:
         self.api_server = uvicorn.Server(config)
         # Prevent uvicorn from installing signal handlers — gateway owns lifecycle.
         self.api_server.install_signal_handlers = lambda: None
-        asyncio.create_task(self.api_server.serve())
+        self._uvicorn_task = asyncio.create_task(self.api_server.serve())
         console.print(
             f"[green]✓[/green] Settings server: http://{host}:{api_port}/"
         )

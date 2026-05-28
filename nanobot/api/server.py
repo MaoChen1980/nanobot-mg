@@ -410,6 +410,7 @@ async def handle_shutdown(request: Request) -> Response:
             start_new_session=True,
         )
         time.sleep(0.3)
+        logger.info("Shutdown via /api/shutdown, exiting with os._exit(0)")
         os._exit(0)
 
     threading.Thread(target=deferred_restart, daemon=True).start()
@@ -432,6 +433,7 @@ async def handle_stop(request: Request) -> Response:
     def deferred_exit():
         import time
         time.sleep(0.3)
+        logger.info("Stop via /api/stop, exiting with os._exit(0)")
         os._exit(0)
 
     threading.Thread(target=deferred_exit, daemon=True).start()
