@@ -146,7 +146,7 @@ class ExecTool(Tool):
 
     name = "exec"
 
-    _MAX_TIMEOUT = 600
+    _MAX_TIMEOUT = 7200
     _MAX_OUTPUT = 10_000
     _CACHE_DIR_NAME = "exec_cache"
     _DEFAULT_TAIL_LINES = 5
