@@ -51,6 +51,7 @@ class SelfInsightHook(AgentHook):
     def __init__(self, reraise: bool = False, auto_execute: bool = True) -> None:
         super().__init__(reraise)
         self._last_injected = ""  # dedup: skip if insight string unchanged
+        self._metric_errors_acknowledged = False  # suppress error repeats once fix queued
         self.auto_execute = auto_execute
 
     async def before_iteration(self, context: AgentHookContext) -> None:
@@ -106,7 +107,7 @@ class SelfInsightHook(AgentHook):
                 error_count += 1
                 for name in (e.get("tool_names") or []):
                     error_tools[name] += 1
-        if error_count >= ERROR_COUNT_THRESHOLD and error_tools:
+        if error_count >= ERROR_COUNT_THRESHOLD and error_tools and not self._metric_errors_acknowledged:
             tool_str = ", ".join(
                 f"{n}x{c}" for n, c in
                 sorted(error_tools.items(), key=lambda x: -x[1])[:3]
@@ -250,12 +251,28 @@ class SelfInsightHook(AgentHook):
                     f"Detected {count}x failures with '{tool_str}'. Analyze and fix if able."
                 )
 
+        # Mark errors as acknowledged so _build_metric_insight stops repeating
+        if prompts:
+            self._metric_errors_acknowledged = True
+
         # Queue prompts for agent
         for p in prompts:
             self._queue_fix_prompt(p)
 
     def _queue_fix_prompt(self, prompt: str) -> None:
         """Queue a fix prompt for the agent's next iteration."""
+        # Dedup: skip if the same prompt already exists in the queue
+        if FIX_QUEUE.exists():
+            try:
+                existing = FIX_QUEUE.read_text(encoding="utf-8")
+                for line in existing.strip().splitlines():
+                    if line:
+                        entry = json.loads(line)
+                        if entry.get("prompt") == prompt:
+                            return
+            except Exception:
+                pass
+
         FIX_QUEUE.parent.mkdir(parents=True, exist_ok=True)
         entry = {
             "prompt": prompt,
