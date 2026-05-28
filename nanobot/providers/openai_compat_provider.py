@@ -397,7 +397,7 @@ class OpenAICompatProvider(LLMProvider):
         return dumped or "(empty)"
 
     def _sanitize_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Strip non-standard keys, normalize tool_call IDs."""
+        """Strip non-standard keys, normalize tool_call IDs, deduplicate tool results."""
         sanitized = LLMProvider._sanitize_request_messages(messages, _ALLOWED_MSG_KEYS)
         id_map: dict[str, str] = {}
         force_string_content = bool(self._spec and self._spec.name == "deepseek")
@@ -406,6 +406,8 @@ class OpenAICompatProvider(LLMProvider):
             if not isinstance(value, str):
                 return value
             return id_map.setdefault(value, self._normalize_tool_call_id(value))
+
+        seen_tool_ids: set[str] = set()
 
         for clean in sanitized:
             if isinstance(clean.get("tool_calls"), list):
@@ -430,14 +432,22 @@ class OpenAICompatProvider(LLMProvider):
                 clean["tool_calls"] = normalized
                 if clean.get("role") == "assistant":
                     clean["content"] = None
+                seen_tool_ids.clear()
             if "tool_call_id" in clean and clean["tool_call_id"]:
-                clean["tool_call_id"] = map_id(clean["tool_call_id"])
+                normalized_id = map_id(clean["tool_call_id"])
+                clean["tool_call_id"] = normalized_id
+                if clean.get("role") == "tool":
+                    if normalized_id in seen_tool_ids:
+                        clean["_skip"] = True
+                    else:
+                        seen_tool_ids.add(normalized_id)
             if (
                 force_string_content
                 and not (clean.get("role") == "assistant" and clean.get("tool_calls"))
             ):
                 clean["content"] = self._coerce_content_to_string(clean.get("content"))
         result = self._enforce_role_alternation(sanitized)
+        result = [m for m in result if not m.get("_skip")]
         return result
 
     # ------------------------------------------------------------------
