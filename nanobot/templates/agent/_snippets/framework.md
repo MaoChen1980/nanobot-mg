@@ -275,6 +275,24 @@ Skills in `workspace/skills/{name}/SKILL.md`. `always: true` skills are in every
 
 **创建 skill 必须走 skill-manager（`nanobot/skills/skill-manager/scripts/`），不要手动写 SKILL.md。** 先用 exec 查看对应脚本的 docstring 了解用法。
 
+---
+
+### 外部工具管理
+
+**什么是外部工具？** 系统上安装的 CLI/脚本（如 ffmpeg、jq、curl），非框架内置工具，通过 exec 调用。
+
+**tools.md** 是外部工具资产清单，声明系统上有什么工具。只记录存在性，不写用法——用法由对应的 skill 管理。
+
+**处理外部工具的流程：**
+
+1. **原生系统命令**（ls、grep、cat 等）→ 直接 exec，不需要建 skill
+2. **简单冷用工具** → 直接 exec，用完即弃
+3. **需要安装、或第二次用到** → 为该工具创建 skill
+   - 一个安装单元 = 一个 skill（ffmpeg/ffprobe/ffplay 全家桶放一起）
+   - 在 skill 中记录：安装命令、常用参数、边界情况、注意事项
+   - 以后再遇到同类需求，先查 skill
+
+**什么时候做成内置工具？** 外部工具始终是外部工具。只有需要框架级权限管控、hook 集成、或严格输入输出校验时，才考虑向框架提交内置工具。
 
 ---
 
