@@ -34,6 +34,7 @@ class _SessionPoll:
     stdin_closed: bool = False
     truncated_chars: int = 0
     raw_output: str = ""
+    ctx_tail: str = ""
 
 
 @dataclass(slots=True)
@@ -74,6 +75,7 @@ class _ExecSession:
         self._chunks: list[str] = []
         self._lock = asyncio.Lock()
         self._timed_out = False
+        self._history_buf: str = ""  # rolling history of all output, capped at MAX_BUFFERED_CHARS
         self._pty_master: int | None = None
         if master_fd is not None:
             os.set_blocking(master_fd, False)
@@ -188,7 +190,17 @@ class _ExecSession:
             raw = "".join(self._chunks)
             self._chunks.clear()
 
+        if raw:
+            self._history_buf += raw
+            if len(self._history_buf) > MAX_BUFFERED_CHARS:
+                self._history_buf = self._history_buf[-MAX_BUFFERED_CHARS:]
+
         output, truncated = _truncate_output(raw, max_output_chars)
+
+        ctx_tail = ""
+        if not output and self._history_buf:
+            # No new output — include tail of history for context
+            ctx_tail = self._history_buf[-500:]
         return _SessionPoll(
             output=output,
             raw_output=raw if truncated else "",
@@ -199,6 +211,7 @@ class _ExecSession:
             terminated=terminated,
             stdin_closed=stdin_closed,
             truncated_chars=truncated,
+            ctx_tail=ctx_tail,
         )
 
     async def kill(self) -> None:
@@ -396,6 +409,8 @@ def _truncate_output(output: str, max_output_chars: int) -> tuple[str, int]:
 
 def format_session_poll(session_id: str, poll: _SessionPoll) -> str:
     parts = [poll.output] if poll.output else []
+    if not poll.output and poll.ctx_tail:
+        parts.append(f"[Context tail (last {len(poll.ctx_tail)} chars)]\n{poll.ctx_tail}")
     if poll.truncated_chars:
         parts.append(f"(output truncated by {poll.truncated_chars:,} chars)")
     if poll.timed_out:
