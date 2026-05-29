@@ -542,6 +542,30 @@ class GatewayApplication:
             f"{self.config.gateway.heartbeat.interval_s}s"
         )
 
+        try:
+            import sentence_transformers  # noqa: F401
+        except ImportError:
+            console.print()
+            console.print(
+                "[red]╔══════════════════════════════════════════════════════════╗[/red]"
+            )
+            console.print(
+                "[red]║[/red]  [bold]Vector Search Disabled[/bold]                                    [red]║[/red]"
+            )
+            console.print(
+                "[red]║[/red]  Install [bold]sentence-transformers[/bold] for semantic memory search:   [red]║[/red]"
+            )
+            console.print(
+                "[red]║[/red]  [bold]pip install sentence-transformers[/bold]                          [red]║[/red]"
+            )
+            console.print(
+                "[red]║[/red]  Enables FAISS-powered vector search across memory files.        [red]║[/red]"
+            )
+            console.print(
+                "[red]╚══════════════════════════════════════════════════════════╝[/red]"
+            )
+            console.print()
+
     def _register_extractor_job(self) -> None:
         """Register the MemoryExtractor system cron job."""
         from nanobot.cron.types import CronJob, CronPayload
