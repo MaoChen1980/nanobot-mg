@@ -546,33 +546,14 @@ class GatewayApplication:
             import sentence_transformers  # noqa: F401
         except ImportError:
             console.print()
-            console.print(
-                "[red]╔══════════════════════════════════════════════════════════╗[/red]"
-            )
-            console.print(
-                "[red]║[/red]  [bold]Vector Search Disabled[/bold]                                    [red]║[/red]"
-            )
-            console.print(
-                "[red]║[/red]  Install [bold]sentence-transformers + faiss-cpu[/bold] for smart search  [red]║[/red]"
-            )
-            console.print(
-                "[red]║[/red]  across your ideas, projects and decisions:                   [red]║[/red]"
-            )
-            console.print(
-                "[red]║[/red]  [bold]pip install sentence-transformers faiss-cpu[/bold]               [red]║[/red]"
-            )
-            console.print(
-                "[red]║[/red]                                                                        [red]║[/red]"
-            )
-            console.print(
-                "[red]║[/red]  Note: this also installs PyTorch (~2GB) and downloads a         [red]║[/red]"
-            )
-            console.print(
-                "[red]║[/red]  model (~30MB) on first use.                                      [red]║[/red]"
-            )
-            console.print(
-                "[red]╚══════════════════════════════════════════════════════════╝[/red]"
-            )
+            console.print("[red]╔══════════════════════════════════════════════════════════════════╗[/red]")
+            console.print("[red]║  Smart Search Disabled — search ideas, decisions & notes         ║[/red]")
+            console.print("[red]║  Install [bold]sentence-transformers + faiss-cpu[/bold] to enable:            ║[/red]")
+            console.print("[red]║  [bold]pip install sentence-transformers faiss-cpu[/bold]                     ║[/red]")
+            console.print("[red]║                                                                  ║[/red]")
+            console.print("[red]║  Note: this also installs PyTorch (~2GB) and downloads a model   ║[/red]")
+            console.print("[red]║  (~30MB) on first use.                                           ║[/red]")
+            console.print("[red]╚══════════════════════════════════════════════════════════════════╝[/red]")
             console.print()
 
     def _register_extractor_job(self) -> None:
