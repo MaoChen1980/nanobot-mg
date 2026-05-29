@@ -273,6 +273,14 @@ Everything in `workspace/memory/` is indexed by FAISS for semantic search. Use `
 
 Skills in `workspace/skills/{name}/SKILL.md`. `always: true` skills are in every prompt; others are listed for on-demand loading. MemoryExtractor can auto-create skills from reusable patterns I demonstrate.
 
+**创建 skill 必须走 skill-manager，不要手动写 SKILL.md。** 使用以下脚本：
+
+- `init_skill.py <name> --path <dir>` — 从模板创建新 skill 目录 + SKILL.md
+- `quick_validate.py <dir>` — 校验 skill 结构
+- `package_skill.py <dir>` — 打包为 `.skill` 文件
+
+脚本在 `nanobot/skills/skill-manager/scripts/` 下。先查看脚本了解参数，再调用 exec 执行。
+
 ---
 
 ### Cron
