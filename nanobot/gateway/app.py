@@ -553,13 +553,22 @@ class GatewayApplication:
                 "[red]║[/red]  [bold]Vector Search Disabled[/bold]                                    [red]║[/red]"
             )
             console.print(
-                "[red]║[/red]  [bold]Enhance Your Experience[/bold] — Install [bold]sentence-transformers[/bold]:  [red]║[/red]"
+                "[red]║[/red]  Install [bold]sentence-transformers + faiss-cpu[/bold] for smart search  [red]║[/red]"
+            )
+            console.print(
+                "[red]║[/red]  across your ideas, projects and decisions:                   [red]║[/red]"
             )
             console.print(
                 "[red]║[/red]  [bold]pip install sentence-transformers faiss-cpu[/bold]               [red]║[/red]"
             )
             console.print(
-                "[red]║[/red]  Enables smart search across your ideas, projects and decisions.  [red]║[/red]"
+                "[red]║[/red]                                                                        [red]║[/red]"
+            )
+            console.print(
+                "[red]║[/red]  Note: this also installs PyTorch (~2GB) and downloads a         [red]║[/red]"
+            )
+            console.print(
+                "[red]║[/red]  model (~30MB) on first use.                                      [red]║[/red]"
             )
             console.print(
                 "[red]╚══════════════════════════════════════════════════════════╝[/red]"
