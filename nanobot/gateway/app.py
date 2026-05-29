@@ -556,7 +556,7 @@ class GatewayApplication:
                 "[red]║[/red]  [bold]Enhance Your Experience[/bold] — Install [bold]sentence-transformers[/bold]:  [red]║[/red]"
             )
             console.print(
-                "[red]║[/red]  [bold]pip install sentence-transformers[/bold]                          [red]║[/red]"
+                "[red]║[/red]  [bold]pip install sentence-transformers faiss-cpu[/bold]               [red]║[/red]"
             )
             console.print(
                 "[red]║[/red]  Enables smart search across your ideas, projects and decisions.  [red]║[/red]"
