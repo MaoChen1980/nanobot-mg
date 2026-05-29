@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -85,6 +87,12 @@ class GatewayApplication:
         gracefully and this method re-invokes _async_run() to restart the gateway.
         """
         restart_flag_path = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
+        # Windows: install SIGINT handler that forces immediate exit.
+        # The asyncio ProactorEventLoop fails to deliver KeyboardInterrupt when
+        # blocked in IOCP wait, causing Ctrl-C to silently hang until the event
+        # loop checks signals between I/O operations.
+        if sys.platform == "win32":
+            signal.signal(signal.SIGINT, lambda s, f: os._exit(0))
         while True:
             try:
                 asyncio.run(self._async_run())
