@@ -94,42 +94,55 @@ class ContextBuilder:
         skill_names: list[str] | None = None,
         channel: str | None = None,
         tool_definitions: list[dict[str, Any]] | None = None,
+        runtime_context: str | None = None,
     ) -> str:
         """Build the static portion of the system prompt (identity, tools, bootstrap, skills)."""
         _t0 = time.time()
-        parts = [self._get_identity(channel=channel)]
+        identity = self._get_identity(channel=channel)
 
-        # Tools early — let LLM know capabilities before loading context
+        tools = None
         if tool_definitions:
-            section = self._build_tools_section(tool_definitions)
-            if section:
-                parts.append(section)
+            tools = self._build_tools_section(tool_definitions)
 
         # Regenerate tools index so TOOLS.md is always fresh
         _rebuild_tools_index(self.workspace)
 
         bootstrap = self._load_bootstrap_files()
-        if bootstrap:
-            parts.append(bootstrap)
 
         workflow_routing = self._build_workflow_routing()
-        if workflow_routing:
-            parts.append(workflow_routing)
 
+        always_content = None
         always_skills = self.skills.get_always_skills()
         if always_skills:
             always_content = self.skills.format_skills_for_context(always_skills)
-            if always_content:
-                parts.append(f"# Active Skills\n\n{always_content}")
 
         skills_summary = self.skills.build_skills_summary(exclude=set(always_skills))
         if skills_summary:
-            parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
+            skills_section = render_template("agent/skills_section.md", skills_summary=skills_summary)
+        else:
+            skills_section = None
+
+        result = render_template(
+            "agent/system_prompt.md",
+            identity=identity,
+            tools=tools,
+            bootstrap=bootstrap or None,
+            workflows=workflow_routing or None,
+            always_skills=always_content,
+            skills_summary=skills_section,
+            runtime_context=runtime_context,
+            # Framework config — used by framework_core.md via {% include %}
+            max_iterations=self._framework_config.get("max_iterations", 200),
+            context_window_tokens=self._framework_config.get("context_window_tokens", 200_000),
+            max_tool_result_chars=self._framework_config.get("max_tool_result_chars", 32_000),
+            exec_timeout=self._framework_config.get("exec_timeout", 60),
+            subagent_max_iterations=self._framework_config.get("subagent_max_iterations", 100),
+            heartbeat_interval_minutes=self._framework_config.get("heartbeat_interval_minutes", 30),
+        )
 
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 100:
             logger.info("build_system_prompt took {:.0f}ms", _elapsed)
-        result = self._SECTION_SEPARATOR.join(parts)
         return normalize_paths(result)
 
     def _build_tools_section(self, tool_definitions: list[dict[str, Any]]) -> str:
@@ -194,24 +207,43 @@ class ContextBuilder:
         text = re.sub(r'^```', r'\\`\\`\\`', text, flags=re.MULTILINE)
         return text
 
-    def _get_identity(self, channel: str | None = None) -> str:
+    def _get_identity(self, channel: str | None = None, include_vector_search: bool = True) -> str:
         """Get the core identity section."""
         workspace_path = self.workspace.expanduser().resolve().as_posix()
         system = platform.system()
-        runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
 
-        return render_template(
-            "agent/identity.md",
+        os_platform = "macOS" if system == "Darwin" else ("Windows" if system == "Windows" else "Linux")
+        arch = platform.machine()
+        python_version = platform.python_version()
+
+        kwargs: dict[str, object] = dict(
             workspace_path=workspace_path,
-            runtime=runtime,
+            os_platform=os_platform,
+            os_version=platform.release(),
+            arch=arch,
+            python_version=python_version,
             channel=channel,
-            max_iterations=self._framework_config.get("max_iterations", 200),
+            model=self._framework_config.get("model"),
+            provider=self._framework_config.get("provider"),
+            timezone=self.timezone,
             context_window_tokens=self._framework_config.get("context_window_tokens", 200_000),
+            max_iterations=self._framework_config.get("max_iterations", 200),
             max_tool_result_chars=self._framework_config.get("max_tool_result_chars", 32_000),
             exec_timeout=self._framework_config.get("exec_timeout", 60),
             subagent_max_iterations=self._framework_config.get("subagent_max_iterations", 100),
             heartbeat_interval_minutes=self._framework_config.get("heartbeat_interval_minutes", 30),
         )
+
+        if include_vector_search:
+            try:
+                import sentence_transformers  # noqa: F401
+                kwargs["sentence_transformers"] = True
+            except ImportError:
+                kwargs["sentence_transformers"] = False
+        else:
+            kwargs["sentence_transformers"] = None
+
+        return render_template("agent/identity.md", **kwargs)
 
     @staticmethod
     def _convert_timestamp(ts: str, timezone: str | None) -> str:
@@ -333,26 +365,6 @@ class ContextBuilder:
         return "\n".join(lines)
 
     @staticmethod
-    def _build_runtime_context(
-        channel: str | None = None,
-        timezone: str | None = None,
-        current_iteration: int | None = None,
-        max_iterations: int | None = None,
-    ) -> str:
-        """Build untrusted runtime metadata block for injection before the user message."""
-        lines = [format_message_header(), f"Current Time: {current_time_str(timezone)}"]
-        if channel:
-            lines.append(f"Channel: {channel}")
-        if current_iteration is not None and max_iterations is not None:
-            lines.append(f"Iteration: {current_iteration}/{max_iterations}")
-        return (
-            ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" +
-            "\n".join(lines) + "\n" +
-            ContextBuilder._RUNTIME_CONTEXT_END +
-            "\n\n--- latest user message below ---"
-        )
-
-    @staticmethod
     def _merge_message_content(left: Any, right: Any) -> str | list[dict[str, Any]]:
         if isinstance(left, str) and isinstance(right, str):
             return f"{left}\n\n{right}" if left else right
@@ -472,15 +484,7 @@ class ContextBuilder:
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
         cs = context_state or ContextState()
-        sys_static = self.build_system_prompt(
-            channel=channel,
-            tool_definitions=cs.tool_definitions,
-        )
-        retained_history = history
-
-        # Dynamic system content — runtime metadata, memory, state
-        sys_dynamic_parts: list[str] = []
-
+        # Runtime metadata — injected into system prompt (template puts it at the end)
         runtime_lines = [f"Current Time: {current_time_str(self.timezone)}"]
         if channel:
             runtime_lines.append(f"Channel: {channel}")
@@ -490,22 +494,31 @@ class ContextBuilder:
             runtime_lines.append(f"Context Window: {cs.context_window_tokens} tokens")
         if cs.history_budget_tokens is not None:
             runtime_lines.append(f"History Budget: ~{cs.history_budget_tokens} tokens available")
-        sys_dynamic_parts.append("\n".join(runtime_lines))
+
+        sys_static = self.build_system_prompt(
+            channel=channel,
+            tool_definitions=cs.tool_definitions,
+            runtime_context="\n".join(runtime_lines),
+        )
+        retained_history = history
+
+        # Dynamic session state — appended to system prompt (changes each turn)
+        session_parts: list[str] = []
 
         memory_section = self._build_memory_section()
         if memory_section:
-            sys_dynamic_parts.append(memory_section)
+            session_parts.append(memory_section)
 
         state_block = self._build_task_tree_section()
         if state_block:
-            sys_dynamic_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
+            session_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
 
         current_block = self._build_current_context_section()
         if current_block:
-            sys_dynamic_parts.append(current_block)
+            session_parts.append(current_block)
 
-        if sys_dynamic_parts:
-            sys_static = sys_static + "\n\n# Runtime Context\n\n" + "\n\n".join(sys_dynamic_parts)
+        if session_parts:
+            sys_static = sys_static + "\n\n" + "\n\n".join(session_parts)
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": sys_static},

@@ -213,6 +213,9 @@ class AgentLoop:
                                            "exec_timeout": self.exec_config.timeout,
                                            "subagent_max_iterations": 100,
                                            "heartbeat_interval_minutes": 30,
+                                           "model": self.model,
+                                           "provider": provider.__class__.__name__,
+                                           "reasoning_effort": provider.generation.reasoning_effort,
                                        })
         self.sessions = session_manager or SessionManager()
         self.tools = ToolRegistry()

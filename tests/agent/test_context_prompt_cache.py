@@ -48,17 +48,27 @@ def test_system_prompt_stays_stable_when_clock_changes(tmp_path, monkeypatch) ->
 
 
 def test_system_prompt_reflects_current_dream_memory_contract(tmp_path) -> None:
+    """Workspace with customized MEMORY.md should inject it via build_messages()."""
+    from nanobot.utils.gitstore import sync_workspace_templates
+
     workspace = _make_workspace(tmp_path)
+    sync_workspace_templates(workspace, silent=True)
+
+    # Populate memory with customized content (simulating Dream write)
+    (workspace / "memory" / "MEMORY.md").write_text(
+        "# Long-term Memory\n\nUser prefers dark mode.\n", encoding="utf-8"
+    )
+
     builder = ContextBuilder(workspace)
+    messages = builder.build_messages(history=[], current_message="hi")
 
-    prompt = builder.build_system_prompt()
-
-    assert "auto-managed" in prompt
-    assert "do not edit directly" in prompt
+    static = messages[0]["content"]
+    assert "persistent memory" in static
+    assert "User prefers dark mode" in static
 
 
 def test_runtime_context_is_in_system_prompt_not_user_message(tmp_path) -> None:
-    """Runtime metadata is in the system prompt, user message is clean."""
+    """Runtime metadata is in the system prompt; user message is clean."""
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
@@ -70,7 +80,6 @@ def test_runtime_context_is_in_system_prompt_not_user_message(tmp_path) -> None:
     )
 
     assert messages[0]["role"] == "system"
-    # Per-turn runtime metadata IS in system prompt now
     assert "Current Time:" in messages[0]["content"]
     assert "Channel: cli" in messages[0]["content"]
 
@@ -79,14 +88,13 @@ def test_runtime_context_is_in_system_prompt_not_user_message(tmp_path) -> None:
     user_content = messages[-1]["content"]
     assert isinstance(user_content, str)
     assert user_content == "Return exactly: OK"
-    assert ContextBuilder._RUNTIME_CONTEXT_TAG not in user_content
     assert "Current Time:" not in user_content
     assert "Channel: cli" not in user_content
 
 
 
 def test_execution_rules_in_system_prompt(tmp_path) -> None:
-    """SOUL.md tag table and core discipline should appear in the system prompt."""
+    """SOUL.md character traits and role definitions should appear in the system prompt."""
     from nanobot.utils.gitstore import sync_workspace_templates
 
     workspace = _make_workspace(tmp_path)
@@ -94,15 +102,14 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
     builder = ContextBuilder(workspace)
 
     prompt = builder.build_system_prompt()
-    # Core discipline from SOUL.md
-    assert "Every conclusion needs tool evidence" in prompt
-    # Tag table from SOUL.md
-    assert "| **#code**" in prompt
-    assert "| **#plan**" in prompt
+    # Character traits from SOUL.md
+    assert "Thorough" in prompt
+    assert "Understand before act" in prompt
+    # Role definitions from SOUL.md
+    assert "Principal engineer" in prompt
+    assert "tradeoffs, constraints, and failure modes" in prompt
     # Tool reference from identity.md
     assert "read_file" in prompt
-    # Task dispatch from identity.md
-    assert "直接做" in prompt
 
 
 def test_identity_has_no_behavioral_instructions(tmp_path) -> None:
@@ -128,40 +135,8 @@ def test_framework_search_is_registered(tmp_path) -> None:
 
 
 
-def test_channel_format_hint_telegram(tmp_path) -> None:
-    """Telegram channel should get messaging-app format hint."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    prompt = builder.build_system_prompt(channel="telegram")
-    assert "Format Hint" in prompt
-    assert "messaging app" in prompt
-
-
-def test_channel_format_hint_whatsapp(tmp_path) -> None:
-    """WhatsApp should get plain-text format hint."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    prompt = builder.build_system_prompt(channel="whatsapp")
-    assert "Format Hint" in prompt
-    assert "plain text only" in prompt
-
-
-def test_channel_format_hint_absent_for_unknown(tmp_path) -> None:
-    """Unknown or None channel should not inject a format hint."""
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    prompt = builder.build_system_prompt(channel=None)
-    assert "Format Hint" not in prompt
-
-    prompt2 = builder.build_system_prompt(channel="feishu")
-    assert "Format Hint" not in prompt2
-
-
-def test_build_messages_passes_channel_to_system_prompt(tmp_path) -> None:
-    """build_messages should pass channel through to build_system_prompt."""
+def test_channel_appears_in_runtime_context(tmp_path) -> None:
+    """Channel name should appear in runtime context."""
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
@@ -170,8 +145,20 @@ def test_build_messages_passes_channel_to_system_prompt(tmp_path) -> None:
         channel="telegram", chat_id="123",
     )
     system = messages[0]["content"]
-    assert "Format Hint" in system
-    assert "messaging app" in system
+    assert "Channel: telegram" in system
+
+
+def test_channel_absent_when_not_specified(tmp_path) -> None:
+    """No channel should not inject Channel: line."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+
+    messages = builder.build_messages(
+        history=[], current_message="hi",
+        channel=None, chat_id="direct",
+    )
+    system = messages[0]["content"]
+    assert "Channel:" not in system
 
 
 def test_subagent_result_does_not_create_consecutive_assistant_messages(tmp_path) -> None:
@@ -256,3 +243,31 @@ def test_customized_memory_md_is_injected_in_system_prompt(tmp_path) -> None:
 
     assert "User prefers dark mode" in static
     assert len(messages) == 2  # system + user, no separate dynamic message
+
+
+def test_system_prompt_template_renders_with_all_variables(tmp_path) -> None:
+    """build_system_prompt should render without error when all slots are populated."""
+    from nanobot.agent.tools.registry import ToolRegistry
+    from nanobot.agent.tools.search import GrepTool
+    from nanobot.utils.gitstore import sync_workspace_templates
+
+    workspace = _make_workspace(tmp_path)
+    sync_workspace_templates(workspace, silent=True)
+
+    builder = ContextBuilder(workspace)
+
+    # Build a minimal tool definitions list
+    registry = ToolRegistry()
+    registry.register(GrepTool(workspace=workspace))
+    tool_defs = registry.get_definitions()
+
+    prompt = builder.build_system_prompt(
+        channel="cli",
+        tool_definitions=tool_defs,
+        runtime_context="Current Time: 2026-05-29 12:00 (UTC)",
+    )
+
+    assert isinstance(prompt, str)
+    assert len(prompt) > 500
+    # Core sections should be present
+    assert "Environment" in prompt or "OS:" in prompt

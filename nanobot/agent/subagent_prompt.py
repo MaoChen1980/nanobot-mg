@@ -53,17 +53,26 @@ def build_subagent_prompt(
     if skills_summary:
         parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
-    # 3. Runtime context
-    runtime = ContextBuilder._build_runtime_context(timezone=timezone)
-    if runtime:
-        parts.append(f"# Runtime Context\n\n{runtime}")
+    # 3. Memory (same format as main agent — MEMORY.md + system.md + user.md)
+    memory_section = ctx._build_memory_section()
+    if memory_section:
+        parts.append(memory_section)
 
-    # 4. MEMORY.md (if any)
-    memory = ctx.memory.read_memory()
-    if memory:
-        parts.append(f"# Persistent Memory\n\n{memory}")
+    # 4. Identity — environment facts (OS, workspace, model, timezone)
+    parts.append(ctx._get_identity(include_vector_search=False))
 
-    # 5. Output schema (optional)
+    # 5. Bootstrap — TOOLS.md (CLI assets) + USER.md (user preferences)
+    bootstrap = ctx._load_bootstrap_files()
+    if bootstrap:
+        parts.append(bootstrap)
+
+    # 6. Operating principles (shared rules adapted for subagent)
+    parts.append(render_template("agent/_snippets/subagent_decisions.md"))
+
+    # 7. Search tool selector
+    parts.append(render_template("agent/resolver.md"))
+
+    # 8. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"
@@ -73,10 +82,10 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 6. Epistemic hygiene (shared principle for all agents)
+    # 9. Epistemic hygiene (shared principle for all agents)
     parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
 
-    # 7. Worker identity and protocol
+    # 10. Worker identity and protocol
     parts.append(
         "## Role\n\n"
         "You are a **Specialist Worker** — a focused, task-oriented agent. "
@@ -88,14 +97,6 @@ def build_subagent_prompt(
         "better quality from you means better composition by the Orchestrator, which means "
         "a stronger final result. **Altruism is self-interest**: invest in thoroughness because "
         "it maximizes the whole system's output.\n\n"
-        "**Review is part of the output.** Result review and process review "
-        "are part of the output. Deliver both when finishing.\n\n"
-        "Every action — every tool call — must serve one of four purposes:\n\n"
-        "1. **Gather information** — you don't know enough to decide. So investigate.\n"
-        "2. **Experiment** — you have a hypothesis but aren't sure. So try and observe.\n"
-        "3. **Execute** — you know what to do. So deliver.\n"
-        "4. **Communicate** — share what helps, ask for what you need.\n\n"
-        "The first three drive your task forward. The fourth makes the team better than any individual could.\n\n"
         "### Your Task\n\n"
         "- Execute thoroughly and autonomously — quality over minimal completion\n"
         "- Think about how your output will be used: structured, complete, actionable\n"
@@ -144,5 +145,9 @@ def build_subagent_prompt(
         "Think of yourself as a capable specialist delivering your best work to a lead: "
         "bottom line upfront, full details referenced."
     )
+
+    # Runtime context (always last — dynamic content for KV cache preservation)
+    from nanobot.utils.helpers import current_time_str, format_message_header
+    parts.append(f"# Runtime Context\n\n{format_message_header()}\nCurrent Time: {current_time_str(timezone)}")
 
     return "\n\n".join(parts)

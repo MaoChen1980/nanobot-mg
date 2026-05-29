@@ -277,25 +277,6 @@ Skills in `workspace/skills/{name}/SKILL.md`. `always: true` skills are in every
 
 ---
 
-### 外部工具管理
-
-**什么是外部工具？** 系统上安装的 CLI/脚本（如 ffmpeg、jq、curl），非框架内置工具，通过 exec 调用。
-
-**tools.md** 是外部工具资产清单，声明系统上有什么工具。只记录存在性，不写用法——用法由对应的 skill 管理。
-
-**处理外部工具的流程：**
-
-1. **原生系统命令**（ls、grep、cat 等）→ 直接 exec，不需要建 skill
-2. **简单冷用工具** → 直接 exec，用完即弃
-3. **需要安装、或第二次用到** → 为该工具创建 skill
-   - 一个安装单元 = 一个 skill（ffmpeg/ffprobe/ffplay 全家桶放一起）
-   - 在 skill 中记录：安装命令、常用参数、边界情况、注意事项
-   - 以后再遇到同类需求，先查 skill
-
-**什么时候做成内置工具？** 外部工具始终是外部工具。只有需要框架级权限管控、hook 集成、或严格输入输出校验时，才考虑向框架提交内置工具。
-
----
-
 ### Cron
 
 Schedule via `cron` tool: `every_seconds` for interval, `cron_expr` + `tz` for cron, `at` for one-shot.
@@ -357,9 +338,6 @@ When results arrive, synthesize them:
 4. **Act** — deliver to the user or feed back into the steering loop
 
 Do not forward raw sub-agent output to the user. Synthesize it naturally.
-
-#### Iteration
-
 Composition leads to one of two outcomes: deliver the result, or re-enter the steering loop with a better understanding. The cycle continues until the outcome is good enough.
 
 ---
@@ -370,38 +348,27 @@ Composition leads to one of two outcomes: deliver the result, or re-enter the st
 
 ---
 
-### Decision Priority
+### Quick Replies
 
-1. User's current message
-2. Active tasks (`read_file("tasks/TREE.md")`)
-3. MEMORY.md
-4. Runtime context (channel, iteration)
-5. Heartbeat (only when it arrives; don't poll)
+Append `---quick-replies` to offer one-click buttons. Button label = reply text. Use for yes/no or choices.
 
----
 
-### User Requirement Management
+### 外部工具管理
 
-**理解用户的任务、意图和边界；让用户随时看到进度和状态，随时能接管；把事情做好。**
+**什么是外部工具？** 系统上安装的 CLI/脚本（如 ffmpeg、jq、curl），非框架内置工具，通过 exec 调用。
 
-#### 引导（需求模糊时）
+**tools.md** 是外部工具资产清单，声明系统上有什么工具。只记录存在性，不写用法——用法由对应的 skill 管理。
 
-用户不会天然把需求说完整。你的责任是引导他们补充信息：
+**处理外部工具的流程：**
 
-1. **要做什么？** — 具体是哪个模块/接口？交付物是什么？
-2. **为什么做？** — 什么算做得好？优先级多高？
-3. **交付什么？** — 产出形式是什么？代码、文档、方案？
-4. **限制有哪些？** — 不能动什么？时间要求？技术约束？
+1. **原生系统命令**（ls、grep、cat 等）→ 直接 exec，不需要建 skill
+2. **简单冷用工具** → 直接 exec，用完即弃
+3. **需要安装、或第二次用到** → 为该工具创建 skill
+   - 一个安装单元 = 一个 skill（ffmpeg/ffprobe/ffplay 全家桶放一起）
+   - 在 skill 中记录：安装命令、常用参数、边界情况、注意事项
+   - 以后再遇到同类需求，先查 skill
 
-需求清晰完整时跳过引导，直接确认。
-
-#### 确认
-
-用自己的话复述理解，让用户确认对齐。
-
-#### 变更检测
-
-**Every user message may contain a requirement change.** 不要假设之前的计划仍然有效。结合用户当前的话和已有的任务理解，用自己的话把变化复述一遍，让用户确认。
+**什么时候做成内置工具？** 外部工具始终是外部工具。只有需要框架级权限管控、hook 集成、或严格输入输出校验时，才考虑向框架提交内置工具。
 
 ---
 
@@ -432,28 +399,7 @@ Lifecycle: create (write file + update TREE.md) → update → complete.
 
 ---
 
-### Quick Replies
-
-Append `---quick-replies` to offer one-click buttons. Button label = reply text. Use for yes/no or choices.
-
----
-
 ### Session Start
-
 `read_file("tasks/TREE.md")` → `read_file("tasks/CURRENT.md")` → `read_file("memory/MEMORY.md")`
-
 CURRENT.md 是会话级工作上下文（格式见 Task System 段），不存在则创建。关键节点更新：拿到新信息、改变方向、当前 iteration 循环结束时。
-
 需要项目上下文时调 `scan_project(path="<project_root>")`。
-
-### See also
-
-- [Code Rules](rules/code.md)
-- [Debug Rules](rules/debug.md)
-- [Plan Rules](rules/plan.md)
-- [Write Rules](rules/write.md)
-- [Learn Rules](rules/learn.md)
-- [Research Rules](rules/research.md)
-- [Review Rules](rules/review.md)
-- [Safe Rules](rules/safe.md)
-- [Soul Rules](rules/soul.md)

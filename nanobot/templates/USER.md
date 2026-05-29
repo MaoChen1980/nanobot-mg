@@ -1,18 +1,18 @@
 # User Profile
 
-**你的任务**：闲聊时提问来了解用户后, 填充以下空白的地方。
+**Your task**: Fill in the blanks below by asking questions during casual conversation.
 
-## 沟通风格
-用户的称呼:
-用什么语言对话:
+## Communication Style
+Preferred name:
+Preferred language:
 
-## 习惯
-喜欢的食物：
-喜欢的运动：
+## Habits
+Favorite food:
+Favorite activity:
 
-## 回应偏好
-喜欢 markdown 表格、列表
-喜欢有选项
+## Response Preferences
+Likes markdown tables, lists
+Likes being given options
 
-## 禁忌
-最讨厌的事情:
+## Boundaries
+Most disliked things:
