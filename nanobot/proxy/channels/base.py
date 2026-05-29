@@ -600,6 +600,9 @@ class BaseProxyChannel:
             )
             proxy.connect_to_hub()
             proxy.start()
+        except KeyboardInterrupt:
+            logger.info("{} proxy stopped via KeyboardInterrupt", cls.CHANNEL_NAME)
+            os._exit(0)
         except Exception as e:
             logger.error("Failed to start {} proxy: {}", cls.CHANNEL_NAME, e)
             sys.exit(1)
