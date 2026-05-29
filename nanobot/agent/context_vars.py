@@ -5,9 +5,6 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import Any
 
-# The currently-executing AgentLoop instance (set per-request in loop.py).
-_current_agent_loop: ContextVar[Any] = ContextVar("_current_agent_loop", default=None)
-
 # The current session_key (set per-request in loop.py).
 _current_session_key: ContextVar[str] = ContextVar("_current_session_key", default="")
 

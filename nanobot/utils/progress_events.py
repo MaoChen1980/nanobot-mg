@@ -9,28 +9,6 @@ from typing import Any
 from loguru import logger
 
 
-# ----------------------------------------------------------------------
-# Observe event emission — /think and /tool
-# ----------------------------------------------------------------------
-
-
-async def _emit_observe_event(event_type: str, content: str, metadata: dict | None = None) -> None:
-    """Emit a /think or /tool observe event to the proxy channel via context var.
-
-    Safe to call even when no loop is active (no-op).
-    """
-    from nanobot.agent.context_vars import _current_agent_loop
-
-    loop = _current_agent_loop.get()
-    if loop is not None:
-        await loop._emit_observe_event(event_type, content, metadata or {})
-
-
-# ----------------------------------------------------------------------
-# on_progress integration (legacy callback format)
-# ----------------------------------------------------------------------
-
-
 def on_progress_accepts_tool_events(on_progress: Callable[..., Any] | None) -> bool:
     """Check whether on_progress callback accepts a ``tool_events`` kwarg.
 
@@ -67,23 +45,9 @@ async def process_tool_events_and_progress(
     **kwargs: Any,
 ) -> None:
     """Call on_progress with structured args (legacy format: content + tool_hint + tool_events).
-
-    Also emits via the new _emit_observe_event context var when available.
     """
     # Determine whether to pass tool_events to the old callback.
     accept_tool_events = on_progress_accepts_tool_events(on_progress)
-
-    # Emit via the new observe system (_emit_observe_event is always safe to call).
-    if tool_events:
-        for te in tool_events:
-            if isinstance(te, dict):
-                phase = te.get("phase", "start")
-                if phase == "start":
-                    await _emit_observe_event("tool_start", content, te)
-                elif phase == "end":
-                    await _emit_observe_event("tool_end", content, te)
-                elif phase == "error":
-                    await _emit_observe_event("tool_error", content, te)
 
     if on_progress is not None:
         try:

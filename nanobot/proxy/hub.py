@@ -66,14 +66,12 @@ class HubTCPServer:
         port: int,
         agent_loop: Any,
         proxy_manager: ProxyManager,
-        bus: Any = None,
         concurrency_gate: asyncio.Semaphore | None = None,
     ):
         self._host = host
         self._port = port
         self._agent_loop = agent_loop
         self._proxy_manager = proxy_manager
-        self._bus = bus
         self._concurrency_gate = concurrency_gate
         self._server: asyncio.Server | None = None
         # message_id → expiry timestamp; used to drop duplicate messages
@@ -327,37 +325,6 @@ class HubTCPServer:
             session_key, msg.content[:50], session_key,
         )
 
-        # ── Outbound bridge ────────────────────────────────────────────
-        # The message tool sends via bus.publish_outbound.  Consume these
-        # during processing so they reach the proxy in real-time.
-        _outbound_bridge_task: asyncio.Task | None = None
-
-        async def _bridge_outbound() -> None:
-            bus = self._bus
-            try:
-                while True:
-                    try:
-                        outbound = await asyncio.wait_for(
-                            bus.consume_outbound(), timeout=1.0,
-                        )
-                    except asyncio.TimeoutError:
-                        continue
-                    # Only forward messages for this proxy's channel
-                    if outbound.channel != msg.channel:
-                        continue
-                    payload: dict[str, Any] = {
-                        "type": "deliver",
-                        "chat_id": outbound.chat_id,
-                        "content": outbound.content,
-                    }
-                    if outbound.media:
-                        payload["media"] = outbound.media
-                    if outbound.buttons:
-                        payload["buttons"] = outbound.buttons
-                    await self._proxy_manager.deliver_to_proxy(proxy_key, payload)
-            except asyncio.CancelledError:
-                pass
-
         # Progress callback delivers /think and /tool observe events
         # to the proxy in real-time while the main request is processing.
         async def _on_progress(
@@ -400,9 +367,6 @@ class HubTCPServer:
                 })
 
         inbound = msg.to_inbound_message()
-
-        # Start outbound bridge before processing
-        _outbound_bridge_task = asyncio.create_task(_bridge_outbound())
 
         # Serialize concurrent _route_message tasks for the same session.
         # Without this, a second message from the same user arriving during
@@ -483,12 +447,6 @@ class HubTCPServer:
             resp = HubResponse(success=False, error=str(e))
         finally:
             self._session_tasks.pop(session_key, None)
-            if _outbound_bridge_task is not None and not _outbound_bridge_task.done():
-                _outbound_bridge_task.cancel()
-                try:
-                    await _outbound_bridge_task
-                except asyncio.CancelledError:
-                    pass
 
         # After dispatch, re-dispatch any messages that arrived too late
         # for _drain_pending to consume during the agent loop.

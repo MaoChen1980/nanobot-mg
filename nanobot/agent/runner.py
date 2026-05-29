@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from nanobot.agent.context_vars import _current_messages_for_subagent, _current_agent_loop
+from nanobot.agent.context_vars import _current_messages_for_subagent
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.providers.base import LLMProvider

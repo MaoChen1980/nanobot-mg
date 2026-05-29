@@ -53,7 +53,7 @@ from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.agent.tools.self_restart_tool import SelfRestartTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
-from nanobot.agent.context_vars import _current_agent_loop, _current_debug_enabled
+from nanobot.agent.context_vars import _current_debug_enabled
 from nanobot.command import CommandContext, CommandRouter, register_builtin_commands
 from nanobot.config.schema import AgentDefaults
 from nanobot.providers.base import LLMProvider
@@ -292,43 +292,8 @@ class AgentLoop:
         return {k: v.tasks for k, v in self._session_dispatch.items()}
 
     # ------------------------------------------------------------------
-    # Observe events — /think and /tool
+    # Provider snapshot
     # ------------------------------------------------------------------
-
-    async def _emit_observe_event(
-        self,
-        event_type: str,
-        content: str,
-        metadata: dict[str, Any],
-    ) -> None:
-        """Emit a /think or /tool progress event to the proxy channel.
-
-        Called from runner/hook callbacks to push real-time events to the user.
-        """
-        from nanobot.agent.context_vars import _current_inbound
-
-        inbound = _current_inbound.get()
-        if inbound is None:
-            return
-
-        # Skip if observe toggle is off for this session
-        session_key = self._dispatch_manager._effective_session_key(inbound)
-        if event_type == "thinking":
-            if not self._session_observe["_observe_think"].get(session_key, False):
-                return
-        elif event_type.startswith("tool_"):
-            if not self._session_observe["_observe_tool"].get(session_key, False):
-                return
-        else:
-            return
-
-        msg = OutboundMessage(
-            channel=inbound.channel,
-            chat_id=inbound.chat_id,
-            content=content,
-            metadata=metadata,
-        )
-        await self.bus.publish_outbound(msg)
 
     def _apply_provider_snapshot(self, snapshot: ProviderSnapshot) -> None:
         """Swap model/provider for future turns without disturbing an active one."""
@@ -703,10 +668,7 @@ class AgentLoop:
                 except asyncio.TimeoutError:
                     continue
                 except asyncio.CancelledError:
-                    # Preserve real task cancellation so shutdown can complete cleanly.
-                    # Only ignore non-task CancelledError signals that may leak from integrations.
-                    task = asyncio.current_task()
-                    if not self._running or (task is not None and task.cancelling()):
+                    if not self._running:
                         raise
                     continue
                 except Exception as e:
