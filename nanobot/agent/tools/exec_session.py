@@ -53,6 +53,11 @@ class ExecSessionInfo:
 _IS_WINDOWS = os.name == "nt"
 
 
+def _match_any_case(needle: str, haystack: str) -> bool:
+    """Case-insensitive substring match."""
+    return needle.lower() in haystack.lower()
+
+
 class _ExecSession:
     def __init__(
         self,
@@ -553,7 +558,7 @@ class WriteStdinTool(Tool):
             yield_time_ms=0, max_output_chars=max_output_chars,
         )
         session = self._manager._sessions.get(session_id)
-        if session and session._output_window and wait_for in session._output_window:
+        if session and session._output_window and _match_any_case(wait_for, session._output_window):
             return format_session_poll(session_id, poll)
 
         # Wait target not in history — send chars and poll until found.
@@ -572,16 +577,16 @@ class WriteStdinTool(Tool):
             if poll.output:
                 aggregate.append(poll.output)
                 joined = "".join(aggregate)
-                if wait_for in joined:
+                if _match_any_case(wait_for, joined):
                     poll.output = joined
                     return format_session_poll(session_id, poll)
             if poll.done or remaining_ms <= 0:
                 poll.output = "".join(aggregate)
                 # Also check once more against output_window (includes history)
-                if session and session._output_window and wait_for in session._output_window:
+                if session and session._output_window and _match_any_case(wait_for, session._output_window):
                     return format_session_poll(session_id, poll)
                 result = format_session_poll(session_id, poll)
-                if wait_for not in poll.output:
+                if not _match_any_case(wait_for, poll.output):
                     result += f"\nWait target not observed: {wait_for!r}"
                 return result
 
