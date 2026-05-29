@@ -682,10 +682,35 @@ class AgentLoop:
 
                 raw = msg.content.strip()
                 if self.commands.is_priority(raw):
+                    # Check if session was busy before /stop clears dispatch state
+                    _pre_stop_busy = (
+                        raw.lower() == "/stop"
+                        and self._dispatch_manager._effective_session_key(msg) in self._session_dispatch
+                    )
+                    _pre_new_busy = (
+                        raw.lower() in ("/new", "/clear", "/reset")
+                        and self._dispatch_manager._effective_session_key(msg) in self._session_dispatch
+                    )
                     await self._dispatch_command_inline(
                         msg, msg.session_key, raw,
                         self.commands.dispatch_priority,
                     )
+                    # After /stop cancels tasks, feed it to LLM so it can
+                    # update TREE.md (active → paused) and confirm with user.
+                    if _pre_stop_busy:
+                        asyncio.create_task(self._dispatch(InboundMessage(
+                            channel=msg.channel, sender_id=msg.sender_id,
+                            chat_id=msg.chat_id, content="/stop",
+                            media=[], metadata={"_stop_redispatch": True},
+                        )))
+                    # Same for /new/clear/reset — feed to LLM after cancellation
+                    # so it can update TREE.md and confirm with user.
+                    if _pre_new_busy:
+                        asyncio.create_task(self._dispatch(InboundMessage(
+                            channel=msg.channel, sender_id=msg.sender_id,
+                            chat_id=msg.chat_id, content=raw,
+                            media=[], metadata={"_new_redispatch": True},
+                        )))
                     continue
                 effective_key = self._dispatch_manager._effective_session_key(msg)
                 # If this session already has an active pending queue (i.e. a task

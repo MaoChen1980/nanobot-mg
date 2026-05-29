@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import time
 
+from loguru import logger
+
 from nanobot import __version__
 from nanobot.bus.events import OutboundMessage
 from nanobot.agent.subagent_status import SubagentStatus
@@ -13,11 +15,17 @@ from nanobot.utils.helpers import build_status_content
 from nanobot.utils.restart import write_restart_notice_env_vars
 
 
-async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
+async def cmd_stop(ctx: CommandContext) -> OutboundMessage | None:
     """Cancel all active tasks and subagents for the session."""
     loop = ctx.loop
     msg = ctx.msg
     total = await loop._cancel_active_tasks(msg.session_key)
+
+    if total == 0 and msg.metadata.get("_stop_redispatch"):
+        # Re-dispatched /stop after cancellation — let it fall through
+        # to LLM so it can update TREE.md (active → paused) and confirm.
+        return None
+
     content = f"Stopped {total} task(s)." if total else "No active task to stop."
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id, content=content,
@@ -95,10 +103,17 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
     )
 
 
-async def cmd_new(ctx: CommandContext) -> OutboundMessage:
+async def cmd_new(ctx: CommandContext) -> OutboundMessage | None:
     """Stop active task and start a fresh session."""
     loop = ctx.loop
     msg = ctx.msg
+
+    # Re-dispatch: first pass already cancelled tasks and cleared session.
+    # Return None so the message falls through to LLM, which can update
+    # TREE.md (active → paused) and confirm with the user.
+    if msg.metadata.get("_new_redispatch"):
+        return None
+
     cancelled = await loop._cancel_active_tasks(ctx.key)
 
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
@@ -200,9 +215,9 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.priority("/stop", cmd_stop)
     router.priority("/restart", cmd_restart)
     router.priority("/status", cmd_status)
-    router.exact("/new", cmd_new)
-    router.exact("/clear", cmd_new)
-    router.exact("/reset", cmd_new)
+    router.priority("/new", cmd_new)
+    router.priority("/clear", cmd_new)
+    router.priority("/reset", cmd_new)
     router.exact("/sub", cmd_sub)
     router.exact("/help", cmd_help)
 

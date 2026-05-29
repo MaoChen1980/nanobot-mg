@@ -293,6 +293,38 @@ class HubTCPServer:
                         del self._session_pending_queues[k]
                 logger.debug("Cleaned up session state for proxy {}", proxy_key)
 
+    async def _deliver_stop_response(
+        self,
+        proxy_key: str,
+        msg: ProxyMessage,
+        session_key: str,
+        session_lock: asyncio.Lock,
+    ) -> None:
+        """Process /stop through LLM and deliver the response to the proxy."""
+        try:
+            async with session_lock:
+                response = await self._agent_loop.process_direct(
+                    content="/stop",
+                    session_key=session_key,
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    metadata={"_stop_redispatch": True},
+                )
+            if response and response.content:
+                await self._proxy_manager.deliver_to_proxy(proxy_key, {
+                    "type": "deliver",
+                    "chat_id": msg.chat_id,
+                    "content": response.content,
+                })
+        except Exception as e:
+            logger.warning("Error processing /stop through LLM: {}", e)
+            # Fallback: send simple confirmation
+            await self._proxy_manager.deliver_to_proxy(proxy_key, {
+                "type": "deliver",
+                "chat_id": msg.chat_id,
+                "content": "✅ 已停止",
+            })
+
     async def _route_message(
         self,
         write_lock: asyncio.Lock,
@@ -399,13 +431,14 @@ class HubTCPServer:
                 if task and not task.done():
                     task.cancel()
                     logger.info("Stopped session {} via /stop", session_key)
-                # Deliver confirmation back to the user
-                asyncio.create_task(self._proxy_manager.deliver_to_proxy(
-                    proxy_key, {
-                        "type": "deliver",
-                        "chat_id": msg.chat_id,
-                        "content": "✅ 已停止",
-                    }
+                    try:
+                        await task  # wait for full unwind
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                # Process /stop through LLM so it can update TREE.md
+                # and confirm with the user over this proxy connection.
+                asyncio.create_task(self._deliver_stop_response(
+                    proxy_key, msg, session_key, session_lock,
                 ))
                 return
             logger.debug("Session {} busy, enqueuing for mid-turn injection", session_key)
