@@ -84,43 +84,24 @@ class GatewayApplication:
         When a restart was requested (via self_restart tool), the agent loop stops
         gracefully and this method re-invokes _async_run() to restart the gateway.
         """
-        import atexit as _atexit
-        _wd = Path.home() / ".nanobot" / "gateway_watchdog.txt"
-        _wd.write_text(f"run() entered at {time.time()}\n")
-        _atexit.register(lambda: (
-            print(f"ATEXIT_TRAP: process exiting at {time.time()}", flush=True),
-            _wd.write_text(f"ATEXIT_TRAP: process exiting at {time.time()}\n")
-        ))
-
         restart_flag_path = Path.home() / ".nanobot" / "workspace" / "_restart_flag.json"
         while True:
-            print("RUN_DBG: before asyncio.run", flush=True)
             try:
                 asyncio.run(self._async_run())
-                print("RUN_DBG: after asyncio.run (normal return)", flush=True)
             except KeyboardInterrupt:
-                print("RUN_DBG: KeyboardInterrupt from asyncio.run", flush=True)
-                logger.info("RUN_DBG: KeyboardInterrupt from asyncio.run")
                 break
-            except SystemExit as e:
-                print(f"RUN_DBG: SystemExit({e.code}) from asyncio.run", flush=True)
-                logger.info("RUN_DBG: SystemExit({}) from asyncio.run", e.code)
+            except SystemExit:
                 break
             except BaseException:
-                print("RUN_DBG: unexpected exception from asyncio.run", flush=True)
-                logger.exception("RUN_DBG: unexpected exception from asyncio.run")
+                logger.exception("Unexpected exception in gateway run loop")
                 break
-            logger.info("RESTART_DBG: _async_run returned, flag_exists={}, path={}",
-                        restart_flag_path.exists(), restart_flag_path)
             if not restart_flag_path.exists():
                 break
-            # Agent loop exited due to restart flag — clean up and restart
             try:
                 restart_flag_path.unlink()
             except OSError:
                 pass
             logger.info("Restart flag detected — restarting gateway services")
-        print("RUN_DBG: Gateway exited", flush=True)
         logger.info("Gateway exited")
 
     # ------------------------------------------------------------------
@@ -835,8 +816,6 @@ class GatewayApplication:
 
     async def _start_all(self) -> None:
         """Start all services and block until one exits."""
-        _swd = Path.home() / ".nanobot" / "start_watchdog.txt"
-        _swd.write_text(f"{time.time()} _start_all entered\n")
         if self.agent is None:
             # Setup mode — only the API server
             import uvicorn
