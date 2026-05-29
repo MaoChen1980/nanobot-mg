@@ -53,26 +53,34 @@ def build_subagent_prompt(
     if skills_summary:
         parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
-    # 3. Memory (same format as main agent — MEMORY.md + system.md + user.md)
+    # 3. Task tree + current context (same as main agent)
+    tree_section = ctx._build_task_tree_section()
+    if tree_section:
+        parts.append(tree_section)
+    ctx_section = ctx._build_current_context_section()
+    if ctx_section:
+        parts.append(ctx_section)
+
+    # 4. Memory (same format as main agent — MEMORY.md + system.md + user.md)
     memory_section = ctx._build_memory_section()
     if memory_section:
         parts.append(memory_section)
 
-    # 4. Identity — environment facts (OS, workspace, model, timezone)
+    # 5. Identity — environment facts (OS, workspace, model, timezone)
     parts.append(ctx._get_identity(include_vector_search=False))
 
-    # 5. Bootstrap — TOOLS.md (CLI assets) + USER.md (user preferences)
+    # 6. Bootstrap — TOOLS.md (CLI assets) + USER.md (user preferences)
     bootstrap = ctx._load_bootstrap_files()
     if bootstrap:
         parts.append(bootstrap)
 
-    # 6. Operating principles (shared rules adapted for subagent)
+    # 7. Operating principles (shared rules adapted for subagent)
     parts.append(render_template("agent/_snippets/subagent_decisions.md"))
 
-    # 7. Search tool selector
+    # 8. Search tool selector
     parts.append(render_template("agent/resolver.md"))
 
-    # 8. Output schema (optional)
+    # 9. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"
@@ -82,10 +90,10 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 9. Epistemic hygiene (shared principle for all agents)
+    # 10. Epistemic hygiene (shared principle for all agents)
     parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
 
-    # 10. Worker identity and protocol
+    # 11. Worker identity and protocol
     parts.append(
         "## Role\n\n"
         "You are a **Specialist Worker** — a focused, task-oriented agent. "
@@ -102,7 +110,8 @@ def build_subagent_prompt(
         "- Think about how your output will be used: structured, complete, actionable\n"
         "- Do NOT make changes outside your task scope\n"
         "- If the task is impossible or ambiguous, document your reasoning clearly\n"
-        "- Return the best result you can within your iteration budget\n\n"
+        "- Return the best result you can within your iteration budget\n"
+        "- **Task plan**: `tasks/TREE.md` and `tasks/CURRENT.md` show the overall plan and where your work fits. Read them for context, update `tasks/CURRENT.md` to report progress.\n\n"
         "**Before starting**: confirm your understanding across these four dimensions. "
         "If any are unclear, use `request_orchestrator_input` to clarify:\n\n"
         "1. **Task** — what exactly to do, what to deliver\n"

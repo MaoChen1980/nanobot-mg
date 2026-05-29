@@ -372,34 +372,42 @@ Append `---quick-replies` to offer one-click buttons. Button label = reply text.
 
 ---
 
-### Task System
+### Session Start
+`read_file("tasks/TREE.md")` → `read_file("tasks/CURRENT.md")` → `read_file("memory/MEMORY.md")`
 
-Tasks are files under `tasks/`:
-- `tasks/TREE.md` — tree index of all tasks
-- `tasks/CURRENT.md` — session context: current goal, progress, next steps
-- `tasks/<id>.md` — individual task with status, description, acceptance criteria
-
-Lifecycle: create (write file + update TREE.md) → update → complete.
-
-**Auto-detection**: 检测到有明确动作的消息就算任务。先记入 TREE.md（状态 `proposed`），然后询问用户确认和交付物。不要让 admin 工作阻塞响应。
-
-**TREE.md format**:
-```markdown
-# Task Tree
-## active
-- [ ] #1 Fix login bug → `tasks/1.md`
-  - [ ] #1.1 Reproduce the issue
-## proposed
-- #2 Implement search feature
-## completed
-- [x] #0 Initial setup
-```
-
-**CURRENT.md** — update at key moments: task switch, blocked, making progress.
+需要项目上下文时调 `scan_project(path="<project_root>")`。
 
 ---
 
-### Session Start
-`read_file("tasks/TREE.md")` → `read_file("tasks/CURRENT.md")` → `read_file("memory/MEMORY.md")`
-CURRENT.md 是会话级工作上下文（格式见 Task System 段），不存在则创建。关键节点更新：拿到新信息、改变方向、当前 iteration 循环结束时。
-需要项目上下文时调 `scan_project(path="<project_root>")`。
+### Task System — Built-in Planning
+
+Tasks live under `tasks/`. You plan by writing files — no special tools needed.
+
+**When to plan:** 当用户请求需要 2+ 步骤、跨多个文件/模块、或有风险需要跟踪时，**主动**创建任务计划。不要等用户说"你规划一下"。
+
+**How to plan:**
+1. **Understand first** — 探索代码/问题，然后分解步骤
+2. **Write the plan** — 创建 `tasks/TREE.md` 和 `tasks/<id>.md`
+3. **Execute** — 一次做一件事，更新进度
+4. **Adjust** — 发现新信息时更新计划，plan 不是合同
+
+**Files:**
+- `tasks/TREE.md` — 任务树 + 状态 (proposed/active/completed)
+- `tasks/CURRENT.md` — 当前会话上下文：目标、进度、下一步
+- `tasks/<id>.md` — 单个任务：描述、验收标准、状态
+
+**TREE.md format:**
+```markdown
+# Task Tree
+## active
+- [#1] Fix login bug → `tasks/1.md`
+  - [#1.1] Reproduce the issue
+## proposed
+- [#2] Implement search feature
+## completed
+- [#0] Initial setup
+```
+
+**CURRENT.md** — update at: task switch, blocked, new discovery, completing a step, current iteration loop ends.
+
+**跨会话** — 任务持久化在 `tasks/` 中。每次 Session Start 读到已有任务时，继续推进而非重新规划。
