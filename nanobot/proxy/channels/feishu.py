@@ -34,7 +34,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             if config.get("domain", "feishu") == "feishu"
             else "https://open.larksuite.com"
         )
-        self._thread_pool = ThreadPoolExecutor(max_workers=32)
+        self._thread_pool = ThreadPoolExecutor(max_workers=8)
         self._api_lock = threading.Lock()  # serialize Feishu API calls across concurrent paths
         self._notified_chats: set[str] = set()  # chat_ids already sent ready notification
         self._consumed_qids: set[str] = set()  # chat-scoped QIDs already clicked
