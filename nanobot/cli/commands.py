@@ -710,7 +710,7 @@ def agent(
             sig_name = signal.Signals(signum).name
             _restore_terminal()
             console.print(f"\nReceived {sig_name}, goodbye!")
-            sys.exit(0)
+            os._exit(0)
 
         signal.signal(signal.SIGINT, _handle_signal)
         signal.signal(signal.SIGTERM, _handle_signal)
@@ -807,7 +807,13 @@ def agent(
                             metadata={"_wants_stream": True},
                         ))
 
-                        await turn_done.wait()
+                        # Poll with 1s timeout so the event loop checks signals (Windows IOCP)
+                        while True:
+                            try:
+                                await asyncio.wait_for(turn_done.wait(), timeout=1.0)
+                                break
+                            except asyncio.TimeoutError:
+                                pass
 
                         if turn_response:
                             content, meta = turn_response[0]
