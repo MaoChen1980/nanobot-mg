@@ -52,6 +52,35 @@ class ExecSessionInfo:
 _IS_WINDOWS = os.name == "nt"
 
 
+class _WinptyProcess:
+    """Duck-type compatible replacement for asyncio.subprocess.Process using pywinpty."""
+
+    def __init__(self, args: list[str], cwd: str, env: dict[str, str]) -> None:
+        from winpty import PtyProcess
+
+        self._pty = PtyProcess.spawn(args, cwd=cwd, env=env)
+        self.returncode: int | None = None
+        self.pid: int = self._pty.pid
+        self.stdin = None
+        self.stdout = None
+        self.stderr = None
+
+    def kill(self) -> None:
+        try:
+            self._pty.terminate()
+            self._pty.close()
+        except Exception:
+            pass
+        self.returncode = 0
+
+    async def wait(self) -> int:
+        while self._pty.isalive():
+            await asyncio.sleep(0.1)
+        self._pty.close()
+        self.returncode = 0
+        return 0
+
+
 class _ExecSession:
     def __init__(
         self,
@@ -77,14 +106,19 @@ class _ExecSession:
         self._timed_out = False
         self._history_buf: str = ""  # rolling history of all output, capped at MAX_BUFFERED_CHARS
         self._pty_master: int | None = None
-        if master_fd is not None:
+        self._winpty_proc: Any | None = None
+        self._pty_task: asyncio.Task | None = None
+        self._stdout_task: asyncio.Task | None = None
+        self._stderr_task: asyncio.Task | None = None
+
+        if isinstance(process, _WinptyProcess):
+            self._winpty_proc = process._pty
+            self._pty_task = asyncio.create_task(self._read_pty_win())
+        elif master_fd is not None:
             os.set_blocking(master_fd, False)
             self._pty_master = master_fd
             self._pty_task = asyncio.create_task(self._read_pty())
-            self._stdout_task: asyncio.Task | None = None
-            self._stderr_task: asyncio.Task | None = None
         else:
-            self._pty_task: asyncio.Task | None = None
             self._stdout_task = asyncio.create_task(self._read_stream(process.stdout, ""))
             self._stderr_task = asyncio.create_task(self._read_stream(process.stderr, "STDERR:\n"))
 
@@ -133,7 +167,28 @@ class _ExecSession:
             except OSError:
                 break
 
+    async def _read_pty_win(self) -> None:
+        """Read from pywinpty PTY in executor thread."""
+        loop = asyncio.get_event_loop()
+        while self._winpty_proc is not None:
+            try:
+                text: str = await loop.run_in_executor(None, self._winpty_proc.read)
+                if not text:
+                    break
+                async with self._lock:
+                    current = sum(len(c) for c in self._chunks)
+                    if current >= MAX_BUFFERED_CHARS:
+                        continue
+                    if current + len(text) > MAX_BUFFERED_CHARS:
+                        text = text[: MAX_BUFFERED_CHARS - current]
+                    self._chunks.append(text)
+            except EOFError:
+                break
+
     async def write(self, chars: str) -> str | None:
+        if self._winpty_proc is not None:
+            self._winpty_proc.write(chars)
+            return None
         if self.process.returncode is not None:
             return "session has already exited"
         if self._pty_master is not None:
@@ -149,6 +204,8 @@ class _ExecSession:
         return None
 
     async def close_stdin(self) -> str | None:
+        if self._winpty_proc is not None:
+            return None  # no way to close stdin on winpty independently
         if self._pty_master is not None:
             return None  # PTY has no stdin to close; close pty to signal EOF
         if self.process.returncode is not None:
@@ -171,6 +228,10 @@ class _ExecSession:
         self.last_access = time.monotonic()
         if yield_time_ms > 0 and self.process.returncode is None:
             await asyncio.sleep(min(yield_time_ms, MAX_YIELD_MS) / 1000)
+
+        # Poll winpty process exit status
+        if self._winpty_proc is not None and not self._winpty_proc.isalive():
+            self.process.returncode = 0
 
         if self.process.returncode is None and time.monotonic() >= self.deadline:
             self._timed_out = True
@@ -215,6 +276,15 @@ class _ExecSession:
         )
 
     async def kill(self) -> None:
+        if self._winpty_proc is not None:
+            try:
+                self._winpty_proc.terminate()
+                self._winpty_proc.close()
+            except Exception:
+                pass
+            self._winpty_proc = None
+            self.process.returncode = 0
+            return
         if self._pty_master is not None:
             try:
                 os.close(self._pty_master)
@@ -375,6 +445,19 @@ class ExecSessionManager:
             )
             os.close(slave_fd)
             return proc, master_fd
+
+        if use_pty and _IS_WINDOWS:
+            shell = shell_program or "powershell.exe"
+            is_pwsh = "powershell" in shell.lower() or "pwsh" in shell.lower()
+            if is_pwsh:
+                args = [shell, "-Command", command]
+            else:
+                args = [shell]
+                if login:
+                    args.append("-l")
+                args.extend(["-c", command])
+            proc = _WinptyProcess(args, cwd, env)
+            return proc, None
 
         from nanobot.agent.tools.shell import ExecTool
 
