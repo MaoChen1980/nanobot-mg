@@ -880,17 +880,13 @@ class GatewayApplication:
 
         # Wait for the agent to complete (e.g. restart flag detected).
         # _shutdown() in _async_run()'s finally block handles cleanup.
-        _swd.write_text(f"{time.time()} before await agent_task\n")
         try:
             await agent_task
-            _swd.write_text(f"{time.time()} after await agent_task (normal)\n")
             logger.info("GATEWAY_TRACE: agent_task completed normally")
         except asyncio.CancelledError:
-            _swd.write_text(f"{time.time()} after await agent_task (CancelledError)\n")
             logger.info("GATEWAY_TRACE: agent_task was cancelled")
             pass
         except BaseException:
-            _swd.write_text(f"{time.time()} after await agent_task (BaseException)\n")
             logger.exception("GATEWAY_TRACE: agent_task raised unexpected exception")
             raise
 
