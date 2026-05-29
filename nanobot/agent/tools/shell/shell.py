@@ -21,6 +21,7 @@ from nanobot.agent.tools.exec_session import (
     DEFAULT_EXEC_SESSION_MANAGER,
     DEFAULT_MAX_OUTPUT_CHARS,
     DEFAULT_YIELD_MS,
+    ExecSessionManager,
     MAX_OUTPUT_CHARS,
     MAX_YIELD_MS,
     clamp_session_int,
@@ -160,6 +161,7 @@ class ExecTool(Tool):
         sandbox: str = "",
         path_append: str = "",
         allowed_env_keys: list[str] | None = None,
+        session_manager: ExecSessionManager | None = None,
     ):
         self.timeout = timeout
         self.working_dir = working_dir
