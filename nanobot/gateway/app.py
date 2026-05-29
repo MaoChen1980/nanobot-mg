@@ -553,13 +553,13 @@ class GatewayApplication:
                 "[red]║[/red]  [bold]Vector Search Disabled[/bold]                                    [red]║[/red]"
             )
             console.print(
-                "[red]║[/red]  Install [bold]sentence-transformers[/bold] for semantic memory search:   [red]║[/red]"
+                "[red]║[/red]  [bold]Enhance Your Experience[/bold] — Install [bold]sentence-transformers[/bold]:  [red]║[/red]"
             )
             console.print(
                 "[red]║[/red]  [bold]pip install sentence-transformers[/bold]                          [red]║[/red]"
             )
             console.print(
-                "[red]║[/red]  Enables FAISS-powered vector search across memory files.        [red]║[/red]"
+                "[red]║[/red]  Enables smart search across your ideas, projects and decisions.  [red]║[/red]"
             )
             console.print(
                 "[red]╚══════════════════════════════════════════════════════════╝[/red]"
