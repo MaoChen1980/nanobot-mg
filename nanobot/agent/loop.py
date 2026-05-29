@@ -931,18 +931,24 @@ class AgentLoop:
         """
         if not msg.content:
             return False
-        task_id = msg.metadata.get("subagent_task_id") if isinstance(msg.metadata, dict) else None
-        if task_id and any(
+        meta = msg.metadata if isinstance(msg.metadata, dict) else {}
+        task_id = meta.get("subagent_task_id")
+        injected_event = meta.get("injected_event", "subagent_result")
+
+        # Only dedup actual subagent results — worker notifications/requests
+        # don't carry a task_id and should always be appended.
+        if injected_event == "subagent_result" and task_id and any(
             m.get("injected_event") == "subagent_result" and m.get("subagent_task_id") == task_id
             for m in session.messages
         ):
             return False
+
         session.add_message(
             "assistant",
             msg.content,
             timestamp=msg.timestamp.isoformat(),
             sender_id=msg.sender_id,
-            injected_event="subagent_result",
+            injected_event=injected_event,
             subagent_task_id=task_id,
         )
         return True
