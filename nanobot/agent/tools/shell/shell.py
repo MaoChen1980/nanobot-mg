@@ -17,6 +17,15 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
+from nanobot.agent.tools.exec_session import (
+    DEFAULT_EXEC_SESSION_MANAGER,
+    DEFAULT_MAX_OUTPUT_CHARS,
+    DEFAULT_YIELD_MS,
+    MAX_OUTPUT_CHARS,
+    MAX_YIELD_MS,
+    clamp_session_int,
+    format_session_poll,
+)
 from nanobot.agent.tools.sandbox import wrap_command
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.shell_validators import DANGEROUS_PATTERNS, check_command_safety
@@ -118,6 +127,23 @@ def _extract_powershell_inner(command: str) -> str | None:
             "  check=\"python -c \\\"import sys; data=open('{cache}').read(); sys.exit(0 if 'PASS' in data else 1)\\\"\"\n"
             "  check=\"test -f dist/app.exe\""
         ),
+        yield_time_ms=p("integer",
+            "Optional milliseconds to wait before returning output. "
+            "When set, a still-running command returns a session_id that "
+            "can be polled or written to with write_stdin. Omit this field "
+            "to keep one-shot exec behavior.",
+            minimum=0, maximum=MAX_YIELD_MS,
+        ),
+        max_output_chars=p("integer",
+            "Maximum output characters to return when yield_time_ms is used "
+            "(default 10000, max 50000).",
+            minimum=1000, maximum=MAX_OUTPUT_CHARS,
+        ),
+        max_output_tokens=p("integer",
+            "Compatibility alias for max_output_chars. The current runtime "
+            "uses a character budget.",
+            minimum=1000, maximum=MAX_OUTPUT_CHARS,
+        ),
         required=[],
     )
 )
@@ -143,6 +169,7 @@ class ExecTool(Tool):
         self.restrict_to_workspace = restrict_to_workspace
         self.path_append = path_append
         self.allowed_env_keys = allowed_env_keys or []
+        self._session_manager = session_manager or DEFAULT_EXEC_SESSION_MANAGER
 
     name = "exec"
 
@@ -153,18 +180,13 @@ class ExecTool(Tool):
     _TAIL_LINES_ON_ERROR = 15
 
     description = (
-            "**用途**: 执行 shell 命令进行计算和脚本操作。\n\n"
-            "**什么时候用**:\n"
-            "- 需要运行命令行工具、脚本或编译命令时\n"
-            "- 需要执行计算、数据处理或系统操作时\n\n"
-            "**什么时候不用**:\n"
-            "- 只需要读文件 → 用 read_file（更好的格式支持）\n"
-            "- 只需要搜索 → 用 grep\n"
-            "- 只需要网络请求 → 用 web_fetch\n"
-            "- 危险命令自动拦截：rm -rf、del /f /q、shutdown 等\n"
-            "- 输出截断 10,000 字符，默认超时 60 秒\n"
-            "- 输出会被自动缓存，显示 [Full output cached: path] — 后续可用 from_cache 重新查看\n"
-            "- capture_file 场景：长时间命令（编译、安装），可中途 read_file 查看进度"
+            "**Purpose**: Execute shell commands for computation and scripting.\n\n"
+            "**When to use**:\n"
+            "- When you need to run command-line tools, scripts, or build commands\n"
+            "- When you need to perform computation, data processing, or system operations\n"
+            "- When you need to SSH into a remote server (add yield_time_ms to enter session mode)\n\n"
+            "**SSH Remote Operations**: Add yield_time_ms to create a session, then use write_stdin to send commands and respond to interactive prompts.\n"
+            "Example: exec ssh user@host yield_time_ms=2000 → write_stdin handles host key confirmation and password → normal operation"
         )
 
     exclusive = True
@@ -216,6 +238,8 @@ class ExecTool(Tool):
         grep: str | None = None, extract: str | None = None,
         from_cache: str | None = None,
         verify: str | None = None, check: str | None = None,
+        yield_time_ms: int | None = None, max_output_chars: int | None = None,
+        max_output_tokens: int | None = None,
         **kwargs: Any,
     ) -> str:
         # ── Tool suggestion nudge ──
@@ -283,6 +307,27 @@ class ExecTool(Tool):
             else:
                 env["NANOBOT_PATH_APPEND"] = self.path_append
                 command = f'export PATH="$PATH{os.pathsep}$NANOBOT_PATH_APPEND"; {command}'
+
+        # ── Session mode: yield_time_ms set → use ExecSessionManager ──
+        if yield_time_ms is not None:
+            if max_output_chars is None:
+                max_output_chars = max_output_tokens
+            try:
+                session_id, poll = await self._session_manager.start(
+                    command=command,
+                    cwd=cwd,
+                    env=env,
+                    timeout=effective_timeout,
+                    shell_program=None,
+                    login=True,
+                    yield_time_ms=yield_time_ms,
+                    max_output_chars=clamp_session_int(
+                        max_output_chars, DEFAULT_MAX_OUTPUT_CHARS, 1000, MAX_OUTPUT_CHARS,
+                    ),
+                )
+                return format_session_poll(session_id, poll)
+            except Exception as exc:
+                return f"Error executing command: {exc}"
 
         try:
             capture_path = Path(capture_file) if capture_file else None
@@ -640,19 +685,29 @@ class ExecTool(Tool):
     @staticmethod
     async def _spawn(
         command: str, cwd: str, env: dict[str, str],
+        shell_program: str | None = None,
+        login: bool = True,
+        *,
+        stdin: int = asyncio.subprocess.DEVNULL,
     ) -> asyncio.subprocess.Process:
         """Launch *command* in a platform-appropriate shell."""
         if _IS_WINDOWS:
             return await asyncio.create_subprocess_exec(
                 "powershell.exe", "-Command", command,
+                stdin=stdin,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
                 env=env,
             )
-        bash = shutil.which("bash") or "/bin/bash"
+        shell_program = shell_program or shutil.which("bash") or "/bin/bash"
+        args = [shell_program]
+        if login:
+            args.append("-l")
+        args.extend(["-c", command])
         return await asyncio.create_subprocess_exec(
-            bash, "-l", "-c", command,
+            *args,
+            stdin=stdin,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,

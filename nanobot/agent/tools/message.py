@@ -100,14 +100,10 @@ class MessageTool(Tool):
     name = "message"
 
     description = (
-        "**用途**: 向用户发送消息，支持文字和文件附件。\n\n"
-        "**什么时候用**:\n"
-        "- 需要向用户发送文字消息或文件附件时\n"
-        "- 需要发送带按钮的交互消息时\n\n"
-        "**什么时候不用**:\n"
-        "- 需要阻塞式提问 → 用 ask_user\n"
-        "- media 路径需为本地文件路径\n"
-        "- buttons: 最多 4 行，每行最多 3 个按钮，每个按钮最多 20 字符"
+        "**Purpose**: Send messages to the user, supporting text and file attachments.\n\n"
+        "**When to use**:\n"
+        "- When you need to send a text message or file attachments to the user\n"
+        "- When you need to send interactive messages with buttons\n\n"
     )
 
     async def execute(

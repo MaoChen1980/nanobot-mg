@@ -64,13 +64,10 @@ class NotebookEditTool(_FsTool):
     name = "notebook_edit"
 
     description = (
-        "**用途**: 编辑 Jupyter notebook (.ipynb) 单元格。\n\n"
-        "**什么时候用**:\n"
-        "- 需要自动化编辑 notebook 单元格（替换、插入、删除）\n"
-        "- 需要创建新的 notebook 文件\n\n"
-        "**什么时候不用**:\n"
-        "- 编辑普通文本文件（.py, .md 等）→ 用 edit_file\n"
-        "- 只是查看 notebook 内容 → 用 read_file\n"
+        "**Purpose**: Edit Jupyter notebook (.ipynb) cells.\n\n"
+        "**When to use**:\n"
+        "- When you need to programmatically edit notebook cells (replace, insert, delete)\n"
+        "- When you need to create a new notebook file\n\n"
     )
 
     async def execute(

@@ -31,15 +31,15 @@ class NotifyOrchestratorTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 向 Orchestrator 发送通知（不阻塞）。\n\n"
-            "当你发现更好的方案、踩坑、或需要报告进展时使用。\n"
-            "Orchestrator 会在下一轮迭代中看到你的消息。\n\n"
-            "**优先级**:\n"
-            "- info: 一般信息、进展报告\n"
-            "- suggestion: 改进建议（发现更好的方案）\n"
-            "- blocker: 阻塞性问题，需要 Orchestrator 决策\n\n"
-            "**注意**: 这是 fire-and-forget，调用后继续执行。\n"
-            "如果需要 Orchestrator 回复，使用 request_orchestrator_input。"
+            "**Purpose**: Send a notification to the Orchestrator (non-blocking).\n\n"
+            "Use when you discover a better approach, hit a snag, or need to report progress.\n"
+            "The Orchestrator will see your message in the next iteration.\n\n"
+            "**Priority**:\n"
+            "- info: General information, progress reports\n"
+            "- suggestion: Improvement suggestions (found a better approach)\n"
+            "- blocker: Blocking issue requiring Orchestrator decision\n\n"
+            "**Note**: This is fire-and-forget; execution continues after calling.\n"
+            "If you need a reply from the Orchestrator, use request_orchestrator_input."
         )
 
     async def execute(self, message: str, priority: str = "info", **kwargs: Any) -> str:

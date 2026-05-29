@@ -34,6 +34,8 @@ from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.self import MyTool
 from nanobot.agent.tools.shell import ExecTool
+from nanobot.agent.tools.exec_session import WriteStdinTool, ListExecSessionsTool
+from nanobot.agent.tools.edit_files import EditFilesTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.spawn_many import SpawnManyTool
 from nanobot.agent.tools.respond_to_worker import RespondToWorkerTool
@@ -338,6 +340,7 @@ class AgentLoop:
         )
         for cls in (WriteFileTool, EditFileTool, ListDirTool, DeleteFileTool, MoveFileTool):
             self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
+        self.tools.register(EditFilesTool(workspace=self.workspace, allowed_dir=allowed_dir))
         for cls in (GlobTool, GrepTool):
             self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(NotebookEditTool(workspace=self.workspace, allowed_dir=allowed_dir))
@@ -386,6 +389,8 @@ class AgentLoop:
                     allowed_env_keys=self.exec_config.allowed_env_keys,
                 )
             )
+            self.tools.register(WriteStdinTool(output_dir=self.workspace / ".truncated_output"))
+            self.tools.register(ListExecSessionsTool())
 
     async def _connect_mcp(self) -> None:
         """Connect to configured MCP servers (one-time, lazy)."""

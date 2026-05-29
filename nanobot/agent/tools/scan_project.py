@@ -29,14 +29,12 @@ class ScanProjectTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 扫描项目目录并生成项目卡片，让 agent 理解项目结构。\n\n"
-            "**什么时候用**:\n"
-            "- 用户让你帮忙看/改某个项目时，先调这个工具扫描项目\n"
-            "- 想了解项目结构、语言、构建工具、测试框架时\n\n"
-            "**什么时候不用**:\n"
-            "- 只需要读单个文件内容 → 用 read_file\n\n"
-            "**注意事项**:\n"
-            "- path 必须是项目根目录的绝对路径"
+            "**Purpose**: Scan a project directory and generate a project card so the agent understands the project structure.\n\n"
+            "**When to use**:\n"
+            "- A user asks you to look at or modify a project — call this tool first to scan it\n"
+            "- You want to understand project structure, language, build tools, and test framework\n\n"
+            "**Notes**:\n"
+            "- path must be the absolute path to the project root directory"
         )
 
     async def execute(self, path: str, **kwargs: Any) -> str:

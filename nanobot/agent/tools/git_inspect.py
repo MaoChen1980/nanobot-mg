@@ -29,16 +29,13 @@ class GitInspectTool(_FsTool):
     read_only = True
 
     description = (
-        "**用途**: 查看 git 历史 — 谁改了什么、为什么改。\n\n"
-        "**用法**:\n"
-        "- **只看 log**（概述）→ 不传 `commit` 参数，返回 commit 列表\n"
-        "- **看具体 diff**（深度）→ 传 `commit=SHA`，显示该 commit 的完整 diff\n\n"
-        "**什么时候用**:\n"
-        "- 需要查看某个文件或目录最近的 commit 记录\n"
-        "- 需要检查某个 commit 的具体改动（diff）\n\n"
-        "**什么时候不用**:\n"
-        "- 需要同时搜索代码和 git 历史 → 用 diagnose\n"
-        "- 只是确认是否在 git 仓库 → 用 my(check)\n"
+        "**Purpose**: Inspect git history — who changed what and why.\n\n"
+        "**Usage**:\n"
+        "- **Log only** (overview) → omit `commit` param, returns a list of commits\n"
+        "- **Full diff** (in-depth) → pass `commit=SHA`, shows the complete diff for that commit\n\n"
+        "**When to use**:\n"
+        "- When you need to review recent commits for a file or directory\n"
+        "- When you need to examine the specific changes (diff) in a commit\n\n"
     )
 
     async def execute(

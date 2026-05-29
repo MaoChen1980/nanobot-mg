@@ -133,6 +133,7 @@ class BaseProxyChannel:
             self._reader, self._writer = await asyncio.open_connection(
                 self.hub_tcp_host, self.hub_tcp_port,
             )
+            self._reader._limit = 1024 * 1024
             self._setup_keepalive(self._writer.transport)
             self._parent_pid = os.getppid()
             logger.info(
@@ -180,9 +181,18 @@ class BaseProxyChannel:
         future = loop.create_future()
         self._response_futures[seq] = future
         data["_seq"] = seq
+        # Proactive size check: refuse to send messages > 1MB to hub
+        payload_bytes = (json.dumps(data) + "\n").encode("utf-8")
+        if len(payload_bytes) > 1024 * 1024:
+            logger.error(
+                "Outbound message too large ({} bytes), returning error to channel",
+                len(payload_bytes),
+            )
+            self._response_futures.pop(seq, None)
+            return {"success": False, "error": "Message too large (max 1MB), please shorten your input"}
         try:
             async with self._write_lock:
-                self._writer.write((json.dumps(data) + "\n").encode())
+                self._writer.write(payload_bytes)
                 await self._writer.drain()
             response = await future
             return response
@@ -256,6 +266,7 @@ class BaseProxyChannel:
         self._reader, self._writer = await asyncio.open_connection(
             self.hub_tcp_host, self.hub_tcp_port,
         )
+        self._reader._limit = 1024 * 1024
         self._setup_keepalive(self._writer.transport)
 
         # Re-register with Hub

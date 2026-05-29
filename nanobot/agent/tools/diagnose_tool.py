@@ -28,14 +28,10 @@ class DiagnoseTool(_FsTool):
     read_only = True
 
     description = (
-        "**用途**: 结合代码搜索和 git 历史，一站式调查错误根因。\n\n"
-        "**什么时候用**:\n"
-        "- 遇到错误（如 TypeError），需要同时查找代码中的相关位置和近期 git commit\n"
-        "- error 传入完整的错误消息，自动提取关键词并搜索代码 + git 历史\n\n"
-        "**什么时候不用**:\n"
-        "- 只需要代码搜索 → 用 grep\n"
-        "- 只需要 git 历史 → 用 git_inspect\n"
-        "- 配置/环境问题 — diagnose 不适合，直接排查配置\n"
+        "**Purpose**: Investigate error root causes in one shot by combining code search and git history.\n\n"
+        "**When to use**:\n"
+        "- You encounter an error (e.g. TypeError) and need to find both relevant code locations and recent git commits\n"
+        "- Pass the full error message — keywords are automatically extracted and searched across code + git history\n\n"
     )
 
     async def execute(

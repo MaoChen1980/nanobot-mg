@@ -8,6 +8,7 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from nanobot.agent.tools import file_state
 from nanobot.agent.tools.base import tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
@@ -34,14 +35,10 @@ class ReadFilesTool(_FsTool):
     _MAX_FILE_BYTES = 2_000_000
 
     description = (
-        "**用途**: 按 glob 模式批量读取多个文件，一次调用替代 glob+read 循环。\n\n"
-        "**什么时候用**:\n"
-        "- 需要同时读取匹配某个模式的多个文件\n"
-        "- 需要在多个文件中搜索关键词并查看匹配行及其上下文（传 extract 参数）\n\n"
-        "**什么时候不用**:\n"
-        "- 需要从特定行号开始读单个文件 → 用 read_file\n"
-        "- 只需要文件名列表 → 用 glob\n"
-        "- 只需搜索内容而不读文件 → 用 grep\n"
+        "**Purpose**: Batch read multiple files matching a glob pattern — one call replaces glob+read loops.\n\n"
+        "**When to use**:\n"
+        "- When you need to read multiple files matching a pattern simultaneously\n"
+        "- When you need to search for keywords across multiple files and view matched lines with context (pass extract param)\n\n"
     )
 
     async def execute(
@@ -104,7 +101,7 @@ class ReadFilesTool(_FsTool):
                 except UnicodeDecodeError:
                     skipped_binary += 1
                     continue
-
+                file_state.record_read(fp)
                 text = text.replace("\r\n", "\n")
                 lines = text.split("\n")
                 rel_path = fp.relative_to(root).as_posix()

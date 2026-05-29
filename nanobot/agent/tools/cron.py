@@ -52,9 +52,6 @@ _CRON_PARAMETERS = build_parameters_schema(
         "- You need a reminder at a specific time or interval\n"
         "- You want to schedule recurring checks or maintenance\n"
         "- You need to run a task at a future time\n\n"
-        "Do NOT use when:\n"
-        "- You want to execute something immediately — use exec or other tools\n"
-        "- You're inside a cron job and need job_id — it's auto-injected\n\n"
         "Actions: add (needs message + schedule), remove (needs job_id), "
         "update (job_id + fields to change), list (view all), "
         "test (run immediately for debugging). "
@@ -152,15 +149,12 @@ class CronTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 安排定时或周期性任务。\n\n"
-            "**什么时候用**:\n"
-            "- 需要按固定间隔、cron 表达式或一次性定时执行任务时\n"
-            "- 支持 every_seconds（间隔）、cron_expr（cron 表达式）、at（一次性）三种调度方式\n\n"
-            "**什么时候不用**:\n"
-            "- 只需要单次延迟执行 → 用 exec sleep 命令\n"
-            "- 从 cron 任务执行中不能创建新定时任务\n"
-            "- tz 参数只能与 cron_expr 一起使用\n"
-            "- 系统任务（如 extractor）不可删除/修改"
+            "**Purpose**: Schedule timed or recurring tasks.\n\n"
+            "**When to use**:\n"
+            "- When you need to execute tasks at fixed intervals, via cron expressions, or as one-time scheduled tasks\n"
+            "- Supports three scheduling modes: every_seconds (interval), cron_expr (cron expression), at (one-time)\n\n"
+            "**Note**: tz parameter can only be used together with cron_expr. "
+            "System tasks (e.g., extractor) cannot be deleted/modified."
         )
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:

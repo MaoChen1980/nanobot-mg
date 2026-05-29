@@ -13,18 +13,14 @@ from nanobot.agent.tools.schema import p
     "path": p("string", "Absolute path to a file to delete. Workspace-guarded, rejects system paths."),
 }, required=["path"])
 class DeleteFileTool(_FsTool):
-    """Delete a single file. Supports workspace-relative and absolute paths."""
+    """Delete a single file. Absolute path only."""
 
     name = "delete_file"
     description = (
-        "**用途**: 删除单个文件。\n\n"
-        "**什么时候用**:\n"
-        "- 需要删除不再需要的文件时\n"
-        "- 需要比 exec rm 更安全的删除（带 workspace 保护和自动验证）时\n\n"
-        "**什么时候不用**:\n"
-        "- 需要删除目录 → 用 exec rmdir / rm -rf\n"
-        "- 需要批量删除文件 → 用 exec rm\n"
-        "- 需要移动/重命名文件 → 用 move_file\n"
+        "**Purpose**: Delete a single file.\n\n"
+        "**When to use**:\n"
+        "- When a file is no longer needed and should be deleted\n"
+        "- When safer deletion than exec rm is desired (workspace-guarded with auto-verification)\n\n"
     )
 
     _pre_validators = [PathExists("path"), PathType("path", "file")]

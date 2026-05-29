@@ -106,15 +106,12 @@ class WebSearchTool(WebToolBase, Tool):
 
     name = "web_search"
     description = (
-        "**用途**: 搜索网络获取最新信息。\n\n"
-        "**什么时候用**:\n"
-        "- 需要查询不熟悉的信息、最新新闻或线上文档时\n"
-        "- 需要查找最新的技术方案或最佳实践时\n\n"
-        "**什么时候不用**:\n"
-        "- 已有 URL → 用 web_fetch，不用 web_search\n"
-        "- 需要读取具体页面 → 用 web_fetch\n"
-        "- 结果来自搜索引擎，不保证 100% 准确\n"
-        "- 默认返回 8 条结果，最多 20 条"
+        "**Purpose**: Search the web for the latest information.\n\n"
+        "**When to use**:\n"
+        "- When you need to look up unfamiliar information, latest news, or online documentation\n"
+        "- When you need to find the latest technical solutions or best practices\n\n"
+        "**Note**: Results come from search engines, 100% accuracy is not guaranteed. "
+        "Returns 8 results by default, up to 20 max."
     )
 
     def __init__(self, config: WebSearchConfig | None = None, proxy: str | None = None, user_agent: str | None = None):
@@ -307,18 +304,15 @@ class WebFetchTool(WebToolBase, Tool):
     _MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB hard cap
     name = "web_fetch"
     description = (
-        "**用途**: 获取 URL 内容并提取可读文本，支持截断预览和正则过滤。\n\n"
-        "**什么时候用**:\n"
-        "- 已有 URL 需要获取页面内容时\n"
-        "- 不确定页面内容是否有用 → 先 `maxChars=1000` 预览，再决定是否读完整（默认 2000000）\n\n"
-        "**什么时候不用**:\n"
-        "- 无 URL → 用 web_search 先搜索\n"
-        "- 只需页面元数据 → web_search 结果已包含\n"
-        "- JS 密集的页面可能渲染不完整\n\n"
-        "**有用参数**:\n"
-        "- `maxChars` — 控制返回字数（默认 2000000），小值预览大值深读\n"
-        "- `format` — `markdown`（结构化）或 `text`（纯文本）\n"
-        "- `extract` — 正则过滤，只返回匹配行"
+        "**Purpose**: Fetch URL content and extract readable text, with support for truncated previews and regex filtering.\n\n"
+        "**When to use**:\n"
+        "- When you already have a URL and need to fetch page content\n"
+        "- Unsure if the page content is useful → preview with `maxChars=1000` first, then decide whether to read in full (default 2000000)\n\n"
+        "**Note**: JS-heavy pages may not render completely.\n\n"
+        "**Useful Parameters**:\n"
+        "- `maxChars` — controls the number of returned characters (default 2000000), small values for preview, large values for deep reading\n"
+        "- `format` — `markdown` (structured) or `text` (plain text)\n"
+        "- `extract` — regex filtering, only returns matching lines"
     )
 
     def __init__(self, config: WebFetchConfig | None = None, proxy: str | None = None, user_agent: str | None = None, max_chars: int = 100000):

@@ -27,15 +27,11 @@ class AnalyzeTool(_FsTool):
     read_only = True
 
     description = (
-        "**用途**: 分析文本并返回结构化摘要（行统计、关键词、按关键词过滤），无需全文读到 context。\n\n"
-        "**什么时候用**:\n"
-        "- 文件太大（如日志），先 analyze 看概况，再决定读哪段\n"
-        "- 想知道文件主题而非全文，analyze 出关键词\n"
-        "- 想找特定类型的内容（错误、警告），传 keyword\n\n"
-        "**什么时候不用**:\n"
-        "- 需要完整文本 → 用 read_file\n"
-        "- 需要精确模式搜索 → 用 grep\n"
-        "- 需要探索代码结构 → 用 explore_module\n"
+        "**Purpose**: Analyze text and return a structured summary (line stats, keywords, keyword-filtered), without reading the full text into context.\n\n"
+        "**When to use**:\n"
+        "- File is too large (e.g. logs) — analyze it first to get an overview, then decide which section to read\n"
+        "- You want to know the topic of a file without reading the full content — analyze extracts keywords\n"
+        "- You want to find specific types of content (errors, warnings) — pass a keyword\n\n"
     )
 
     MAX_TEXT_SIZE = 500_000

@@ -28,24 +28,24 @@ class ConversationSearchTool(Tool):
     read_only = True
 
     description = (
-        "**用途**: 搜索对话历史 — 从过去的对话记录中查找信息。\n\n"
-        "**什么时候用**:\n"
-        '- 用户说「之前讨论过」「上次说过」「以前做过」\n'
-        "- 你感觉之前见过某个信息但记不清了\n"
-        "- 需要精确关键词匹配历史记录\n\n"
-        "**和 memory_search 的区别**:\n"
-        "- memory_search 搜索知识库（语义匹配）\n"
-        "- conversation_search 搜索对话历史记录（关键词子串匹配 + 时间过滤）\n\n"
-        "**参数说明**:\n"
-        "- keyword — 精确子串匹配，不区分大小写\n"
-        "- start/end — 按时间范围过滤（YYYY-MM-DD 格式）\n"
-        "- query — keyword 的别名，两个参数传一个即可\n\n"
-        "**注意**:\n"
-        "- 不搜索 goal/event/lesson 表（查询目标进度用 read_file(\"tasks/TREE.md\")）\n"
-        "- 关键词是子串匹配，'deploy' 会匹配 'deployment'、'deploying' 等\n\n"
-        "**示例**:\n"
+        "**Purpose**: Search conversation history — find information from past conversation records.\n\n"
+        "**When to use**:\n"
+        '- The user says "we discussed this before", "I mentioned it last time", "we did this earlier"\n'
+        "- You feel like you've seen some information before but can't recall it clearly\n"
+        "- You need exact keyword matching against historical records\n\n"
+        "**Difference from memory_search**:\n"
+        "- memory_search searches the knowledge base (semantic matching)\n"
+        "- conversation_search searches conversation history (keyword substring match + time filter)\n\n"
+        "**Parameters**:\n"
+        "- keyword — exact substring match, case-insensitive\n"
+        "- start/end — filter by time range (YYYY-MM-DD format)\n"
+        "- query — alias for keyword, provide either one\n\n"
+        "**Note**:\n"
+        "- Does not search goal/event/lesson tables (use read_file(\"tasks/TREE.md\") to check goal progress)\n"
+        "- Keywords use substring matching — 'deploy' will match 'deployment', 'deploying', etc.\n\n"
+        "**Examples**:\n"
         "  conversation_search(keyword='docker')\n"
-        "  conversation_search(keyword='部署问题', start='2026-01-01')\n"
+        "  conversation_search(keyword='deployment issue', start='2026-01-01')\n"
         "  conversation_search(query='error', start='2026-03-01', end='2026-03-15')"
     )
 

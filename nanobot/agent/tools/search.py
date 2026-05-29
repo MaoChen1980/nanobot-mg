@@ -142,15 +142,10 @@ class GlobTool(_SearchTool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 按文件名模式搜索文件。\n\n"
-            "**什么时候用**:\n"
-            "- 需要按 glob 模式匹配文件名来搜索文件时\n"
-            "- 默认最多返回 250 条（最多 1000）\n\n"
-            "**什么时候不用**:\n"
-            "- 需要搜索文件内容 → 用 grep\n"
-            "- 需要看目录所有文件 → 用 list_dir\n"
-            "- 自动跳过 .git / node_modules 等目录\n"
-            "- 不搜索文件内容"
+            "**Purpose**: Search for files matching a glob pattern by filename.\n\n"
+            "**When to use**:\n"
+            "- When you need to find files by glob pattern matching their filenames\n"
+            "- Default max 250 results (up to 1000)\n\n"
         )
 
     @property
@@ -169,7 +164,7 @@ class GlobTool(_SearchTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to a directory to search in (default: workspace root). Accepts relative paths that resolve against workspace.",
+                    "description": "Absolute path to a directory to search in (default: workspace root).",
                 },
                 "max_results": {
                     "type": "integer",
@@ -273,20 +268,15 @@ class GrepTool(_SearchTool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 用正则表达式搜索文件内容。\n\n"
-            "**输出格式 (output_mode)**:\n"
-            "- `content`:  PATH:LINENO 头 + \"> LINENO| 匹配行\" + \"  LINENO| 上下文行\"\n"
-            "  匹配行的 path 和 lineno 可直接传给 read_file 的 path 和 offset 参数\n"
-            "- `files_with_matches`（默认）: 每行一个绝对路径\n"
-            "- `count`:  path:匹配行数\n\n"
-            "**什么时候用**:\n"
-            "- 需要在文件内容中搜索匹配某个模式的行\n"
-            "- 支持正则表达式\n\n"
-            "**什么时候不用**:\n"
-            "- 需要按文件名搜 → 用 glob\n"
-            "- 需要读特定文件 → 用 read_file\n"
-            "- 跳过二进制文件和 >2 MB 的文件\n"
-            "- 默认最多返回 250 条结果"
+            "**Purpose**: Search file contents using a regex pattern.\n\n"
+            "**Output format (output_mode)**:\n"
+            "- `content`:  PATH:LINENO header + \"> LINENO| matched line\" + \"  LINENO| context line\"\n"
+            "  The matched line's path and lineno are directly usable as read_file path and offset params\n"
+            "- `files_with_matches` (default): one absolute path per line\n"
+            "- `count`:  path:match count\n\n"
+            "**When to use**:\n"
+            "- When you need to search file contents for lines matching a pattern\n"
+            "- Supports regular expressions\n\n"
         )
 
     @property
@@ -305,7 +295,7 @@ class GrepTool(_SearchTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to a file or directory to search in (default: workspace root). Accepts relative paths that resolve against workspace.",
+                    "description": "Absolute path to a file or directory to search in (default: workspace root).",
                 },
                 "glob": {
                     "type": "string",

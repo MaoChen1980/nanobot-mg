@@ -45,14 +45,10 @@ class SearchTextTool(Tool):
         self._allowed_dir = allowed_dir
 
     description = (
-        "**用途**: 在给定文本或文件中按语义搜索相关段落，不需要全文阅读。text 和 path 二选一传入。\n\n"
-        "**什么时候用**:\n"
-        "- 有一篇长文档，想知道哪些段落与某个自然语言查询相关\n"
-        "- text 和 path 二选一，搜索你传入的文本/文件\n\n"
-        "**什么时候不用**:\n"
-        "- 需要精确关键词匹配 → 用 grep\n"
-        "- 需要代码搜索 → 用 grep\n"
-        "- 搜索 memory/ 目录 → 用 memory_search\n"
+        "**Purpose**: Semantically search for relevant passages in a given text or file without reading the entire document. Pass either text or path (not both).\n\n"
+        "**When to use**:\n"
+        "- You have a long document and want to find which passages are semantically relevant to a natural language query\n"
+        "- Pass either text or path to search within the provided text/file\n\n"
     )
 
     async def execute(

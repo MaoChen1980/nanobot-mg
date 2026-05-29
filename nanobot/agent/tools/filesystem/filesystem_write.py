@@ -39,20 +39,16 @@ class WriteFileTool(_FsTool):
     name = "write_file"
 
     description = (
-        "**用途**: 创建新文件或整体覆写已有文件。\n\n"
-        "**什么时候用**:\n"
-        "- 需要创建新文件时\n"
-        "- 需要整体替换文件内容时\n"
-        "- 需要写文件后自动验证、类型检查或执行命令时\n\n"
-        "**后处理链**（按顺序执行）:\n"
-        "- `then_grep` — 写入后搜索指定字符串，验证写入成功，不重新读取整个文件\n"
-        "- `then_check` — 写入后运行类型检查（pyright/tsc），返回 pass/fail + 错误详情\n"
-        "- `then_exec` — 写入并验证后执行一条 shell 命令（工作目录为文件所在目录）\n"
-        "三者可组合使用，e.g. write → then_check → then_exec。\n\n"
-        "**什么时候不用**:\n"
-        "- 只需要修改文件中的部分内容 → 用 edit_file\n"
-        "- 只需要读取文件 → 用 read_file\n"
-        "- 需要移动/重命名文件 → 用 move_file\n"
+        "**Purpose**: Create a new file or fully overwrite an existing file.\n\n"
+        "**When to use**:\n"
+        "- When creating a new file\n"
+        "- When fully replacing file contents\n"
+        "- When auto-verification, type-checking, or command execution is needed after writing\n\n"
+        "**Post-processing chain** (executed in order):\n"
+        "- `then_grep` — Search for a string after writing to verify success without re-reading the whole file\n"
+        "- `then_check` — Run type-checking (pyright/tsc) after writing, returns pass/fail + error details\n"
+        "- `then_exec` — Execute a shell command after writing and verification (working directory is the file's parent)\n"
+        "All three can be combined, e.g. write → then_check → then_exec.\n\n"
     )
 
     async def execute(

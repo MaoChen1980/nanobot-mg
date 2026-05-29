@@ -158,6 +158,9 @@ class FeishuProxyChannel(BaseProxyChannel):
                             item["media"] = response.media
                         logger.info("Feishu enqueue response: {}:{}", chat_id[:20], response.content[:60] if response.content else "(media only)")
                         self._enqueue_send(item)
+                    elif response and not response.success and response.error:
+                        logger.error("Hub returned error for message {}: {}", message_id, response.error)
+                        self._send_plain_text(chat_id, response.error)
                     if response and response.success and response.metadata.get("done_emoji"):
                         self._add_reaction(message_id, response.metadata["done_emoji"])
                     elif response:

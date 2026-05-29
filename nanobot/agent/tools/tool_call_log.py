@@ -33,13 +33,10 @@ class ToolCallLogTool(Tool):
     name = "tool_call_log"
 
     description = (
-            "**用途**: 查询工具调用执行日志，用于调试失败的调用或追踪结果。\n\n"
-            "**什么时候用**:\n"
-            "- 需要调试某个工具调用为什么失败时\n"
-            "- 需要追踪之前工具调用的结果\n\n"
-            "**什么时候不用**:\n"
-            "- 需要搜索对话历史 → 用 conversation_search\n"
-            "- 需要查看当前运行状态 → 用 my"
+            "**Purpose**: Query tool call execution logs for debugging failed calls or tracking results.\n\n"
+            "**When to use**:\n"
+            "- You need to debug why a particular tool call failed\n"
+            "- You need to trace the result of a previous tool call\n\n"
         )
 
     read_only = True

@@ -30,14 +30,10 @@ class AskUserTool(Tool):
     name = "ask_user"
 
     description = (
-        "**用途**: 阻塞式提问 — 暂停执行直到用户回答。\n\n"
-        "**什么时候用**:\n"
-        "- 需要用户做决策或提供信息才能继续时\n"
-        "- options 提供建议选项，用户仍可自由输入\n\n"
-        "**什么时候不用**:\n"
-        "- 只是通知用户 → 用 message\n"
-        "- 可以合理推断默认值继续 → 不问，直接做\n"
-        "- options 只是建议，用户仍可自由输入"
+        "**Purpose**: Blocking question — pauses execution until the user responds.\n\n"
+        "**When to use**:\n"
+        "- When you need the user to make a decision or provide information to proceed\n"
+        "- `options` provides suggested choices, but the user can still type free-text\n\n"
     )
 
     exclusive = True

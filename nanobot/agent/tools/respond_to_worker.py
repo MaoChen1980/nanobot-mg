@@ -29,16 +29,16 @@ class RespondToWorkerTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 回复 Worker 的请求，解除其阻塞状态。\n\n"
-            "当 Worker 调用 request_orchestrator_input 后，用此工具回复。\n"
-            "Worker 收到回复后继续执行。\n\n"
-            "**什么时候用**:\n"
-            "- Worker 请求输入，需要你的决策\n"
-            "- Worker 报告 blocker，你有解决方案\n\n"
-            "**注意**: \n"
-            "- worker_id 使用 Worker 的 label（不是 task_id）\n"
-            "- 如果 Worker 已超时，回复会被忽略\n"
-            "- 回复要清晰、可执行，让 Worker 能直接继续"
+            "**Purpose**: Reply to a Worker's request, unblocking it.\n\n"
+            "After a Worker calls request_orchestrator_input, use this tool to respond.\n"
+            "The Worker resumes execution upon receiving your reply.\n\n"
+            "**When to use**:\n"
+            "- A Worker requests input and needs your decision\n"
+            "- A Worker reports a blocker and you have a solution\n\n"
+            "**Notes**:\n"
+            "- Use the Worker's label as worker_id (not task_id)\n"
+            "- If the Worker has timed out, the reply is ignored\n"
+            "- Make responses clear and actionable so the Worker can proceed directly"
         )
 
     async def execute(self, worker_id: str, response: str, **kwargs: Any) -> str:

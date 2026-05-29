@@ -108,17 +108,11 @@ class MyTool(Tool):
     @property
     def description(self) -> str:
         base = (
-            "**用途**: 查看和修改 agent loop 的运行时状态。\n\n"
-            "**什么时候用**:\n"
-            "- check（无 key）→ 显示完整配置概览\n"
-            "- check（有 key）→ 查看具体值，支持点路径（如 '_last_usage.prompt_tokens'）\n"
-            "- set（有 key, value）→ 修改配置或存储 scratchpad 笔记\n\n"
-            "**什么时候不用**:\n"
-            "- 需要持久化信息 → 用 write_file 写入 tasks/ 或 memory/\n"
-            "- 敏感字段（api_key, secret, token 等）不可访问\n"
-            "- scratchpad 最多 64 个 key，值必须是 JSON 安全类型\n"
-            "- 修改只读字段（web_config, exec_config）→ 拒绝\n"
-            "- 修改可能造成崩溃的字段（如 model）→ 先警告用户"
+            "**Purpose**: View and modify the agent loop's runtime state.\n\n"
+            "**When to use**:\n"
+            "- check (no key) → shows full configuration overview\n"
+            "- check (with key) → view a specific value, supports dot-path (e.g. '_last_usage.prompt_tokens')\n"
+            "- set (with key, value) → modify configuration or store scratchpad notes\n\n"
         )
         if not self._modify_allowed:
             base += "\nREAD-ONLY MODE: set is disabled."

@@ -52,31 +52,27 @@ class SpawnManyTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**用途**: 批量启动多个子任务并行执行。一次调用启动多个独立子任务，每个在后台独立运行。\n\n"
-            "## 工作机制\n\n"
-            "- 接受任务数组，每个任务独立 spawn\n"
-            "- 所有任务同时启动，互不依赖\n"
-            "- 每个任务完成后各自异步通知结果\n"
-            "- 可以用 check_subagent 或 list_subagents 查询进度\n\n"
-            "## 什么时候用\n\n"
-            "- 有多个独立、可并行的子任务需要处理\n"
-            "- 需要将一个大任务分解为多个独立步骤\n"
-            "- 需要同时对多个文件/模块做相同类型的分析\n\n"
-            "## 什么时候不用\n\n"
-            "- 任务之间有依赖关系 → 用 spawn 单独控制\n"
-            "- 只有一个子任务 → 直接用 spawn\n"
-            "- 需要同步结果 → 自己做，不要 spawn\n\n"
-            "## 限制\n\n"
-            "- 每个任务遵守 spawn 的相同限制\n"
-            "- 任务之间不能互相通信\n"
-            "- 结果到达顺序不确定\n\n"
-            "## 案例\n\n"
+            "**Purpose**: Batch launch multiple subtasks for parallel execution. Starts several independent subtasks in a single call, each running independently in the background.\n\n"
+            "## How It Works\n\n"
+            "- Accepts an array of tasks; each task is spawned independently\n"
+            "- All tasks start simultaneously with no interdependencies\n"
+            "- Each task notifies its result asynchronously upon completion\n"
+            "- You can check progress with `check_subagent` or `list_subagents`\n\n"
+            "## When to Use\n\n"
+            "- You have multiple independent, parallel subtasks to process\n"
+            "- You need to decompose a large task into multiple independent steps\n"
+            "- You need to run the same type of analysis across multiple files/modules simultaneously\n\n"
+            "## Limitations\n\n"
+            "- Each task follows the same restrictions as `spawn`\n"
+            "- Tasks cannot communicate with each other\n"
+            "- Result arrival order is non-deterministic\n\n"
+            "## Examples\n\n"
             "spawn_many(tasks=[\n"
-            '    {"task": "分析 module A 的结构", "label": "mod-a"},\n'
-            '    {"task": "分析 module B 的结构", "label": "mod-b"},\n'
-            '    {"task": "分析 module C 的结构", "label": "mod-c", "output_schema": \'{"type": "object", "properties": {"classes": {"type": "array"}}}\'},\n'
+            '    {"task": "Analyze the structure of module A", "label": "mod-a"},\n'
+            '    {"task": "Analyze the structure of module B", "label": "mod-b"},\n'
+            '    {"task": "Analyze the structure of module C", "label": "mod-c", "output_schema": \'{"type": "object", "properties": {"classes": {"type": "array"}}}\'},\n'
             "])\n"
-            "→ 三个子任务同时启动，各自完成后通知结果"
+            "→ All three subtasks start simultaneously; each notifies its result upon completion"
         )
 
     async def execute(self, tasks: list[dict], team_context: str | None = None, **kwargs: Any) -> str:

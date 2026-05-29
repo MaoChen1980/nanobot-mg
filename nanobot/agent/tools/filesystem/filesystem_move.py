@@ -18,15 +18,10 @@ class MoveFileTool(_FsTool):
 
     name = "move_file"
     description = (
-        "**用途**: 移动或重命名单个文件。\n\n"
-        "**什么时候用**:\n"
-        "- 需要将文件移动到另一个目录时\n"
-        "- 需要重命名文件时\n\n"
-        "**什么时候不用**:\n"
-        "- 需要复制文件 → 用 exec cp\n"
-        "- 需要移动/重命名目录 → 用 exec mv\n"
-        "- 需要修改文件内容 → 用 edit_file 或 write_file\n"
-        "- 需要删除文件 → 用 delete_file\n"
+        "**Purpose**: Move or rename a single file.\n\n"
+        "**When to use**:\n"
+        "- When moving a file to another directory\n"
+        "- When renaming a file\n\n"
     )
 
     _pre_validators = [PathExists("source"), PathType("source", "file"), PathNotExists("dest")]

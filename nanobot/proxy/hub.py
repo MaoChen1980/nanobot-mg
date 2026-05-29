@@ -186,6 +186,9 @@ class HubTCPServer:
         """
         peername = writer.get_extra_info("peername")
         logger.info("Proxy TCP connection from {}", peername)
+        # Raise readline limit from default 64KB to 1MB to prevent truncated
+        # reads on long messages (e.g. Feishu messages with large content).
+        reader._limit = 1024 * 1024
         self._setup_keepalive(writer.transport)
         # Use the shared per-proxy write lock so deliver_to_proxy and
         # register/error writes are serialized through the same lock.
@@ -207,7 +210,14 @@ class HubTCPServer:
 
         try:
             while True:
-                line_bytes = await reader.readline()
+                try:
+                    line_bytes = await reader.readline()
+                except ValueError:
+                    logger.warning(
+                        "Oversized message from proxy {} (exceeds 1MB limit), disconnecting",
+                        peername,
+                    )
+                    break
                 if not line_bytes:
                     break  # EOF — connection closed
 

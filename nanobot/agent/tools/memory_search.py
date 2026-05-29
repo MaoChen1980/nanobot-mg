@@ -46,23 +46,23 @@ class MemorySearchTool(Tool):
     read_only = True
 
     description = (
-        "**用途**: 从持久化知识库（memory/ 目录）中按语义搜索相关记忆。\n\n"
-        "**什么时候用**:\n"
-        '- 用户说「以前遇到过」「上次学过」「之前做过类似的东西」\n'
-        "- 需要回顾积累的知识、经验、决策\n"
-        "- 想找与此相关的历史记录\n\n"
-        "**和 search_text 的区别**:\n"
-        "- search_text 搜索你传入的单段文本/单个文件\n"
-        "- memory_search 搜索整个 memory/ 知识库（FAISS 向量索引）\n\n"
-        "**和 conversation_search 的区别**:\n"
-        "- conversation_search 搜索对话历史（关键词匹配 + 时间过滤）\n"
-        "- memory_search 搜索知识库（语义相似度匹配）\n\n"
-        "**注意**:\n"
-        "- 知识库新增/修改的内容最长 2 小时后才会出现在索引中\n"
-        "- 这是语义模糊匹配，可能漏掉特定术语 — 需要精确关键词用 grep\n\n"
-        "**示例**:\n"
+        "**Purpose**: Search the persistent knowledge base (memory/ directory) by semantic similarity.\n\n"
+        "**When to use**:\n"
+        '- The user says "we encountered this before", "we learned this last time", "we did something similar"\n'
+        "- You need to recall accumulated knowledge, experience, or decisions\n"
+        "- You want to find historical records related to the current topic\n\n"
+        "**Difference from search_text**:\n"
+        "- search_text searches the single text snippet or file you pass in\n"
+        "- memory_search searches the entire memory/ knowledge base (FAISS vector index)\n\n"
+        "**Difference from conversation_search**:\n"
+        "- conversation_search searches conversation history (keyword match + time filter)\n"
+        "- memory_search searches the knowledge base (semantic similarity match)\n\n"
+        "**Note**:\n"
+        "- New or modified knowledge takes up to 2 hours to appear in the index\n"
+        "- This is fuzzy semantic matching — may miss specific terms. Use grep for exact keywords.\n\n"
+        "**Examples**:\n"
         "  memory_search(query='memory consolidation', k=5)\n"
-        "  memory_search(query='部署最佳实践')"
+        "  memory_search(query='deployment best practices')"
     )
 
     async def execute(self, query: str, k: int = 5, **kwargs: Any) -> str:

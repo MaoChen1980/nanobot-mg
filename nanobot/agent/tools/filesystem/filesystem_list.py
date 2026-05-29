@@ -32,19 +32,14 @@ class ListDirTool(_FsTool):
     name = "list_dir"
 
     description = (
-        "**用途**: 列出目录内容，支持递归。\n\n"
-        "**输出格式**:\n"
-        "- 每行一个绝对路径\n"
-        "- 目录路径以 / 结尾（便于区分文件和目录）\n"
-        "- 递归模式输出所有子条目\n\n"
-        "**什么时候用**:\n"
-        "- 需要查看目录中有哪些文件和子目录时\n"
-        "- 需要递归探索项目结构时\n\n"
-        "**什么时候不用**:\n"
-        "- 需要按模式匹配文件名 → 用 glob 或 file_search\n"
-        "- 需要搜索文件内容 → 用 grep\n"
-        "- 需要读取文件内容 → 用 read_file\n"
-        "- 需要单个文件状态（是否存在/类型）→ 用 stat\n"
+        "**Purpose**: List directory contents. Supports recursive traversal.\n\n"
+        "**Output Format**:\n"
+        "- One absolute path per line\n"
+        "- Directory paths end with / (to distinguish files from directories)\n"
+        "- Recursive mode outputs all sub-entries\n\n"
+        "**When to use**:\n"
+        "- When exploring which files and subdirectories exist in a directory\n"
+        "- When recursively exploring a project's structure\n\n"
     )
 
     read_only = True

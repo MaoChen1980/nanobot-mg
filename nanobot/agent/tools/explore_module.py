@@ -75,16 +75,13 @@ class ExploreModuleTool(_FsTool):
     read_only = True
 
     description = (
-        "**用途**: 获取代码文件或目录的结构化概览（函数/类定义、签名、行号）。\n\n"
-        "**输出格式**:\n"
-        "- 函数和类定义附带 1-indexed 行号（可直接传给 read_file 的 offset 参数）\n"
-        "- Python 用 AST 解析（精确），其他语言用正则（可能不完整）\n"
-        "- 末尾附带 Tip: read_file 命令，可直接复制使用\n\n"
-        "**什么时候用**:\n"
-        "- 想快速了解一个文件或目录有哪些类和函数及其定义位置\n\n"
-        "**什么时候不用**:\n"
-        "- 需要完整文件内容 → 用 read_file\n"
-        "- 只需要搜索关键词 → 用 grep"
+        "**Purpose**: Get a structured overview of a code file or directory (function/class definitions, signatures, line numbers).\n\n"
+        "**Output format**:\n"
+        "- Function and class definitions with 1-indexed line numbers (directly usable as read_file offset param)\n"
+        "- Python uses AST parsing (precise), other languages use regex (may be incomplete)\n"
+        "- Appends a read_file tip command ready to copy-paste\n\n"
+        "**When to use**:\n"
+        "- When you want a quick overview of what classes and functions exist in a file or directory and where they are defined\n\n"
     )
 
     async def execute(

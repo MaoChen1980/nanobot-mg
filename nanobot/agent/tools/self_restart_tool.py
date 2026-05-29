@@ -21,7 +21,7 @@ class SelfRestartTool(Tool):
     """Restart nanobot framework."""
 
     name = "self_restart"
-    description = "LLM 重新启动 nanobot 框架自身所用。无参数。"
+    description = "Restart the nanobot framework. No parameters."
 
     async def execute(self, **kwargs: Any) -> str:
         try:
