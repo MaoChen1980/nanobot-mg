@@ -17,8 +17,6 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 
 DEFAULT_YIELD_MS = 1000
 MAX_YIELD_MS = 30_000
-DEFAULT_WAIT_FOR_MS = 10_000
-MAX_WAIT_FOR_MS = 120_000
 DEFAULT_MAX_OUTPUT_CHARS = 10_000
 MAX_OUTPUT_CHARS = 32_000
 MAX_STDIN_CHARS = 500_000
@@ -53,11 +51,6 @@ class ExecSessionInfo:
 _IS_WINDOWS = os.name == "nt"
 
 
-def _match_any_case(needle: str, haystack: str) -> bool:
-    """Case-insensitive substring match."""
-    return needle.lower() in haystack.lower()
-
-
 class _ExecSession:
     def __init__(
         self,
@@ -81,7 +74,6 @@ class _ExecSession:
         self._chunks: list[str] = []
         self._lock = asyncio.Lock()
         self._timed_out = False
-        self._output_window: str = ""  # rolling window, preserves output across polls
         self._pty_master: int | None = None
         if master_fd is not None:
             os.set_blocking(master_fd, False)
@@ -193,10 +185,6 @@ class _ExecSession:
         async with self._lock:
             raw = "".join(self._chunks)
             self._chunks.clear()
-            if raw:
-                self._output_window += raw
-                if len(self._output_window) > MAX_BUFFERED_CHARS:
-                    self._output_window = self._output_window[-MAX_BUFFERED_CHARS:]
 
         output, truncated = _truncate_output(raw, max_output_chars)
         return _SessionPoll(
@@ -428,8 +416,6 @@ def format_session_poll(session_id: str, poll: _SessionPoll) -> str:
     close_stdin=p("boolean", "Close stdin after writing chars. Useful for commands waiting for EOF.", default=False),
     terminate=p("boolean", "Terminate the running exec session.", default=False),
     yield_time_ms=p("integer", "Milliseconds to wait before returning recent output (default 1000, max 30000).", minimum=0, maximum=MAX_YIELD_MS),
-    wait_for=p("string", "Optional text to wait for in output before returning. Useful for interactive commands and dev servers.", nullable=True),
-    wait_timeout_ms=p("integer", "Maximum milliseconds to wait for wait_for text (default 10000, max 120000).", minimum=0, maximum=MAX_WAIT_FOR_MS, nullable=True),
     max_output_chars=p("integer", "Maximum output characters to return from this poll (default 10000, max 32000).", minimum=1000, maximum=MAX_OUTPUT_CHARS),
     max_output_tokens=p("integer", "Compatibility alias for max_output_chars. The current runtime uses a character budget.", minimum=1000, maximum=MAX_OUTPUT_CHARS, nullable=True),
     required=["session_id"],
@@ -440,24 +426,19 @@ class WriteStdinTool(Tool):
     name = "write_stdin"
 
     description = (
-        "**Purpose**: Send stdin, poll output, and handle interactive prompts for a running exec session.\n\n"
+        "**Purpose**: Send stdin to or poll output of a running exec session.\n\n"
         "**When to use**:\n"
         "- Send input to a running command (passwords, yes/no responses, etc.)\n"
-        "- Poll and wait for command output\n"
-        "- Handle interactive prompts (SSH host key confirmation, passwords, sudo, etc.)\n"
-        "- Wait for specific text to appear (wait_for)\n"
-        "- Terminate a long-running exec session\n\n"
+        "- Poll for recent output\n"
+        "- Close stdin (send EOF) or terminate a long-running session\n\n"
         "**Usage**:\n"
         "- chars='' or omit → poll output only, no stdin write\n"
         "- chars='text\\n' → send text to stdin\n"
         "- close_stdin=true → close stdin (send EOF)\n"
-        "- terminate=true → kill the process\n"
-        "- wait_for='text' → wait for specific text in output (e.g., password prompt)\n\n"
-        "**SSH example**:\n"
-        "1. exec ssh user@host yield_time_ms=2000 → see host key prompt\n"
-        "2. write_stdin session_id=xxx wait_for='continue connecting' chars='yes\\n'\n"
-        "3. see password prompt → write_stdin wait_for='assword:' chars='mypassword\\n'\n"
-        "4. logged in, send commands"
+        "- terminate=true → kill the process\n\n"
+        "**Interactive prompts**: Just write chars and the process receives them. "
+        "Check the returned output to see what the process responded with. "
+        "If the expected prompt text is not in the output yet, call write_stdin again with yield_time_ms to wait for more output."
     )
 
     exclusive = True
@@ -487,8 +468,6 @@ class WriteStdinTool(Tool):
         close_stdin: bool = False,
         terminate: bool = False,
         yield_time_ms: int | None = None,
-        wait_for: str | None = None,
-        wait_timeout_ms: int | None = None,
         max_output_chars: int | None = None,
         max_output_tokens: int | None = None,
         **kwargs: Any,
@@ -504,21 +483,6 @@ class WriteStdinTool(Tool):
                 1000,
                 MAX_OUTPUT_CHARS,
             )
-            if wait_for:
-                return await self._wait_for_output(
-                    session_id=session_id,
-                    chars=chars,
-                    close_stdin=close_stdin,
-                    terminate=terminate,
-                    wait_for=wait_for,
-                    wait_timeout_ms=clamp_session_int(
-                        wait_timeout_ms,
-                        DEFAULT_WAIT_FOR_MS,
-                        0,
-                        MAX_WAIT_FOR_MS,
-                    ),
-                    max_output_chars=output_limit,
-                )
             poll = await self._manager.write(
                 session_id=session_id,
                 chars=chars,
@@ -537,58 +501,6 @@ class WriteStdinTool(Tool):
         except Exception as exc:
             return f"Error writing to exec session: {exc}"
 
-    async def _wait_for_output(
-        self,
-        *,
-        session_id: str,
-        chars: str | None,
-        close_stdin: bool,
-        terminate: bool,
-        wait_for: str,
-        wait_timeout_ms: int,
-        max_output_chars: int,
-    ) -> str:
-        # First: poll without sending chars to check accumulated output.
-        # This captures output that arrived since the last tool call and
-        # saves it to the session's _output_window (which persists across
-        # polls), so wait_for can match text that was already output.
-        poll = await self._manager.write(
-            session_id=session_id,
-            chars=None, close_stdin=False, terminate=False,
-            yield_time_ms=0, max_output_chars=max_output_chars,
-        )
-        session = self._manager._sessions.get(session_id)
-        if session and session._output_window and _match_any_case(wait_for, session._output_window):
-            return format_session_poll(session_id, poll)
-
-        # Wait target not in history — send chars and poll until found.
-        deadline = time.monotonic() + (wait_timeout_ms / 1000)
-        aggregate = [poll.output] if poll.output else []
-        while True:
-            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
-            step_ms = min(500, remaining_ms)
-            poll = await self._manager.write(
-                session_id=session_id,
-                chars=chars,
-                close_stdin=False, terminate=False,
-                yield_time_ms=step_ms,
-                max_output_chars=max_output_chars,
-            )
-            if poll.output:
-                aggregate.append(poll.output)
-                joined = "".join(aggregate)
-                if _match_any_case(wait_for, joined):
-                    poll.output = joined
-                    return format_session_poll(session_id, poll)
-            if poll.done or remaining_ms <= 0:
-                poll.output = "".join(aggregate)
-                # Also check once more against output_window (includes history)
-                if session and session._output_window and _match_any_case(wait_for, session._output_window):
-                    return format_session_poll(session_id, poll)
-                result = format_session_poll(session_id, poll)
-                if not _match_any_case(wait_for, poll.output):
-                    result += f"\nWait target not observed: {wait_for!r}"
-                return result
 
 
 @tool_parameters(build_parameters_schema())
