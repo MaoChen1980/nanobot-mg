@@ -210,6 +210,8 @@ class ContextBuilder:
     def _get_identity(self, channel: str | None = None, include_vector_search: bool = True) -> str:
         """Get the core identity section."""
         workspace_path = self.workspace.expanduser().resolve().as_posix()
+        from nanobot.config.paths import get_data_dir
+        data_dir = get_data_dir().as_posix()
         system = platform.system()
 
         os_platform = "macOS" if system == "Darwin" else ("Windows" if system == "Windows" else "Linux")
@@ -218,6 +220,7 @@ class ContextBuilder:
 
         kwargs: dict[str, object] = dict(
             workspace_path=workspace_path,
+            data_dir=data_dir,
             os_platform=os_platform,
             os_version=platform.release(),
             arch=arch,

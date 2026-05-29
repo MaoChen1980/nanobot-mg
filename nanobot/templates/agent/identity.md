@@ -4,6 +4,7 @@
 **OS:** `{{ os_platform }} {{ os_version }} {{ arch }}, Python {{ python_version }}`
 **Workspace:** `{{ workspace_path }}`
 > Your working directory. Contains `SOUL.md` (identity), `USER.md` (preferences), `TOOLS.md` (CLI assets), `memory/` (long-term memory), `tasks/` (task tree), `skills/` (extensions), and `framework/` (workflows & rules).
+**Data:** `{{ data_dir }}` — runtime data, including logs under `logs/`
 {% if model %}**Model:** `{{ model }}`{% endif %}
 {% if provider %}**Provider:** `{{ provider }}`{% endif %}
 **Context Window:** `{{ context_window_tokens }}` tokens
