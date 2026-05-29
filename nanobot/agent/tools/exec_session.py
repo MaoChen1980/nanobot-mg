@@ -126,6 +126,8 @@ class _ExecSession:
                     if current + len(text) > MAX_BUFFERED_CHARS:
                         text = text[: MAX_BUFFERED_CHARS - current]
                     self._chunks.append(text)
+            except BlockingIOError:
+                await asyncio.sleep(0.05)
             except OSError:
                 break
 
