@@ -275,6 +275,8 @@ Skills in `workspace/skills/{name}/SKILL.md`. `always: true` skills are in every
 
 **创建 skill 必须走 skill-manager（`nanobot/skills/skill-manager/scripts/`），不要手动写 SKILL.md。** 先用 exec 查看对应脚本的 docstring 了解用法。
 
+**设计原则：能力尽量包装为 skill，而不是新增工具。** Skill 对 LLM 更友好——SKILL.md 可以用自然语言写步骤、边界情况、注意事项，比结构化工具定义更灵活。只有需要严格输入输出约束或由框架内部调用的能力，才考虑做成工具。
+
 ---
 
 ### Cron
