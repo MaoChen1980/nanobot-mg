@@ -1,6 +1,6 @@
 # Project Card: nanobot
 
-Last scanned: 2026-05-27T12:29:33+0800
+Last scanned: 2026-05-29T00:49:34+0800
 Project root: `E:\claude\nanobot`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~66,918
+- **Approx LOC**: ~66,258
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 305 | ~66,918 |
+| Python | 303 | ~66,258 |
 
 ## Directory Structure
 
@@ -108,7 +108,6 @@ E:\claude\nanobot/
     nanobot_arch.png (490KB)
     nanobot_logo.png (187KB)
     nanobot_webui.png (295KB)
-  memory/
   nanobot/
     agent/
       commands/
@@ -146,7 +145,7 @@ E:\claude\nanobot/
         schema.py (2KB)
         search.py (27KB)
         self.py (20KB)
-        self_restart_tool.py (4KB)
+        self_restart_tool.py (1KB)
         semantic_search.py (4KB)
         shell_validators.py (5KB)
         spawn.py (8KB)
@@ -157,28 +156,28 @@ E:\claude\nanobot/
       __init__.py (584B)
       context.py (25KB)
       context_vars.py (1KB)
-      db.py (16KB)
+      db.py (17KB)
       hook.py (6KB)
-      loop.py (55KB)
+      loop.py (59KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (199B)
-      loop_dispatch.py (6KB)
+      loop_dispatch.py (7KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (22KB)
+      loop_message_handlers.py (24KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (27KB)
+      memory_extractor.py (25KB)
       memory_store.py (10KB)
       memory_vector.py (11KB)
       project_scanner.py (21KB)
-      runner.py (28KB)
+      runner.py (27KB)
       runner_constants.py (1KB)
       runner_context.py (7KB)
       runner_execution.py (7KB)
       runner_injection.py (5KB)
       runner_llm.py (5KB)
-      skills.py (11KB)
+      skills.py (12KB)
       subagent.py (19KB)
       subagent_prompt.py (7KB)
       subagent_status.py (2KB)
@@ -269,7 +268,7 @@ dependencies = [
     "ddgs>=9.10.0,<10.0.0; python_version >= '3.10'",
     "ddgs>=9.5.5,<9.10.0; python_version < '3.10'",
     "oauth-cli-kit>=0.1.3,<1.0.0; python_version >= '3.11'",
-... (133 more lines)
+... (137 more lines)
 ```
 
 ### .editorconfig
