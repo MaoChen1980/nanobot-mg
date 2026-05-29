@@ -576,11 +576,12 @@ class AgentLoop:
                 if media:
                     content, media = separate_and_extract_media(content, media)
                     media = media or None
+                from nanobot.utils.helpers import current_time_str
+                runtime_lines = [f"Current Time: {current_time_str(self.context.timezone)}"]
+                if pending_msg.channel:
+                    runtime_lines.append(f"Channel: {pending_msg.channel}")
+                runtime_ctx = "\n".join(runtime_lines)
                 user_content = self.context._build_user_content(content, media)
-                runtime_ctx = self.context._build_runtime_context(
-                    channel=pending_msg.channel,
-                    timezone=self.context.timezone,
-                )
                 if runtime_ctx:
                     if isinstance(user_content, str):
                         user_content = f"{runtime_ctx}\n\n{user_content}"
