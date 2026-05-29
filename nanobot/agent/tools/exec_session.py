@@ -71,6 +71,7 @@ class _ExecSession:
         self._chunks: list[str] = []
         self._lock = asyncio.Lock()
         self._timed_out = False
+        self._output_window: str = ""  # rolling window, preserves output across polls
         self._stdout_task = asyncio.create_task(self._read_stream(process.stdout, ""))
         self._stderr_task = asyncio.create_task(self._read_stream(process.stderr, "STDERR:\n"))
 
@@ -146,6 +147,10 @@ class _ExecSession:
         async with self._lock:
             raw = "".join(self._chunks)
             self._chunks.clear()
+            if raw:
+                self._output_window += raw
+                if len(self._output_window) > MAX_BUFFERED_CHARS:
+                    self._output_window = self._output_window[-MAX_BUFFERED_CHARS:]
 
         output, truncated = _truncate_output(raw, max_output_chars)
         return _SessionPoll(
@@ -470,23 +475,32 @@ class WriteStdinTool(Tool):
         wait_timeout_ms: int,
         max_output_chars: int,
     ) -> str:
-        deadline = time.monotonic() + (wait_timeout_ms / 1000)
-        aggregate: list[str] = []
-        first = True
-        poll: _SessionPoll | None = None
+        # First: poll without sending chars to check accumulated output.
+        # This captures output that arrived since the last tool call and
+        # saves it to the session's _output_window (which persists across
+        # polls), so wait_for can match text that was already output.
+        poll = await self._manager.write(
+            session_id=session_id,
+            chars=None, close_stdin=False, terminate=False,
+            yield_time_ms=0, max_output_chars=max_output_chars,
+        )
+        session = self._manager._sessions.get(session_id)
+        if session and session._output_window and wait_for in session._output_window:
+            return format_session_poll(session_id, poll)
 
+        # Wait target not in history — send chars and poll until found.
+        deadline = time.monotonic() + (wait_timeout_ms / 1000)
+        aggregate = [poll.output] if poll.output else []
         while True:
             remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
             step_ms = min(500, remaining_ms)
             poll = await self._manager.write(
                 session_id=session_id,
-                chars=chars if first else None,
-                close_stdin=close_stdin if first else False,
-                terminate=terminate if first else False,
+                chars=chars,
+                close_stdin=False, terminate=False,
                 yield_time_ms=step_ms,
                 max_output_chars=max_output_chars,
             )
-            first = False
             if poll.output:
                 aggregate.append(poll.output)
                 joined = "".join(aggregate)
@@ -495,6 +509,9 @@ class WriteStdinTool(Tool):
                     return format_session_poll(session_id, poll)
             if poll.done or remaining_ms <= 0:
                 poll.output = "".join(aggregate)
+                # Also check once more against output_window (includes history)
+                if session and session._output_window and wait_for in session._output_window:
+                    return format_session_poll(session_id, poll)
                 result = format_session_poll(session_id, poll)
                 if wait_for not in poll.output:
                     result += f"\nWait target not observed: {wait_for!r}"
