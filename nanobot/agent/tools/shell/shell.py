@@ -145,6 +145,12 @@ def _extract_powershell_inner(command: str) -> str | None:
             "uses a character budget.",
             minimum=1000, maximum=MAX_OUTPUT_CHARS,
         ),
+        use_pty=p("boolean",
+            "Use a PTY (pseudo-terminal) instead of PIPE for the subprocess. "
+            "Required for interactive commands like SSH. "
+            "Only supported on Linux/macOS — ignored on Windows.",
+            default=False,
+        ),
         required=[],
     )
 )
@@ -242,6 +248,7 @@ class ExecTool(Tool):
         verify: str | None = None, check: str | None = None,
         yield_time_ms: int | None = None, max_output_chars: int | None = None,
         max_output_tokens: int | None = None,
+        use_pty: bool = False,
         **kwargs: Any,
     ) -> str:
         # ── Tool suggestion nudge ──
@@ -326,6 +333,7 @@ class ExecTool(Tool):
                     max_output_chars=clamp_session_int(
                         max_output_chars, DEFAULT_MAX_OUTPUT_CHARS, 1000, MAX_OUTPUT_CHARS,
                     ),
+                    use_pty=use_pty,
                 )
                 return format_session_poll(session_id, poll)
             except Exception as exc:

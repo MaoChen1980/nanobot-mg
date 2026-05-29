@@ -6,6 +6,7 @@ import asyncio
 import os
 import time
 import uuid
+import shutil
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +50,9 @@ class ExecSessionInfo:
     owner_session_key: str | None = None
 
 
+_IS_WINDOWS = os.name == "nt"
+
+
 class _ExecSession:
     def __init__(
         self,
@@ -59,6 +63,7 @@ class _ExecSession:
         cwd: str,
         timeout: int | None,
         owner_session_key: str | None = None,
+        master_fd: int | None = None,
     ) -> None:
         self.session_id = session_id
         self.process = process
@@ -72,8 +77,17 @@ class _ExecSession:
         self._lock = asyncio.Lock()
         self._timed_out = False
         self._output_window: str = ""  # rolling window, preserves output across polls
-        self._stdout_task = asyncio.create_task(self._read_stream(process.stdout, ""))
-        self._stderr_task = asyncio.create_task(self._read_stream(process.stderr, "STDERR:\n"))
+        self._pty_master: int | None = None
+        if master_fd is not None:
+            os.set_blocking(master_fd, False)
+            self._pty_master = master_fd
+            self._pty_task = asyncio.create_task(self._read_pty())
+            self._stdout_task: asyncio.Task | None = None
+            self._stderr_task: asyncio.Task | None = None
+        else:
+            self._pty_task: asyncio.Task | None = None
+            self._stdout_task = asyncio.create_task(self._read_stream(process.stdout, ""))
+            self._stderr_task = asyncio.create_task(self._read_stream(process.stderr, "STDERR:\n"))
 
     async def _read_stream(
         self,
@@ -99,9 +113,31 @@ class _ExecSession:
                     text = text[: MAX_BUFFERED_CHARS - current]
                 self._chunks.append(text)
 
+    async def _read_pty(self) -> None:
+        """Read from PTY master fd in executor thread."""
+        loop = asyncio.get_event_loop()
+        while self._pty_master is not None:
+            try:
+                chunk = await loop.run_in_executor(None, os.read, self._pty_master, 65536)
+                if not chunk:
+                    break
+                text = chunk.decode("utf-8", errors="replace")
+                async with self._lock:
+                    current = sum(len(c) for c in self._chunks)
+                    if current >= MAX_BUFFERED_CHARS:
+                        continue
+                    if current + len(text) > MAX_BUFFERED_CHARS:
+                        text = text[: MAX_BUFFERED_CHARS - current]
+                    self._chunks.append(text)
+            except OSError:
+                break
+
     async def write(self, chars: str) -> str | None:
         if self.process.returncode is not None:
             return "session has already exited"
+        if self._pty_master is not None:
+            os.write(self._pty_master, chars.encode("utf-8"))
+            return None
         if self.process.stdin is None:
             return "session stdin is not available"
         try:
@@ -112,6 +148,8 @@ class _ExecSession:
         return None
 
     async def close_stdin(self) -> str | None:
+        if self._pty_master is not None:
+            return None  # PTY has no stdin to close; close pty to signal EOF
         if self.process.returncode is not None:
             return "session has already exited"
         if self.process.stdin is None:
@@ -139,10 +177,13 @@ class _ExecSession:
 
         if self.process.returncode is not None:
             with suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(
-                    asyncio.gather(self._stdout_task, self._stderr_task),
-                    timeout=2.0,
-                )
+                if self._pty_task is not None:
+                    await asyncio.wait_for(self._pty_task, timeout=2.0)
+                else:
+                    await asyncio.wait_for(
+                        asyncio.gather(self._stdout_task, self._stderr_task),
+                        timeout=2.0,
+                    )
 
         async with self._lock:
             raw = "".join(self._chunks)
@@ -166,6 +207,12 @@ class _ExecSession:
         )
 
     async def kill(self) -> None:
+        if self._pty_master is not None:
+            try:
+                os.close(self._pty_master)
+            except OSError:
+                pass
+            self._pty_master = None
         if self.process.returncode is not None:
             return
         self.process.kill()
@@ -192,12 +239,13 @@ class ExecSessionManager:
         yield_time_ms: int,
         max_output_chars: int,
         owner_session_key: str | None = None,
+        use_pty: bool = False,
     ) -> tuple[str, _SessionPoll]:
         async with self._lock:
             await self._cleanup_locked()
             if len(self._sessions) >= self.max_sessions:
                 raise RuntimeError(f"maximum exec sessions reached ({self.max_sessions})")
-            process = await self._spawn(command, cwd, env, shell_program, login)
+            process, master_fd = await self._spawn(command, cwd, env, shell_program, login, use_pty=use_pty)
             session_id = uuid.uuid4().hex[:12]
             session = _ExecSession(
                 session_id=session_id,
@@ -206,6 +254,7 @@ class ExecSessionManager:
                 cwd=cwd,
                 timeout=timeout,
                 owner_session_key=owner_session_key,
+                master_fd=master_fd,
             )
             self._sessions[session_id] = session
 
@@ -300,13 +349,32 @@ class ExecSessionManager:
         env: dict[str, str],
         shell_program: str | None,
         login: bool,
-    ) -> asyncio.subprocess.Process:
+        *,
+        use_pty: bool = False,
+    ) -> tuple[asyncio.subprocess.Process, int | None]:
+        if use_pty and not _IS_WINDOWS:
+            import pty
+            shell = shell_program or shutil.which("bash") or "/bin/bash"
+            args = [shell]
+            if login:
+                args.append("-l")
+            args.extend(["-c", command])
+            master_fd, slave_fd = pty.openpty()
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+                cwd=cwd, env=env,
+            )
+            os.close(slave_fd)
+            return proc, master_fd
+
         from nanobot.agent.tools.shell import ExecTool
 
-        return await ExecTool._spawn(
+        proc = await ExecTool._spawn(
             command, cwd, env, shell_program, login,
             stdin=asyncio.subprocess.PIPE,
         )
+        return proc, None
 
 
 DEFAULT_EXEC_SESSION_MANAGER = ExecSessionManager()
