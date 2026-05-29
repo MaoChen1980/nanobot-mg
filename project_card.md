@@ -1,7 +1,7 @@
-# Project Card: nanobot
+# Project Card: nanobot-mg
 
-Last scanned: 2026-05-29T00:49:34+0800
-Project root: `E:\claude\nanobot`
+Last scanned: 2026-05-30T01:37:04+0800
+Project root: `E:\claude\nanobot-mg`
 
 ## Overview
 
@@ -11,17 +11,17 @@ Project root: `E:\claude\nanobot`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~66,258
+- **Approx LOC**: ~66,144
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 303 | ~66,258 |
+| Python | 303 | ~66,144 |
 
 ## Directory Structure
 
-E:\claude\nanobot/
+E:\claude\nanobot-mg/
   bridge/
     src/
       index.ts (1KB)
@@ -108,6 +108,7 @@ E:\claude\nanobot/
     nanobot_arch.png (490KB)
     nanobot_logo.png (187KB)
     nanobot_webui.png (295KB)
+  memory/
   nanobot/
     agent/
       commands/
@@ -154,11 +155,11 @@ E:\claude\nanobot/
         web.py (23KB)
       verify/
       __init__.py (584B)
-      context.py (25KB)
-      context_vars.py (1KB)
+      context.py (26KB)
+      context_vars.py (981B)
       db.py (17KB)
       hook.py (6KB)
-      loop.py (59KB)
+      loop.py (56KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (199B)
       loop_dispatch.py (7KB)
@@ -172,14 +173,14 @@ E:\claude\nanobot/
       memory_vector.py (11KB)
       project_scanner.py (21KB)
       runner.py (27KB)
-      runner_constants.py (1KB)
+      runner_constants.py (516B)
       runner_context.py (7KB)
       runner_execution.py (7KB)
       runner_injection.py (5KB)
       runner_llm.py (5KB)
       skills.py (12KB)
       subagent.py (19KB)
-      subagent_prompt.py (7KB)
+      subagent_prompt.py (8KB)
       subagent_status.py (2KB)
       subagent_tools.py (4KB)
     api/
