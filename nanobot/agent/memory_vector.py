@@ -135,7 +135,7 @@ class MemoryVectorIndex:
         self._index = None
 
         if not self._load_model():
-            logger.info("Vector search unavailable (sentence-transformers not installed)")
+            logger.warning("Vector search disabled — pip install sentence-transformers to enable semantic memory retrieval")
             return
 
         chunks: list[dict[str, Any]] = []
@@ -316,7 +316,7 @@ class MemoryVectorIndex:
 
                 self._index = faiss.read_index(str(index_path))
             except Exception:
-                logger.warning("Failed to load FAISS index")
+                logger.warning("Failed to load FAISS index at {} — will rebuild", index_path)
                 self._index = None
 
         # Check dimension when model is already loaded (e.g. restart without rebuild)
