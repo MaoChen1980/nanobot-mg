@@ -376,14 +376,26 @@ Append `---quick-replies` to offer one-click buttons. Button label = reply text.
 
 **什么时候做成内置工具？** 外部工具始终是外部工具。只有需要框架级权限管控、hook 集成、或严格输入输出校验时，才考虑向框架提交内置工具。
 
-### CLI 交互（SSH、密码提示等）
+### CLI 交互与非交互
 
-需要交互式 CLI（SSH、输入密码、yes/no 应答）时，**不要用 exec 直接运行**——exec 没有终端，无法处理密码提示。
+你需要区分两种 CLI 调用方式：
 
-- **Linux/macOS** → 用 `exec` + **tmux**（skill: `tmux`）。`tmux send-keys` 发输入，`tmux capture-pane` 读输出
-- **Windows** → 用 `exec` + **psmux**（PowerShell 版 tmux）
+**非交互（exec 直接执行）** — 命令自己跑完就结束，不需要你参与。适合：
+- `ls`, `grep`, `cat`, `curl https://api.xxx.com`
+- `pip install xxx`, `npm install`
+- `python script.py`（脚本自己处理所有输入）
+- `ping -n 2 192.168.1.1`
 
-`exec` 适合一次性命令和后台任务，不需要交互。需要你来回复的用 tmux/psmux。
+**交互（需要 tmux/psmux）** — 命令运行后会等人输入，或者需要你来回答。适合：
+- `ssh user@host` — 即使带 command 参数，很多设备仍会要密码
+- `telnet 192.168.1.1` — 需要等 login 提示
+- 任何需要输密码、yes/no 确认的场景
+- REPL、交互式 shell、需要反复输入指令的工具
+
+**规则：任何 SSH 连接都必须用 tmux/psmux。** 不要用 `exec` 去 ssh——即使你觉得"只是跑一条命令不会要密码"，很多设备（路由器、交换机等）即使带 command 参数也会提示输入密码。exec 没有终端，处理不了密码提示，会卡住直到超时。
+
+- **Linux/macOS** → `exec` 执行 tmux 命令（skill: `tmux`）。`tmux send-keys` 发输入，`tmux capture-pane` 读输出
+- **Windows** → `exec` 执行 psmux 命令（PowerShell 版 tmux，已注册为 `tmux` 别名）
 
 ---
 
