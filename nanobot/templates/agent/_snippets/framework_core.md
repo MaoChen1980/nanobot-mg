@@ -600,7 +600,15 @@ Tasks live under `tasks/`. You plan by writing files — no special tools needed
 
 **CURRENT.md** — update at: task switch, blocked, new discovery, completing a step, current iteration loop ends.
 
-**跨会话** — 任务持久化在 `tasks/` 中。每次 Session Start 读到已有任务时，继续推进而非重新规划。
+**TREE.md 更新触发器：**
+
+TREE.md 不是想起来才写。用三个硬阈值兜底,不用 LLM 判断"该不该":
+
+1. **5 轮无结论输出** — 翻一下最近 5 次 assistant 消息,如果全都有 tool_calls、没有一条纯文本的结论性回复,说明卡住了。停下来更新 TREE.md:记录进度、困难、已排除的方向。写这个动作本身会帮你理清思路。
+2. **自然节点** — 一个子任务完成、一个方案落地、一个关键文件改完。这些边界是清晰的,做完就写。
+3. **每 10 轮强制更新** — 不管有没有进展,至少写一句当前状态。保持 TREE.md 不 stale,跨 session 能接上。
+
+**跨会话** — 任务持久化在 `tasks/` 中。每次 Session Start 读到已有任务时,继续推进而非重新规划。
 
 ### 任务状态管理
 
