@@ -383,6 +383,8 @@ Append `---quick-replies` to offer one-click buttons. Button label = reply text.
 ### Session Start
 `read_file("tasks/TREE.md")` → `read_file("tasks/CURRENT.md")` → `read_file("memory/MEMORY.md")`
 
+**检查待处理 skill** — 如果 MEMORY.md 中有 `pending_skills` 的链接，读它并用 skill-manager 处理（创建或忽略）。
+
 需要项目上下文时调 `scan_project(path="<project_root>")`。
 
 ---
