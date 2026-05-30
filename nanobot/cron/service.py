@@ -340,22 +340,35 @@ class CronService:
         self._arm_timer()
 
     async def _execute_job(self, job: CronJob) -> None:
-        """Execute a single job."""
+        """Execute a single job with retry for transient failures."""
+        max_retries = 3
+        base_delay_s = 5
         start_ms = _now_ms()
         logger.info("Cron: executing job '{}' ({})", job.name, job.id)
 
-        try:
-            if self.on_job:
-                await self.on_job(job)
+        for attempt in range(max_retries):
+            try:
+                if self.on_job:
+                    await self.on_job(job)
 
-            job.state.last_status = "ok"
-            job.state.last_error = None
-            logger.info("Cron: job '{}' completed", job.name)
+                job.state.last_status = "ok"
+                job.state.last_error = None
+                logger.info("Cron: job '{}' completed", job.name)
+                break
 
-        except Exception as e:
-            job.state.last_status = "error"
-            job.state.last_error = str(e)
-            logger.error("Cron: job '{}' failed: {}", job.name, e)
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = base_delay_s * (2 ** attempt)
+                    logger.warning(
+                        "Cron: job '{}' failed (attempt {}/{}), retrying in {}s: {}",
+                        job.name, attempt + 1, max_retries, wait, e,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+
+                job.state.last_status = "error"
+                job.state.last_error = str(e)
+                logger.error("Cron: job '{}' failed after {} attempts: {}", job.name, max_retries, e)
 
         end_ms = _now_ms()
         job.state.last_run_at_ms = start_ms

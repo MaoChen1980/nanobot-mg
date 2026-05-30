@@ -24,6 +24,8 @@
 ## 进行中的任务
 - [#review] nanobot-mg 模块化 Code Review（进行中）
   - [x] agent/context.py + templates + runner (done 2026-05-30)
+- [x] Comprehensive global review — 4 dimensions (done 2026-05-30)
+- [x] Mechanisms review — Agent/Subagent/Cron/Heartbeat/SelfEvolution (done 2026-05-31)
   - [ ] agent/loop.py
   - [ ] agent/loop.py
   - [ ] agent/runner*.py

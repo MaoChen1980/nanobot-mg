@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-05-30T21:26:40+0800
+Last scanned: 2026-05-31T01:29:24+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~66,466
+- **Approx LOC**: ~66,916
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 304 | ~66,466 |
+| Python | 306 | ~66,916 |
 
 ## Directory Structure
 
@@ -149,6 +149,7 @@ E:\claude\nanobot-mg/
         self.py (20KB)
         self_restart_tool.py (1KB)
         semantic_search.py (4KB)
+        send_message.py (3KB)
         shell_validators.py (5KB)
         spawn.py (8KB)
         spawn_many.py (5KB)
@@ -175,12 +176,12 @@ E:\claude\nanobot-mg/
       project_scanner.py (21KB)
       runner.py (27KB)
       runner_constants.py (610B)
-      runner_context.py (7KB)
+      runner_context.py (6KB)
       runner_execution.py (7KB)
       runner_injection.py (5KB)
       runner_llm.py (5KB)
       skills.py (12KB)
-      subagent.py (19KB)
+      subagent.py (22KB)
       subagent_prompt.py (8KB)
       subagent_status.py (2KB)
       subagent_tools.py (4KB)

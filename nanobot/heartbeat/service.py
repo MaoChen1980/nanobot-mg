@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from nanobot.agent.loop_constants import UNIFIED_SESSION_KEY
 from nanobot.bus.events import InboundMessage
 
 if TYPE_CHECKING:
@@ -109,7 +110,7 @@ content=(
                 media=[],
                 ephemeral=True,
             ),
-            session_key_override="cli:direct",
+            session_key_override=UNIFIED_SESSION_KEY if self.agent_loop._unified_session else "cli:direct",
         )
         await self.agent_loop.bus.publish_inbound(msg)
         logger.info("Heartbeat: trigger published to main session via bus")
