@@ -6,7 +6,7 @@ version: 0.1.0
 
 # tmux Skill, tools from system
 
-Use tmux only when you need an interactive TTY. Prefer exec background mode for long-running, non-interactive tasks.
+Use tmux for any CLI task — it provides a proper terminal, handles signals correctly, and reliably captures output.
 
 ## Install
 
