@@ -1,6 +1,6 @@
 ---
 name: tmux
-description: Runs interactive CLI programs in persistent terminal sessions. Supports SSH, password prompts, REPLs, and any tool needing back-and-forth input and output. Use when the user needs to SSH, enter passwords, run REPLs, or interact with a CLI program.
+description: Runs interactive CLI programs in persistent terminal sessions. Supports SSH, password prompts, REPLs, cmd, and any tool needing back-and-forth input and output. Use when the user needs to SSH, enter passwords, run REPLs, or interact with a CLI program.
 version: 0.1.0
 ---
 
