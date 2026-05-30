@@ -8,6 +8,7 @@ _MAX_EMPTY_RETRIES = 2
 _MAX_LENGTH_RECOVERIES = 3
 _MAX_INJECTIONS_PER_TURN = 50
 _MAX_INJECTION_CYCLES = 20
+_MAX_MODEL_ERROR_RETRIES = 1  # Number of times to let LLM retry after content-safety errors
 _SNIP_SAFETY_BUFFER = 4096
 _MAX_SELF_EDIT_CYCLES = 20
 _BACKFILL_CONTENT = "[Tool result unavailable — call was interrupted or lost]"

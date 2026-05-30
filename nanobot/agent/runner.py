@@ -40,6 +40,7 @@ from .runner_constants import (
     _MAX_INJECTION_CYCLES,
     _MAX_INJECTIONS_PER_TURN,
     _MAX_LENGTH_RECOVERIES,
+    _MAX_MODEL_ERROR_RETRIES,
     _PERSISTED_MODEL_ERROR_PLACEHOLDER,
     _SNIP_SAFETY_BUFFER,
 )
@@ -199,6 +200,7 @@ class AgentRunner:
         external_lookup_counts: dict[str, int] = {}
         empty_content_retries = 0
         length_recovery_count = 0
+        model_error_retries = 0
         had_injections = False
         injection_cycles = 0
 
@@ -475,6 +477,13 @@ class AgentRunner:
                 )
                 if should_continue:
                     had_injections = True
+                    continue
+                if model_error_retries < _MAX_MODEL_ERROR_RETRIES:
+                    model_error_retries += 1
+                    messages.append(build_assistant_message(
+                        "[My previous response was blocked by content safety. I'll reformulate and try again.]"
+                    ))
+                    empty_content_retries = 0
                     continue
                 break
 
