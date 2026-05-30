@@ -225,7 +225,7 @@ class SubagentManager:
                     initial_messages=messages,
                     tools=tools,
                     model=self.model,
-                    max_iterations=max_iterations or 100,
+                    max_iterations=max_iterations or 200,
                     max_tool_result_chars=self.max_tool_result_chars,
                     hook=_SubagentHook(task_id, status),
                     max_iterations_message="Task completed but no final response was generated.",
@@ -235,6 +235,8 @@ class SubagentManager:
                     injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
                     session_key=origin["session_key"],
+                    max_turns_before_compress=50,
+                    compressed_turn_count=20,
                 ))
 
                 # Save conversation snapshot for MemoryExtractor

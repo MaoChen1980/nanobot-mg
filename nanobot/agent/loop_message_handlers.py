@@ -85,7 +85,7 @@ class SystemMessageHandler:
         self._loop._last_adjusted_budget = adjusted
         # Compress session if over budget before building LLM prompt
         self._loop._compress_if_needed(session)
-        history = session.get_history(max_turns=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        history = session.get_history(max_turns=0, max_messages=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns = sum(1 for m in history if m.get("role") == "assistant")
         logger.info(
@@ -270,7 +270,7 @@ class UserMessageHandler:
         self._loop._last_adjusted_budget = adjusted
         # Compress session if over budget before building LLM prompt
         self._loop._compress_if_needed(session)
-        history = session.get_history(max_turns=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        history = session.get_history(max_turns=0, max_messages=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
         # Log what get_history actually returned
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns = sum(1 for m in history if m.get("role") == "assistant")
