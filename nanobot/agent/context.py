@@ -158,11 +158,10 @@ class ContextBuilder:
             fn = schema.get("function", {})
             name = fn.get("name", "unknown")
             desc = fn.get("description", "")
-            # Keep up to 2500 chars so LLM sees detailed "when to use / how to
-            # act / failure modes" guidance.  Truncate at \n\n boundary when
-            # possible to keep whole sections.
-            if len(desc) > 2500:
-                truncated = desc[:2497]
+            # Truncate at 10K to prevent MCP mega-descriptions from
+            # dominating the prompt.  Keeps \n\n section boundaries intact.
+            if len(desc) > 10_000:
+                truncated = desc[:9_997]
                 last_break = truncated.rfind("\n\n")
                 if last_break > 1000:
                     desc = truncated[:last_break]

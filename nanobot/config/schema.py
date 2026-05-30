@@ -184,7 +184,7 @@ class AgentDefaults(Base):
     unified_session: bool = False  # Share one session across all channels (single-user multi-device)
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
     output_token_reserve_cap: int = Field(
-        default=16384,
+        default=65536,
         ge=1024,
     )  # Max tokens reserved for LLM output when computing history budget
     history_safety_margin: int = Field(

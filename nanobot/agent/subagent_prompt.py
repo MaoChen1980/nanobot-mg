@@ -74,10 +74,13 @@ def build_subagent_prompt(
     if bootstrap:
         parts.append(bootstrap)
 
-    # 7. Operating principles (shared rules adapted for subagent)
+    # 7. Framework rules (adapted for subagent)
+    parts.append(render_template("agent/_snippets/subagent_framework.md"))
+
+    # 8. Operating principles (shared rules adapted for subagent)
     parts.append(render_template("agent/_snippets/subagent_decisions.md"))
 
-    # 8. Search tool selector
+    # 9. Search tool selector
     parts.append(render_template("agent/resolver.md"))
 
     # 9. Output schema (optional)

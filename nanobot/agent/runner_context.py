@@ -102,9 +102,9 @@ def trim_history_to_budget(
     )
     # Cap output reservation so history isn't starved.  The provider's
     # max_tokens (e.g. 160K) is the *maximum* the API allows, not what
-    # we must reserve — capping at 16K matches the handler-level budget
-    # in _compute_history_budget so that trim doesn't re-drop history.
-    max_output = min(max_output, 16384)
+    # we must reserve — 64K matches the handler-level budget default so
+    # that trim doesn't re-drop history.
+    max_output = min(max_output, 65536)
     # Dynamic budget: what the context window allows after output + safety.
     # context_block_limit can only raise this floor (never shrink it), since
     # history has already been limited at the message-handler level.

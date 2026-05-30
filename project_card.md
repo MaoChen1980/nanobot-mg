@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-05-30T01:37:04+0800
+Last scanned: 2026-05-30T21:26:40+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~66,144
+- **Approx LOC**: ~66,466
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 303 | ~66,144 |
+| Python | 304 | ~66,466 |
 
 ## Directory Structure
 
@@ -127,6 +127,7 @@ E:\claude\nanobot-mg/
         conversation_search.py (7KB)
         cron.py (20KB)
         diagnose_tool.py (7KB)
+        edit_files.py (17KB)
         explore_module.py (19KB)
         file_state.py (7KB)
         framework_search.py (3KB)
@@ -134,7 +135,7 @@ E:\claude\nanobot-mg/
         list_subagents.py (1KB)
         memory_search.py (5KB)
         message.py (7KB)
-        notebook.py (7KB)
+        notebook.py (6KB)
         notify_orchestrator.py (2KB)
         output_cache.py (3KB)
         read_files.py (7KB)
@@ -157,9 +158,9 @@ E:\claude\nanobot-mg/
       __init__.py (584B)
       context.py (26KB)
       context_vars.py (981B)
-      db.py (17KB)
+      db.py (16KB)
       hook.py (6KB)
-      loop.py (56KB)
+      loop.py (58KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (199B)
       loop_dispatch.py (7KB)
@@ -168,12 +169,12 @@ E:\claude\nanobot-mg/
       loop_message_handlers.py (24KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (25KB)
+      memory_extractor.py (23KB)
       memory_store.py (10KB)
       memory_vector.py (11KB)
       project_scanner.py (21KB)
       runner.py (27KB)
-      runner_constants.py (516B)
+      runner_constants.py (610B)
       runner_context.py (7KB)
       runner_execution.py (7KB)
       runner_injection.py (5KB)
