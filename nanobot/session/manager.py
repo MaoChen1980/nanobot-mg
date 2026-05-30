@@ -206,8 +206,6 @@ class SessionManager:
         # _dispatch) also serializes async access per session. threading.Lock
         # additionally protects against HTTP gateway sync access from other threads.
         self._cache_lock = threading.Lock()
-        # Track how many messages are saved per session for incremental saves.
-        self._saved_msg_count: dict[str, int] = {}
 
     def get_or_create(self, key: str) -> Session:
         """Get an existing session or create a new one."""
@@ -274,26 +272,12 @@ class SessionManager:
             return None
         session.messages = self._fix_tool_protocol_violations(session.messages)
         session.messages = self._strip_bypassed_tool_messages(session.messages)
-        self._saved_msg_count[key] = len(session.messages)
         return session
 
     def save(self, session: Session) -> None:
-        """Save a session to the database.
-
-        Uses incremental append when messages have only been added.
-        Uses full save (delete + re-insert) when messages were removed
-        (e.g. after summary compression).
-        """
+        """Save a session to the database (full save: delete + re-insert)."""
         if self._db is not None:
-            prev_count = self._saved_msg_count.get(session.key, 0)
-            current_count = len(session.messages)
-
-            if current_count < prev_count:
-                self._db.save_session(session)
-            elif current_count > prev_count:
-                self._db.append_messages(session.key, session.messages[prev_count:])
-
-            self._saved_msg_count[session.key] = current_count
+            self._db.save_session(session)
 
         with self._cache_lock:
             self._cache[session.key] = session
@@ -320,7 +304,6 @@ class SessionManager:
         """Remove a session from the in-memory cache."""
         with self._cache_lock:
             self._cache.pop(key, None)
-        self._saved_msg_count.pop(key, None)
 
     def delete_session(self, key: str) -> bool:
         """Remove a session from the database and in-memory cache."""

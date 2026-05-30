@@ -144,8 +144,7 @@ class TestSave:
         s = Session(key="ch:u")
         s.add_message("user", "hello")
         mgr.save(s)
-        # New session: prev_count=0, current=1 → incremental append
-        db.append_messages.assert_called_once_with("ch:u", [s.messages[0]])
+        db.save_session.assert_called_once_with(s)
 
     def test_save_with_db_updates_cache(self):
         db = MagicMock()
@@ -154,25 +153,23 @@ class TestSave:
         mgr.save(s)
         assert mgr._cache.get("ch:u") is s
 
-    def test_save_incremental_appends(self):
-        """New-message saves call append_messages; full-save used after removal."""
+    def test_save_calls_save_session(self):
+        """Every save calls save_session (full save)."""
         db = MagicMock()
         mgr = SessionManager(db=db)
         s = Session(key="ch:u")
         s.add_message("user", "first")
-        # Save a new session: prev_count=0, current=1 → append
-        mgr.save(s)
-        db.append_messages.assert_called_once()
-
-        s.add_message("user", "second")
-        # Second save: incremental (prev_count=1, current=2)
-        mgr.save(s)
-        assert db.append_messages.call_count == 2
-
-        # Simulate removal (e.g. after summary compression): triggers full save
-        s.messages.pop(0)
         mgr.save(s)
         db.save_session.assert_called_once()
+
+        s.add_message("user", "second")
+        mgr.save(s)
+        assert db.save_session.call_count == 2
+
+        # Simulate removal (e.g. after summary compression): still calls save_session
+        s.messages.pop(0)
+        mgr.save(s)
+        assert db.save_session.call_count == 3
 
 
 class TestFixToolProtocolViolations:
