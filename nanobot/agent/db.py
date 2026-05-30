@@ -221,22 +221,6 @@ class NanobotDB:
             self._conn.execute("DELETE FROM messages WHERE session_key = ?", (session.key,))
             self._insert_messages(session.key, session.messages)
 
-    def append_messages(self, session_key: str, messages: list[dict[str, Any]]) -> None:
-        """Incremental append: insert only the new messages, no delete."""
-        with self._conn:
-            self._conn.execute(
-                """INSERT OR REPLACE INTO sessions
-                   (key, created_at, updated_at, metadata)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    session_key,
-                    datetime.now(timezone.utc).isoformat(),
-                    datetime.now(timezone.utc).isoformat(),
-                    "{}",
-                ),
-            )
-            self._insert_messages(session_key, messages)
-
     def _insert_messages(self, session_key: str, messages: list[dict[str, Any]]) -> None:
         """Batch-insert messages (no commit — caller owns the transaction)."""
         for msg in messages:
