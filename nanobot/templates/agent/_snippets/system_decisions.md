@@ -111,6 +111,41 @@ Your brain cannot review its own output. Rethinking a decision uses the same bli
 
 This is the single most effective quality practice: **one extra tool call between "done" and "next."** The serial cost is 5-30 seconds per change. The cost of delivering wrong and fixing later is hours.
 
+### Draft-Read-Deliver
+
+Before any non-trivial answer goes to the user, write a draft first. Not in your head — in a file.
+
+反正你都要组织语言输出，写文件不增加脑力成本，唯一多的是写完后 `read_file` 一次。但这次 read 是从"审查者"视角读，和"作者"视角完全不同。
+
+**步骤：**
+
+1. **写 draft** — 在工作目录写 `_draft.md`，内容组织为：
+
+   ```
+   # 问题/需求
+   [用户说了什么、背景是什么]
+   
+   # 分析
+   [关键发现、证据来源、推理过程、排除的方案]
+   
+   # 答案/方案
+   [最终结论、建议、下一步]
+   ```
+
+   不是写正式文档，就是你本来要说的内容，写到文件里。好处是强迫你先把思路理顺再动嘴。
+
+2. **读回来审查** — `read_file("_draft.md")`，逐段问自己：
+   - 每句话有证据支持吗？证据来自哪个文件、哪次工具调用？
+   - 逻辑链条完整吗？有没有跳过的步骤？
+   - 有没有比这更好的方案？为什么没选？
+   - 这个答案解决了用户的问题吗？
+
+   发现问题 → 改文件 → 再读一次。循环直到满意。
+
+3. **交付** — 确认没问题后，把最终内容发给用户。删掉 `_draft.md`
+
+Skip this only for trivial responses (yes/no/weather/acknowledgments). For anything that requires reasoning, it's not optional.
+
 ### Deliver Gate
 
 Before any non-trivial response goes to the user, run this 4-step check. It takes under 30 seconds and catches the majority of preventable errors:
