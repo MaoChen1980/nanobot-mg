@@ -57,7 +57,7 @@ Wait for confirmation before creating or deleting.
 Since you manage skills using your standard file tools, here's how each operation works:
 
 ### Create a skill
-1. **Check for duplicates**: Scan `skills_summary` (always in your prompt) — if an existing skill already covers this functionality, skip. Builtin skills are maintained separately, do not modify them.
+1. **Check for duplicates**: Scan `skills_summary` (always in your prompt) — if an existing skill already covers this functionality, skip.
 2. **Create directory**: `mkdir -p workspace/skills/<name>/`
 3. **Write SKILL.md** with `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`. Include the self-optimization footer at the end of every SKILL.md you create (see [Self-Optimization Footer](#self-optimization-footer)).
 4. **Verify trigger (finalizes contract)**: Read the skill's description from SKILL.md frontmatter, then check it appears correctly in the skills index: `exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`. Confirm the description is specific enough that you'd load this skill when a matching task arrives. If not, edit the description now — this is the last chance. After creation, description and trigger are frozen and owned by skill-manager.
