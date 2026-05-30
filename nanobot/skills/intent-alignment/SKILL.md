@@ -1,7 +1,7 @@
 ---
 name: intent-alignment
-description: Intelligent intent detection and requirement clarification - proactively probe user needs, paraphrase in different words for alignment, distinguish simple vs complex tasks.
-always: false
+description: Clarifies vague, ambiguous, or multi-step requests by asking targeted questions. Paraphrases user intent in different words to confirm alignment before acting. Use when the user gives an unclear, complex, or open-ended request.
+version: 0.1.0
 ---
 
 # Intent Alignment Skill, rules from user

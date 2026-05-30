@@ -1,7 +1,7 @@
 ---
 name: multi-question-answering
-description: "Answer multiple-choice questions directly with option numbers/letters, no extra explanation. Use when user asks 'A or B?', connects questions with '还是', or asks numbered questions."
-always: false
+description: Answers multiple-choice and A/B questions directly with numbers or letters. Provides concise responses without extra explanation or commentary. Use when the user says "A or B", asks numbered questions, or connects choices with "还是".
+version: 0.1.0
 ---
 
 # Multi-Question Answering, rules from user

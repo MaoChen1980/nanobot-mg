@@ -1,7 +1,7 @@
 ---
 name: my
-description: Check and set the agent's own runtime state (model, iterations, context window, token usage, web config). Use when diagnosing why something doesn't work ("why can't you search the web?", "why did you stop?"), checking resource limits before complex tasks, adapting configuration for long or simple tasks, or remembering user preferences across turns. Also use when the user asks what model you are running, how many tokens you've used, or what your settings are.
-always: false
+description: Inspects and modifies agent runtime state — model, iteration limit, context window, and settings. Operates in-memory only; changes reset on restart. Use when diagnosing issues, checking capabilities, or adjusting configuration.
+version: 0.1.0
 ---
 
 # Self-Awareness, tools from system

@@ -1,13 +1,18 @@
 ---
 name: github
-description: "Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries."
-metadata: {"nanobot":{"emoji":"🐙","requires":{"bins":["gh"]},"install":[{"id":"brew","kind":"brew","formula":"gh","bins":["gh"],"label":"Install GitHub CLI (brew)"},{"id":"apt","kind":"apt","package":"gh","bins":["gh"],"label":"Install GitHub CLI (apt)"}]}}
-always: false
+description: Manages GitHub pull requests, issues, CI runs, code search, and API queries. Operates through the gh CLI — requires authentication. Use when the user asks to check PRs, review CI status, list issues, or query GitHub data.
+version: 0.1.0
 ---
 
 # GitHub Skill, tools from system
 
 Use the `gh` CLI to interact with GitHub. Always specify `--repo owner/repo` when not in a git directory, or use URLs directly.
+
+## Install
+
+- **macOS**: `brew install gh`
+- **Linux**: `apt install gh` or `brew install gh`
+- **Windows**: `winget install GitHub.cli`
 
 ## Pull Requests
 

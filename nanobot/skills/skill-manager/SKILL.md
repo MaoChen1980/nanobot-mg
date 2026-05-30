@@ -1,7 +1,7 @@
 ---
 name: skill-manager
-description: "Self-manage skills using file tools — detect reusable patterns, create skills, patch/optimize them anytime during daily work, and clean up obsolete ones. Use whenever a skill has issues, can be better, or is obsolete. Also use after complex tasks (5+ tool calls), tricky errors, user corrections, or discovering reusable workflows."
-always: false
+description: Creates, patches, and removes skills by recognizing reusable patterns. Operates through standard file tools — reads and writes SKILL.md files. Use when a skill has incorrect steps, after complex tasks, or when you discover a repeatable workflow.
+version: 0.1.0
 ---
 
 # Skill Manager

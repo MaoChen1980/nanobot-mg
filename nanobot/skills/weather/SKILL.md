@@ -1,9 +1,7 @@
 ---
 name: weather
-description: Get current weather and forecasts (no API key required).
-homepage: https://wttr.in/:help
-metadata: {"nanobot":{"emoji":"🌤️","requires":{"bins":["curl"]}}}
-always: false
+description: Checks current weather and forecasts for any city or location. Uses free APIs (wttr.in, Open-Meteo) — no API key required. Use when the user asks about temperature, rain, forecast, or climate.
+version: 0.1.0
 ---
 
 # Weather, tools from system

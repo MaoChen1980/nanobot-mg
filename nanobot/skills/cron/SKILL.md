@@ -1,7 +1,7 @@
 ---
 name: cron
-description: Schedule reminders and recurring tasks.
-always: false
+description: Schedules reminders, recurring tasks, and one-shot notifications at specific times or intervals. Operates through the agent's cron system — supports cron expressions and ISO datetimes. Use when the user asks to be reminded, set a recurring task, or schedule something.
+version: 0.1.0
 ---
 
 # Cron, tools from system

@@ -1,9 +1,7 @@
 ---
 name: clawhub
-description: Search and install agent skills from ClawHub, the public skill registry.
-homepage: https://clawhub.ai
-metadata: {"nanobot":{"emoji":"🦞"}}
-always: false
+description: Searches, installs, and updates community skills from the public registry. Uses npx to run the clawhub CLI — requires Node.js. Use when the user asks to find a skill, install something, or update skills.
+version: 0.1.0
 ---
 
 # ClawHub, resources from system

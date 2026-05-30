@@ -1,14 +1,18 @@
 ---
 name: summarize
-description: Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for "transcribe this YouTube/video").
-homepage: https://summarize.sh
-metadata: {"nanobot":{"emoji":"🧾","requires":{"bins":["summarize"]},"install":[{"id":"brew","kind":"brew","formula":"steipete/tap/summarize","bins":["summarize"],"label":"Install summarize (brew)"}]}}
-always: false
+description: Summarizes web pages, local files, and YouTube videos. Extracts key content and produces transcripts via the summarize CLI. Use when the user asks to summarize, transcribe, or get key points from content.
+version: 0.1.0
 ---
 
 # Summarize, tools from system
 
 Fast CLI to summarize URLs, local files, and YouTube links.
+
+## Install
+
+```bash
+brew install steipete/tap/summarize
+```
 
 ## When to use (trigger phrases)
 

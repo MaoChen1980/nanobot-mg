@@ -1,13 +1,18 @@
 ---
 name: tmux
-description: Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.
-metadata: {"nanobot":{"emoji":"🧵","os":["darwin","linux"],"requires":{"bins":["tmux"]}}}
-always: false
+description: Runs interactive CLI programs in persistent terminal sessions. Supports SSH, password prompts, REPLs, and any tool needing back-and-forth input and output. Use when the user needs to SSH, enter passwords, run REPLs, or interact with a CLI program.
+version: 0.1.0
 ---
 
 # tmux Skill, tools from system
 
 Use tmux only when you need an interactive TTY. Prefer exec background mode for long-running, non-interactive tasks.
+
+## Install
+
+- **Linux**: `apt install tmux` or `brew install tmux`
+- **macOS**: `brew install tmux`
+- **Windows**: `winget install psmux` (then restart shell)
 
 ## Quickstart (isolated socket, exec tool)
 
@@ -61,10 +66,11 @@ To monitor:
 
 - For python REPLs, set `PYTHON_BASIC_REPL=1` (non-basic REPL breaks send-keys flows).
 
-## Windows / WSL
+## Windows
 
-- tmux is supported on macOS/Linux. On Windows, use WSL and install tmux inside WSL.
-- This skill is gated to `darwin`/`linux` and requires `tmux` on PATH.
+- Install **psmux** (`winget install psmux`) — a PowerShell tmux clone. Commands are identical (`send-keys`, `capture-pane`, etc.).
+- psmux registers `tmux` as a command alias. Use it the same way as Linux tmux.
+- After installing, restart your shell to pick up the updated PATH.
 
 ## Orchestrating Coding Agents (Codex, Claude Code)
 
