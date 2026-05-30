@@ -17,7 +17,6 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.exec_session import format_session_poll
 from nanobot.agent.tools.sandbox import wrap_command
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.shell_validators import DANGEROUS_PATTERNS, check_command_safety
@@ -158,7 +157,7 @@ class ExecTool(Tool):
             "**When to use**:\n"
             "- When you need to run command-line tools, scripts, or build commands\n"
             "- When you need to perform computation, data processing, or system operations\n"
-            "- For **interactive/SSH sessions**, use **interact** instead (it provides PTY and long-running mode)"
+            "- For **interactive/CLI sessions**, use **tmux** (Linux/macOS) or **psmux** (Windows) via exec instead"
         )
 
     exclusive = True

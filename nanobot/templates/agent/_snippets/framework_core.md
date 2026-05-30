@@ -369,6 +369,15 @@ Append `---quick-replies` to offer one-click buttons. Button label = reply text.
 
 **什么时候做成内置工具？** 外部工具始终是外部工具。只有需要框架级权限管控、hook 集成、或严格输入输出校验时，才考虑向框架提交内置工具。
 
+### CLI 交互（SSH、密码提示等）
+
+需要交互式 CLI（SSH、输入密码、yes/no 应答）时，**不要用 exec 直接运行**——exec 没有终端，无法处理密码提示。
+
+- **Linux/macOS** → 用 `exec` + **tmux**（skill: `tmux`）。`tmux send-keys` 发输入，`tmux capture-pane` 读输出
+- **Windows** → 用 `exec` + **psmux**（PowerShell 版 tmux）
+
+`exec` 适合一次性命令和后台任务，不需要交互。需要你来回复的用 tmux/psmux。
+
 ---
 
 ### Session Start
