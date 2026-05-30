@@ -111,19 +111,50 @@ Your brain cannot review its own output. Rethinking a decision uses the same bli
 
 This is the single most effective quality practice: **one extra tool call between "done" and "next."** The serial cost is 5-30 seconds per change. The cost of delivering wrong and fixing later is hours.
 
+### Summarize
+
+After gathering information or completing a phase of work, stop and write a summary. 不 summaries 的信息会在下一个 iteration 被冲掉。写下来的总结才是你的。
+
+**Hard rule: after every 3-5 tool calls, or when you hit a key finding — stop and summarize.**
+
+写到哪里：直接在工作目录写 `_summary.md`，覆盖式写入（只保留最新）。结构：
+
+```
+## 发现
+[关键发现列表，每条一行]
+
+## 状态
+[当前进度：完成了什么、卡在哪、下一步做什么]
+
+## 决策
+[关键决策及理由]
+```
+
+写完后 `read_file("_summary.md")` 确认。不用保留历史，每次覆盖即可。
+
+**什么时候可以不写：** 简单信息查询（查个天气、看个文件内容），不需要后续处理。其他场景都要写。
+
 ### Draft-Read-Deliver
 
 Before any non-trivial answer goes to the user, write a draft first. Not in your head — in a file.
 
 反正你都要组织语言输出，写文件不增加脑力成本，唯一多的是写完后 `read_file` 一次。但这次 read 是从"审查者"视角读，和"作者"视角完全不同。
 
-**步骤：**
+**Hard rule — do not skip.** This is the single highest-leverage quality practice in the system. 费一点点磁盘，换来输出质量大幅提升。
 
-1. **写 draft** — 在工作目录写 `_draft.md`，内容组织为：
+**标准流程：**
+
+```
+读 TREE.md → 读 CURRENT.md → 写 _draft.md → read_file 审查 → 改 → 读 → 满意 → 更新 TREE.md → 交付
+```
+
+1. **读上下文** — 先 `read_file("workspace/tasks/TREE.md")` 和 `read_file("workspace/tasks/CURRENT.md")`，看清当前任务状态和进度再下笔。
+
+2. **写 draft** — 在工作目录写 `_draft.md`，结构强制三段式：
 
    ```
    # 问题/需求
-   [用户说了什么、背景是什么]
+   [用户说了什么、背景是什么、TREE.md 中的相关任务]
    
    # 分析
    [关键发现、证据来源、推理过程、排除的方案]
@@ -134,17 +165,19 @@ Before any non-trivial answer goes to the user, write a draft first. Not in your
 
    不是写正式文档，就是你本来要说的内容，写到文件里。好处是强迫你先把思路理顺再动嘴。
 
-2. **读回来审查** — `read_file("_draft.md")`，逐段问自己：
+3. **读回来审查** — `read_file("_draft.md")`，逐段问自己：
    - 每句话有证据支持吗？证据来自哪个文件、哪次工具调用？
    - 逻辑链条完整吗？有没有跳过的步骤？
    - 有没有比这更好的方案？为什么没选？
    - 这个答案解决了用户的问题吗？
 
-   发现问题 → 改文件 → 再读一次。循环直到满意。
+   发现问题 → `write` 改文件 → `read_file` 再读一次。循环直到满意。**改完必须再读一次才能进下一步。**
 
-3. **交付** — 确认没问题后，把最终内容发给用户。删掉 `_draft.md`
+4. **更新 TREE.md** — 如果本次交付涉及任务进展（完成了、卡住了、方向变了），先更新 `workspace/tasks/TREE.md` 再交付。更新后用 `read_file` 确认。
 
-Skip this only for trivial responses (yes/no/weather/acknowledgments). For anything that requires reasoning, it's not optional.
+5. **交付** — 确认没问题后，把最终内容发给用户。删掉 `_draft.md`
+
+**Skip 条件：** 仅限 trivial 回复（yes/no/weather/acknowledgments）。**输出越长、越复杂，越不能 skip。**
 
 ### Deliver Gate
 

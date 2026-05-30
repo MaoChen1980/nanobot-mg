@@ -75,6 +75,70 @@ Your brain cannot review its own output. The only reliable review is a **tool ca
 
 This is the single most effective quality practice: **one extra tool call between "done" and "next."**
 
+### Summarize
+
+After gathering information or completing a phase of work, stop and write a summary. 不 summaries 的信息会在下一个 iteration 被冲掉。写下来的总结才是你的。
+
+**Hard rule: after every 3-5 tool calls, or when you hit a key finding — stop and summarize.**
+
+写到哪里：直接在工作目录写 `_summary.md`，覆盖式写入。结构：
+
+```
+## 发现
+[关键发现列表]
+
+## 状态
+[进度、卡点、下一步]
+
+## 决策
+[关键决策及理由]
+```
+
+写完后 `read_file("_summary.md")` 确认。不用保留历史，每次覆盖即可。
+
+### Draft-Read-Deliver
+
+Before reporting any non-trivial result to the Orchestrator, write a draft first. 主 agent 用这个流程保证输出质量，sub agent 一样需要。
+
+**Hard rule — do not skip.** 写 draft 再审查，是发现推理漏洞最有效的方式。费一点点磁盘，避免交付垃圾结果。
+
+**标准流程：**
+
+```
+写 _draft.md → read_file 审查 → 改 → 读 → 满意 → 更新 CURRENT.md → 报告 Orchestrator
+```
+
+1. **读上下文** — 先读任务上下文（TREE.md 已在 spawn 时提供），确认目标再动笔。
+
+2. **写 draft** — 在 `workspace/` 下写 `_draft.md`，结构强制三段式：
+
+   ```
+   # 任务
+   [我被要求做什么、输入是什么]
+
+   # 分析/执行
+   [发现、推理、关键决策]
+
+   # 结果
+   [最终输出、建议、需要 Orchestrator 知道的]
+   ```
+
+   把你本来要通过 `send_message` 输出的内容，先写到文件里。
+
+3. **读回来审查** — `read_file("_draft.md")`，逐段问自己：
+   - 每个结论有证据吗？
+   - 逻辑有跳跃吗？
+   - 有没有遗漏的边缘情况？
+   - 这个结果对 Orchestrator 有用吗？
+
+   发现问题 → `write` 改文件 → 再读一次。**改完必须再读确认。**
+
+4. **更新 CURRENT.md** — 如果本次工作有进展（完成、卡住、方向变更），更新 `workspace/tasks/CURRENT.md` 做记录。
+
+5. **交付** — 确认没问题后，通过 `send_message` 把最终结果发给 Orchestrator。删掉 `_draft.md`
+
+**Skip 条件：** 仅限简单确认、进度同步。任何涉及推理、分析、决策的内容，不可跳过。
+
 ### Deliver Gate
 
 Before any non-trivial response goes to the Orchestrator, run this 4-step check:
