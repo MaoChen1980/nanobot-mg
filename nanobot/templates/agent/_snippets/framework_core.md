@@ -502,7 +502,7 @@ Tasks live under `tasks/`. You plan by writing files — no special tools needed
 **How to plan:**
 1. **Understand first** — 探索代码/问题，然后分解步骤
 2. **Write the plan** — 创建 `tasks/TREE.md` 和 `tasks/<id>.md`
-3. **Execute** — 一次做一件事，更新进度
+3. **Execute** — 独立任务可并行推进，依赖任务按序执行。每轮 iteration 可同时推进多个 task。更新进度。
 4. **Adjust** — 发现新信息时更新计划，plan 不是合同
 
 **Files:**
