@@ -45,7 +45,7 @@ class NotifyOrchestratorTool(Tool):
     async def execute(self, message: str, priority: str = "info", **kwargs: Any) -> str:
         if priority not in ("info", "suggestion", "blocker"):
             priority = "info"
-        return self._manager.notify_orchestrator(
+        return await self._manager.notify_orchestrator(
             message=message,
             worker_id=self._worker_id,
             worker_label=self._worker_label,

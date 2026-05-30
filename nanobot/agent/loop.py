@@ -39,6 +39,7 @@ from nanobot.agent.tools.edit_files import EditFilesTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.spawn_many import SpawnManyTool
 from nanobot.agent.tools.respond_to_worker import RespondToWorkerTool
+from nanobot.agent.tools.send_message import SendMessageTool
 from nanobot.agent.tools.check_subagent import CheckSubagentTool
 from nanobot.agent.tools.list_subagents import ListSubagentsTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
@@ -368,6 +369,7 @@ class AgentLoop:
         self.tools.register(CheckSubagentTool(manager=self.subagents))
         self.tools.register(ListSubagentsTool(manager=self.subagents))
         self.tools.register(RespondToWorkerTool(manager=self.subagents))
+        self.tools.register(SendMessageTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(
                 CronTool(self.cron_service, default_timezone=self.context.timezone or "UTC")
@@ -746,7 +748,7 @@ class AgentLoop:
                 # Compute the effective session key before dispatching
                 # This ensures /stop command can find tasks correctly when unified session is enabled
                 task = asyncio.create_task(self._dispatch(msg))
-                state = self._session_dispatch.setdefault(effective_key, _SessionDispatchState(tasks=[], pending=asyncio.Queue(maxsize=20)))
+                state = self._session_dispatch.setdefault(effective_key, _SessionDispatchState(tasks=[], pending=asyncio.Queue(maxsize=200)))
                 state.tasks.append(task)
                 task.add_done_callback(
                     lambda t, k=effective_key: (
@@ -768,7 +770,7 @@ class AgentLoop:
 
         # Register a pending queue so follow-up messages for this session are
         # routed here (mid-turn injection) instead of spawning a new task.
-        pending = asyncio.Queue(maxsize=20)
+        pending = asyncio.Queue(maxsize=200)
         # Don't overwrite existing state (created by run()) — reuse existing queue
         if session_key not in self._session_dispatch:
             self._session_dispatch[session_key] = _SessionDispatchState(tasks=[], pending=pending)

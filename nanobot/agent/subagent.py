@@ -90,6 +90,7 @@ class SubagentManager:
         self._pending_worker_questions: dict[str, asyncio.Future] = {}
         self._worker_origin: dict[str, dict[str, str]] = {}  # task_id -> origin info
         self._worker_label_to_id: dict[str, str] = {}  # label -> task_id
+        self._worker_inboxes: dict[str, "asyncio.Queue[str]"] = {}  # task_id -> inbox
 
     def set_provider(self, provider: LLMProvider, model: str) -> None:
         self.provider = provider
@@ -113,6 +114,7 @@ class SubagentManager:
         origin = {"channel": origin_channel, "chat_id": origin_chat_id, "session_key": session_key}
         self._worker_origin[task_id] = origin
         self._worker_label_to_id[display_label] = task_id
+        self._worker_inboxes[task_id] = asyncio.Queue()
 
         status = SubagentStatus(
             task_id=task_id,
@@ -132,6 +134,9 @@ class SubagentManager:
         def _cleanup(_: asyncio.Task) -> None:
             self._running_tasks.pop(task_id, None)
             self._task_statuses.pop(task_id, None)
+            self._worker_inboxes.pop(task_id, None)
+            self._worker_label_to_id.pop(display_label, None)
+            self._worker_origin.pop(task_id, None)
             if session_key and (ids := self._session_tasks.get(session_key)):
                 ids.discard(task_id)
                 if not ids:
@@ -165,8 +170,12 @@ class SubagentManager:
 
             # Register team communication tools
             from nanobot.agent.tools.notify_orchestrator import NotifyOrchestratorTool
+            from nanobot.agent.tools.send_message import SendMessageTool
             from nanobot.agent.tools.request_input import RequestOrchestratorInputTool
             tools.register(NotifyOrchestratorTool(
+                manager=self, worker_id=task_id, worker_label=label,
+            ))
+            tools.register(SendMessageTool(
                 manager=self, worker_id=task_id, worker_label=label,
             ))
             tools.register(RequestOrchestratorInputTool(
@@ -189,6 +198,21 @@ class SubagentManager:
             # Mark execution as subagent context — blocks nested spawn at tool level
             token = _in_subagent.set(True)
             try:
+                # Injection callback for main→subagent messages
+                inbox = self._worker_inboxes.get(task_id)
+
+                async def _drain_inbox(*, limit: int = 10) -> list[dict[str, Any]]:
+                    if inbox is None:
+                        return []
+                    items: list[dict[str, Any]] = []
+                    while len(items) < limit:
+                        try:
+                            text = inbox.get_nowait()
+                            items.append({"role": "user", "content": text})
+                        except asyncio.QueueEmpty:
+                            break
+                    return items
+
                 result = await self.runner.run(AgentRunSpec(
                     initial_messages=messages,
                     tools=tools,
@@ -200,6 +224,7 @@ class SubagentManager:
                     error_message=None,
                     fail_on_tool_error=True,
                     checkpoint_callback=_on_checkpoint,
+                    injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
                     session_key=origin["session_key"],
                 ))
@@ -290,6 +315,10 @@ class SubagentManager:
             pt_path=_pt_path,
         )
 
+        # Wrap in <system-reminder> so the main agent's LLM clearly
+        # distinguishes this as system-injected context, not user input.
+        wrapped = f"<system-reminder>\n{announce_content}\n</system-reminder>"
+
         # Inject as system message to trigger main agent.
         # Use session_key_override to align with the main agent's effective
         # session key (which accounts for unified sessions) so the result is
@@ -300,7 +329,7 @@ class SubagentManager:
             channel="system",
             sender_id="subagent",
             chat_id=f"{origin['channel']}:{origin['chat_id']}",
-            content=announce_content,
+            content=wrapped,
             session_key_override=override,
             metadata={
                 "injected_event": "subagent_result",
@@ -345,7 +374,7 @@ class SubagentManager:
     # Team communication: Worker ↔ Orchestrator
     # ------------------------------------------------------------------
 
-    def notify_orchestrator(
+    async def notify_orchestrator(
         self,
         message: str,
         worker_id: str,
@@ -360,12 +389,13 @@ class SubagentManager:
             return "Error: worker origin not found"
 
         content = f"[Worker '{worker_label}' ({priority})]: {message}"
+        wrapped = f"<system-reminder>\n{content}\n</system-reminder>"
         msg = InboundMessage(
             channel="system",
             sender_id="subagent",
             chat_id=f"{origin['channel']}:{origin['chat_id']}",
-            content=content,
-            session_key_override=origin["session_key"],
+            content=wrapped,
+            session_key_override=origin.get("session_key") or f"{origin['channel']}:{origin['chat_id']}",
             metadata={
                 "injected_event": "worker_notification",
                 "worker_id": worker_id,
@@ -373,9 +403,27 @@ class SubagentManager:
                 "notification_priority": priority,
             },
         )
-        self.bus.publish_inbound(msg)
+        await self.bus.publish_inbound(msg)
         logger.info("Worker [{}] notified Orchestrator (priority={}): {}", worker_label, priority, message[:80])
         return f"Orchestrator notified (priority: {priority})"
+
+    def send_to_worker(self, worker_label: str, content: str) -> str:
+        """Send a message from Orchestrator to a Worker. Fire-and-forget."""
+        task_id = self._worker_label_to_id.get(worker_label)
+        if task_id is None:
+            known = list(self._worker_label_to_id.keys())
+            return (
+                f"Error: no worker with label '{worker_label}'. "
+                f"Active workers: {known}"
+            )
+        # TOCTOU guard: check task is still running before accessing inbox
+        task = self._running_tasks.get(task_id)
+        inbox = self._worker_inboxes.get(task_id)
+        if task is None or task.done() or inbox is None:
+            return f"Error: worker '{worker_label}' has already completed. Message not delivered."
+        inbox.put_nowait(f"[Orchestrator]: {content}")
+        logger.info("Sent message to worker [{}]: {}", worker_label, content[:80])
+        return f"Message sent to worker '{worker_label}'"
 
     async def request_orchestrator_input(
         self,
@@ -414,7 +462,7 @@ class SubagentManager:
                 "worker_label": worker_label,
             },
         )
-        self.bus.publish_inbound(msg)
+        await self.bus.publish_inbound(msg)
         logger.info("Worker [{}] requested Orchestrator input: {}", worker_label, question[:80])
 
         # Wait for response with timeout

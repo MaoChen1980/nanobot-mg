@@ -63,8 +63,13 @@ class SystemMessageHandler:
         session = self._loop.lifecycle.prepare(key)
         pending = None
         is_subagent = msg.sender_id == "subagent"
-        if is_subagent and self._loop._persist_subagent_followup(session, msg):
-            self._loop.sessions.save(session)
+        # Subagent result is NOT persisted before the LLM loop, because:
+        # _persist_subagent_followup saves it as an "assistant" message, and
+        # get_history → build_messages would put it in history as the last
+        # assistant message with no user message after it. The LLM then sees
+        # the subagent result as its own past output and produces nothing.
+        # Instead, pass the subagent result as a user message (prompting LLM
+        # to respond), then persist after the loop for durability.
         # For "system" channel (subagent), use channel extracted from chat_id (e.g. "slack").
         # For all other channels (cron, proxy, direct), use msg.channel directly.
         effective_channel = channel if msg.channel == "system" else msg.channel
@@ -87,7 +92,6 @@ class SystemMessageHandler:
             "HISTORY_DBG: key={}, budget_adjusted={}, history_msgs={}, history_turns={}, history_tokens={}",
             key, adjusted, len(history), hist_turns, hist_tokens,
         )
-        current_role = "assistant" if is_subagent else "user"
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
@@ -97,14 +101,18 @@ class SystemMessageHandler:
         )
         messages = self._loop.context.build_messages(
             history=history,
-            current_message="" if is_subagent else msg.content,
+            current_message=msg.content,
             channel=effective_channel,
             chat_id=chat_id,
-            current_role=current_role,
+            current_role="user",
             context_state=cs,
         )
         final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         msgs_count = len(messages)
+        # Persist subagent result after the LLM loop so it appears in session
+        # before the LLM's response (correct chronological order).
+        if is_subagent and self._loop._persist_subagent_followup(session, msg):
+            self._loop.sessions.save(session)
         self._loop._append_turn_to_session(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
         self._loop.lifecycle.finalize(session)
         options = ask_user_options_from_messages(all_msgs) if stop_reason == "ask_user" else []

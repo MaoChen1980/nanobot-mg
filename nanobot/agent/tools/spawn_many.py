@@ -79,6 +79,13 @@ class SpawnManyTool(Tool):
         """Spawn multiple subagents."""
         if _in_subagent.get():
             return "Error: subagent cannot spawn sub-subagents."
+        # Validate label uniqueness before spawning
+        seen_labels: set[str] = set()
+        for t in tasks:
+            label = t.get("label") or t["task"][:30] + ("..." if len(t["task"]) > 30 else "")
+            if label in seen_labels:
+                return f"Error: duplicate label '{label}' in spawn_many tasks. Each task must have a unique label."
+            seen_labels.add(label)
         workspace = getattr(self._manager, "workspace", None)
         context = build_context_block(workspace, team_context=team_context)
         results: list[str] = []

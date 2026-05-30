@@ -1,0 +1,298 @@
+"""Tests for send_message, send_to_worker, and related fixes."""
+
+import asyncio
+import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from nanobot.config.schema import AgentDefaults
+
+_MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
+
+
+@pytest.mark.asyncio
+async def test_send_message_worker_to_main(tmp_path):
+    """send_message(recipient='main') delivers message via bus."""
+    from nanobot.agent.subagent import SubagentManager
+    from nanobot.agent.tools.send_message import SendMessageTool
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    # Simulate a registered worker
+    mgr._worker_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
+
+    tool = SendMessageTool(manager=mgr, worker_id="test-w", worker_label="test-worker")
+    result = await tool.execute(recipient="main", message="need help", priority="blocker")
+
+    assert "notified" in result or "sent" in result.lower()
+
+    # Verify message actually landed on the bus
+    bus_msg = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
+    assert "need help" in bus_msg.content
+    assert "<system-reminder>" in bus_msg.content
+    assert bus_msg.metadata.get("injected_event") == "worker_notification"
+
+
+@pytest.mark.asyncio
+async def test_send_message_orchestrator_to_worker(tmp_path):
+    """send_message(recipient='worker:label') delivers to subagent inbox."""
+    from nanobot.agent.subagent import SubagentManager
+    from nanobot.agent.tools.send_message import SendMessageTool
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    # Register a running worker with an inbox
+    mgr._worker_label_to_id["test-worker"] = "test-id"
+    mgr._worker_inboxes["test-id"] = asyncio.Queue()
+    task = asyncio.create_task(asyncio.Event().wait())  # "running" task
+    mgr._running_tasks["test-id"] = task
+
+    tool = SendMessageTool(manager=mgr)  # no worker_id = orchestrator mode
+    result = await tool.execute(recipient="worker:test-worker", message="hello there")
+
+    assert "sent" in result.lower()
+
+    # Verify message landed in the worker's inbox
+    inbox_msg = await asyncio.wait_for(mgr._worker_inboxes["test-id"].get(), timeout=1.0)
+    assert "hello there" in inbox_msg
+
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_send_to_worker_toctou_guard(tmp_path):
+    """send_to_worker returns error when subagent already completed."""
+    from nanobot.agent.subagent import SubagentManager
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    # Register a FINISHED worker (task is done)
+    done = asyncio.create_task(asyncio.sleep(0))
+    await done  # let it complete
+    mgr._worker_label_to_id["gone-worker"] = "gone-id"
+    mgr._running_tasks["gone-id"] = done
+    mgr._worker_inboxes["gone-id"] = asyncio.Queue()
+
+    result = mgr.send_to_worker("gone-worker", "hello")
+    assert "already completed" in result or "Error" in result
+
+
+@pytest.mark.asyncio
+async def test_send_to_worker_unknown_label(tmp_path):
+    """send_to_worker returns error for unknown worker label."""
+    from nanobot.agent.subagent import SubagentManager
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    result = mgr.send_to_worker("nobody", "hello")
+    assert "no worker" in result or "Error" in result
+
+
+@pytest.mark.asyncio
+async def test_spawn_many_duplicate_label_rejected(tmp_path):
+    """spawn_many rejects duplicate labels."""
+    from nanobot.agent.subagent import SubagentManager
+    from nanobot.agent.tools.spawn_many import SpawnManyTool
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    tool = SpawnManyTool(manager=mgr)
+    result = await tool.execute(
+        tasks=[
+            {"task": "do thing A", "label": "same-label"},
+            {"task": "do thing B", "label": "same-label"},
+        ]
+    )
+
+    assert "duplicate label" in result or "Error" in result
+
+
+@pytest.mark.asyncio
+async def test_notify_orchestrator_actually_sends(tmp_path):
+    """notify_orchestrator now awaits bus.publish_inbound (fix async bug)."""
+    from nanobot.agent.subagent import SubagentManager
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    mgr._worker_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
+
+    # This should NOT crash — the async bug fix means await happens
+    result = await mgr.notify_orchestrator(message="async works now", worker_id="test-w", worker_label="test")
+    assert "notified" in result or "sent" in result.lower()
+
+    # Verify message was actually published to bus
+    bus_msg = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
+    assert "async works now" in bus_msg.content
+    assert "<system-reminder>" in bus_msg.content
+
+
+@pytest.mark.asyncio
+async def test_subagent_injection_callback_wired(tmp_path):
+    """_run_subagent passes injection_callback to AgentRunSpec."""
+    from nanobot.agent.subagent import SubagentManager, SubagentStatus
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    mgr._announce_result = AsyncMock()
+    captured_spec = {}
+
+    async def fake_run(spec):
+        captured_spec["spec"] = spec
+        return SimpleNamespace(
+            stop_reason="completed",
+            final_content="done",
+            error=None,
+            tool_events=[],
+            messages=[],
+            usage={},
+            had_injections=False,
+            tools_used=[],
+        )
+
+    mgr.runner.run = AsyncMock(side_effect=fake_run)
+
+    status = SubagentStatus(
+        task_id="sub-1", label="label", task_description="do task", started_at=time.monotonic()
+    )
+    await mgr._run_subagent(
+        "sub-1", "do task", "label", {"channel": "test", "chat_id": "c1", "session_key": "test:c1"},
+        status,
+    )
+
+    spec = captured_spec.get("spec")
+    assert spec is not None
+    assert spec.injection_callback is not None
+
+    # The callback should return empty when inbox is empty
+    result = await spec.injection_callback(limit=5)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_subagent_injection_callback_receives_messages(tmp_path):
+    """injection_callback drains messages from worker inbox."""
+    from nanobot.agent.subagent import SubagentManager, SubagentStatus
+    from nanobot.bus.queue import MessageBus
+
+    bus = MessageBus()
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    mgr = SubagentManager(
+        provider=provider,
+        workspace=tmp_path,
+        bus=bus,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    )
+
+    mgr._announce_result = AsyncMock()
+    captured_spec = {}
+
+    async def fake_run(spec):
+        captured_spec["spec"] = spec
+        return SimpleNamespace(
+            stop_reason="completed",
+            final_content="done",
+            error=None,
+            tool_events=[],
+            messages=[],
+            usage={},
+            had_injections=False,
+            tools_used=[],
+        )
+
+    mgr.runner.run = AsyncMock(side_effect=fake_run)
+
+    status = SubagentStatus(
+        task_id="sub-2", label="label", task_description="do task", started_at=time.monotonic()
+    )
+
+    # Put messages in inbox before running
+    inbox = mgr._worker_inboxes["sub-2"] = asyncio.Queue()
+    inbox.put_nowait("msg 1")
+    inbox.put_nowait("msg 2")
+
+    await mgr._run_subagent(
+        "sub-2", "do task", "label", {"channel": "test", "chat_id": "c1", "session_key": "test:c1"},
+        status,
+    )
+
+    spec = captured_spec.get("spec")
+    assert spec is not None
+    assert spec.injection_callback is not None
+
+    # The callback should return the pre-loaded messages with user role
+    result = await spec.injection_callback(limit=10)
+    assert len(result) == 2
+    assert result[0]["role"] == "user"
+    assert "msg 1" in result[0]["content"]
+    assert result[1]["role"] == "user"
+    assert "msg 2" in result[1]["content"]

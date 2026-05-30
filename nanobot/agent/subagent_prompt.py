@@ -132,7 +132,7 @@ def build_subagent_prompt(
         "The only way the team reaches the global optimum is through open communication.\n\n"
         "**Share findings proactively.** A discovery you don't share is wasted. "
         "If you find a better approach, a pitfall, something that changes the plan — "
-        "tell the Orchestrator via `notify_orchestrator`. "
+        "tell the Orchestrator via `send_message(recipient='main', ...)`. "
         "Your report may cause the Orchestrator to adjust tasks, including your own. "
         "That's not a failure — that's the team optimizing.\n\n"
         "**Ask for help when you're stuck.** A problem you sit on alone is wasted time "
