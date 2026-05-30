@@ -664,10 +664,10 @@ class ListExecSessionsTool(Tool):
     ),
     required=["command"],
 ))
-class ExecInteractiveTool(Tool):
+class InteractTool(Tool):
     """Create a long-running interactive session."""
 
-    name = "exec_interactive"
+    name = "interact"
 
     description = (
         "**Purpose**: Start an interactive session with a PTY (SSH, telnet, etc.).\n\n"
@@ -676,7 +676,7 @@ class ExecInteractiveTool(Tool):
         "- Any command that prompts for passwords, yes/no, or interactive input\n"
         "- Long-running commands where you want to send input dynamically\n\n"
         "**Workflow**:\n"
-        "1. **exec_interactive**(command=\"ssh user@host\")\n"
+        "1. **interact**(command=\"ssh user@host\")\n"
         "   → Returns a session_id and initial output (e.g., password prompt)\n"
         "2. **write_stdin**(session_id=..., chars=\"password\\n\")\n"
         "   → Sends input, returns output (e.g., shell prompt)\n"

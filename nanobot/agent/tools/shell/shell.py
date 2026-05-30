@@ -158,7 +158,7 @@ class ExecTool(Tool):
             "**When to use**:\n"
             "- When you need to run command-line tools, scripts, or build commands\n"
             "- When you need to perform computation, data processing, or system operations\n"
-            "- For **interactive/SSH sessions**, use **exec_interactive** instead (it provides PTY and long-running mode)"
+            "- For **interactive/SSH sessions**, use **interact** instead (it provides PTY and long-running mode)"
         )
 
     exclusive = True
