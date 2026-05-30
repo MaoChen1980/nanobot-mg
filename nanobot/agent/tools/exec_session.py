@@ -641,3 +641,86 @@ class ListExecSessionsTool(Tool):
             return "\n".join(lines)
         except Exception as exc:
             return f"Error listing exec sessions: {exc}"
+
+
+@tool_parameters(build_parameters_schema(
+    command=p("string", "Command to run in the interactive session (e.g., ssh user@host)."),
+    use_pty=p("boolean",
+        "Use a PTY for interactive prompts. Required for SSH password prompts. "
+        "Default: true.",
+        default=True,
+    ),
+    timeout=p("integer",
+        "Session timeout in seconds (default 3600). The session is killed after this.",
+        minimum=30, maximum=7200, nullable=True,
+    ),
+    yield_time_ms=p("integer",
+        "Milliseconds to wait for initial output before returning (default 5000, max 30000).",
+        minimum=1000, maximum=MAX_YIELD_MS, nullable=True,
+    ),
+    max_output_chars=p("integer",
+        "Maximum output characters returned (default 10000, max 32000).",
+        minimum=1000, maximum=MAX_OUTPUT_CHARS, nullable=True,
+    ),
+    required=["command"],
+))
+class ExecInteractiveTool(Tool):
+    """Create a long-running interactive session."""
+
+    name = "exec_interactive"
+
+    description = (
+        "**Purpose**: Start an interactive session with a PTY (SSH, telnet, etc.).\n\n"
+        "**When to use** instead of **exec**:\n"
+        "- SSH into a remote server (SSH needs a PTY for password prompts)\n"
+        "- Any command that prompts for passwords, yes/no, or interactive input\n"
+        "- Long-running commands where you want to send input dynamically\n\n"
+        "**Workflow**:\n"
+        "1. **exec_interactive**(command=\"ssh user@host\")\n"
+        "   → Returns a session_id and initial output (e.g., password prompt)\n"
+        "2. **write_stdin**(session_id=..., chars=\"password\\n\")\n"
+        "   → Sends input, returns output (e.g., shell prompt)\n"
+        "3. **write_stdin**(session_id=..., chars=\"command\\n\")\n"
+        "   → Keep sending commands\n"
+        "4. **write_stdin**(session_id=..., terminate=True)\n"
+        "   → End the session\n\n"
+        "**Tip**: Always uses a PTY, so SSH password prompts work. "
+        "If you don't see expected output yet, call write_stdin with yield_time_ms to wait longer."
+    )
+
+    exclusive = True
+
+    def __init__(
+        self,
+        *,
+        manager: ExecSessionManager | None = None,
+    ) -> None:
+        self._manager = manager or DEFAULT_EXEC_SESSION_MANAGER
+
+    async def execute(
+        self,
+        command: str,
+        use_pty: bool = True,
+        timeout: int | None = None,
+        yield_time_ms: int | None = None,
+        max_output_chars: int | None = None,
+        **kwargs: Any,
+    ) -> str:
+        try:
+            effective_timeout = min(timeout or 3600, 7200)
+            session_id, poll = await self._manager.start(
+                command=command,
+                cwd=os.getcwd(),
+                env=os.environ,
+                timeout=effective_timeout,
+                shell_program=None,
+                login=True,
+                yield_time_ms=clamp_session_int(yield_time_ms or 5000, 5000, 1000, MAX_YIELD_MS),
+                max_output_chars=clamp_session_int(
+                    max_output_chars, DEFAULT_MAX_OUTPUT_CHARS, 1000, MAX_OUTPUT_CHARS,
+                ),
+                use_pty=use_pty,
+            )
+            return format_session_poll(session_id, poll)
+        except Exception as exc:
+            return f"Error starting session: {exc}"
