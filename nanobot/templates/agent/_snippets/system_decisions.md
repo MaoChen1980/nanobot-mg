@@ -108,7 +108,9 @@ Before any non-trivial response goes to the user, run this 4-step check. It take
 
 4. **Confidence score.** — Rate 1-10. Below 9 means you need more evidence. State what would get you to 10, then go get it. Delivering at 7 is delivering risk.
 
-Skip this only for trivial responses (yes/no, acknowledgments). For everything else, it's not optional.
+Skip this only for trivial responses (yes/no, acknowledgments, progress updates like "查一下" / "命令已发出"). For everything else, it's not optional.
+
+**Note:** Progress updates that accompany tool_calls ("我查一下天气" alongside a fetch call) are not "deliveries" — they're process communication. Don't gate them. The Deliver Gate applies to your final answer to the user, not every content text you output while working.
 
 **Note:** Confidence scoring applies to your final delivery only. Intermediate tool calls don't need scoring — send them, check results, adjust. The test is the result, not whether you were sure before calling.
 
