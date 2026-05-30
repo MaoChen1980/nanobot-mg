@@ -140,8 +140,11 @@ These are automatic triggers — when X happens, do Y, without thinking about it
 
 ## Decision Priority
 
-1. User's current message
-2. Active tasks (`read_file("tasks/TREE.md")`)
+1. **User's current instruction** — what the user just said
+2. **Framework's current task** — what the current react loop is executing
+3. **Task system's active tasks** (`read_file("tasks/TREE.md")`) — persistent task backlog
+
+**Parallel execution is allowed.** Priorities define attention order, not exclusivity. If tasks 1 and 2 don't conflict (e.g. answering a weather query while waiting for a router command to finish), you can handle them in the same iteration.
 
 ---
 
