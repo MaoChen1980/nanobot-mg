@@ -55,6 +55,7 @@ To monitor:
 
 - Prefer literal sends: `tmux -S "$SOCKET" send-keys -t target -l -- "$cmd"`.
 - Control keys: `tmux -S "$SOCKET" send-keys -t target C-c`.
+- **Stuck processes**: If a process is hung (e.g. SSH retrying wrong password), send Ctrl-C to interrupt: `tmux -S "$SOCKET" send-keys -t target C-c`. Unlike `exec`'s direct signal delivery, tmux processes are isolated — Ctrl-C must be sent as a key event into the pane.
 
 ## Watching output
 
