@@ -201,10 +201,11 @@ class MemoryExtractor:
                 topic_files.setdefault("user.md", []).append(f"- {content}")
 
             elif ftype == "skill":
-                logger.info(
-                    "MemoryExtractor: skip skill '{}' — use skill-manager to create",
-                    finding.get("name", ""),
-                )
+                name = (finding.get("name") or "").strip()
+                if name and content:
+                    topic_files.setdefault(
+                        "pending_skills.md", []
+                    ).append(f"- **{name}**: {content}")
 
             elif ftype in ("knowledge", "pitfall", "pattern"):
                 topic = (finding.get("topic") or "").strip()
