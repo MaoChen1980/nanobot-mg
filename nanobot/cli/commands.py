@@ -612,7 +612,6 @@ def agent(
         mcp_servers=config.tools.mcp_servers,
         channels_config=config.channels,
         timezone=config.agents.defaults.timezone,
-        unified_session=config.agents.defaults.unified_session,
         disabled_skills=config.agents.defaults.disabled_skills,
         tools_config=config.tools,
         pt_save_interval=config.agents.defaults.extractor.save_interval,

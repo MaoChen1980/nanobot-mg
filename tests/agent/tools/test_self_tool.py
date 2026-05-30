@@ -33,7 +33,6 @@ def _make_mock_loop(**overrides):
     loop.provider_retry_mode = "standard"
     loop.max_tool_result_chars = 16000
     loop._concurrency_gate = None
-    loop._unified_session = False
     loop._extra_hooks = []
 
     # web_config mock — needed for check tests

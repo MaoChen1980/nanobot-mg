@@ -262,23 +262,6 @@ class TestMergeBotConfig:
 
 
 # ---------------------------------------------------------------------------
-# _wire_callbacks — _channel_session_key
-# ---------------------------------------------------------------------------
-
-
-class TestChannelSessionKey:
-    def test_unified_session(self, config: Config) -> None:
-        config.agents.defaults.unified_session = True
-        app = _make_mocked_app(config)
-        app._wire_callbacks()
-
-    def test_per_channel_key(self, config: Config) -> None:
-        config.agents.defaults.unified_session = False
-        app = _make_mocked_app(config)
-        app._wire_callbacks()
-
-
-# ---------------------------------------------------------------------------
 # _wire_callbacks — _deliver_to_channel
 # ---------------------------------------------------------------------------
 

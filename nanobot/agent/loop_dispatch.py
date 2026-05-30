@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from nanobot.bus.events import InboundMessage, OutboundMessage
 
 from nanobot.bus.events import OutboundMessage
-from nanobot.agent.loop_constants import UNIFIED_SESSION_KEY
 from nanobot.agent.context_vars import _current_inbound
 
 
@@ -66,9 +65,7 @@ class DispatchManager:
             await self._republish_leftover_messages(session_key, pending)
 
     def _effective_session_key(self, msg: InboundMessage) -> str:
-        if self._loop._unified_session and not msg.session_key_override:
-            return UNIFIED_SESSION_KEY
-        return msg.session_key
+        return msg.session_key or msg.session_key
 
     def _maybe_streaming(
         self, msg: InboundMessage,

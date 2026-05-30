@@ -475,7 +475,6 @@ function renderAgent() {
     <div class="card">
       <div class="card-header">Session</div>
       ${selectField('timezone', 'Timezone', a.timezone, 'agents.defaults.timezone', TIMEZONES.map(t => ({v:t,l:t})))}
-      ${field('unified_session', 'Unified Session', a.unified_session, 'checkbox', 'agents.defaults.unified_session')}
       ${field('disabled_skills', 'Disabled Skills', Array.isArray(a.disabled_skills) ? a.disabled_skills.join(', ') : '', 'text', 'agents.defaults.disabled_skills')}
       <div class="row"><label></label><span class="hint">Comma-separated skill names</span></div>
     </div>

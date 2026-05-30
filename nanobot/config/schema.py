@@ -181,7 +181,6 @@ class AgentDefaults(Base):
     provider_retry_mode: Literal["standard", "persistent"] = "persistent"
     reasoning_effort: Optional[str] = "high"  # low / medium / high / max / adaptive - enables LLM thinking mode
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
-    unified_session: bool = False  # Share one session across all channels (single-user multi-device)
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
     output_token_reserve_cap: int = Field(
         default=65536,

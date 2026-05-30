@@ -76,7 +76,6 @@ from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 
 # Import from split modules
 from .loop_constants import (
-    UNIFIED_SESSION_KEY,
     _RUNTIME_CHECKPOINT_KEY,
     _PENDING_USER_TURN_KEY,
 )
@@ -149,7 +148,6 @@ class AgentLoop:
         channels_config: ChannelsConfig | None = None,
         timezone: str | None = None,
         hooks: list[AgentHook] | None = None,
-        unified_session: bool = False,
         disabled_skills: list[str] | None = None,
         tools_config: ToolsConfig | None = None,
         project_root: Path | None = None,
@@ -243,7 +241,6 @@ class AgentLoop:
             project_root=self.project_root,
             memory_store=self.context.memory,
         )
-        self._unified_session = unified_session
         self._running = False
         self._mcp_servers = mcp_servers or {}
         self._mcp_stacks: dict[str, AsyncExitStack] = {}
@@ -408,8 +405,6 @@ class AgentLoop:
         # channel:chat_id for callers that don't have a thread-scoped key.
         if session_key is not None:
             effective_key = session_key
-        elif self._unified_session:
-            effective_key = UNIFIED_SESSION_KEY
         else:
             effective_key = f"{channel}:{chat_id}"
         for name in ("message", "spawn", "spawn_many", "cron", "my"):
@@ -745,8 +740,6 @@ class AgentLoop:
                             effective_key,
                         )
                         continue
-                # Compute the effective session key before dispatching
-                # This ensures /stop command can find tasks correctly when unified session is enabled
                 task = asyncio.create_task(self._dispatch(msg))
                 state = self._session_dispatch.setdefault(effective_key, _SessionDispatchState(tasks=[], pending=asyncio.Queue(maxsize=200)))
                 state.tasks.append(task)

@@ -938,35 +938,7 @@ async def test_pending_queue_cleanup_on_dispatch(tmp_path):
     assert msg.session_key not in loop._session_dispatch
 
 
-@pytest.mark.asyncio
-async def test_followup_routed_to_pending_queue(tmp_path):
-    """Unified-session follow-ups should route into the active pending queue."""
-    from nanobot.agent.loop import UNIFIED_SESSION_KEY
-    from nanobot.bus.events import InboundMessage
 
-    loop = _make_loop(tmp_path)
-    loop._unified_session = True
-    loop._dispatch = AsyncMock()  # type: ignore[method-assign]
-
-    pending = asyncio.Queue(maxsize=20)
-    loop._session_dispatch[UNIFIED_SESSION_KEY] = _SessionDispatchState(tasks=[], pending=pending)
-
-    run_task = asyncio.create_task(loop.run())
-    msg = InboundMessage(channel="discord", sender_id="u", chat_id="c", content="follow-up")
-    await loop.bus.publish_inbound(msg)
-
-    deadline = time.time() + 2
-    while pending.empty() and time.time() < deadline:
-        await asyncio.sleep(0.01)
-
-    loop.stop()
-    await asyncio.wait_for(run_task, timeout=2)
-
-    assert loop._dispatch.await_count == 0
-    assert not pending.empty()
-    queued_msg = pending.get_nowait()
-    assert queued_msg.content == "follow-up"
-    assert queued_msg.session_key == UNIFIED_SESSION_KEY
 
 
 

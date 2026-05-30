@@ -81,7 +81,6 @@ class Nanobot:
             restrict_to_workspace=config.tools.restrict_to_workspace,
             mcp_servers=config.tools.mcp_servers,
             timezone=defaults.timezone,
-            unified_session=defaults.unified_session,
             disabled_skills=defaults.disabled_skills,
             tools_config=config.tools,
             pt_save_interval=defaults.extractor.save_interval,

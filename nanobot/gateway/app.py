@@ -237,7 +237,6 @@ class GatewayApplication:
             mcp_servers=self.config.tools.mcp_servers,
             channels_config=self.config.channels,
             timezone=self.config.agents.defaults.timezone,
-            unified_session=self.config.agents.defaults.unified_session,
             disabled_skills=self.config.agents.defaults.disabled_skills,
             output_token_reserve_cap=self.config.agents.defaults.output_token_reserve_cap,
             history_safety_margin=self.config.agents.defaults.history_safety_margin,
@@ -275,17 +274,12 @@ class GatewayApplication:
 
     def _wire_callbacks(self) -> None:
         """Connect cross-component callbacks (message tool, cron, etc.)."""
-        from nanobot.agent.loop import UNIFIED_SESSION_KEY
         from nanobot.agent.tools.cron import CronTool
         from nanobot.agent.tools.message import MessageTool
         from nanobot.bus.events import OutboundMessage
 
         def _channel_session_key(channel: str, chat_id: str) -> str:
-            return (
-                UNIFIED_SESSION_KEY
-                if self.config.agents.defaults.unified_session
-                else f"{channel}:{chat_id}"
-            )
+            return f"{channel}:{chat_id}"
 
         async def _deliver_to_channel(
             msg: OutboundMessage,
