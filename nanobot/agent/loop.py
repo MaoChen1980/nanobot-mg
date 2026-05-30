@@ -34,7 +34,7 @@ from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.self import MyTool
 from nanobot.agent.tools.shell import ExecTool
-from nanobot.agent.tools.exec_session import WriteStdinTool, ListExecSessionsTool, InteractTool
+from nanobot.agent.tools.exec_session import WriteStdinTool, ListInteractTool, InteractTool
 from nanobot.agent.tools.edit_files import EditFilesTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.spawn_many import SpawnManyTool
@@ -390,7 +390,7 @@ class AgentLoop:
                 )
             )
             self.tools.register(WriteStdinTool(output_dir=self.workspace / ".truncated_output"))
-            self.tools.register(ListExecSessionsTool())
+            self.tools.register(ListInteractTool())
             self.tools.register(InteractTool())
 
     async def _connect_mcp(self) -> None:

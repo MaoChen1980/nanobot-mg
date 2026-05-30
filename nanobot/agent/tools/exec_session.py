@@ -604,16 +604,16 @@ class WriteStdinTool(Tool):
 
 
 @tool_parameters(build_parameters_schema())
-class ListExecSessionsTool(Tool):
-    """List active exec sessions."""
+class ListInteractTool(Tool):
+    """List active interact sessions."""
 
-    name = "list_exec_sessions"
+    name = "list_interact"
 
     description = (
-        "**Purpose**: List active exec sessions with session_id, cwd, elapsed time, idle time, remaining timeout, and command preview.\n\n"
+        "**Purpose**: List active interact sessions (session_id, cwd, elapsed, remaining timeout, command preview).\n\n"
         "**When to use**:\n"
-        "- Recover a lost exec session_id after context shift\n"
-        "- Check which sessions are currently running\n"
+        "- Recover a lost session_id after context shift\n"
+        "- Check which interact sessions are running\n"
         "- Before continuing with write_stdin after conversation was interrupted"
     )
 
