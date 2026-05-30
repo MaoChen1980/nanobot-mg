@@ -187,7 +187,6 @@ class MemoryExtractor:
     async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]]) -> None:
         """Write all findings to target files, then cleanup-check SOUL.md/USER.md, then commit and rebuild FAISS."""
         topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
-        skills_to_create: list[dict[str, Any]] = []
 
         for finding in findings:
             ftype = finding.get("type", "skip")
@@ -202,13 +201,10 @@ class MemoryExtractor:
                 topic_files.setdefault("user.md", []).append(f"- {content}")
 
             elif ftype == "skill":
-                name = (finding.get("name") or "").strip()
-                if name:
-                    skills_to_create.append(finding)
-                else:
-                    logger.warning(
-                        "MemoryExtractor: skill finding without name, skipping"
-                    )
+                logger.info(
+                    "MemoryExtractor: skip skill '{}' — use skill-manager to create",
+                    finding.get("name", ""),
+                )
 
             elif ftype in ("knowledge", "pitfall", "pattern"):
                 topic = (finding.get("topic") or "").strip()
@@ -226,7 +222,7 @@ class MemoryExtractor:
                 topic_files.setdefault(rel_path, []).append(paragraph)
 
         # ── Flush additions to files ──
-        changed = bool(topic_files or skills_to_create)
+        changed = bool(topic_files)
 
         if topic_files:
             for rel_path, paragraphs in topic_files.items():
@@ -248,9 +244,6 @@ class MemoryExtractor:
                     len(paragraphs),
                     rel_path,
                 )
-
-        if skills_to_create:
-            await self._create_skills(skills_to_create)
 
         if not changed:
             logger.info("MemoryExtractor: no actionable findings to write")
@@ -278,51 +271,6 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
     # Skill creation
     # ------------------------------------------------------------------
-
-    async def _create_skills(self, skills: list[dict[str, Any]]) -> None:
-        """Generate SKILL.md for each pattern finding."""
-        for sk in skills:
-            content = (sk.get("content") or "").strip()
-            name = (sk.get("name") or "").strip()
-            if not name:
-                name = sk.get("topic", "").strip().replace("/", "-").lower()
-            if not name or not content:
-                continue
-
-            prompt = (
-                f"Create a SKILL.md for a skill named '{name}'.\n\n"
-                f"## Description\n{content}\n\n"
-                f"Output ONLY the SKILL.md content, starting with `---` frontmatter."
-            )
-
-            try:
-                response = await self.provider.chat_with_retry(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You generate SKILL.md files. Output only the SKILL.md content.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    tools=None,
-                    tool_choice=None,
-                )
-                skill_content = (response.content or "").strip()
-                if not skill_content:
-                    logger.warning(
-                        "MemoryExtractor: empty SKILL.md generation for {}", name
-                    )
-                    continue
-
-                skill_dir = ensure_dir(self.store.workspace / "skills" / name)
-                skill_path = skill_dir / "SKILL.md"
-                skill_path.write_text(skill_content, encoding="utf-8")
-                logger.info("MemoryExtractor: created skill '{}'", name)
-            except Exception:
-                logger.exception(
-                    "MemoryExtractor: failed to create skill '{}'", name
-                )
 
     # ------------------------------------------------------------------
     # Memory directory change detection
