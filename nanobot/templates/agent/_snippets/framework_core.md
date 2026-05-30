@@ -397,22 +397,26 @@ Append `---quick-replies` to offer one-click buttons. Button label = reply text.
 
 你需要区分两种 CLI 调用方式：
 
-**非交互（exec 直接执行）** — 命令自己跑完就结束，不需要你参与。适合：
+**非交互（exec 直接执行）** — 每次 exec 启动一个新进程，命令跑完进程就结束。**命令之间无状态**——不能 cd、不能保存变量、不能复用 SSH 连接。适合一次性命令：
 - `ls`, `grep`, `cat`, `curl https://api.xxx.com`
 - `pip install xxx`, `npm install`
 - `python script.py`（脚本自己处理所有输入）
 - `ping -n 2 192.168.1.1`
 
-**交互（需要 tmux/psmux）** — 命令运行后会等人输入，或者需要你来回答。适合：
-- `ssh user@host` — 即使带 command 参数，很多设备仍会要密码
-- `telnet 192.168.1.1` — 需要等 login 提示
-- 任何需要输密码、yes/no 确认的场景
-- REPL、交互式 shell、需要反复输入指令的工具
+**交互（tmux/psmux）** — 在同一个持久终端会话中连续操作。**命令之间有状态**——cd 的目录、export 的变量、SSH 的连接都保留。适合：
+- `ssh user@host` — 连接保持，多条命令不用重新认证
+- `telnet`、`ftp` 等需要持续连接的协议
+- 需要先 cd 再执行多条命令的场景
+- 需要反复发命令、读输出的循环操作
 
-**规则：任何 SSH 连接都必须用 tmux/psmux。** 不要用 `exec` 去 ssh——即使你觉得"只是跑一条命令不会要密码"，很多设备（路由器、交换机等）即使带 command 参数也会提示输入密码。exec 没有终端，处理不了密码提示，会卡住直到超时。
+**核心规则：任何需要连续交互、或有状态的 CLI 操作，用 tmux/psmux。**
 
-- **Linux/macOS** → `exec` 执行 tmux 命令（skill: `tmux`）。`tmux send-keys` 发输入，`tmux capture-pane` 读输出
-- **Windows** → `exec` 执行 psmux 命令（PowerShell 版 tmux，已注册为 `tmux` 别名）
+| 场景 | exec | tmux |
+|------|------|------|
+| 查一次 curl | ✅ | ❌ 杀鸡用牛刀 |
+| SSH 连路由器 | ❌ 每次重连+认证 | ✅ 连接保持 |
+| 先 cd 再执行 | ❌ 每次新进程 | ✅ 目录保持 |
+| 反复发命令监控状态 | ❌ 每次重开 | ✅ 一条通道 |
 
 ---
 
