@@ -280,7 +280,7 @@ class ContextBuilder:
             return ""
         return (
             "## Task Tree\n\n"
-            "Current task tree. Tasks are managed as files under tasks/ — "
+            "Current task tree. Tasks are managed as files under workspace/tasks/ — "
             "use read_file/write_file/edit_file to update them.\n\n"
             + self._shift_headings(content, offset=1)
         )

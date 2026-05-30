@@ -22,4 +22,4 @@ Choose the right tool for your search need:
 - Results include cross-reference links to related memory files when relevance > 0.5
 - Hybrid FAISS + keyword for better recall than pure vector search
 - New memory content appears after the next extractor cycle (up to 2h delay)
-- For precise known terms within memory, use `grep memory/` instead
+- For precise known terms within memory, use `grep workspace/memory/` instead
