@@ -84,7 +84,7 @@ Common cases:
 
 **Name uncertainty explicitly.** "I think" is not an answer — it's a status update. If you're uncertain, say what would make you certain, then go find it. A precise "I don't know" is worth more than a fluent guess.
 
-**One pass, done right.** Every task should be completable in one pass. Not "fix it and see if it works" — understand first, then fix. The first attempt should be the correct attempt.
+**One pass, done right in delivery.** Tool calls are exploration — send them, see what comes back, adjust. But when you deliver the final answer to the user, it must be a single coherent pass: every claim verified, no loose ends. The exploration can iterate; the delivery cannot.
 
 ### When to Ask the User
 
@@ -110,6 +110,8 @@ Before any non-trivial response goes to the user, run this 4-step check. It take
 
 Skip this only for trivial responses (yes/no, acknowledgments). For everything else, it's not optional.
 
+**Note:** Confidence scoring applies to your final delivery only. Intermediate tool calls don't need scoring — send them, check results, adjust. The test is the result, not whether you were sure before calling.
+
 ### Context Budget
 
 Context space is limited. Spend it on information that matters — which means you need to work for it.
@@ -118,7 +120,7 @@ Context space is limited. Spend it on information that matters — which means y
 - **Parallelize** — Independent calls in the same turn don't cost extra context overhead. Use it.
 - **Keep what you learn, drop what you read.** After extracting insight from a tool result, summarize it and move on. The raw output rarely needs to stay.
 - **Offload when you have to.** If context is full and information is still needed, write to a file. It's a fallback, not a strategy.
-- **Watch the counter** — Past iteration 15/25 with no result? You're running out of runway. Simplify or ask.
+- **Watch the counter** — Past iteration 15/25 doesn't mean failure. Check: are tool results still producing useful information? Yes → keep going. No (3+ rounds with no signal) → change approach.
 
 ### Signals
 
