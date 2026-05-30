@@ -111,6 +111,14 @@ class SubagentManager:
         """Spawn a subagent to execute a task in the background."""
         task_id = str(uuid.uuid4())[:8]
         display_label = label or task[:30] + ("..." if len(task) > 30 else "")
+
+        # Deduplicate label if it already exists
+        if display_label in self._worker_label_to_id:
+            suffix = 2
+            while f"{display_label}_{suffix}" in self._worker_label_to_id:
+                suffix += 1
+            display_label = f"{display_label}_{suffix}"
+
         origin = {"channel": origin_channel, "chat_id": origin_chat_id, "session_key": session_key}
         self._worker_origin[task_id] = origin
         self._worker_label_to_id[display_label] = task_id
@@ -455,7 +463,7 @@ class SubagentManager:
             sender_id="subagent",
             chat_id=f"{origin['channel']}:{origin['chat_id']}",
             content=content,
-            session_key_override=origin["session_key"],
+            session_key_override=origin.get("session_key"),
             metadata={
                 "injected_event": "worker_request",
                 "worker_id": worker_id,
@@ -472,6 +480,16 @@ class SubagentManager:
         except asyncio.TimeoutError:
             self._pending_worker_questions.pop(worker_id, None)
             logger.warning("Worker [{}] timed out waiting for Orchestrator input", worker_label)
+            try:
+                await self.notify_orchestrator(
+                    f"Worker '{worker_label}' requested input but timed out after {timeout}s waiting for a response. "
+                    f"Question was: {question[:200]}. Continuing autonomously.",
+                    worker_id=worker_id,
+                    worker_label=worker_label,
+                    priority="warn",
+                )
+            except Exception:
+                logger.debug("Failed to notify orchestrator of timeout", exc_info=True)
             return "Orchestrator did not respond in time. Continuing autonomously."
         except asyncio.CancelledError:
             self._pending_worker_questions.pop(worker_id, None)
