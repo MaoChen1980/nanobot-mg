@@ -275,10 +275,9 @@ class HubTCPServer:
                     await _write(HubResponse(success=True).to_dict())
 
                 elif msg_type == "message":
-                    seq = data.get("_seq")
                     # Process asynchronously so other messages from the same
                     # proxy are still serviced during long LLM calls.
-                    task = asyncio.create_task(self._route_message(proxy_write_lock, writer, data, peername, seq=seq))
+                    task = asyncio.create_task(self._route_message(proxy_write_lock, writer, data, peername))
                     _track_task(task)
 
         except asyncio.CancelledError:
@@ -348,7 +347,6 @@ class HubTCPServer:
         writer: asyncio.StreamWriter,
         data: dict[str, Any],
         peername: Any,
-        seq: int | None = None,
     ) -> None:
         """Deserialize a ProxyMessage, process it through the agent, and reply."""
         try:
@@ -478,19 +476,6 @@ class HubTCPServer:
             logger.debug("Session {} busy, enqueuing for mid-turn injection", session_key)
             queue = self._session_pending_queues.setdefault(session_key, asyncio.Queue())
             queue.put_nowait(_PendingItem(inbound, data, write_lock, writer, peername))
-            # Send ack to proxy immediately so the sending thread doesn't hang.
-            # The actual response (content/reply_to) will route through the
-            # current turn's response or the post-turn re-dispatch.
-            seq = data.get("_seq")
-            if seq is not None:
-                ack = {
-                    "type": "deliver",
-                    "_seq": seq,
-                    "success": True,
-                    "content": "",
-                    "chat_id": msg.chat_id,
-                }
-                asyncio.create_task(self._proxy_manager.deliver_to_proxy(proxy_key, ack))
             return
 
         # Lock is free — register this task so /stop can find it.
@@ -567,8 +552,6 @@ class HubTCPServer:
         resp_dict = resp.to_dict()
         resp_dict["type"] = "deliver"
         resp_dict["chat_id"] = msg.chat_id
-        if seq is not None:
-            resp_dict["_seq"] = seq  # echo back for waiter matching
         delivered = await self._proxy_manager.deliver_to_proxy(
             proxy_key, resp_dict,
         )

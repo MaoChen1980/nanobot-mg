@@ -15,7 +15,6 @@ from typing import Any
 from loguru import logger
 
 from nanobot.proxy.channels.base import BaseProxyChannel
-from nanobot.proxy.protocol import HubResponse, ProxyMessage
 
 
 class FeishuProxyChannel(BaseProxyChannel):
@@ -158,23 +157,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                             msg_data["media"] = [local_path]
                             logger.info("Feishu inbound media: type={}, key={} → {}", msg_type, file_key, local_path)
 
-                    response = self.send_to_hub(msg_data)
-                    if response and response.success:
-                        item: dict[str, Any] = {"chat_id": chat_id, "root_id": message_id}
-                        if response.content:
-                            item["content"] = response.content
-                        if response.media:
-                            item["media"] = response.media
-                        logger.info("Feishu enqueue response: {}:{}", chat_id[:20], response.content[:60] if response.content else "(media only)")
-                        self._enqueue_send(item)
-                    elif response and not response.success and response.error:
-                        logger.error("Hub returned error for message {}: {}", message_id, response.error)
-                        self._send_plain_text(chat_id, response.error)
-                    if response and response.success and response.metadata.get("done_emoji"):
-                        self._add_reaction(message_id, response.metadata["done_emoji"])
-                    elif response:
-                        self._add_reaction(message_id, self._done_emoji)
-                    self._remove_reaction(message_id)
+                    self.send_to_hub(msg_data)  # fire-and-forget — reply arrives via _handle_deliver
                 except Exception as e:
                     logger.error("Feishu on_message process error: {}", e)
 
@@ -243,9 +226,7 @@ class FeishuProxyChannel(BaseProxyChannel):
         try:
             self._send_plain_text(chat_id, f"你选择了'{reply_text}'")
             msg_data = self.build_message(sender_id, chat_id, reply_text, f"card_{action_name}")
-            result = self.send_to_hub(msg_data)
-            if result and result.success and result.content:
-                self._enqueue_send({"chat_id": chat_id, "root_id": None, "content": result.content})
+            self.send_to_hub(msg_data)
         except Exception as e:
             logger.error("Failed to process card action: {}", e)
 
@@ -287,9 +268,23 @@ class FeishuProxyChannel(BaseProxyChannel):
         media = data.get("media", [])
         buttons = data.get("buttons", [])
         reply_to = data.get("reply_to", "")
-        if not chat_id or (not content and not media):
-            logger.warning("Feishu _handle_deliver: dropped (no chat_id or empty content+media)")
+        error = data.get("error", "")
+
+        if not chat_id:
             return
+        # Hub error with no content — use error text as fallback
+        if error and not content and not media:
+            content = f"[服务错误: {error}]"
+        if not content and not media:
+            logger.warning("Feishu _handle_deliver: dropped (empty content+media for {})", chat_id[:20])
+            return
+
+        # Final bot response (has reply_to) — clean up processing reaction
+        if reply_to:
+            self._thread_pool.submit(self._remove_reaction, reply_to)
+            if self._done_emoji:
+                self._thread_pool.submit(self._add_reaction, reply_to, self._done_emoji)
+
         # Convert structured buttons to ---quick-replies format for _send_formatted_reply
         if buttons and content:
             qr_lines = []

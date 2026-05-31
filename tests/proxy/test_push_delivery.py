@@ -102,7 +102,7 @@ class TestDeliverToProxy:
 
 
 class TestBackgroundReader:
-    """_background_reader routes deliver messages by _seq or to _handle_deliver."""
+    """_background_reader dispatches all delivers to _handle_deliver."""
 
     @pytest.fixture
     def channel(self):
@@ -117,7 +117,7 @@ class TestBackgroundReader:
         return ch
 
     async def test_deliver_dispatched_to_handle_deliver(self, channel):
-        """Messages with type='deliver' go to _handle_deliver, not pending_response."""
+        """All type='deliver' messages go to _handle_deliver."""
         deliver_line = json.dumps({
             "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
         }) + "\n"
@@ -135,32 +135,10 @@ class TestBackgroundReader:
             "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
         })
 
-    async def test_deliver_with_seq_fulfills_matching_future(self, channel):
-        """Deliver messages with _seq fulfill the matching response future."""
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        channel._response_futures[42] = future
-
-        response_line = json.dumps({
-            "type": "deliver", "_seq": 42, "success": True, "content": "ok",
-        }) + "\n"
-        channel._reader.readline = AsyncMock(side_effect=[
-            response_line.encode(),
-            b"",  # EOF
-        ])
-        with patch("os._exit"):
-            await channel._background_reader()
-
-        assert future.done()
-        result = future.result()
-        assert result["success"] is True
-        assert result["content"] == "ok"
-        assert 42 not in channel._response_futures  # popped
-
-    async def test_deliver_without_seq_goes_to_handle_deliver(self, channel):
-        """Deliver messages without _seq go to _handle_deliver, not into futures."""
+    async def test_deliver_with_seq_still_goes_to_handle_deliver(self, channel):
+        """Delivers with _seq (legacy hub) now also go to _handle_deliver."""
         deliver_line = json.dumps({
-            "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
+            "type": "deliver", "_seq": 42, "success": True, "content": "ok",
         }) + "\n"
         channel._reader.readline = AsyncMock(side_effect=[
             deliver_line.encode(),
@@ -173,7 +151,7 @@ class TestBackgroundReader:
             await channel._background_reader()
 
         handle_deliver.assert_awaited_once_with({
-            "type": "deliver", "chat_id": "oc_xxx", "content": "reminder",
+            "type": "deliver", "_seq": 42, "success": True, "content": "ok",
         })
 
     async def test_eof_exits_process(self, channel):

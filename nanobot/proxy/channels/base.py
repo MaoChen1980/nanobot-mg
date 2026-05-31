@@ -15,8 +15,6 @@ from typing import Any
 
 from loguru import logger
 
-from nanobot.proxy.protocol import HubResponse
-
 
 class BaseProxyChannel:
     """Common TCP connection and message-forwarding logic for proxy channels.
@@ -49,15 +47,9 @@ class BaseProxyChannel:
         self._writer: asyncio.StreamWriter | None = None
         self._conn_loop: asyncio.AbstractEventLoop | None = None
         self._conn_thread: threading.Thread | None = None
-        self._send_lock = threading.Lock()
         self._write_lock = asyncio.Lock()
         self._reader_task: asyncio.Task | None = None
         self._parent_watch_task: asyncio.Task | None = None
-        # seq-numbered response futures — each _send_raw call gets a unique
-        # sequence number so _background_reader can route responses correctly
-        # without a shared single-slot future.
-        self._response_futures: dict[int, asyncio.Future] = {}
-        self._next_seq: int = 0
         self._parent_pid: int = 0  # set after TCP connect
         # FIFO send queue — linearizes outbound messages so push deliveries
         # (tool/think events) always arrive before the reply.
@@ -163,72 +155,37 @@ class BaseProxyChannel:
         future.result()
 
 
-    async def _send_raw(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Low-level: write JSON dict to TCP, wait for response via background reader.
+    async def _send_raw(self, data: dict[str, Any]) -> None:
+        """Fire-and-forget: write JSON dict to TCP and return immediately.
 
-        Each call gets a unique sequence number embedded in the wire message.
-        The hub echoes it back in the response, and _background_reader routes
-        the response to the correct future.  This makes concurrent _send_raw
-        calls safe — no shared slot to race on.
-
-        No hard timeout — the caller (send_to_hub / async_send_to_hub) is
-        responsible for bounding the total wait.  Hub death is detected by
-        TCP keepalive + background reader EOF.
+        Hub responses (content, progress, error) arrive asynchronously via
+        ``_background_reader`` → ``_handle_deliver`` — no waiting for a reply.
         """
-        loop = asyncio.get_running_loop()
-        seq = self._next_seq
-        self._next_seq += 1
-        future = loop.create_future()
-        self._response_futures[seq] = future
-        data["_seq"] = seq
-        # Proactive size check: refuse to send messages > 1MB to hub
         payload_bytes = (json.dumps(data) + "\n").encode("utf-8")
         if len(payload_bytes) > 1024 * 1024:
-            logger.error(
-                "Outbound message too large ({} bytes), returning error to channel",
-                len(payload_bytes),
-            )
-            self._response_futures.pop(seq, None)
-            return {"success": False, "error": "Message too large (max 1MB), please shorten your input"}
-        try:
-            async with self._write_lock:
-                self._writer.write(payload_bytes)
-                await self._writer.drain()
-            response = await future
-            return response
-        finally:
-            self._response_futures.pop(seq, None)
+            logger.error("Outbound message too large ({} bytes), dropping", len(payload_bytes))
+            return
+        async with self._write_lock:
+            self._writer.write(payload_bytes)
+            await self._writer.drain()
 
-    async def _send_message(self, msg: dict[str, Any]) -> HubResponse:
+    async def _send_message(self, msg: dict[str, Any]) -> None:
         """Send a message to Hub with one reconnect attempt on write failure.
 
-        Reconnects only when the TCP write itself fails (stale connection).
-        A timeout waiting for the response simply means the LLM is still
-        processing — reconnecting would create duplicate work.
-
-        Caught CancelledError means another concurrent caller triggered
-        a reconnect and cancelled all pending futures — retry once on
-        the fresh connection.
+        Fire-and-forget: the Hub's response arrives through ``_handle_deliver``.
         """
         msg["type"] = "message"
-        for attempt in range(2):
+        try:
+            await self._send_raw(msg)
+        except (ConnectionError, OSError) as e:
+            logger.warning("Send failed, reconnecting: {}", e)
             try:
-                resp = await self._send_raw(msg)
-                return HubResponse.from_dict(resp)
-            except asyncio.CancelledError:
-                # Another concurrent caller's reconnect cancelled our future
-                if attempt == 0:
-                    continue
-                raise
-            except (ConnectionError, OSError) as e:
-                if attempt == 0:
-                    logger.warning("Send failed (attempt {}), reconnecting: {}", attempt + 1, e)
-                    await self._reconnect()
-                    continue
-                raise
-            except asyncio.TimeoutError:
-                # LLM is still processing — don't reconnect, just propagate
-                raise
+                await self._reconnect()
+                await self._send_raw(msg)
+            except (ConnectionError, OSError) as e2:
+                logger.error("Send failed after reconnect: {}", e2)
+        except Exception as e:
+            logger.error("Send failed: {}", e)
 
     async def _reconnect(self) -> None:
         """Close the stale TCP connection and open a fresh one to Hub.
@@ -238,12 +195,6 @@ class BaseProxyChannel:
         full process restart.
         """
         logger.info("Reconnecting to Hub at {}:{}...", self.hub_tcp_host, self.hub_tcp_port)
-
-        # Cancel all in-flight sends — the old connection is dead
-        for fut in self._response_futures.values():
-            if not fut.done():
-                fut.cancel()
-        self._response_futures.clear()
 
         # Cancel old background reader
         if self._reader_task is not None:
@@ -288,56 +239,33 @@ class BaseProxyChannel:
         logger.info("Reconnected and re-registered with Hub")
 
     async def _background_reader(self) -> None:
-        """Continuously read TCP messages and dispatch pushes or fulfill pending sends.
+        """Continuously read TCP push deliveries from hub.
 
-        Each message from hub carries ``_seq`` which matches the sequence number
-        assigned in ``_send_raw``.  Responses are routed to the correct waiter;
-        progress updates (no ``_seq`` or unknown seq) go to ``_handle_deliver``.
-
-        On EOF (hub disconnected), cancels all pending sends and exits the process.
+        All ``type: "deliver"`` messages are dispatched to ``_handle_deliver``.
+        On EOF (hub disconnected), exits the process.
         """
         try:
             while True:
                 line = await self._reader.readline()
                 if not line:
-                    # EOF — hub disconnected
                     logger.error("Hub TCP connection closed, exiting")
                     break
                 data = json.loads(line.decode())
-
                 if data.get("type") == "deliver":
-                    seq = data.get("_seq")
-                    if isinstance(seq, int) and seq in self._response_futures:
-                        # Response to a pending _send_raw call
-                        fut = self._response_futures.pop(seq)
-                        if not fut.done():
-                            fut.set_result(data)
-                    else:
-                        # Progress update (thinking, tool events) from hub
-                        logger.debug("Background reader: deliver msg to chat={}", data.get("chat_id", "")[:20])
-                        try:
-                            await self._handle_deliver(data)
-                        except Exception as e:
-                            logger.error("Background reader: _handle_deliver failed: {}", e)
-                    continue
-
-                # Unexpected message type
-                has_content = bool(data.get("content"))
-                logger.warning(
-                    "Background reader: unexpected msg (type={}, content={}): {}",
-                    data.get("type", "none"),
-                    has_content, str(data.get("content", ""))[:60],
-                )
+                    try:
+                        await self._handle_deliver(data)
+                    except Exception as e:
+                        logger.error("Background reader: _handle_deliver failed: {}", e)
+                else:
+                    logger.warning(
+                        "Background reader: unexpected msg (type={}): {}",
+                        data.get("type", "none"), str(data.get("content", ""))[:60],
+                    )
         except asyncio.CancelledError:
             return
         except Exception as e:
             logger.error("Background reader error: {}", e)
         finally:
-            # Cancel any in-flight sends before exiting
-            for fut in self._response_futures.values():
-                if not fut.done():
-                    fut.cancel()
-            self._response_futures.clear()
             os._exit(1)
 
     async def _start_background_reader(self) -> None:
@@ -345,7 +273,11 @@ class BaseProxyChannel:
         self._reader_task = asyncio.create_task(self._background_reader())
 
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
-        """Handle a push delivery from hub. Override in subclasses to send messages."""
+        """Handle a push delivery from hub. Override in subclasses to send messages.
+
+        All ``type: "deliver"`` messages from the hub arrive here —
+        both progress updates (thinking, tool events) and the final reply.
+        """
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         media = data.get("media", [])
@@ -447,41 +379,34 @@ class BaseProxyChannel:
 
     def send_to_hub(
         self, msg_data: dict[str, Any], timeout: int | None = None,
-    ) -> HubResponse | None:
-        """Thread-safe blocking send.  Returns None on permanent failure.
+    ) -> None:
+        """Fire-and-forget: forward a message to Hub and return immediately.
 
-        No timeout and no serialization lock — multiple callers can send
-        concurrently, each with their own seq-numbered future.  The hub
-        always accepts messages regardless of how many are in flight.
+        The Hub's response (content, progress, error) arrives asynchronously
+        via ``_handle_deliver`` on the background reader task.
         """
         try:
-            future = asyncio.run_coroutine_threadsafe(
+            asyncio.run_coroutine_threadsafe(
                 self._send_message(msg_data),
                 self._conn_loop,
             )
-            return future.result(timeout=timeout)
         except BaseException as e:
             logger.error("Failed to forward message: {}", e)
-            return None
 
     async def async_send_to_hub(
         self, msg_data: dict[str, Any],
-    ) -> HubResponse | None:
-        """Async send.  Returns None on permanent failure.
+    ) -> None:
+        """Fire-and-forget async send.
 
-        Runs the send on the conn_loop to guarantee cross-loop TCP safety,
-        then bridges the result back to the caller's event loop.
-
-        Intended for fully-async channels (slack, telegram, matrix).
+        Schedules the TCP write on the conn_loop and returns immediately.
+        Hub responses arrive through ``_handle_deliver``.
         """
         try:
-            future = asyncio.run_coroutine_threadsafe(
+            asyncio.run_coroutine_threadsafe(
                 self._send_message(msg_data), self._conn_loop,
             )
-            return await asyncio.wrap_future(future)
         except BaseException as e:
             logger.error("Failed to forward message: {}", e)
-            return None
 
     # ------------------------------------------------------------------
     # Deduplication
