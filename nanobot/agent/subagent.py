@@ -230,7 +230,7 @@ class SubagentManager:
                     hook=_SubagentHook(task_id, status),
                     max_iterations_message="Task completed but no final response was generated.",
                     error_message=None,
-                    fail_on_tool_error=True,
+                    fail_on_tool_error=False,
                     checkpoint_callback=_on_checkpoint,
                     injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
@@ -282,11 +282,20 @@ class SubagentManager:
                     )
                 else:
                     final_result = result.final_content or "Task completed but no final response was generated."
-                    logger.info("Subagent [{}] completed successfully", task_id)
-                    await self._announce_result(task_id, label, task, final_result, origin, "ok", sub_result=sub_result, pt_path=pt_path)
+                    announce_status = "error" if sub_result.status == "error" else "ok"
+                    if announce_status == "ok":
+                        logger.info("Subagent [{}] completed successfully", task_id)
+                    else:
+                        logger.warning("Subagent [{}] stopped with status {}", task_id, result.stop_reason)
+                    await self._announce_result(task_id, label, task, final_result, origin, announce_status, sub_result=sub_result, pt_path=pt_path)
             finally:
                 _in_subagent.reset(token)
 
+        except asyncio.CancelledError:
+            status.phase = "cancelled"
+            logger.warning("Subagent [{}] cancelled by orchestrator", task_id)
+            await self._announce_result(task_id, label, task, "Worker cancelled by orchestrator", origin, "error")
+            raise
         except Exception as e:
             status.phase = "error"
             status.error = str(e)
@@ -360,6 +369,22 @@ class SubagentManager:
             await asyncio.gather(*tasks, return_exceptions=True)
         return len(tasks)
 
+    async def cancel_by_label(self, label: str) -> str:
+        """Cancel a specific subagent by its worker label."""
+        task_id = self._worker_label_to_id.get(label)
+        if task_id is None:
+            known = list(self._worker_label_to_id.keys())
+            return f"Error: no worker with label '{label}'. Active workers: {known}"
+        task = self._running_tasks.get(task_id)
+        if task is None or task.done():
+            return f"Worker '{label}' has already completed."
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        return f"Worker '{label}' cancelled."
+
     def get_status(self, task_id: str) -> SubagentStatus | None:
         """Return the current status of a subagent task, or None if unknown."""
         return self._task_statuses.get(task_id)
@@ -375,6 +400,13 @@ class SubagentManager:
             1 for tid in tids
             if tid in self._running_tasks and not self._running_tasks[tid].done()
         )
+
+    def get_sessions_with_running_workers(self) -> list[str]:
+        """Return session keys that have at least one running worker."""
+        return [
+            sk for sk, tids in self._session_tasks.items()
+            if any(tid in self._running_tasks and not self._running_tasks[tid].done() for tid in tids)
+        ]
 
     def list_running_statuses(self) -> list[SubagentStatus]:
         """Return statuses of all currently running subagents."""

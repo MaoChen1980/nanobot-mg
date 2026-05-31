@@ -41,6 +41,7 @@ from nanobot.agent.tools.spawn_many import SpawnManyTool
 from nanobot.agent.tools.respond_to_worker import RespondToWorkerTool
 from nanobot.agent.tools.send_message import SendMessageTool
 from nanobot.agent.tools.check_subagent import CheckSubagentTool
+from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
 from nanobot.agent.tools.list_subagents import ListSubagentsTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
@@ -242,6 +243,7 @@ class AgentLoop:
             memory_store=self.context.memory,
         )
         self._running = False
+        self._last_worker_check: dict[str, float] = {}
         self._mcp_servers = mcp_servers or {}
         self._mcp_stacks: dict[str, AsyncExitStack] = {}
         self._mcp_connected = False
@@ -364,6 +366,7 @@ class AgentLoop:
         self.tools.register(SpawnTool(manager=self.subagents))
         self.tools.register(SpawnManyTool(manager=self.subagents))
         self.tools.register(CheckSubagentTool(manager=self.subagents))
+        self.tools.register(CancelSubagentTool(manager=self.subagents))
         self.tools.register(ListSubagentsTool(manager=self.subagents))
         self.tools.register(RespondToWorkerTool(manager=self.subagents))
         self.tools.register(SendMessageTool(manager=self.subagents))
@@ -667,6 +670,7 @@ class AgentLoop:
                 try:
                     msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
                 except asyncio.TimeoutError:
+                    await self._check_workers()
                     continue
                 except asyncio.CancelledError:
                     if not self._running:
@@ -754,6 +758,44 @@ class AgentLoop:
             logger.exception("run() exiting due to unhandled exception")
             raise
 
+    # Worker check interval: how often to inject a check message for sessions
+    # with running subagents but no other activity.
+    _WORKER_CHECK_INTERVAL: float = 180.0
+
+    async def _check_workers(self) -> None:
+        """Inject worker check messages for sessions with long-idle subagents."""
+        now = time.time()
+
+        # Track new sessions that have running workers
+        for session_key in self.subagents.get_sessions_with_running_workers():
+            if session_key not in self._last_worker_check:
+                self._last_worker_check[session_key] = now
+
+        # Check tracked sessions — inject or clean up
+        for session_key in list(self._last_worker_check.keys()):
+            if self.subagents.get_running_count_by_session(session_key) == 0:
+                del self._last_worker_check[session_key]
+                continue
+            if now - self._last_worker_check[session_key] < self._WORKER_CHECK_INTERVAL:
+                continue
+
+            msg = InboundMessage(
+                channel="cli",
+                sender_id="boss",
+                chat_id=session_key,
+                content=(
+                    "<system-reminder>\n"
+                    "⏰ 定时检查：有 Worker 在运行中。"
+                    "用 list_subagents 查看状态，用 check_subagent 检查进度。\n"
+                    "</system-reminder>"
+                ),
+                ephemeral=True,
+                metadata={},
+                session_key_override=session_key,
+            )
+            await self.bus.publish_inbound(msg)
+            self._last_worker_check[session_key] = now
+
     async def _dispatch(self, msg: InboundMessage) -> None:
         """Process a message: per-session serial, cross-session concurrent.
 
@@ -783,6 +825,11 @@ class AgentLoop:
         # the task entry from state.tasks, but the stale _SessionDispatchState
         # itself must be removed here.
         self._session_dispatch.pop(session_key, None)
+
+        # Any dispatch for this session resets the worker check timer — the LLM
+        # has had control, so no need for an automatic reminder right away.
+        if session_key in self._last_worker_check:
+            self._last_worker_check[session_key] = time.time()
 
     async def close_mcp(self) -> None:
         """Drain pending background archives, then close MCP connections."""
