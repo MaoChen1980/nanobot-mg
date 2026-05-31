@@ -92,13 +92,27 @@ class FeishuProxyChannel(BaseProxyChannel):
             if not message_id or self.check_duplicate(message_id):
                 return
 
+            # Log sender identity for debugging anomalous messages
+            sender_type = getattr(sender, "sender_type", None) or "unknown"
+            sender_id_obj = getattr(sender, "sender_id", None)
+            if sender_id_obj is not None and hasattr(sender_id_obj, "open_id"):
+                sender_id = sender_id_obj.open_id
+            else:
+                sender_id = str(sender_id_obj or "")
+            logger.info("Feishu message sender: type={} id={}", sender_type, sender_id)
+
+            # Skip bot's own messages (echoed back by Feishu platform)
+            if sender_type == "app":
+                logger.debug("Skipping bot's own message: {}", message_id)
+                return
+
             # Skip stale messages (platform sometimes redelivers old messages)
             create_time = getattr(message, "create_time", None)
             if create_time and self._is_stale_message(float(create_time), self._max_message_age):
                 return
 
-            # DEBUG: dump raw message structure to diagnose empty content
-            msg_attrs = {a: getattr(message, a) for a in ['message_id', 'message_type', 'content', 'chat_id', 'root_id', 'parent_id', 'chat_type']
+            # Dump raw message attrs (exclude content — logged separately with truncation)
+            msg_attrs = {a: getattr(message, a) for a in ['message_id', 'message_type', 'chat_id', 'root_id', 'parent_id', 'chat_type']
                          if hasattr(message, a)}
             logger.debug("Feishu message attrs: {}", msg_attrs)
             body = getattr(message, "body", None)
@@ -118,11 +132,6 @@ class FeishuProxyChannel(BaseProxyChannel):
             except Exception:
                 text = content
 
-            sender_id_obj = getattr(sender, "sender_id", None)
-            if sender_id_obj is not None and hasattr(sender_id_obj, "open_id"):
-                sender_id = sender_id_obj.open_id
-            else:
-                sender_id = str(sender_id_obj or "")
             chat_id = getattr(message, "chat_id", "")
 
             # Offload all blocking work (Feishu API calls, Hub TCP) to thread pool
