@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 from typing import Any
 
+import httpx
 from loguru import logger
 
 from nanobot.proxy.channels.base import BaseProxyChannel
@@ -43,10 +45,23 @@ class DiscordProxyChannel(BaseProxyChannel):
             channel_id = str(message.channel.id)
             content = message.content or ""
 
-            if not content:
+            # Download attachments
+            media = []
+            for att in message.attachments:
+                try:
+                    resp = httpx.get(att.url, timeout=30)
+                    resp.raise_for_status()
+                    local_path = self._save_media_bytes(att.filename, resp.content)
+                    media.append(local_path)
+                    ref = self._media_text_reference(local_path)
+                    content = content + "\n" + ref if content else ref
+                except Exception as e:
+                    logger.error("Discord attachment download failed: {}", e)
+
+            if not content and not media:
                 return
 
-            msg_data = self.build_message(sender_id, channel_id, content, msg_id)
+            msg_data = self.build_message(sender_id, channel_id, content, msg_id, media=media)
             response = self.send_to_hub(msg_data)
 
             if response and response.success and response.content:
@@ -61,13 +76,27 @@ class DiscordProxyChannel(BaseProxyChannel):
             return
         chat_id = item["chat_id"]
         content = item.get("content", "")
-        if not content:
+        media_paths = list(item.get("media", []))
+
+        # Scan content for embedded media markers
+        for path, mtype in self._scan_media_paths(content):
+            if path not in media_paths:
+                media_paths.append(path)
+
+        # Strip media markers from content for clean display
+        text = re.sub(r"!\[.*?\]\([^)]+\)", "", content)
+        text = re.sub(r"\[FILE\].*?\[/FILE\]", "", text)
+        text = re.sub(r"file:///[^\s\)\]}]+", "", text)
+        text = text.strip()
+
+        if not text and not media_paths:
             return
         try:
             async def _send():
                 channel = self._client.get_channel(int(chat_id))
                 if channel:
-                    await channel.send(content)
+                    files = [discord.File(p) for p in media_paths] if media_paths else None
+                    await channel.send(content=text or None, files=files)
             future = asyncio.run_coroutine_threadsafe(_send(), self._bot_loop)
             future.result(timeout=30)
         except Exception as e:
@@ -77,8 +106,8 @@ class DiscordProxyChannel(BaseProxyChannel):
         """Enqueue push delivery from hub to Discord channel."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
-        if chat_id and content:
-            self._enqueue_send({"chat_id": chat_id, "content": content})
+        if chat_id and (content or data.get("media")):
+            self._enqueue_send({"chat_id": chat_id, "content": content, "media": data.get("media", [])})
 
     def start(self) -> None:
         """Run the Discord bot connection."""

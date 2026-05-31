@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from typing import Any
@@ -26,7 +27,7 @@ class TelegramProxyChannel(BaseProxyChannel):
     async def _handle_update(self, update: Any, context: Any) -> None:
         try:
             msg = update.message or update.edited_message
-            if not msg or not msg.text:
+            if not msg:
                 return
 
             msg_id = str(msg.message_id)
@@ -35,13 +36,38 @@ class TelegramProxyChannel(BaseProxyChannel):
 
             sender_id = str(msg.from_user.id)
             chat_id = str(msg.chat.id)
-            content = msg.text.strip()
 
-            msg_data = self.build_message(sender_id, chat_id, content, msg_id)
+            media_paths: list[str] = []
+            content = ""
+
+            if msg.photo:
+                file = await msg.photo[-1].get_file()
+                photo_bytes = await file.download_as_bytearray()
+                local_path = self._save_media_bytes(f"telegram_photo_{msg_id}.jpg", bytes(photo_bytes))
+                media_paths.append(local_path)
+                content = self._media_text_reference(local_path)
+            elif msg.document:
+                file = await msg.document.get_file()
+                doc_bytes = await file.download_as_bytearray()
+                original_name = msg.document.file_name or f"telegram_doc_{msg_id}"
+                local_path = self._save_media_bytes(original_name, bytes(doc_bytes))
+                media_paths.append(local_path)
+                content = self._media_text_reference(local_path)
+            elif msg.text:
+                content = msg.text.strip()
+            else:
+                return
+
+            msg_data = self.build_message(sender_id, chat_id, content, msg_id, media=media_paths)
             response = await self.async_send_to_hub(msg_data)
 
-            if response and response.success and response.content:
-                self._enqueue_send({"chat_id": chat_id, "content": response.content})
+            if response and response.success and (response.content or response.media):
+                enqueue_item: dict[str, Any] = {"chat_id": chat_id}
+                if response.content:
+                    enqueue_item["content"] = response.content
+                if response.media:
+                    enqueue_item["media"] = response.media
+                self._enqueue_send(enqueue_item)
 
         except Exception as e:
             logger.error("Telegram proxy handler error: {}", e)
@@ -62,7 +88,10 @@ class TelegramProxyChannel(BaseProxyChannel):
 
         self._app = Application.builder().token(token).loop(loop).build()
         self._app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_update)
+            MessageHandler(
+                (filters.TEXT & ~filters.COMMAND) | filters.PHOTO | filters.Document.ALL,
+                self._handle_update,
+            )
         )
 
         loop.run_until_complete(self._app.run_polling())
@@ -72,11 +101,35 @@ class TelegramProxyChannel(BaseProxyChannel):
         if not self._app or not self._telegram_loop:
             return
         try:
-            future = asyncio.run_coroutine_threadsafe(
-                self._app.bot.send_message(chat_id=item["chat_id"], text=item["content"]),
-                self._telegram_loop,
-            )
-            future.result(timeout=30)
+            chat_id = item["chat_id"]
+            content = item.get("content", "")
+            media_list = item.get("media", [])
+
+            # Send media files first
+            for path in media_list:
+                if not os.path.exists(path):
+                    logger.warning("Telegram media send: file not found: {}", path)
+                    continue
+                ext = os.path.splitext(path)[1].lower()
+                if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"):
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._app.bot.send_photo(chat_id=chat_id, photo=open(path, "rb")),
+                        self._telegram_loop,
+                    )
+                else:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._app.bot.send_document(chat_id=chat_id, document=open(path, "rb")),
+                        self._telegram_loop,
+                    )
+                future.result(timeout=30)
+
+            # Send text content after media
+            if content:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._app.bot.send_message(chat_id=chat_id, text=content),
+                    self._telegram_loop,
+                )
+                future.result(timeout=30)
         except Exception as e:
             logger.error("Telegram send error: {}", e)
 
@@ -84,8 +137,14 @@ class TelegramProxyChannel(BaseProxyChannel):
         """Enqueue push delivery from hub to Telegram chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
-        if chat_id and content:
-            self._enqueue_send({"chat_id": chat_id, "content": content})
+        media = data.get("media", [])
+        if chat_id and (content or media):
+            enqueue_item: dict[str, Any] = {"chat_id": chat_id}
+            if content:
+                enqueue_item["content"] = content
+            if media:
+                enqueue_item["media"] = media
+            self._enqueue_send(enqueue_item)
 
 
 def main() -> None:

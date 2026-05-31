@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import re
 import sys
 from typing import Any
 
+import httpx
 from loguru import logger
 
 from nanobot.proxy.channels.base import BaseProxyChannel
@@ -45,10 +48,27 @@ class QQProxyChannel(BaseProxyChannel):
                 self._chat_type_cache[chat_id] = "c2c"
 
             content = (data.content or "").strip()
-            if not content:
+
+            # Download attachments
+            media = []
+            attachments = getattr(data, "attachments", None) or []
+            if attachments:
+                async with httpx.AsyncClient() as client:
+                    for att in attachments:
+                        try:
+                            resp = await client.get(att.url, timeout=30)
+                            resp.raise_for_status()
+                            local_path = self._save_media_bytes(att.name, resp.content)
+                            media.append(local_path)
+                            ref = self._media_text_reference(local_path)
+                            content = content + "\n" + ref if content else ref
+                        except Exception as e:
+                            logger.error("QQ attachment download failed: {}", e)
+
+            if not content and not media:
                 return
 
-            msg_data = self.build_message(user_id, chat_id, content, data.id)
+            msg_data = self.build_message(user_id, chat_id, content, data.id, media=media)
             response = await self.async_send_to_hub(msg_data)
 
             if response and response.success and response.content:
@@ -57,12 +77,36 @@ class QQProxyChannel(BaseProxyChannel):
         except Exception as e:
             logger.error("QQ proxy message handler error: {}", e)
 
-    async def _send_reply(self, chat_id: str, is_group: bool, content: str) -> None:
+    def _send_plain_text(self, chat_id: str, text: str) -> None:
+        """Sync helper: enqueue a plain text message for async sending."""
+        is_group = self._chat_type_cache.get(chat_id, "c2c") == "group"
+        self._enqueue_send({"chat_id": chat_id, "is_group": is_group, "content": text})
+
+    async def _send_reply(self, chat_id: str, is_group: bool, content: str, media_paths: list[str] | None = None) -> None:
         if not self._client:
             return
         try:
             self._msg_seq += 1
-            payload = {"msg_type": 2 if self.config.get("msgFormat") == "markdown" else 0, "content": content}
+            media_paths = media_paths or []
+
+            if media_paths:
+                path = media_paths[0]
+                ext = os.path.splitext(path)[1].lower()
+                if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"):
+                    # Send as image message
+                    extra = ""
+                    if len(media_paths) > 1:
+                        extra = "\n".join(self._media_text_reference(p) for p in media_paths[1:])
+                    combined = (content + "\n" + extra).strip() if extra else content
+                    payload = {"msg_type": 7, "content": combined, "media": path, "msg_seq": self._msg_seq}
+                else:
+                    # Non-image file: reference in text
+                    refs = "\n".join(self._media_text_reference(p) for p in media_paths)
+                    combined = (content + "\n" + refs).strip() if content else refs
+                    payload = {"msg_type": 2 if self.config.get("msgFormat") == "markdown" else 0, "content": combined, "msg_seq": self._msg_seq}
+            else:
+                payload = {"msg_type": 2 if self.config.get("msgFormat") == "markdown" else 0, "content": content, "msg_seq": self._msg_seq}
+
             if is_group:
                 await self._client.api.post_group_message(group_openid=chat_id, **payload)
             else:
@@ -86,6 +130,7 @@ class QQProxyChannel(BaseProxyChannel):
         class Bot(botpy.Client):
             async def on_ready(self):
                 logger.info("QQ proxy bot ready: {}", self.robot.name)
+                _channel.notify_ready()
 
             async def on_c2c_message_create(self, message):
                 await _channel._on_message(message, is_group=False)
@@ -112,8 +157,22 @@ class QQProxyChannel(BaseProxyChannel):
         if not self._client or not self._qq_loop:
             return
         try:
+            content = item.get("content", "")
+            media_paths = list(item.get("media", []))
+
+            # Scan content for embedded media markers
+            for path, mtype in self._scan_media_paths(content):
+                if path not in media_paths:
+                    media_paths.append(path)
+
+            # Strip media markers from content for clean display
+            text = re.sub(r"!\[.*?\]\([^)]+\)", "", content)
+            text = re.sub(r"\[FILE\].*?\[/FILE\]", "", text)
+            text = re.sub(r"file:///[^\s\)\]}]+", "", text)
+            text = text.strip()
+
             future = asyncio.run_coroutine_threadsafe(
-                self._send_reply(item["chat_id"], item["is_group"], item["content"]),
+                self._send_reply(item["chat_id"], item["is_group"], text, media_paths=media_paths),
                 self._qq_loop,
             )
             future.result(timeout=30)
@@ -124,9 +183,9 @@ class QQProxyChannel(BaseProxyChannel):
         """Enqueue push delivery from hub to QQ chat."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
-        if chat_id and content and self._client and self._qq_loop:
+        if chat_id and (content or data.get("media")) and self._client and self._qq_loop:
             is_group = self._chat_type_cache.get(chat_id) == "group"
-            self._enqueue_send({"chat_id": chat_id, "is_group": is_group, "content": content})
+            self._enqueue_send({"chat_id": chat_id, "is_group": is_group, "content": content, "media": data.get("media", [])})
 
 
 def main() -> None:

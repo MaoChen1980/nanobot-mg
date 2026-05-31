@@ -7,6 +7,8 @@ import email
 import html
 import imaplib
 import json
+import mimetypes
+import os
 import re
 import smtplib
 import ssl
@@ -78,13 +80,24 @@ class EmailProxyChannel(BaseProxyChannel):
         except Exception:
             return value
 
-    @classmethod
-    def _extract_text_body(cls, msg: Any) -> str:
+    def _extract_text_body(self, msg: Any) -> tuple[str, list[str]]:
+        """Extract text body and save attachments.
+
+        Returns:
+            Tuple of (body_text, list_of_saved_attachment_paths).
+        """
+        media_paths: list[str] = []
         if msg.is_multipart():
             plain_parts: list[str] = []
             html_parts: list[str] = []
             for part in msg.walk():
                 if part.get_content_disposition() == "attachment":
+                    filename = part.get_filename()
+                    if filename:
+                        data = part.get_payload(decode=True)
+                        if data:
+                            path = self._save_media_bytes(filename, data)
+                            media_paths.append(path)
                     continue
                 content_type = part.get_content_type()
                 try:
@@ -100,22 +113,33 @@ class EmailProxyChannel(BaseProxyChannel):
                 elif content_type == "text/html":
                     html_parts.append(payload)
             if plain_parts:
-                return "\n\n".join(plain_parts).strip()
-            if html_parts:
-                return cls._html_to_text("\n\n".join(html_parts)).strip()
-            return ""
+                body = "\n\n".join(plain_parts).strip()
+            elif html_parts:
+                body = self._html_to_text("\n\n".join(html_parts)).strip()
+            else:
+                body = ""
+        else:
+            try:
+                payload = msg.get_content()
+            except Exception:
+                payload_bytes = msg.get_payload(decode=True) or b""
+                charset = msg.get_content_charset() or "utf-8"
+                payload = payload_bytes.decode(charset, errors="replace")
+            if not isinstance(payload, str):
+                body = ""
+            elif msg.get_content_type() == "text/html":
+                body = self._html_to_text(payload).strip()
+            else:
+                body = payload.strip()
 
-        try:
-            payload = msg.get_content()
-        except Exception:
-            payload_bytes = msg.get_payload(decode=True) or b""
-            charset = msg.get_content_charset() or "utf-8"
-            payload = payload_bytes.decode(charset, errors="replace")
-        if not isinstance(payload, str):
-            return ""
-        if msg.get_content_type() == "text/html":
-            return cls._html_to_text(payload).strip()
-        return payload.strip()
+        if media_paths:
+            names = ", ".join(os.path.basename(p) for p in media_paths)
+            if body:
+                body += f"\n[附件: {names}]"
+            else:
+                body = f"[附件: {names}]"
+
+        return body, media_paths
 
     @staticmethod
     def _html_to_text(raw_html: str) -> str:
@@ -193,7 +217,9 @@ class EmailProxyChannel(BaseProxyChannel):
                         continue
 
                     subject = self._decode_header_value(parsed.get("Subject", ""))
-                    body = self._extract_text_body(parsed) or "(empty email body)"
+                    body, media_paths = self._extract_text_body(parsed)
+                    if not body:
+                        body = "(empty email body)"
                     body = body[:max_body_chars]
 
                     if subject:
@@ -206,6 +232,7 @@ class EmailProxyChannel(BaseProxyChannel):
                         "subject": subject,
                         "message_id": message_id,
                         "uid": uid,
+                        "media": media_paths,
                         "content": (
                             f"[EMAIL-CONTEXT] Email received.\n"
                             f"From: {sender}\nSubject: {subject}\n\n{body}"
@@ -225,7 +252,7 @@ class EmailProxyChannel(BaseProxyChannel):
             logger.error("Email IMAP polling error: {}", e)
         return messages
 
-    def _smtp_send(self, to_addr: str, content: str, subject: str | None = None, in_reply_to: str | None = None) -> None:
+    def _smtp_send(self, to_addr: str, content: str, subject: str | None = None, in_reply_to: str | None = None, media_paths: list[str] | None = None) -> None:
         try:
             smtp_host = self.config.get("smtp_host", "")
             smtp_port = self.config.get("smtp_port", 587)
@@ -243,6 +270,24 @@ class EmailProxyChannel(BaseProxyChannel):
             if in_reply_to:
                 email_msg["In-Reply-To"] = in_reply_to
                 email_msg["References"] = in_reply_to
+
+            # Attach media files referenced in content or passed explicitly
+            all_media: set[str] = set(media_paths or [])
+            for path, _ in self._scan_media_paths(content):
+                all_media.add(path)
+            for path in all_media:
+                try:
+                    filename = os.path.basename(path)
+                    with open(path, "rb") as f:
+                        data = f.read()
+                    mime_type, _ = mimetypes.guess_type(filename)
+                    if mime_type:
+                        maintype, _, subtype = mime_type.partition("/")
+                    else:
+                        maintype, subtype = "application", "octet-stream"
+                    email_msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
+                except Exception as e:
+                    logger.warning("Failed to attach file {}: {}", path, e)
 
             timeout = 30
             if smtp_use_ssl:
@@ -265,6 +310,7 @@ class EmailProxyChannel(BaseProxyChannel):
             content=item["content"],
             subject=item.get("subject"),
             in_reply_to=item.get("in_reply_to"),
+            media_paths=item.get("media"),
         )
 
     async def _handle_deliver(self, data: dict[str, Any]) -> None:
@@ -272,7 +318,11 @@ class EmailProxyChannel(BaseProxyChannel):
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
         if chat_id and content:
-            self._enqueue_send({"to": chat_id, "content": content})
+            self._enqueue_send({
+                "to": chat_id,
+                "content": content,
+                "media": data.get("media", []),
+            })
 
     def start(self) -> None:
         """Poll IMAP and forward messages to Hub."""
@@ -292,7 +342,7 @@ class EmailProxyChannel(BaseProxyChannel):
                     if not msg_id:
                         msg_id = str(time.time())
 
-                    msg_data = self.build_message(sender, sender, content, msg_id)
+                    msg_data = self.build_message(sender, sender, content, msg_id, media=item.get("media", []))
                     response = self.send_to_hub(msg_data)
 
                     if response and response.success and response.content:

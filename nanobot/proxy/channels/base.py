@@ -540,6 +540,93 @@ class BaseProxyChannel:
         }
 
     # ------------------------------------------------------------------
+    # Media helpers
+    # ------------------------------------------------------------------
+
+    def _workspace_dir(self) -> str:
+        """Return the workspace directory, creating it if needed."""
+        import pathlib
+        ws = self.config.get("_workspace_path") or str(
+            pathlib.Path.home() / ".nanobot" / "workspace"
+        )
+        pathlib.Path(ws).mkdir(parents=True, exist_ok=True)
+        return ws
+
+    def _save_media_bytes(self, filename: str, data: bytes) -> str:
+        """Save bytes to ``<workspace>/incoming/`` and return the absolute path.
+
+        Auto-renames if the filename already exists (appends ``_1``, ``_2``, etc.).
+        """
+        import pathlib
+        incoming = pathlib.Path(self._workspace_dir()) / "incoming"
+        incoming.mkdir(parents=True, exist_ok=True)
+
+        dest = incoming / filename
+        if dest.exists():
+            stem = dest.stem
+            suffix = dest.suffix
+            counter = 1
+            while dest.exists():
+                dest = incoming / f"{stem}_{counter}{suffix}"
+                counter += 1
+        dest.write_bytes(data)
+        return str(dest)
+
+    @staticmethod
+    def _scan_media_paths(content: str) -> list[tuple[str, str]]:
+        """Scan content text for local media file references.
+
+        Returns list of ``(local_path, media_type)`` where ``media_type``
+        is ``"image"`` or ``"file"``.
+
+        Recognised formats:
+        - ``![alt](path)`` — markdown image → ``"image"``
+        - ``[FILE]path[/FILE]`` — generic file marker → ``"file"``
+        - Bare ``file://`` URIs → ``"image"`` or ``"file"`` by extension
+        """
+        import os
+        import re
+
+        results: list[tuple[str, str]] = []
+
+        # Markdown images: ![alt](path)
+        for m in re.finditer(r"!\[.*?\]\(([^)]+)\)", content):
+            path = m.group(1).strip()
+            if os.path.exists(path):
+                ext = os.path.splitext(path)[1].lower()
+                mtype = "image" if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp") else "file"
+                results.append((path, mtype))
+
+        # FILE markers: [FILE]path[/FILE]
+        for m in re.finditer(r"\[FILE\](.*?)\[/FILE\]", content):
+            path = m.group(1).strip()
+            if os.path.exists(path):
+                ext = os.path.splitext(path)[1].lower()
+                mtype = "image" if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp") else "file"
+                results.append((path, mtype))
+
+        # file:// URIs
+        for m in re.finditer(r"file:///([^\s\)\]}]+)", content):
+            path = m.group(1).strip()
+            if os.path.exists(path):
+                ext = os.path.splitext(path)[1].lower()
+                mtype = "image" if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp") else "file"
+                results.append((path, mtype))
+
+        return results
+
+    @staticmethod
+    def _media_text_reference(path: str) -> str:
+        """Generate a text reference with absolute path for a media file.
+
+        The LLM receives this text reference so it can locate the file on disk.
+        """
+        ext = os.path.splitext(path)[1].lower()
+        if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"):
+            return f"[用户发送了图片: {path}]"
+        return f"[用户发送了文件: {path}]"
+
+    # ------------------------------------------------------------------
     # Static helpers
     # ------------------------------------------------------------------
 

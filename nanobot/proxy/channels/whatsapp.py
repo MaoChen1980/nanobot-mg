@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from typing import Any
 
@@ -34,13 +35,18 @@ class WhatsAppProxyChannel(BaseProxyChannel):
                 return
 
             content = data.get("content", "").strip()
-            if not content:
-                return
-
+            media = data.get("media")
             sender_id = data.get("sender_id", "")
             chat_id = data.get("chat_id", "")
 
-            msg_data = self.build_message(sender_id, chat_id, content, msg_id)
+            # If no text content but media exists, create a text reference
+            if not content and media:
+                content = self._media_text_reference(media[0])
+
+            if not content:
+                return
+
+            msg_data = self.build_message(sender_id, chat_id, content, msg_id, media=media)
             response = self.send_to_hub(msg_data)
 
             if response and response.success and response.content:
@@ -63,11 +69,27 @@ class WhatsAppProxyChannel(BaseProxyChannel):
         if not self._ws or not self._bridge_loop:
             return
         try:
-            msg = json.dumps({
-                "type": "send",
-                "chat_id": item["chat_id"],
-                "content": item["content"],
-            })
+            media_paths = self._scan_media_paths(item["content"])
+            if media_paths:
+                path, mtype = media_paths[0]
+                _MIME_MAP = {
+                    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+                }
+                ext = os.path.splitext(path)[1].lower()
+                mimetype = _MIME_MAP.get(ext, "application/octet-stream")
+                msg = json.dumps({
+                    "type": "send_media",
+                    "chat_id": item["chat_id"],
+                    "filePath": path,
+                    "mimetype": mimetype,
+                })
+            else:
+                msg = json.dumps({
+                    "type": "send",
+                    "chat_id": item["chat_id"],
+                    "content": item["content"],
+                })
             future = asyncio.run_coroutine_threadsafe(
                 self._ws.send(msg), self._bridge_loop,
             )

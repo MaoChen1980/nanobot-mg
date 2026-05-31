@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from typing import Any
@@ -68,21 +69,45 @@ class SlackProxyChannel(BaseProxyChannel):
             return
 
         text = event.get("text") or ""
-        if not text:
+
+        # Handle file attachments — download each via private URL with bot token
+        media_paths: list[str] = []
+        files = event.get("files") or []
+        for f in files:
+            download_url = f.get("url_private_download")
+            if not download_url:
+                continue
+            try:
+                import httpx
+                headers = {"Authorization": f"Bearer {self.config.get('bot_token', '')}"}
+                resp = httpx.get(download_url, headers=headers, follow_redirects=True, timeout=60)
+                resp.raise_for_status()
+                filename = f.get("name") or f.get("title") or f"slack_file_{f.get('id', 'unknown')}"
+                local_path = self._save_media_bytes(filename, resp.content)
+                media_paths.append(local_path)
+            except Exception as e:
+                logger.error("Slack file download failed: {}", e)
+
+        if not text and not media_paths:
             return
 
-        await self._handle_text_message(sender_id, chat_id, text, req)
+        await self._handle_text_message(sender_id, chat_id, text, req, media=media_paths)
 
-    async def _handle_text_message(self, sender_id: str, chat_id: str, text: str, req: Any) -> None:
-        # Use envelope_id for dedup (2 second window for Slack's at-least-once delivery)
-        if self.check_duplicate(req.envelope_id or f"{chat_id}:{time.time()}", ttl=2):
+    async def _handle_text_message(self, sender_id: str, chat_id: str, text: str, req: Any, media: list[str] | None = None) -> None:
+        # Use envelope_id for dedup (5 minute window for Slack's at-least-once delivery)
+        if self.check_duplicate(req.envelope_id or f"{chat_id}:{time.time()}", ttl=300):
             return
 
-        msg_data = self.build_message(sender_id, chat_id, text, req.envelope_id or f"{chat_id}:{time.time()}")
+        msg_data = self.build_message(sender_id, chat_id, text, req.envelope_id or f"{chat_id}:{time.time()}", media=media or [])
         response = await self.async_send_to_hub(msg_data)
 
-        if response and response.success and response.content:
-            self._enqueue_send({"chat_id": chat_id, "content": response.content})
+        if response and response.success and (response.content or response.media):
+            enqueue_item: dict[str, Any] = {"chat_id": chat_id}
+            if response.content:
+                enqueue_item["content"] = response.content
+            if response.media:
+                enqueue_item["media"] = response.media
+            self._enqueue_send(enqueue_item)
 
     def start(self) -> None:
         """Run the Slack Socket Mode connection."""
@@ -114,11 +139,35 @@ class SlackProxyChannel(BaseProxyChannel):
         if not self._web_client or not self._slack_loop:
             return
         try:
-            future = asyncio.run_coroutine_threadsafe(
-                self._web_client.chat_postMessage(channel=item["chat_id"], text=item["content"]),
-                self._slack_loop,
-            )
-            future.result(timeout=30)
+            chat_id = item["chat_id"]
+            content = item.get("content", "")
+            media_list = list(item.get("media", []))
+            # Also scan content for embedded media paths (e.g. [FILE]path[/FILE])
+            if not media_list and content:
+                media_list = [p for p, _ in self._scan_media_paths(content)]
+
+            # Upload media files first
+            for path in media_list:
+                if not os.path.exists(path):
+                    logger.warning("Slack media send: file not found: {}", path)
+                    continue
+                future = asyncio.run_coroutine_threadsafe(
+                    self._web_client.files_upload_v2(
+                        channel=chat_id,
+                        file=path,
+                        title=os.path.basename(path),
+                    ),
+                    self._slack_loop,
+                )
+                future.result(timeout=30)
+
+            # Send text content after media
+            if content:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._web_client.chat_postMessage(channel=chat_id, text=content),
+                    self._slack_loop,
+                )
+                future.result(timeout=30)
         except Exception as e:
             logger.error("Slack send error: {}", e)
 
@@ -126,8 +175,14 @@ class SlackProxyChannel(BaseProxyChannel):
         """Enqueue push delivery from hub to Slack channel."""
         chat_id = data.get("chat_id", "")
         content = data.get("content", "")
-        if chat_id and content:
-            self._enqueue_send({"chat_id": chat_id, "content": content})
+        media = data.get("media", [])
+        if chat_id and (content or media):
+            enqueue_item: dict[str, Any] = {"chat_id": chat_id}
+            if content:
+                enqueue_item["content"] = content
+            if media:
+                enqueue_item["media"] = media
+            self._enqueue_send(enqueue_item)
 
 
 def main() -> None:

@@ -367,18 +367,26 @@ class HubTCPServer:
         # Proxy reconnections can re-deliver the same message_id over a new
         # TCP connection.  Drop duplicates here so they never reach the agent
         # loop and corrupt session state.
+        # Key includes proxy_key so different sessions can't collide on
+        # platform-agnostic message IDs.
+        dedup_key = f"{proxy_key}:{msg.message_id}" if proxy_key else msg.message_id
         if msg.message_id:
             now = time.time()
-            expiry = self._seen_message_ids.get(msg.message_id, 0)
+            expiry = self._seen_message_ids.get(dedup_key, 0)
             if expiry > now:
                 logger.debug("Dropped duplicate message {} from {}", msg.message_id, peername)
                 return
-            self._seen_message_ids[msg.message_id] = now + self._DEDUP_TTL
-            # Prune stale entries when the map grows large enough
+            self._seen_message_ids[dedup_key] = now + self._DEDUP_TTL
+            # Prune stale entries when the map grows large enough.
+            # If expired-only prune doesn't free enough, remove oldest 25%.
             if len(self._seen_message_ids) > 10000:
                 stale = [mid for mid, exp in self._seen_message_ids.items() if exp <= now]
                 for mid in stale:
                     del self._seen_message_ids[mid]
+                if len(self._seen_message_ids) > 10000:
+                    sorted_keys = sorted(self._seen_message_ids.keys(), key=lambda k: self._seen_message_ids[k])
+                    for k in sorted_keys[:len(sorted_keys) // 4]:
+                        del self._seen_message_ids[k]
         logger.info(
             "TCP proxy message for {}: {} (session={})",
             session_key, msg.content[:50], session_key,
@@ -526,7 +534,8 @@ class HubTCPServer:
                 # Clear dedup entry so re-dispatch isn't dropped as duplicate
                 pard = ProxyMessage.from_dict(item.data)
                 if pard.message_id:
-                    self._seen_message_ids.pop(pard.message_id, None)
+                    dk = f"{proxy_key}:{pard.message_id}" if proxy_key else pard.message_id
+                    self._seen_message_ids.pop(dk, None)
                 asyncio.create_task(self._route_message(
                     item.write_lock, item.writer, item.data, item.peername,
                 ))
