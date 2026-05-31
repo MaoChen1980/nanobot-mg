@@ -755,7 +755,12 @@ class AgentLoop:
             raise
 
     async def _dispatch(self, msg: InboundMessage) -> None:
-        """Process a message: per-session serial, cross-session concurrent."""
+        """Process a message: per-session serial, cross-session concurrent.
+
+        Cleans up the dispatch state on exit so the next message for this
+        session creates a fresh dispatch instead of rotting in the stale
+        pending queue.
+        """
         session_key = self._dispatch_manager._effective_session_key(msg)
         if session_key != msg.session_key:
             msg = dataclasses.replace(msg, session_key_override=session_key)
@@ -772,6 +777,12 @@ class AgentLoop:
 
         async with lock:
             await self._dispatch_manager.run_dispatch(msg, session_key, pending)
+
+        # Pop ourselves so the next message for this session creates a fresh
+        # dispatch.  The done_callback added by run() already handles removing
+        # the task entry from state.tasks, but the stale _SessionDispatchState
+        # itself must be removed here.
+        self._session_dispatch.pop(session_key, None)
 
     async def close_mcp(self) -> None:
         """Drain pending background archives, then close MCP connections."""

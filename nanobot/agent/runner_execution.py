@@ -1,8 +1,8 @@
-"""Tool execution and batching for AgentRunner."""
+"""Tool execution for AgentRunner — sequential only."""
 
 from __future__ import annotations
 
-import asyncio
+from asyncio import CancelledError
 import time
 from typing import Any
 
@@ -18,26 +18,8 @@ def partition_tool_batches(
     spec: Any,
     tool_calls: list,
 ) -> list[list]:
-    """Partition tool calls into batches respecting concurrency rules."""
-    if not spec.concurrent_tools:
-        return [[tool_call] for tool_call in tool_calls]
-
-    batches: list[list] = []
-    current: list = []
-    for tool_call in tool_calls:
-        get_tool = getattr(spec.tools, "get", None)
-        tool = get_tool(tool_call.name) if callable(get_tool) else None
-        can_batch = bool(tool and tool.concurrency_safe)
-        if can_batch:
-            current.append(tool_call)
-            continue
-        if current:
-            batches.append(current)
-            current = []
-        batches.append([tool_call])
-    if current:
-        batches.append(current)
-    return batches
+    """Each tool call executes as its own batch — sequential only."""
+    return [[tool_call] for tool_call in tool_calls]
 
 
 async def execute_tools(
@@ -49,7 +31,7 @@ async def execute_tools(
     injection_cycles: int,
     iteration: int,
 ) -> tuple:
-    """Execute tool calls in batches.
+    """Execute tool calls sequentially.
 
     Returns (results, events, fatal_error, was_interrupted,
     new_injection_cycles, executed_count, saved_injections).
@@ -61,24 +43,23 @@ async def execute_tools(
     turn = 0
 
     for batch in batches:
-        if spec.concurrent_tools and len(batch) > 1:
-            batch_results = await _batch_run_tools(
-                self_ref, spec, batch, external_lookup_counts, iteration, turn
+        batch_results = []
+        for tool_call in batch:
+            result = await _run_tool(
+                self_ref, spec, tool_call, external_lookup_counts, iteration, turn
             )
-            turn += len(batch)
-            tool_results.extend(batch_results)
-        else:
-            batch_results = []
-            for tool_call in batch:
-                result = await _run_tool(
-                    self_ref, spec, tool_call, external_lookup_counts, iteration, turn
-                )
-                turn += 1
-                tool_results.append(result)
-                batch_results.append(result)
-                if isinstance(result[2], AskUserInterrupt):
-                    break
+            turn += 1
+            tool_results.append(result)
+            batch_results.append(result)
+            if isinstance(result[2], AskUserInterrupt):
+                break
+            if isinstance(result[2], RuntimeError):
+                interrupted = True
+                break
         if any(isinstance(error, AskUserInterrupt) for _, _, error in batch_results):
+            break
+        if any(isinstance(error, RuntimeError) for _, _, error in batch_results):
+            interrupted = True
             break
 
         if tool_results and injection_cycles < _MAX_INJECTION_CYCLES:
@@ -140,7 +121,9 @@ async def _run_tool(
             "status": "error",
             "detail": prep_error.split(": ", 1)[-1][:120],
         }
-        return prep_error, event, RuntimeError(prep_error) if spec.fail_on_tool_error else None
+        if spec.fail_on_tool_error:
+            return prep_error, event, RuntimeError(prep_error)
+        return prep_error, event, None
 
     start = time.monotonic()
     try:
@@ -149,7 +132,7 @@ async def _run_tool(
         else:
             result = await spec.tools.execute(tool_call.name, params)
         duration_ms = int((time.monotonic() - start) * 1000)
-    except asyncio.CancelledError:
+    except CancelledError:
         raise
     except BaseException as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
@@ -194,19 +177,3 @@ async def _run_tool(
         detail = detail[:120] + "..."
     self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, detail_raw, True, None, duration_ms)
     return result, {"name": tool_call.name, "status": "ok", "detail": detail, "duration_ms": duration_ms}, None
-
-
-async def _batch_run_tools(
-    self_ref: Any,
-    spec: Any,
-    tool_calls: list,
-    external_lookup_counts: dict[str, int],
-    iteration: int,
-    turn_start: int,
-) -> list:
-    """Execute multiple tool calls concurrently."""
-    tasks = [
-        _run_tool(self_ref, spec, tc, external_lookup_counts, iteration, turn_start + i)
-        for i, tc in enumerate(tool_calls)
-    ]
-    return await asyncio.gather(*tasks)

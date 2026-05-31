@@ -313,6 +313,8 @@ class AgentRunner:
 
                 if was_interrupted:
                     completed_tool_results: list[dict[str, Any]] = []
+                    is_tool_failure = isinstance(fatal_error, RuntimeError)
+                    failed_name = tool_calls[executed_count - 1].name if is_tool_failure and executed_count else ""
                     for i, tc in enumerate(tool_calls):
                         if i < executed_count:
                             res = results[i]
@@ -320,6 +322,9 @@ class AgentRunner:
                             ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
                             ev = new_events[i] if i < len(new_events) else {}
                             content = self._fmt_tool_metadata(tc.name, content, ts, ev.get("duration_ms"))
+                        elif is_tool_failure:
+                            content = f"[CANCELLED] Tool '{tc.name}' was not executed because '{failed_name}' failed"
+                            ts = ""
                         else:
                             content = f"[BYPASSED] tool call {tc.name} was not executed due to interruption"
                             ts = ""
