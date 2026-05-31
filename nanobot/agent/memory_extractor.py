@@ -224,6 +224,7 @@ class MemoryExtractor:
 
         # ── Flush additions to files ──
         changed = bool(topic_files)
+        modified_for_cleanup: list[str] = []  # rel_paths written to
 
         if topic_files:
             for rel_path, paragraphs in topic_files.items():
@@ -231,15 +232,26 @@ class MemoryExtractor:
                 full_path.parent.mkdir(parents=True, exist_ok=True)
                 date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 if full_path.exists():
-                    with open(full_path, "a", encoding="utf-8") as f:
-                        for p in paragraphs:
-                            f.write(f"\n\n{p}\n")
+                    existing = full_path.read_text(encoding="utf-8")
+                    new_paragraphs = [p for p in paragraphs if p.strip() not in existing]
+                    skipped = len(paragraphs) - len(new_paragraphs)
+                    if new_paragraphs:
+                        with open(full_path, "a", encoding="utf-8") as f:
+                            for p in new_paragraphs:
+                                f.write(f"\n\n{p}\n")
+                        modified_for_cleanup.append(rel_path)
+                    if skipped:
+                        logger.info(
+                            "MemoryExtractor: skipped {} duplicate(s) in {}",
+                            skipped, rel_path,
+                        )
                 else:
                     lines = [f"# {full_path.stem}\n"]
                     for p in paragraphs:
                         lines.append(f"\n{p}\n")
                     lines.append(f"\n---\n\n*创建: {date_str}*\n")
                     full_path.write_text("".join(lines), encoding="utf-8")
+                    modified_for_cleanup.append(rel_path)
                 logger.info(
                     "MemoryExtractor: wrote {} paragraph(s) to {}",
                     len(paragraphs),
@@ -254,7 +266,7 @@ class MemoryExtractor:
         self._generate_memory_index()
 
         # ── Step 2b: cleanup check ──
-        await self._cleanup_check()
+        await self._cleanup_check(modified_for_cleanup)
 
         # ── Git commit ──
         if self.store.git.is_initialized():
@@ -454,11 +466,27 @@ class MemoryExtractor:
     # Cleanup check
     # ------------------------------------------------------------------
 
-    async def _cleanup_check(self) -> None:
-        """Step 2b: LLM check SOUL.md/USER.md for contradictions, duplicates, stale content."""
+    async def _cleanup_check(self, modified_files: list[str] | None = None) -> None:
+        """Step 2b: LLM check SOUL.md/USER.md (and optionally modified topic files)
+        for contradictions, duplicates, stale content."""
         soul = self.store.read_soul()
         user = self.store.read_user()
-        if not soul and not user:
+
+        # Build user message from SOUL/USER and any modified topic files
+        content_parts: list[str] = []
+        content_parts.append(f"## SOUL.md\n{soul or '(empty)'}")
+        content_parts.append(f"## USER.md\n{user or '(empty)'}")
+
+        if modified_files:
+            for rel_path in modified_files:
+                full_path = self.store.memory_dir / rel_path
+                try:
+                    text = full_path.read_text(encoding="utf-8")
+                    content_parts.append(f"## {rel_path}\n{text}")
+                except OSError:
+                    continue
+
+        if not soul and not user and not modified_files:
             return
 
         try:
@@ -471,7 +499,7 @@ class MemoryExtractor:
                     },
                     {
                         "role": "user",
-                        "content": f"## SOUL.md\n{soul or '(empty)'}\n\n## USER.md\n{user or '(empty)'}",
+                        "content": "\n\n".join(content_parts),
                     },
                 ],
                 tools=None,
@@ -505,6 +533,8 @@ class MemoryExtractor:
                 file_path = self.store.soul_file
             elif file_name == "USER.md":
                 file_path = self.store.user_file
+            elif modified_files and file_name in modified_files:
+                file_path = self.store.memory_dir / file_name
             else:
                 continue
 

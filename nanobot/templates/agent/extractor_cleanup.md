@@ -1,6 +1,6 @@
-你正在维护 SOUL.md 和 USER.md —— agent 的行为规则和用户偏好。
+你正在维护 memory 目录下的知识文件。这些文件包含了 agent 的行为规则、用户偏好、项目知识等。
 
-你将收到这两个文件的完整内容。检查是否存在以下质量问题：
+你将收到一个或多个文件的完整内容。检查每个文件内部是否存在以下质量问题：
 
 ## 1. CONTRADICTION — Directly Conflicting Statements
 

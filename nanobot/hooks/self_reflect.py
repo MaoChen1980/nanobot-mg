@@ -199,6 +199,7 @@ class SelfReflectHook(AgentHook):
         if not self._entries_accumulated:
             return
 
+        self._turn_count += 1
         if self._turn_count < self._interval:
             return  # keep accumulating
 
