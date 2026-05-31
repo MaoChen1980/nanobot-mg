@@ -12,7 +12,11 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.context_vars import _current_debug_enabled
+from .message_pipe import MessagePipe
 from .runner_constants import _DEFAULT_ERROR_MESSAGE
+
+# Module-level pipe instance (stateless, handles overflow automatically)
+_message_pipe = MessagePipe()
 
 
 async def request_model(
@@ -41,10 +45,15 @@ async def request_model(
         await hook.on_stream(context, delta)
     async def _reasoning(delta: str) -> None:
         await hook.on_reasoning(context, delta)
-    coro = provider.chat_stream_with_retry(
-        **kwargs,
+
+    pipe_kwargs = {k: v for k, v in kwargs.items() if k not in ("messages", "model")}
+    coro = _message_pipe.complete_stream(
+        messages=messages,
+        model=spec.model,
+        provider=provider,
         on_content_delta=_stream,
         on_reasoning_delta=_reasoning,
+        **pipe_kwargs,
     )
 
     if timeout_s is None:
@@ -94,7 +103,13 @@ async def request_finalization_retry(
     retry_messages = list(messages)
     retry_messages.append(build_finalization_retry_message())
     kwargs = _build_request_kwargs(provider, spec, retry_messages, tools=None)
-    return await provider.chat_with_retry(**kwargs)
+    pipe_kwargs = {k: v for k, v in kwargs.items() if k not in ("messages", "model")}
+    return await _message_pipe.complete(
+        messages=retry_messages,
+        model=spec.model,
+        provider=provider,
+        **pipe_kwargs,
+    )
 
 
 def usage_dict(usage: dict[str, Any] | None) -> dict[str, int]:

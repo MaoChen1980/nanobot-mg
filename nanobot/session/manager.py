@@ -88,7 +88,7 @@ class Session:
         converted to that timezone so they stay consistent with the runtime
         context's ``Current Time``.
         """
-        unconsolidated = [m for m in self.messages if m.get("status") not in ("excluded", "pending_compress")]
+        unconsolidated = [m for m in self.messages if m.get("status") != "excluded"]
         if max_turns > 0:
             turns = self._split_turns_by_assistant(unconsolidated)
             # Keep synthetic turns (summary pairs) regardless of max_turns limit

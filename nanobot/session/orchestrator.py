@@ -76,9 +76,8 @@ class SessionLifecycle:
     def finalize(self, session: Session) -> list[dict]:
         """Complete a turn: enforce cap, clear checkpoints, save.
 
-        Session size management is handled by ``_compress_if_needed`` —
-        archiving to history happens only after the background summary
-        completes. Returns empty list (legacy signature).
+        Session size management is handled by the session file cap
+        check inside this method. Returns empty list (legacy signature).
         """
         self._recovery.clear_pending_user_turn(session)
         self._recovery.clear_runtime_checkpoint(session)
