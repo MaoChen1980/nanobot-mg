@@ -535,20 +535,21 @@ class FeishuProxyChannel(BaseProxyChannel):
 
                 receive_id_type = self.config.get("receiveIdType", "chat_id")
                 key_field = "image_key" if msg_type == "image" else "file_key"
-                builder = (
-                    CreateMessageRequest.builder()
-                    .receive_id_type(receive_id_type)
-                    .request_body(
-                        CreateMessageRequestBody.builder()
-                        .receive_id(chat_id)
-                        .msg_type(msg_type)
-                        .content(json.dumps({key_field: file_key}))
-                        .build()
-                    )
+                body = (
+                    CreateMessageRequestBody.builder()
+                    .receive_id(chat_id)
+                    .msg_type(msg_type)
+                    .content(json.dumps({key_field: file_key}))
+                    .build()
                 )
                 if root_id:
-                    builder.root_id(root_id)
-                request = builder.build()
+                    body.root_id = root_id
+                request = (
+                    CreateMessageRequest.builder()
+                    .receive_id_type(receive_id_type)
+                    .request_body(body)
+                    .build()
+                )
                 resp = self._client.im.v1.message.create(request)
                 if resp.code != 0:
                     logger.error("Feishu send media failed: code={} msg={}", resp.code, resp.msg)
@@ -738,20 +739,21 @@ class FeishuProxyChannel(BaseProxyChannel):
                     "title": {"tag": "plain_text", "content": header_text},
                     "template": template,
                 }
-            builder = (
-                CreateMessageRequest.builder()
-                .receive_id_type("chat_id")
-                .request_body(
-                    CreateMessageRequestBody.builder()
-                    .receive_id(chat_id)
-                    .msg_type("interactive")
-                    .content(json.dumps(card))
-                    .build()
-                )
+            body = (
+                CreateMessageRequestBody.builder()
+                .receive_id(chat_id)
+                .msg_type("interactive")
+                .content(json.dumps(card))
+                .build()
             )
             if root_id:
-                builder.root_id(root_id)
-            request = builder.build()
+                body.root_id = root_id
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type("chat_id")
+                .request_body(body)
+                .build()
+            )
             resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu card sent OK to chat={} content_len={}", chat_id, len(content))
@@ -778,20 +780,21 @@ class FeishuProxyChannel(BaseProxyChannel):
                     ],
                 },
             }
-            builder = (
-                CreateMessageRequest.builder()
-                .receive_id_type("chat_id")
-                .request_body(
-                    CreateMessageRequestBody.builder()
-                    .receive_id(chat_id)
-                    .msg_type("post")
-                    .content(json.dumps(payload))
-                    .build()
-                )
+            body = (
+                CreateMessageRequestBody.builder()
+                .receive_id(chat_id)
+                .msg_type("post")
+                .content(json.dumps(payload))
+                .build()
             )
             if root_id:
-                builder.root_id(root_id)
-            request = builder.build()
+                body.root_id = root_id
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type("chat_id")
+                .request_body(body)
+                .build()
+            )
             resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu post sent OK to chat={} content_len={}", chat_id, len(content))
@@ -806,20 +809,21 @@ class FeishuProxyChannel(BaseProxyChannel):
         try:
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
-            builder = (
-                CreateMessageRequest.builder()
-                .receive_id_type("chat_id")
-                .request_body(
-                    CreateMessageRequestBody.builder()
-                    .receive_id(chat_id)
-                    .msg_type("text")
-                    .content(json.dumps({"text": content}))
-                    .build()
-                )
+            body = (
+                CreateMessageRequestBody.builder()
+                .receive_id(chat_id)
+                .msg_type("text")
+                .content(json.dumps({"text": content}))
+                .build()
             )
             if root_id:
-                builder.root_id(root_id)
-            request = builder.build()
+                body.root_id = root_id
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type("chat_id")
+                .request_body(body)
+                .build()
+            )
             resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu plain text sent OK to chat={} content_len={}", chat_id, len(content))
