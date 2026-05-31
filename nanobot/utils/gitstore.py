@@ -426,13 +426,15 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
         _write(item, workspace / "framework" / item.relative_to(tpl / "framework"))
     (workspace / "skills").mkdir(exist_ok=True)
 
-    # Create tasks/ directory with empty TREE.md and CURRENT.md for task tracking
+    # Create tasks/ directory with TREE.md and CURRENT.md templates
     tasks_dir = workspace / "tasks"
     tasks_dir.mkdir(exist_ok=True)
-    for name in ("TREE.md", "CURRENT.md"):
+    tree_content = "# Task as Tree - workspace/task/TREE.md\n\n## active\n\n## paused\n\n## completed\n\n## cancelled\n"
+    current_content = "# Current State — workspace/task/CURRENT.md\n"
+    for name, content in (("TREE.md", tree_content), ("CURRENT.md", current_content)):
         f = tasks_dir / name
         if not f.exists():
-            f.write_text("", encoding="utf-8")
+            f.write_text(content, encoding="utf-8")
             added.append(f"tasks/{name}")
 
     # Initialize self-installed tools directory and regenerate index
