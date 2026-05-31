@@ -1,6 +1,6 @@
 # Cross-Turn Collaboration Strategy
 
-遇到大型任务，按任务结构选择协作策略。
+遇到大型 task，按 task 结构选择协作策略。
 
 ## Independent Subtasks
 

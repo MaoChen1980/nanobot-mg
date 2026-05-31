@@ -26,13 +26,13 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 REFLECTION_SYSTEM_PROMPT = """\
 你是 nanobot，正在做 this session 自我反思。
 
-你的任务是：回顾 this session 对话，提取**值得记住的信息**。
+你的 task 是：回顾 this session 对话，提取**值得记住的信息**。
 
 ## 过滤标准
 
 只记录**同时满足以下两个条件**的信息：
 1. 这不是 LLM 训练数据中已有的通用知识（而是项目特有的架构决策、配置约定、历史原因等）
-2. 这条信息在当前任务或可预见的未来任务中会被复用
+2. 这条信息在当前 task 或可预见的未来 task 中会被复用
 
 符合条件的信息类型：
 
@@ -53,7 +53,7 @@ REFLECTION_SYSTEM_PROMPT = """\
     {
       "type": "knowledge|decision|behavior|correction",
       "content": "具体信息",
-      "relevance": "这条会在什么任务场景下被复用"
+      "relevance": "这条会在什么 task 场景下被复用"
     }
   ]
 }

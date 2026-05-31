@@ -593,7 +593,7 @@ class GatewayApplication:
                     to=cfg.to,
                     session_key=cfg.session_key,
                     message=(
-                        "每日自我审视任务\n\n"
+                        "每日自我审视 task\n\n"
                         "1. 读 ~/.nanobot/agent/self_log.md 最新的 10 条记录，"
                         "问自己：这周有什么别扭的地方是重复出现的？\n"
                         "2. 读 ~/.nanobot/agent/session_metrics.json，"

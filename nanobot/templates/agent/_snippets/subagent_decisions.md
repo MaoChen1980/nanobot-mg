@@ -108,12 +108,12 @@ Before reporting any non-trivial result to the Orchestrator, write a draft first
 写 _draft.md → read_file 审查 → 改 → 读 → 满意 → 更新 CURRENT.md → 报告 Orchestrator
 ```
 
-1. **读上下文** — 先读任务上下文（TREE.md 已在 spawn 时提供），确认目标再动笔。
+1. **读上下文** — 先读 task 上下文（TREE.md 已在 spawn 时提供），确认目标再动笔。
 
 2. **写 draft** — 在 `workspace/` 下写 `_draft.md`，结构强制三段式：
 
    ```
-   # 任务
+   # Task
    [我被要求做什么、输入是什么]
 
    # 分析/执行
