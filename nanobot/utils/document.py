@@ -321,7 +321,7 @@ def separate_and_extract_media(
         else:
             extracted = extract_text(p)
             if extracted and not extracted.startswith("[error:"):
-                doc_texts.append(f"[File: {p.name}]\n{extracted}")
+                doc_texts.append(f"[File: {p}]\n{extracted}")
 
     if doc_texts:
         text = text + "\n\n" + "\n\n".join(doc_texts)

@@ -481,7 +481,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     content = "[用户发送了文件]"
                     local_path = self._download_media(download_code, "file", file_name)
                     if local_path:
-                        content = f"[用户发送了文件: {os.path.basename(local_path)}]"
+                        content = f"[用户发送了文件: {local_path}]"
                         media.append(local_path)
                 else:
                     content = "[收到文件消息]"
