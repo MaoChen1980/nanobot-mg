@@ -478,6 +478,19 @@ class HubTCPServer:
             logger.debug("Session {} busy, enqueuing for mid-turn injection", session_key)
             queue = self._session_pending_queues.setdefault(session_key, asyncio.Queue())
             queue.put_nowait(_PendingItem(inbound, data, write_lock, writer, peername))
+            # Send ack to proxy immediately so the sending thread doesn't hang.
+            # The actual response (content/reply_to) will route through the
+            # current turn's response or the post-turn re-dispatch.
+            seq = data.get("_seq")
+            if seq is not None:
+                ack = {
+                    "type": "deliver",
+                    "_seq": seq,
+                    "success": True,
+                    "content": "",
+                    "chat_id": msg.chat_id,
+                }
+                asyncio.create_task(self._proxy_manager.deliver_to_proxy(proxy_key, ack))
             return
 
         # Lock is free — register this task so /stop can find it.
