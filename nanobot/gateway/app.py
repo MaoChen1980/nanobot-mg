@@ -333,6 +333,8 @@ class GatewayApplication:
                     "chat_id": msg.chat_id,
                     "content": msg.content,
                 }
+                if msg.reply_to:
+                    deliver_msg["reply_to"] = msg.reply_to
                 if msg.media:
                     deliver_msg["media"] = msg.media
                 if msg.buttons:

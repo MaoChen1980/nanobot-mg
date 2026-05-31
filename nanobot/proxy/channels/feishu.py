@@ -531,7 +531,7 @@ class FeishuProxyChannel(BaseProxyChannel):
 
                 receive_id_type = self.config.get("receiveIdType", "chat_id")
                 key_field = "image_key" if msg_type == "image" else "file_key"
-                request = (
+                builder = (
                     CreateMessageRequest.builder()
                     .receive_id_type(receive_id_type)
                     .request_body(
@@ -541,10 +541,10 @@ class FeishuProxyChannel(BaseProxyChannel):
                         .content(json.dumps({key_field: file_key}))
                         .build()
                     )
-                    .build()
                 )
                 if root_id:
-                    request.builder().root_id(root_id)
+                    builder.root_id(root_id)
+                request = builder.build()
                 resp = self._client.im.v1.message.create(request)
                 if resp.code != 0:
                     logger.error("Feishu send media failed: code={} msg={}", resp.code, resp.msg)
@@ -685,6 +685,7 @@ class FeishuProxyChannel(BaseProxyChannel):
     # ── Send strategies ────────────────────────────────────────────────
 
     def _send_card_reply(self, chat_id: str, content: str,
+                          root_id: str | None = None,
                           quick_replies: list[dict[str, str]] | None = None) -> bool:
         """Send as Feishu interactive card v2.0 with native markdown.
 
@@ -733,7 +734,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                     "title": {"tag": "plain_text", "content": header_text},
                     "template": template,
                 }
-            request = (
+            builder = (
                 CreateMessageRequest.builder()
                 .receive_id_type("chat_id")
                 .request_body(
@@ -743,8 +744,10 @@ class FeishuProxyChannel(BaseProxyChannel):
                     .content(json.dumps(card))
                     .build()
                 )
-                .build()
             )
+            if root_id:
+                builder.root_id(root_id)
+            request = builder.build()
             resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu card sent OK to chat={} content_len={}", chat_id, len(content))
@@ -754,7 +757,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             logger.error("Feishu card send exception: {}", e)
         return False
 
-    def _send_post_reply(self, chat_id: str, content: str) -> bool:
+    def _send_post_reply(self, chat_id: str, content: str, root_id: str | None = None) -> bool:
         """Send as post message with a markdown body.
 
         Lighter than interactive cards — good for simple text without
@@ -771,7 +774,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                     ],
                 },
             }
-            request = (
+            builder = (
                 CreateMessageRequest.builder()
                 .receive_id_type("chat_id")
                 .request_body(
@@ -781,8 +784,10 @@ class FeishuProxyChannel(BaseProxyChannel):
                     .content(json.dumps(payload))
                     .build()
                 )
-                .build()
             )
+            if root_id:
+                builder.root_id(root_id)
+            request = builder.build()
             resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu post sent OK to chat={} content_len={}", chat_id, len(content))
@@ -792,12 +797,12 @@ class FeishuProxyChannel(BaseProxyChannel):
             logger.error("Post send exception: {}", e)
         return False
 
-    def _send_plain_text(self, chat_id: str, content: str) -> None:
+    def _send_plain_text(self, chat_id: str, content: str, root_id: str | None = None) -> None:
         """Last-resort fallback: send as plain text with no formatting."""
         try:
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
-            request = (
+            builder = (
                 CreateMessageRequest.builder()
                 .receive_id_type("chat_id")
                 .request_body(
@@ -807,8 +812,10 @@ class FeishuProxyChannel(BaseProxyChannel):
                     .content(json.dumps({"text": content}))
                     .build()
                 )
-                .build()
             )
+            if root_id:
+                builder.root_id(root_id)
+            request = builder.build()
             resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu plain text sent OK to chat={} content_len={}", chat_id, len(content))
@@ -846,14 +853,14 @@ class FeishuProxyChannel(BaseProxyChannel):
 
         # Execute chosen strategy — HTTP calls happen outside the lock
         if use_card:
-            if self._send_card_reply(chat_id, cleaned, quick_replies=qrs):
+            if self._send_card_reply(chat_id, cleaned, root_id=root_id, quick_replies=qrs):
                 return
 
         processed = self._wrap_tables_in_code_fences(cleaned)
-        if self._send_post_reply(chat_id, processed):
+        if self._send_post_reply(chat_id, processed, root_id=root_id):
             return
 
-        self._send_plain_text(chat_id, processed)
+        self._send_plain_text(chat_id, processed, root_id=root_id)
 
     def _add_reaction(self, message_id: str, emoji: str) -> None:
         """Add reaction emoji to message."""

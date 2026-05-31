@@ -400,14 +400,20 @@ class HubTCPServer:
             tool_hint: bool = False,
             tool_events: list | None = None,
         ) -> None:
-            # Send tool finish/error events — these arrive with empty content
-            # from after_iteration but carry structured event data.
+            # User-facing tools must not leak any progress notifications into
+            # the chat — their output IS the response.
+            _user_tools = frozenset(["message", "ask_user"])
+
+            has_non_user_event = False
             if tool_events:
                 for te in tool_events:
                     if not isinstance(te, dict):
                         continue
                     phase = te.get("phase", "")
                     name = te.get("name", "tool")
+                    if name in _user_tools:
+                        continue
+                    has_non_user_event = True
                     args = te.get("arguments", {})
                     if isinstance(args, dict) and args:
                         hint = format_single_tool_hint(name, args)
@@ -425,8 +431,10 @@ class HubTCPServer:
                         "chat_id": msg.chat_id,
                         "content": text,
                     })
-            # Send thinking text and tool hint text
-            if content:
+            # Send thinking text / tool hints only when not exclusively about
+            # user-facing tools.  When ``tool_events`` is None/empty the
+            # content is genuine thinking text and should always be shown.
+            if content and (not tool_events or has_non_user_event):
                 await self._proxy_manager.deliver_to_proxy(proxy_key, {
                     "type": "deliver",
                     "chat_id": msg.chat_id,
