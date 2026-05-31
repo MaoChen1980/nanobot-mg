@@ -111,7 +111,7 @@ def extract_text(path: Path) -> Optional[str]:
         return _extract_text_file(path)
     elif ext in _IMAGE_FORMATS:
         # Image files - for future OCR support
-        return f"[image: {path.name}]"
+        return f"[image: {path}]"
     else:
         # Unsupported extension
         return None
@@ -246,7 +246,7 @@ def _extract_with_markitdown(path: Path) -> str | None:
 
     text_content = result.text_content
     if not text_content or not text_content.strip():
-        return f"({path.suffix.upper().lstrip('.')} has no extractable text: {path.name})"
+        return f"({path.suffix.upper().lstrip('.')} has no extractable text: {path})"
     return _truncate(text_content, _MAX_TEXT_LENGTH)
 
 

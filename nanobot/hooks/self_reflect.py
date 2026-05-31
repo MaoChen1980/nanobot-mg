@@ -1,16 +1,19 @@
 """
-SelfReflectHook: LLM-powered self-reflection after each full user turn.
+SelfReflectHook: LLM-powered self-reflection with hook code self-review.
 
-Phase 1 (SelfReviewHook) captured raw metrics.
-Phase 2 (this hook) adds LLM self-reflection with task-relevance filtering.
-Phase 3 (SelfInsightHook) injects filtered findings back into context.
+Phase 2 of the self-evolution feedback loop. Accumulates metrics across turns,
+then calls LLM to produce structured findings including:
+- Project knowledge, decisions, behavior patterns, corrections
+- **self_bug**: defects in hook source code
+- LLM behavior pattern analysis (bad guesses, repeated errors)
 
-Together they form the self-evolution feedback loop:
-  SelfReviewHook (capture) -> SelfReflectHook (reflect + filter) -> SelfInsightHook (inject)
+The hook reads its own source code and includes it in the reflection prompt
+so the LLM can find bugs in the hooks themselves.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -42,6 +45,7 @@ REFLECTION_SYSTEM_PROMPT = """\
 | **decision** | 架构/设计决策及其理由 | "选 MiniMax 是因为长上下文" |
 | **behavior** | 更高效的执行模式 | "改 provider 前应该先看所有 consumer" |
 | **correction** | 用户纠正的认知偏差 | "用户说 cut 应按 turn 数不是按消息数" |
+| **self_bug** | nanobot 自身代码中的缺陷 | "SelfReflectHook.after_turn 行 149 多了一次 _turn_count += 1" |
 
 不符合以上条件的信息：**不要记录**。即使它看起来很重要。
 
@@ -51,7 +55,7 @@ REFLECTION_SYSTEM_PROMPT = """\
 {
   "findings": [
     {
-      "type": "knowledge|decision|behavior|correction",
+      "type": "knowledge|decision|behavior|correction|self_bug",
       "content": "具体信息",
       "relevance": "这条会在什么 task 场景下被复用"
     }
@@ -67,8 +71,56 @@ REFLECTION_USER_TEMPLATE = """\
 
 {metrics_summary}
 
+## Hook Source Code for Self-Review
+
+{hook_code}
+
+Analyze the execution log AND the hook source code above. Check for:
+
+1. **Hook code bugs** (→ type: `self_bug`): double counting, off-by-one, fragile regex parsing,
+   incorrect state management, resource leaks, logic errors in detection/injection flow.
+
+2. **LLM behavior patterns** (→ type: `correction` or `behavior`): Is the LLM making
+   repeated bad guesses (wrong file paths, calling tools without preparation)?
+   Are there recurring error patterns from incorrect tool usage?
+
 请输出 JSON findings。
 """
+
+# --- Hook files for self-review ------------------------------------------------
+
+_HOOKS_DIR = Path(__file__).resolve().parent
+_HOOK_FILES = ["self_review.py", "self_reflect.py", "self_insight_hook.py"]
+
+
+RESOLVED_FILE = Path.home() / ".nanobot" / "agent" / "resolved_findings.jsonl"
+
+
+def _read_resolved_ids() -> set[str]:
+    """Read resolved finding IDs from JSONL file (one ID per line)."""
+    if not RESOLVED_FILE.exists():
+        return set()
+    ids: set[str] = set()
+    try:
+        for line in RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines():
+            line = line.strip()
+            if line:
+                ids.add(line)
+    except OSError:
+        pass
+    return ids
+
+
+def _read_hook_sources() -> str:
+    """Read hook .py files and format as markdown code blocks."""
+    parts: list[str] = []
+    for name in _HOOK_FILES:
+        path = _HOOKS_DIR / name
+        if path.exists():
+            code = path.read_text(encoding="utf-8")
+            parts.append(f"### {path.resolve().as_posix()}\n\n```python\n{code}\n```")
+    return "\n\n".join(parts)
+
 
 SELF_AWARENESS_PROMPT = """
 ## Self-Awareness
@@ -101,14 +153,15 @@ class SelfReflectHook(AgentHook):
 
     def __init__(self, reraise: bool = False, interval: int | None = None) -> None:
         super().__init__(reraise)
-        self._turn_count = 0
+        self._iteration = 0  # LLM iterations (for entry labeling)
+        self._turn_count = 0  # user turns (for interval check)
         self._entries_accumulated = []
         self._interval = interval if interval is not None else self.DEFAULT_INTERVAL
 
     # -- after_iteration: accumulate metrics in memory ------------------------
 
     async def after_iteration(self, context: AgentHookContext) -> None:
-        self._turn_count += 1
+        self._iteration += 1
         try:
             self._entries_accumulated.append(self._build_entry(context))
         except Exception:
@@ -122,7 +175,7 @@ class SelfReflectHook(AgentHook):
         usage = context.usage or {}
         return {
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "iteration": self._turn_count,
+            "iteration": self._iteration,
             "tool_calls": tool_calls_data,
             "tool_count": len(tool_calls_data),
             "usage": {
@@ -146,7 +199,6 @@ class SelfReflectHook(AgentHook):
         if not self._entries_accumulated:
             return
 
-        self._turn_count += 1
         if self._turn_count < self._interval:
             return  # keep accumulating
 
@@ -154,6 +206,7 @@ class SelfReflectHook(AgentHook):
         entries = self._entries_accumulated
         self._entries_accumulated = []
         self._turn_count = 0
+        self._iteration = 0
 
         try:
             await self._run_turn_reflection(entries)
@@ -207,8 +260,11 @@ class SelfReflectHook(AgentHook):
             f"{edit_summary}"
         )
 
+        # Read hook source code for self-review
+        hook_code = _read_hook_sources()
+
         # Call LLM for structured findings
-        findings = await self._call_for_findings(metrics_text)
+        findings = await self._call_for_findings(metrics_text, hook_code)
 
         # Save findings JSON (consumed by SelfInsightHook)
         self._save_findings(findings, iteration_range, time_str)
@@ -216,16 +272,16 @@ class SelfReflectHook(AgentHook):
         # Also write readable log for human review
         self._append_to_log(iteration_range, time_str, total_tool_calls, errors, findings)
 
-    async def _call_for_findings(self, metrics_text: str) -> list[dict[str, Any]]:
+    async def _call_for_findings(self, metrics_text: str, hook_code: str) -> list[dict[str, Any]]:
         """Call LLM to extract task-relevant findings from this turn."""
         try:
-            response = await self._call_llm(metrics_text)
+            response = await self._call_llm(metrics_text, hook_code)
         except Exception as exc:
             logger.debug("SelfReflectHook: LLM call failed: {}", exc)
             return []
         return self._parse_findings(response)
 
-    async def _call_llm(self, metrics_text: str) -> str:
+    async def _call_llm(self, metrics_text: str, hook_code: str) -> str:
         """Make a minimal LLM call for structured findings extraction."""
         from nanobot.config.loader import load_config
         from nanobot.providers.factory import make_provider
@@ -235,7 +291,7 @@ class SelfReflectHook(AgentHook):
         response = await provider.chat(
             messages=[
                 {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},
-                {"role": "user", "content": REFLECTION_USER_TEMPLATE.format(metrics_summary=metrics_text)},
+                {"role": "user", "content": REFLECTION_USER_TEMPLATE.format(metrics_summary=metrics_text, hook_code=hook_code)},
             ],
             tools=None,
             max_tokens=1024,
@@ -263,20 +319,33 @@ class SelfReflectHook(AgentHook):
         for f in findings:
             if isinstance(f, dict) and f.get("type") and f.get("content"):
                 ftype = f["type"]
-                if ftype in ("knowledge", "decision", "behavior", "correction"):
+                if ftype in ("knowledge", "decision", "behavior", "correction", "self_bug"):
                     valid.append(f)
         return valid
+
+    @staticmethod
+    def _finding_id(content: str) -> str:
+        """Generate a stable finding ID from content hash."""
+        return hashlib.sha256(content.encode()).hexdigest()[:12]
 
     def _save_findings(
         self, findings: list[dict[str, Any]], iteration_range: str, time_str: str
     ) -> None:
         """Write structured findings to JSON file for SelfInsightHook."""
         self.FINDINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        for f in findings:
+            if "id" not in f and f.get("content"):
+                f["id"] = self._finding_id(f["content"])
+
+        # Read existing resolved IDs to carry forward
+        resolved_ids = _read_resolved_ids()
+
         payload = {
             "saved_at": time_str,
             "iteration_range": iteration_range,
             "source": "self_reflect",
             "findings": findings,
+            "resolved_ids": list(resolved_ids),
         }
         self.FINDINGS_FILE.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),

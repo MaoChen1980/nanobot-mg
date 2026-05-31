@@ -97,7 +97,7 @@ class MemorySearchTool(Tool):
                                 continue
                             try:
                                 excerpt = ref_path.read_text(encoding="utf-8")[:150].strip().replace("\n", " ")
-                                refs.append(f"[{title}]({path}): {excerpt}")
+                                refs.append(f"[{title}](memory/{path}): {excerpt}")
                             except OSError:
                                 continue
                         if refs:
@@ -111,7 +111,7 @@ class MemorySearchTool(Tool):
             start = r.get("start_line", 0)
             end = r.get("end_line", 0)
 
-            label = f"{source}" if not heading else f"{source} — {heading}"
+            label = f"memory/{source}" if not heading else f"memory/{source} — {heading}"
             loc = f" (lines {start}-{end})" if start and end else ""
             parts.append(f"**{label}** [score={score:.2f}]{loc}")
             text = r.get("text", "")
