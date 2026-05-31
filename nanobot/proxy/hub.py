@@ -59,6 +59,23 @@ class HubTCPServer:
     """
 
     _DEDUP_TTL = 300  # seconds to keep a message_id for dedup
+    MAX_SESSION_CACHE = 1000
+
+    def _prune_session_cache(self) -> None:
+        """Evict oldest session entries with empty queues when over limit."""
+        if len(self._session_locks) <= self.MAX_SESSION_CACHE:
+            return
+        excess = len(self._session_locks) - self.MAX_SESSION_CACHE
+        removed = 0
+        for key in list(self._session_locks.keys()):
+            if removed >= excess:
+                break
+            queue = self._session_pending_queues.get(key)
+            if queue is None or queue.empty():
+                del self._session_locks[key]
+                self._session_pending_queues.pop(key, None)
+                self._session_tasks.pop(key, None)
+                removed += 1
 
     def __init__(
         self,
@@ -418,6 +435,7 @@ class HubTCPServer:
         if session_lock is None:
             session_lock = asyncio.Lock()
             self._session_locks[session_key] = session_lock
+            self._prune_session_cache()
 
         # If the lock is already held, the session is busy.  Enqueue for
         # mid-turn injection rather than blocking on the lock — except /stop
