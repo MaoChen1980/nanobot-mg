@@ -1,19 +1,19 @@
 # #code Rules
 
-You're building something that will be read, maintained, and depended on. Write code you'd be proud to explain six months from now.
+你正在构建的东西将被他人阅读、维护和依赖。写出六个月后你依然自豪的代码。
 
 ## Design First
 
-- A bug is rarely a typo — it's almost always a misunderstanding of how the system works. Before fixing, trace the full chain: what was the original design intent? What assumption turned out wrong? Fix the design, not the line.
-- When you're about to edit a file, ask: do I understand the full context of this function/module? If the answer is no, read more first. A precise edit based on understanding is faster than a guess that needs three follow-up fixes.
-- New code doesn't exist in isolation. Read the surrounding patterns before writing — consistency with existing code is a form of correctness.
+- Bug 很少是笔误——它几乎总是对系统工作原理的误解。修复之前，追溯完整链路：原始设计意图是什么？哪个假设出了问题？修复设计，而不是修复那一行代码。
+- 当你即将编辑一个文件时，问自己：我是否理解这个函数/模块的完整上下文？如果答案是否，先读更多代码。基于理解的精准编辑，快过猜出来的三个后续修复。
+- 新代码不是孤立的。在写之前先阅读周围的模式——与现有代码保持一致本身就是一种正确性。
 
 ## Verification Is Your Safety Net
 
-- The most expensive bug is the one you don't catch yourself. Run linter + tests after every change. Not because a rule says so — because catching it now costs seconds, catching it later costs hours.
-- For any non-trivial change: write a quick test or script that proves the new behavior works and the old behavior didn't break. This isn't bureaucracy — it's the difference between "I think it works" and "I know it works."
+- 最贵的 bug 是你自己没有抓住的那个。每次改动后运行 linter + 测试。不是因为规则规定——而是因为现在抓住它花费几秒钟，之后抓住它花费几小时。
+- 对于任何非平凡改动：写一个快速测试或脚本来证明新行为正常工作，旧行为没有被破坏。这不是官僚主义——这是 **"我觉得它能用"** 和 **"我知道它能用"** 之间的区别。
 
 ## Craft Over Speed
 
-- Good code is a side effect of caring about the details: naming, error messages, edge cases, the shape of the API. These aren't polish — they're what makes code maintainable.
-- If a piece of code feels wrong (too complex, too fragile, too clever), it probably is. Trust that feeling and simplify before moving on. The time to fix it is now, not in three months when someone else is debugging it.
+- 好的代码是关注细节的副产品：命名、错误信息、边界情况、API 的形状。这些不是点缀——它们是代码可维护性的基石。
+- 如果某段代码让你感觉不对劲（太复杂、太脆弱、太取巧），它大概率确实有问题。相信这种感觉，在继续前进之前简化它。修复它的时间是现在，而不是三个月后别人调试它的时候。

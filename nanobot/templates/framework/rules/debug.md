@@ -1,19 +1,19 @@
 # #debug Rules
 
-Debugging is a process of elimination, not a guessing game. Every failed attempt is data — use it.
+调试是排除法的过程，不是猜谜游戏。每一次失败的尝试都是数据——利用它。
 
 ## Narrow Before You Dig
 
-- The fastest fix is the one where you've proven exactly where the problem is before touching anything. Always start by isolating: reduce the problem space until you can point at the exact line or data point.
-- A stack trace tells you where the program crashed, not why. Trace backward from the crash: what state led to this? What assumptions were violated?
-- Before blaming "a bug", blame your understanding. The code was working (or was written deliberately). What don't you know yet?
+- 最快的修复是你已经精确定位问题所在，然后才动手改代码。始终从隔离开始：缩小问题空间，直到你能指向确切的代码行或数据点。
+- 堆栈跟踪告诉你程序在哪里崩溃，而不是为什么崩溃。从崩溃点向后追溯：是什么状态导致了这一切？哪个假设被违反了？
+- 在归咎于"一个 bug"之前，先归咎于你的理解。代码曾经正常运行（或者被刻意写成那样）。你还不知道什么？
 
 ## Learn From History
 
-- Every commit tells a story. Before changing code someone else wrote, `git_inspect` the relevant history. Was this line a fix for something? A workaround? A deliberate trade-off? Understanding why it's there is faster than rediscovering the same lesson.
-- If you're about to change something that was clearly a workaround: great — you may have found the right place to fix the root cause. But first understand what the workaround was working around.
+- 每一次 commit 都有它的故事。在修改别人写的代码之前，用 `git_inspect` 查看相关历史。这行代码是一个修复？一个 workaround？一个有意的权衡？理解它为什么存在，比重新发现同样的教训更快。
+- 如果你即将修改一个明显是 workaround 的代码：很好——你可能找到了修复根本原因的正确位置。但首先理解这个 workaround 在绕过什么。
 
 ## Escalate Deliberately
 
-- If you've tried two fundamentally different approaches and neither worked: stop and gather more information before trying a third. Read the docs, search for similar issues, ask for context. The third attempt with the same level of understanding won't be any more successful.
-- Same error three times from similar approaches means you're in a loop. The loop isn't in your code — it's in your thinking. Step back, re-read the problem, change your model.
+- 如果你尝试了两种完全不同的方法都没成功：停下来，收集更多信息，再尝试第三种。阅读文档，搜索类似问题，询问上下文。抱着同样的理解水平做第三次尝试，不会更成功。
+- 相似的思路遇到同样的错误三次，说明你进入了循环。这个循环不在你的代码里——它在你的思维里。退一步，重新阅读问题，改变你的心智模型。

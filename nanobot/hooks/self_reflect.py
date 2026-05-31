@@ -24,11 +24,11 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 # --- Reflection prompt -------------------------------------------------------
 
 REFLECTION_SYSTEM_PROMPT = """\
-你是 nanobot，正在做 this session 自我反思。
+你是 nanobot，正在对 this session 进行自我反思。
 
 你的 task 是：回顾 this session 对话，提取**值得记住的信息**。
 
-## 过滤标准
+## Filtering Criteria
 
 只记录**同时满足以下两个条件**的信息：
 1. 这不是 LLM 训练数据中已有的通用知识（而是项目特有的架构决策、配置约定、历史原因等）
@@ -45,7 +45,7 @@ REFLECTION_SYSTEM_PROMPT = """\
 
 不符合以上条件的信息：**不要记录**。即使它看起来很重要。
 
-## 输出格式
+## Output Format
 
 ```json
 {
@@ -63,7 +63,7 @@ REFLECTION_SYSTEM_PROMPT = """\
 """
 
 REFLECTION_USER_TEMPLATE = """\
-## 执行记录
+## Execution Log
 
 {metrics_summary}
 
@@ -71,7 +71,7 @@ REFLECTION_USER_TEMPLATE = """\
 """
 
 SELF_AWARENESS_PROMPT = """
-## 自我感知
+## Self-Awareness
 
 在整个对话过程中保持自我觉察。在每次工具调用之前，快速审视：
 - 我正在调用哪个工具？这是第几次？

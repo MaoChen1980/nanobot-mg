@@ -104,10 +104,10 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
     prompt = builder.build_system_prompt()
     # Character traits from SOUL.md
     assert "Thorough" in prompt
-    assert "Understand before act" in prompt
+    assert "framework_search" in prompt  # rules loaded dynamically via framework_search
     # Role definitions from SOUL.md
     assert "Principal engineer" in prompt
-    assert "tradeoffs, constraints, and failure modes" in prompt
+    assert "取舍、约束和失效模式" in prompt  # translated from "tradeoffs, constraints, and failure modes"
     # Tool reference from identity.md
     assert "read_file" in prompt
 

@@ -1,25 +1,25 @@
 ## Search Tool Selector
 
-Choose the right tool for your search need:
+根据搜索需求选择合适的工具：
 
 | When you need to... | Use | Why |
 |---|---|---|
-| Find **framework docs, behavioral rules, constraints** | `framework_search` | FAISS index of framework/ — 100% accurate, must follow |
-| Find **exact keywords** in code, configs, or files | `grep` | Regex, file patterns, line numbers |
-| **Semantically search** one long document or file | `search_text` | Embedding similarity within a single text |
-| **Semantically search** the entire memory/ knowledge base | `memory_search` | FAISS vector index across all memory files + keyword boost + cross-refs to related files |
-| **Search conversation history** (past sessions) | `conversation_search` | Keyword + date range against SQLite history |
+| 查找**框架文档、行为规则、约束** | `framework_search` | framework/ 的 FAISS 索引——100% 准确，必须遵守 |
+| 在代码、配置或文件中查找**精确关键词** | `grep` | 支持正则、文件模式、行号 |
+| 对单个长文档或文件进行**语义搜索** | `search_text` | 单个文本内的 embedding 相似度 |
+| 对整个 memory/knowledge base 进行**语义搜索** | `memory_search` | 跨所有 memory 文件的 FAISS 向量索引 + 关键词增强 + 相关文件交叉引用 |
+| 搜索**对话历史**（过往 session） | `conversation_search` | 基于关键词 + 日期范围的 SQLite 历史查询 |
 
 **Decision flow:**
 
-1. Need to understand framework rules/constraints? → `framework_search`
-2. Need **exact** match (code, known term, identifier)? → `grep`
-3. Need **meaning match** in a specific document you already have? → `search_text`
-4. Need **meaning match** in accumulated knowledge? → `memory_search`
-5. Need to find **when something happened** in past conversations? → `conversation_search`
+1. 需要理解 framework 规则/约束？→ `framework_search`
+2. 需要**精确**匹配（代码、已知术语、标识符）？→ `grep`
+3. 需要在已有特定文档中进行**语义匹配**？→ `search_text`
+4. 需要在积累的知识中进行**语义匹配**？→ `memory_search`
+5. 需要查找过去对话中**某事发生的时间**？→ `conversation_search`
 
 **memory_search notes:**
-- Results include cross-reference links to related memory files when relevance > 0.5
-- Hybrid FAISS + keyword for better recall than pure vector search
-- New memory content appears after the next extractor cycle (up to 2h delay)
-- For precise known terms within memory, use `grep workspace/memory/` instead
+- 相关性 > 0.5 时，结果包含相关 memory 文件的交叉引用链接
+- FAISS + 关键词混合策略，召回率优于纯向量搜索
+- 新的 memory 内容在下一次 extractor 周期后生效（最长 2 小时延迟）
+- 在 memory 中查找精确的已知术语时，改用 `grep workspace/memory/`

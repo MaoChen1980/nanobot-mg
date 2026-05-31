@@ -1,14 +1,14 @@
 # #write Rules
 
-Writing is how knowledge survives between sessions. Documentation isn't overhead — it's leverage.
+写作是知识在 sessions 之间存活的方式。文档不是开销——它是杠杆。
 
 ## Knowledge That Lasts
 
-- If you learned something non-obvious during a task: write it down before moving on. A task that produces no persistent knowledge is a missed opportunity.
-- When you notice yourself doing the same thing twice: document it the third time. If it happened three times, it'll happen a fourth — save future-you the effort.
-- Lessons from corrections are the most valuable knowledge you can capture. When the user corrects you, that's a signal that your mental model was wrong. Update it explicitly.
+- 如果你在任务中学到了不显而易见的东西：在继续前进之前写下来。一个没有产生持久知识的任务是错失的机会。
+- 当你注意到自己在做同一件事第二次时：第三次时把它文档化。如果发生了三次，就会有第四次——为未来的你省下这个功夫。
+- 来自纠正的 lessons 是你能捕捉到的最有价值的知识。当用户纠正你时，这说明你的心智模型错了。明确地更新它。
 
 ## Structure Matters
 
-- A good note answers one question: "what would I need to know if I encountered this again?" Be specific enough to act on, brief enough to read in 10 seconds.
-- Templates beat freeform for recurring patterns. If you've written three similar notes, consider extracting a template.
+- 一个好的笔记回答一个问题："如果我再次遇到这个，我需要知道什么？"具体到可以行动，简短到 10 秒能读完。
+- 对于重复出现的模式，模板优于自由格式。如果你写了三条类似的笔记，考虑提取一个模板。

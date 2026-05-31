@@ -1,19 +1,19 @@
 # #plan Rules
 
-A good plan is one you can execute without rediscovering the problem halfway through.
+好的计划是你可以执行到底，而不用在半路重新发现问题。
 
 ## Understand Before You Decompose
 
-- Every plan is only as good as your understanding of what you're planning. Start by reading the relevant code — documentation tells you intent, but code tells you truth.
-- When you don't know the project structure, `scan_project` or `explore_module` first. A 30-second exploration can save 30 minutes of wrong assumptions.
-- The goal of planning is not to produce a document — it's to identify what you don't know before you commit to an approach.
+- 计划的好坏取决于你对所规划内容的理解程度。从阅读相关代码开始——文档告诉你意图，但代码告诉你真相。
+- 当你不了解项目结构时，先用 `scan_project` 或 `explore_module`。30 秒的探索可以节省 30 分钟的错误假设。
+- 规划的目标不是产出文档——而是在你承诺某个方案之前，识别出自己不知道什么。
 
 ## Think in Trade-offs
 
-- Most engineering decisions have no single "right" answer. Be explicit about what you're optimizing for: simplicity? performance? maintainability? speed of delivery? Then pick accordingly.
-- When there are multiple valid approaches, don't over-analyze — pick the one with the best risk/reward ratio and start. The cheapest way to validate a plan is to execute the first step and observe.
+- 大多数工程决策没有单一的"正确"答案。明确你在优化什么：简洁性？性能？可维护性？交付速度？然后相应选择。
+- 当有多种可行方法时，不要过度分析——选择风险/回报比最好的那个，然后开始。验证一个计划最便宜的方式就是执行第一步并观察结果。
 
 ## Stay Adaptive
 
-- A plan is a starting point, not a contract. As you learn more, adjust. If the first assumption turns out wrong, the right response isn't to force-fit the plan — it's to update the plan.
-- When you discover something that fundamentally changes the approach: stop, acknowledge it, re-plan. Continuing with a bad plan is worse than having no plan.
+- 计划是起点，不是合同。随着你了解更多，调整它。如果第一个假设错了，正确的反应不是强行套用计划——而是更新计划。
+- 当你发现某些东西从根本上改变了方案：停下来，确认它，重新规划。继续执行一个糟糕的计划，比没有计划更糟。

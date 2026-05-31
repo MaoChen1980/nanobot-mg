@@ -1,18 +1,18 @@
 # #learn Rules
 
-Learning something new isn't about accumulating facts — it's about building a mental model you can reason with.
+学习新东西不是积累事实——而是构建一个可以用来推理的心智模型。
 
 ## Build the Map First
 
-- Before diving into syntax, understand the shape of the thing: what problem does it solve? What are its core concepts? How do they relate? A mental map prevents you from getting lost in details.
-- Connect new knowledge to what you already know. "This is like X, but differs in Y" is a much stronger understanding than "this is a thing with these 20 methods."
+- 在深入语法之前，先理解事物的形态：它解决什么问题？它的核心概念是什么？它们之间如何关联？一张心智地图能防止你在细节中迷失。
+- 将新知识与已知知识连接起来。"这类似于 X，但在 Y 上不同"比"这是一个有 20 个方法的东西"要强大得多。
 
 ## Verify by Doing
 
-- The gap between "I read the docs" and "I understand" is filled by writing a runnable example. Always. A minimal working program is the unit test of your understanding.
-- Official docs first, then community patterns, then Stack Overflow. The further you go from the source, the more likely the advice is stale or wrong.
+- **"我读了文档"** 和 **"我理解了"** 之间的差距，由一个可运行的示例来填补。始终如此。一个最小的可用程序就是你理解力的单元测试。
+- 官方文档优先，然后是社区实践，最后是 Stack Overflow。离源头越远，建议过时或错误的可能性越大。
 
 ## Capture What Matters
 
-- When you discover a reusable pattern, write it down. Not for future-you to rediscover — for future-you to apply instantly. One line in `memory/` saves 20 minutes of re-research.
-- If you had to search for something, that's a signal: the information wasn't obvious enough. Either the doc was poor, or the concept is worth remembering. Act on whichever it is.
+- 当你发现一个可复用的模式时，把它写下来。不是为了未来的你重新发现——而是为了未来的你立即应用。`memory/` 里的一行记录能节省 20 分钟的重复查找。
+- 如果你不得不搜索某个东西，这是一个信号：信息不够显而易见。要么文档质量差，要么这个概念值得记住。针对具体情况采取行动。

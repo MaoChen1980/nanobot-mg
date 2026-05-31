@@ -1,24 +1,24 @@
 # #research Rules
 
-Information is cheap. Wrong conclusions are expensive. Spend information to buy certainty.
+信息是廉价的。错误的结论是昂贵的。用信息来购买确定性。
 
 ## Escalate Deliberately
 
-Information gathering should follow a natural escalation: `grep`/`glob`/`recall`/`git_inspect` → `web_search` → `ask_user`. Each step is a filter: if the answer exists locally, using a slower method is wasting time. If it doesn't, local methods are wasting time.
+信息收集应当遵循自然的升级路径：`grep`/`glob`/`recall`/`git_inspect` → `web_search` → `ask_user`。每一步都是一个过滤器：如果答案在本地存在，使用更慢的方法就是浪费时间。如果答案不在本地，本地方法才是浪费时间。
 
 ## Depth Over Speed
 
-- When more information can produce a better result: get it. A `web_search` or `read_file` costs seconds. A wrong conclusion costs hours.
-- When researching a library, framework, or pattern: use `web_search` for current docs and community practices. Your training data isn't up to date on version specifics — verify.
-- When modifying code: `git_inspect` the history. Every change was made for a reason — understanding that reason prevents you from repeating past mistakes.
-- When exploring unfamiliar code: read broadly before reading deeply. Read 3-5 related files to find the pattern, then focus.
+- 当更多信息能产生更好的结果时：去获取它。一次 `web_search` 或 `read_file` 花费几秒钟。一个错误结论花费数小时。
+- 研究库、框架或模式时：用 `web_search` 获取当前文档和社区实践。你的训练数据在版本细节上并非最新——去验证。
+- 修改代码时：用 `git_inspect` 查看历史。每一次改动都有其原因——理解这个原因能防止你重复过去的错误。
+- 探索不熟悉的代码时：先广泛阅读，再深入阅读。读 3-5 个相关文件找到模式，然后聚焦。
 
 ## Know When to Stop
 
-- If research has produced no useful signal after multiple attempts: stop, act on what you have, and be explicit about what you're uncertain about. More research without a hypothesis shift won't help.
-- If you've drifted far from the original question: pause, re-read the goal, and decide whether the new direction is more valuable or if you're just exploring.
+- 如果多次尝试后研究没有产生有用的信号：停下来，基于已有的信息行动，并明确说明你对什么不确定。没有假设转变的更多研究不会带来帮助。
+- 如果你已经偏离了原始问题很远：暂停，重新阅读目标，判断新方向是否更有价值，还是你只是在探索。
 
 ## Handle Ambiguity Well
 
-- When the user's request is vague: don't guess. Offer 2-3 interpretations and let them pick. Guessing the wrong interpretation wastes more time than asking.
-- Before reporting a finding that contradicts existing knowledge: verify it. A contradiction is either a discovery (valuable) or a mistake (embarrassing). Find out which.
+- 当用户的请求模糊不清时：不要猜测。提供 2-3 种解读让他们选择。猜错解读浪费的时间比询问更多。
+- 在报告与现有知识相矛盾的结果之前：去验证它。一个矛盾要么是发现（有价值），要么是错误（难堪）。搞清楚是哪种。

@@ -6,11 +6,11 @@ version: 0.1.0
 
 # ClawHub, resources from system
 
-Public skill registry for AI agents. Search by natural language (vector search).
+AI agent 的公共 skill 注册中心。通过自然语言搜索（向量搜索）。
 
 ## When to use
 
-Use this skill when the user asks any of:
+当用户提出以下任何请求时，使用此 skill：
 - "find a skill for …"
 - "search for skills"
 - "install a skill"
@@ -29,7 +29,7 @@ npx --yes clawhub@latest search "web scraping" --limit 5
 npx --yes clawhub@latest install <slug> --workdir ~/.nanobot/workspace
 ```
 
-Replace `<slug>` with the skill name from search results. This places the skill into `~/.nanobot/workspace/skills/`, where nanobot loads workspace skills from. Always include `--workdir`.
+将 `<slug>` 替换为搜索结果中的 skill 名称。这将把 skill 放入 `~/.nanobot/workspace/skills/` 目录，nanobot 从此处加载 workspace skills。始终包含 `--workdir`。
 
 ## Update
 
@@ -45,12 +45,15 @@ npx --yes clawhub@latest list --workdir ~/.nanobot/workspace
 
 ## Notes
 
-- Requires Node.js (`npx` comes with it).
-- No API key needed for search and install.
-- Login (`npx --yes clawhub@latest login`) is only required for publishing.
-- `--workdir ~/.nanobot/workspace` is critical — without it, skills install to the current directory instead of the nanobot workspace.
-- After install, remind the user to start a new session to load the skill.
+- 需要 Node.js（`npx` 随附）。
+- 搜索和安装无需 API 密钥。
+- 登录（`npx --yes clawhub@latest login`）仅在发布时需要。
+- `--workdir ~/.nanobot/workspace` 至关重要——不加此参数，skill 会安装到当前目录而不是 nanobot workspace。
+- 安装后，提醒用户启动新 session 以加载 skill。
 
+---
+
+**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
 ---
 
 **Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.

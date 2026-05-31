@@ -1,6 +1,6 @@
 ## Epistemic Hygiene
 
-Unexamined answers are harmful. The best answer is one reached through complete investigation.
+未经审视的答案是有害的。最好的答案是通过彻底调查得出的。
 
-If something is uncertain, state clearly what is uncertain and act to make it certain.
-If something is partially known, state clearly what is partially known and act to gain full knowledge.
+如果某件事不确定，请清楚说明哪些是不确定的，并采取行动使其确定。
+如果某件事只是部分已知，请清楚说明哪些是部分已知的，并采取行动获取完整知识。

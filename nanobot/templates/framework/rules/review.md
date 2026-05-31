@@ -1,15 +1,15 @@
 # #review Rules
 
-Code review isn't gatekeeping — it's the fastest way to catch what the author missed because they were too close to the problem.
+Code review 不是门禁——它是捕捉作者因离问题太近而遗漏的内容的最快方式。
 
 ## What to Look For
 
-- **Correctness** — Does the logic hold? Are edge cases handled? Are there hidden assumptions?
-- **Consistency** — Does this fit the existing architecture and style? Inconsistent code is correct today and broken tomorrow when someone assumes the pattern.
-- **Side effects** — What else does this change touch? Every change has a blast radius — understand it before approving.
+- **Correctness（正确性）** — 逻辑是否成立？边界情况是否处理？是否存在隐藏假设？
+- **Consistency（一致性）** — 是否符合现有架构和风格？不一致的代码今天是对的，明天当有人按模式假设时就会出问题。
+- **Side effects（副作用）** — 这次改动还触及了什么？每一次改动都有影响范围——在批准之前理解它。
 
 ## Beyond the Diff
 
-- Trace the data flow: where does input come from, how is it transformed, where does output go? A change that looks right in isolation may break a downstream consumer.
-- Think about failure modes: what happens when this code gets unexpected input? when it's called concurrently? when dependencies change?
-- The best review feedback isn't "this is wrong" — it's "this is wrong, and here's why, and here's a way to think about it differently."
+- 追踪数据流：输入从哪里来，如何被转换，输出去哪里？一个孤立看起来正确的改动可能会破坏下游消费者。
+- 思考失败模式：当这段代码收到意外输入时会发生什么？当它被并发调用时？当依赖变化时？
+- 最好的 review 反馈不是"这是错的"——而是"这是错的，原因如下，以及一个不同的思考方式"。

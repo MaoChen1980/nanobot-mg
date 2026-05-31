@@ -1,9 +1,9 @@
 [Subagent '{{ label }}' {{ status_text }}]
 
 Task: {{ task }}
-{% if duration_s %}Duration: {{ "%.1f"|format(duration_s) }}s
-{% endif %}{% if tools_used %}Tools used: {{ tools_used }}
-{% endif %}{% if iteration_count %}Iterations: {{ iteration_count }}
+{% if duration_s %}耗时：{{ "%.1f"|format(duration_s) }}s
+{% endif %}{% if tools_used %}使用工具：{{ tools_used }}
+{% endif %}{% if iteration_count %}迭代次数：{{ iteration_count }}
 {% endif %}
 
 Result:
@@ -17,22 +17,22 @@ Output Schema: {{ output_schema }}
 
 {% if status == "ok" %}
 {% if output_schema %}
-A Specialist Worker returned structured output conforming to the schema above. As the Orchestrator, parse the JSON, extract key information, and incorporate it naturally.
+Specialist Worker 返回了符合上述 schema 的结构化输出。作为 Orchestrator，解析 JSON，提取关键信息，并自然地整合到上下文中。
 
-The worker's report follows the four-dimension format: **Status**, **Details**, **Needs**, **Suggestions**. Pay attention to **Needs** — the worker may have identified gaps or decisions that require your input.
+Worker 的报告遵循四维格式：**Status**、**Details**、**Needs**、**Suggestions**。重点关注 **Needs**——worker 可能识别出了需要你决策的缺口或问题。
 {% else %}
-A Specialist Worker completed its task. As the Orchestrator, synthesize this result naturally. Keep it brief (1-4 sentences). Do not mention "subagent" or task IDs.
+Specialist Worker 完成了其 task。作为 Orchestrator，自然地综合这个结果。保持简洁（1-4 句）。不要提到"subagent"或 task ID。
 
-The worker's report includes **Status** (what's done/blocked), **Needs** (what they need from you), and **Suggestions** (recommended next steps). Address these if relevant.
+Worker 的报告包含 **Status**（已完成/阻塞的内容）、**Needs**（需要你提供的支持）和 **Suggestions**（建议的下一步）。如相关请处理这些内容。
 {% endif %}
-{% if pt_path %}*(Conversation snapshot saved at: {{ pt_path }})*{% endif %}
+{% if pt_path %}*（对话快照保存于：{{ pt_path }}）*{% endif %}
 {% else %}
-A Specialist Worker task failed. As the Orchestrator, decide whether to retry (with adjusted approach based on what the worker tried), decompose differently, or handle the gap. Do NOT mention "subagent" or task IDs — explain the situation naturally and offer to retry if appropriate.
+Specialist Worker task 执行失败。作为 Orchestrator，决定是否重试（根据 worker 已尝试过的方式调整策略）、重新分解 task，或处理缺口。不要提到"subagent"或 task ID——自然地说明情况，并在适当时提供重试选项。
 
-The worker's report shows what they tried and what went wrong. Use this to decide the next move.
+Worker 的报告展示了他们的尝试过程和出错原因。据此决定下一步行动。
 
-{% if pt_path %}Debug snapshot saved at: {{ pt_path }}
+{% if pt_path %}调试快照保存于：{{ pt_path }}
 
-Use `read_file` to inspect the full conversation trace (tool calls, errors, thinking) if you need to understand the root cause.
+如需理解根因，使用 `read_file` 查看完整的对话追踪记录（tool calls、errors、thinking）。
 {% endif %}
 {% endif %}
