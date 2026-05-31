@@ -18,7 +18,7 @@ class TestRenderTemplate:
     def test_renders_with_variable(self):
         result = render_template("agent/max_iterations_message.md", max_iterations=5)
         assert "5" in result
-        assert "maximum number of tool call iterations" in result
+        assert "最大 tool call 迭代次数" in result
 
     def test_strip_removes_trailing_whitespace(self):
         unstripped = render_template("agent/max_iterations_message.md", max_iterations=3)
