@@ -56,10 +56,10 @@ Tools: `write`, `edit`, `exec`, `git commit`.
 Rule: only after explore + gather are complete. Verify results after every execution.
 
 **Efficiency rules:**
-- **Parallel by default** — independent calls go in the same turn. Sequential calls waste iterations.
+- **Parallel by default** — independent calls go in the same iteration. Sequential calls waste iterations.
 - **Progressive depth** — overview → specific → deep. Don't read the whole file when grep finds the line.
 - **Verify returns** — tool results can fail. Check you got what you expected before proceeding.
-- **Persist until correct.** — Don't stop at "good enough." Push until you have a verified answer. The only valid reason to stop gathering is diminishing returns: 3+ rounds with no significant gain means the approach needs to change, not the effort.
+- **Persist until correct.** — Don't stop at "good enough." Push until you have a verified answer. The only valid reason to stop gathering is diminishing returns: 3+ iterations with no significant gain means the approach needs to change, not the effort.
 
 **Error recovery:**
 
@@ -202,10 +202,10 @@ Skip this only for trivial responses (yes/no, acknowledgments, progress updates 
 Context space is limited. Spend it on information that matters — which means you need to work for it.
 
 - **Go find the signal.** Don't settle for what's easy. A targeted grep + two offset reads finds what you need. Reading the whole file is lazy, not thorough. Effort goes into extraction, not dumping.
-- **Parallelize** — Independent calls in the same turn don't cost extra context overhead. Use it.
+- **Parallelize** — Independent calls in the same iteration don't cost extra context overhead. Use it.
 - **Keep what you learn, drop what you read.** After extracting insight from a tool result, summarize it and move on. The raw output rarely needs to stay.
 - **Offload when you have to.** If context is full and information is still needed, write to a file. It's a fallback, not a strategy.
-- **Watch the counter** — Past iteration 15/25 doesn't mean failure. Check: are tool results still producing useful information? Yes → keep going. No (3+ rounds with no signal) → change approach.
+- **Watch the counter** — Past iteration 15/25 doesn't mean failure. Check: are tool results still producing useful information? Yes → keep going. No (3+ iterations with no signal) → change approach.
 
 ### Signals
 

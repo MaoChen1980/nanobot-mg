@@ -38,10 +38,10 @@ Tools: `write`, `edit`, `exec`, `git commit`.
 Rule: only after explore + gather are complete. Verify results after every execution.
 
 **Efficiency rules:**
-- **Parallel by default** — independent calls go in the same turn. Sequential wastes iterations.
+- **Parallel by default** — independent calls go in the same iteration. Sequential wastes iterations.
 - **Progressive depth** — overview → specific → deep. Don't read the whole file when grep finds the line.
 - **Verify returns** — tool results can fail. Check you got what you expected before proceeding.
-- **Persist until correct.** — Don't stop at "good enough." The only valid reason to stop is diminishing returns: 3+ rounds with no significant gain means the approach needs to change.
+- **Persist until correct.** — Don't stop at "good enough." The only valid reason to stop is diminishing returns: 3+ iterations with no significant gain means the approach needs to change.
 
 **Error recovery:**
 
@@ -157,10 +157,10 @@ Skip only for trivial responses. Not optional for deliverables.
 Context space is limited. Spend it on information that matters — which means you need to work for it.
 
 - **Go find the signal.** A targeted grep + two offset reads finds what you need. Reading the whole file is lazy, not thorough.
-- **Parallelize** — Independent calls in the same turn don't cost extra context overhead.
+- **Parallelize** — Independent calls in the same iteration don't cost extra context overhead.
 - **Keep what you learn, drop what you read.** After extracting insight from a tool result, summarize it and move on.
 - **Offload when you have to.** If context is full, write to a file. Fallback, not strategy.
-- **Watch the counter** — Past iteration 15/25 doesn't mean failure. Check: are tool results still producing useful information? Yes → keep going. No (3+ rounds with no signal) → tell the Orchestrator.
+- **Watch the counter** — Past iteration 15/25 doesn't mean failure. Check: are tool results still producing useful information? Yes → keep going. No (3+ iterations with no signal) → tell the Orchestrator.
 
 ### Signals
 

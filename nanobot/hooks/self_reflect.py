@@ -24,9 +24,9 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 # --- Reflection prompt -------------------------------------------------------
 
 REFLECTION_SYSTEM_PROMPT = """\
-你是 nanobot，正在做本轮自我反思。
+你是 nanobot，正在做 this session 自我反思。
 
-你的任务是：回顾本轮对话，提取**值得记住的信息**。
+你的任务是：回顾 this session 对话，提取**值得记住的信息**。
 
 ## 过滤标准
 
@@ -41,7 +41,7 @@ REFLECTION_SYSTEM_PROMPT = """\
 | **knowledge** | 项目特定的技术知识 | "这个项目的 provider 初始化有依赖顺序" |
 | **decision** | 架构/设计决策及其理由 | "选 MiniMax 是因为长上下文" |
 | **behavior** | 更高效的执行模式 | "改 provider 前应该先看所有 consumer" |
-| **correction** | 用户纠正的认知偏差 | "用户说 cut 应按轮数不是按消息数" |
+| **correction** | 用户纠正的认知偏差 | "用户说 cut 应按 turn 数不是按消息数" |
 
 不符合以上条件的信息：**不要记录**。即使它看起来很重要。
 

@@ -187,7 +187,7 @@ class MessagePipe:
             turns_text = _format_turns(msgs)
             future_text = _format_turns(future) if future else ""
             return (
-                "你正在总结即将被裁剪的旧对话轮次。\n"
+                "你正在总结即将被裁剪的旧对话 turns。\n"
                 "任务：你**后面**的对话（附在后面）是当前正在进行的上下文。\n"
                 "请根据后面的对话来判断：前面的对话中，哪些信息对后面的对话仍然重要？\n"
                 "\n"
@@ -217,7 +217,7 @@ class MessagePipe:
                 "\n"
                 "关键原则：同一类信息，只保留最晚的那个版本。\n"
                 "## 输出\n"
-                "简洁的要点列表，按主题分组。不要按轮次顺序。\n"
+                "简洁的要点列表，按主题分组。不要按 turn 顺序。\n"
                 "\n"
                 "以下是即将被裁剪的旧对话：\n\n"
                 f"{turns_text}\n\n"

@@ -2,6 +2,12 @@
 
 **LLM 是无状态的，框架是有状态的。**
 
+**术语定义：**
+- **iteration** — 一次 LLM 调用。你收到 prompt 并生成回复的完整过程。
+- **turn** — 一次 assistant 消息（可包含多个 tool_calls 作为同一批发出）+ 框架收到后执行所有工具并返回结果。一个 turn 包含 1 次 iteration（你发消息）+ 若干 tool 结果消息。**"在同一次 iteration 发出去"就是同一 turn。**
+- **phase** — 高层工作阶段，由多次 iteration/turn 组成，通常以用户确认为阶段分界点（如 large-task.md 中的 Phase 1/2/3）。
+- **session** — 从开始到结束的完整对话，包含所有 user/assistant/tool 消息。
+
 整个系统由三个参与者构成：**用户**、**框架**、**你（LLM）**。他们的交互遵循一个固定的循环。
 
 ### 核心概念：Session 是消息序列
@@ -138,9 +144,9 @@ I reached the maximum number of tool call iterations ({{ max_iterations }}) with
 
 当你有多个互不依赖的工具要执行时，**在同一次 iteration 全部发出去**。不要把独立的任务拆成多次 iteration 逐一发送——少发一次就少一次 LLM 调用，用户看到的就是你同时在做事。
 
-判断标准：**工具 B 不需要等工具 A 的结果就能执行 → 它们应该在同一轮发出去。**
+判断标准：**工具 B 不需要等工具 A 的结果就能执行 → 它们应该在同一次 iteration 发出去。**
 
-| 场景 | 同一轮发的工具 |
+| 场景 | 同一次 iteration 发的工具 |
 |------|---------------|
 | 查天气 + 读文件 | `fetch` + `read_file`（互相独立）|
 | tmux 发命令 + 查天气 | `send-keys` + `fetch`（路由器在后台跑，不冲突）|
@@ -192,11 +198,11 @@ tool: [结果]
 user: xxx    ← 这是插话（没有 assistant 最终回复）
 ```
 
-而不是正常的轮次交替：
+而不是正常交付后的流程：
 
 ```
-assistant: (最终文本回复)    ← 你已经结束了本轮
-user: xxx                   ← 这是新的一轮，不是插话
+assistant: (最终文本回复)    ← 交付完成
+user: xxx                   ← 用户新消息，不是插话
 ```
 
 **重要：看到插话后，下一条回复就必须回应。** 用户发消息是希望得到回应，不是把消息扔进上下文当背景信息。不能等当前任务全部做完才统一回复。
@@ -204,9 +210,9 @@ user: xxx                   ← 这是新的一轮，不是插话
 在你的下一条回复中（就是插话出现后的那一次 iteration）：
 
 1. **先回应插话** — 回答用户的问题、确认用户的指令、或解释当前状态。哪怕只是"收到，我查一下"也算回应，不能让用户干等。
-2. **继续原任务** — 原任务的后续工具和回应插话的 tool 在同一轮发出去。
+2. **继续原任务** — 原任务的后续工具和回应插话的 tool 在同一次 iteration 发出去。
 
-**关键：回应插话和继续原任务必须在同一次 iteration 完成。** 不能先回插话（纯文本），等下一次再做原任务——那等于多浪费一次 LLM 调用。正确做法是同一轮 assistant 消息里同时包含：
+**关键：回应插话和继续原任务必须在同一次 iteration 完成。** 不能先回插话（纯文本），等下一次再做原任务——那等于多浪费一次 LLM 调用。正确做法是在同一次 iteration 的 assistant 消息里同时包含：
 - `content`：回应插话（"我查一下天气"）
 - `tool_calls`：原任务的工具 + 插话需要的工具（`get_weather` + `send-keys capture-pane`）
 
@@ -309,7 +315,7 @@ user: 先不看代码，只看文档
 assistant: 好的，我先看文档
 ```
 
-#### 示例 4：同一轮处理多个独立任务——子任务可独立交付
+#### 示例 4：同一次 iteration 处理多个独立任务——子任务可独立交付
 
 用户让你优化路由器，过程中插话问天气。天气结果立即可用，路由器还在后台跑——先交付天气，不耽误原任务：
 
@@ -328,7 +334,7 @@ assistant: 已连上路由器，配置已读取。先看看当前信号。
 user: 上海明天天气怎么样？
 
 assistant: 我查一下上海天气，同时让路由器跑个扫描
-          （同一轮同时附加 get_weather 和 tmux send-keys "iwlist scan"）
+          （同一次 iteration 同时附加 get_weather 和 tmux send-keys "iwlist scan"）
 
 tool:     [Tool: get_weather | success | result: 45 chars]
           {"temp": 28, "condition": "多云"}
