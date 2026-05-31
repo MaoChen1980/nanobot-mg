@@ -1149,6 +1149,11 @@ class AgentLoop:
         Called sync before building the LLM prompt. The tagged messages are
         filtered out by ``get_history``, so the LLM call sees a budget-fitting
         context without any data being deleted yet.
+
+        Selection is by TURNS (whole user+assistant rounds), not by message
+        count: walks backwards from the most recent turn, keeps everything
+        that fits in ``adjusted_budget``, and tags everything older as
+        ``pending_compress`` for background summarization.
         """
         # Safety: clear stale pending_compress tags if no background task (crash recovery)
         if not hasattr(self, "_pending_compression") or self._pending_compression is None:
@@ -1176,61 +1181,71 @@ class AgentLoop:
 
         turns = Session._split_turns_by_assistant(pending_filter)
 
-        # Count leading synthetic turns (old summaries)
-        synth_turn_count = 0
-        synth_message_count = 0
-        for turn in turns:
-            if any(m.get("status") == "synthetic" for m in turn):
-                synth_turn_count += 1
-                synth_message_count += len(turn)
-            else:
+        # Walk backwards from the latest turn: keep whole turns that fit in
+        # adjusted_budget. Everything before the split is tagged for compression.
+        # This is turn-based selection, not token/message-count based.
+        keep_tokens = 0
+        split_idx = len(turns)
+        for i in range(len(turns) - 1, -1, -1):
+            turn_tokens = sum(estimate_message_tokens(m) for m in turns[i])
+            if keep_tokens + turn_tokens > adjusted_budget:
+                split_idx = i + 1
                 break
+            keep_tokens += turn_tokens
 
-        # 25% target based on non-synthetic tokens only
-        non_synthetic_tokens = sum(
-            sum(estimate_message_tokens(m) for m in turn)
-            for turn in turns[synth_turn_count:]
-        )
-        target_save = int(non_synthetic_tokens * 0.25) or 1
-
-        # Take oldest non-synthetic turns until target is met
-        trim_turns: list[list[dict]] = []
-        boundary = 0
-        saved = 0
-        for turn in turns[synth_turn_count:]:
-            if saved >= target_save:
-                break
-            trim_turns.append(turn)
-            boundary += len(turn)
-            saved += sum(estimate_message_tokens(m) for m in turn)
-
-        if not trim_turns:
+        to_compress = turns[:split_idx]
+        if not to_compress:
             return False
 
-        synth_messages = [m for turn in turns[:synth_turn_count] for m in turn]
-        trim_flat = [m for turn in trim_turns for m in turn]
-        future_context = [m for turn in turns[synth_turn_count + len(trim_turns):] for m in turn]
+        compress_flat = [m for turn in to_compress for m in turn]
 
         # Tag as pending_compress instead of deleting — data preserved if summary fails
-        compress_ids = {id(m) for m in synth_messages + trim_flat}
+        compress_ids = {id(m) for m in compress_flat}
         pending_count = 0
         for m in session.messages:
             if id(m) in compress_ids:
                 m["status"] = "pending_compress"
                 pending_count += 1
 
-        # Start background summary generation (old summary + compressible -> merged summary)
-        summary_input = synth_messages + trim_flat
+        # Start background summary generation (all tagged turns -> merged summary)
+        future_context = [m for turn in turns[split_idx:] for m in turn]
         self._pending_compression = asyncio.create_task(
-            self._summarize_turns(summary_input, future_context)
+            self._summarize_turns(compress_flat, future_context)
         )
 
         logger.info(
-            "Tagged {} oldest msgs as pending_compress ({} tokens, {} non-synth turns) "
-            "for session {} — bg summary started",
-            pending_count, saved, len(trim_turns), session.key,
+            "Tagged {} oldest msgs ({} turns) as pending_compress for session {} — bg summary started",
+            pending_count, len(to_compress), session.key,
         )
         return True
+
+    async def _apply_and_recompress(self, session: Session) -> None:
+        """Await pending compression & swap tagged→synthetic, then clear for fresh recompress."""
+        pending = getattr(self, "_pending_compression", None)
+        if pending is None:
+            return
+        try:
+            summary = await pending
+        except Exception as e:
+            logger.warning("Retry compression task failed: {}", e)
+            summary = None
+        from datetime import datetime, timezone
+        pending_msgs = [m for m in session.messages if m.get("status") == "pending_compress"]
+        if summary and pending_msgs:
+            self.context.memory.condense_session_to_history(pending_msgs)
+            ts = pending_msgs[0].get("timestamp", datetime.now(timezone.utc).isoformat())
+            summary_pair = [
+                {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
+                {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
+            ]
+            remaining = [m for m in session.messages if m.get("status") != "pending_compress"]
+            session.messages = list(summary_pair) + remaining
+            logger.info("Applied retry compression, archived {} pending msgs", len(pending_msgs))
+        else:
+            for m in session.messages:
+                if m.get("status") == "pending_compress":
+                    m.pop("status", None)
+        self._pending_compression = None
 
     async def process_direct(
         self,

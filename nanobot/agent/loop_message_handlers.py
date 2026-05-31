@@ -51,6 +51,22 @@ def _has_recent_user_response(session, content, message_id=""):
     return False
 
 
+def _has_context_window_error(content: str | None) -> bool:
+    """Check if an LLM error response indicates the context window was exceeded."""
+    if not content:
+        return False
+    lowered = content.lower()
+    markers = (
+        "context window",
+        "maximum context",
+        "prompt is too long",
+        "too many tokens",
+        "token limit",
+        "context length",
+    )
+    return any(m in lowered for m in markers)
+
+
 class SystemMessageHandler:
     def __init__(self, loop):
         self._loop = loop
@@ -188,46 +204,79 @@ class UserMessageHandler:
             logger.info("Re-dispatch detected for session {} (msg='{}...'), skipping", key, msg.content[:40])
             return None
 
-        # Stage 1: session preparation (checkpoint restore & history loading)
-        session, pending, history, channel, chat_id, key, budget_adjusted, context_window = self._prepare_session(msg, session_key)
-
-        # Fix 1: Reset iteration counter — each new turn starts at 0
-        self._loop._current_iteration = 0
-
-        # Stage 2: tool context
-        self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
-        self._maybe_start_message_tool()
-
-        # Stage 3: build initial messages
-        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session, budget_adjusted, context_window)
-        initial_msgs_count = len(initial_messages)
-
-        # Stage 4: callbacks
-        on_progress_final = on_progress or self._make_bus_progress_callback(msg)
-        on_retry_wait = self._make_retry_wait_callback(msg)
-
-        # Stage 5: persist user message before loop runs
+        # Retry loop for context-window-exceeded errors.  When the session
+        # exceeds the model's actual context limit (e.g. MiniMax with 200K
+        # vs config with 400K), the LLM API rejects the request.  Budget
+        # per retry = base * 0.7^n (base = min(config_window, actual_prompt_size)).
+        _MAX_CW_RETRIES = 3
         user_persisted_early = False
-        if not msg.ephemeral:
-            user_persisted_early = self._persist_user_message_early(session, msg, pending_ask_id)
 
-        # Stage 6: run agent loop
-        final_content, _, all_msgs, stop_reason, had_injections = await self._loop._run_agent_loop(
-            initial_messages,
-            on_progress=on_progress_final,
-            on_stream=on_stream,
-            on_stream_end=on_stream_end,
-            on_reasoning=on_reasoning,
-            on_reasoning_end=on_reasoning_end,
-            on_retry_wait=on_retry_wait,
-            session=session,
-            channel=msg.channel,
-            chat_id=chat_id,
-            message_id=msg.metadata.get("message_id"),
-            metadata=msg.metadata,
-            session_key=key,
-            pending_queue=pending_queue,
-        )
+        for cw_attempt in range(_MAX_CW_RETRIES + 1):
+            if cw_attempt > 0:
+                # Clean up session state left by the previous attempt:
+                # recovery markers, the early-persisted user message, and
+                # any runtime checkpoint from a partial agent run.
+                self._loop._recovery.clear_pending_user_turn(session)
+                self._loop._recovery.clear_runtime_checkpoint(session)
+                if user_persisted_early and session.messages and session.messages[-1].get("role") == "user":
+                    session.messages.pop()
+                user_persisted_early = False
+
+
+                logger.warning("Context window retry {}/{} for session {}", cw_attempt, _MAX_CW_RETRIES, key)
+
+            # Stage 1: session preparation (checkpoint restore & history loading)
+            session, pending, history, channel, chat_id, key, budget_adjusted, context_window = self._prepare_session(msg, session_key)
+
+            # Fix 1: Reset iteration counter — each new turn starts at 0
+            self._loop._current_iteration = 0
+
+            # Stage 2: tool context
+            self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
+            self._maybe_start_message_tool()
+
+            # Stage 3: build initial messages
+            initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session, budget_adjusted, context_window)
+            initial_msgs_count = len(initial_messages)
+
+            # Stage 4: callbacks
+            on_progress_final = on_progress or self._make_bus_progress_callback(msg)
+            on_retry_wait = self._make_retry_wait_callback(msg)
+
+            # Stage 5: persist user message before loop runs (skip on retry — already in session)
+            if cw_attempt == 0 and not msg.ephemeral:
+                user_persisted_early = self._persist_user_message_early(session, msg, pending_ask_id)
+
+            # Stage 6: run agent loop
+            final_content, _, all_msgs, stop_reason, had_injections = await self._loop._run_agent_loop(
+                initial_messages,
+                on_progress=on_progress_final,
+                on_stream=on_stream,
+                on_stream_end=on_stream_end,
+                on_reasoning=on_reasoning,
+                on_reasoning_end=on_reasoning_end,
+                on_retry_wait=on_retry_wait,
+                session=session,
+                channel=msg.channel,
+                chat_id=chat_id,
+                message_id=msg.metadata.get("message_id"),
+                metadata=msg.metadata,
+                session_key=key,
+                pending_queue=pending_queue,
+            )
+
+            # Retry on context-window-exceeded — compress & await summary first, then retry
+            if stop_reason == "error" and _has_context_window_error(final_content):
+                if cw_attempt < _MAX_CW_RETRIES:
+                    # Before retrying: trigger compression & await summary so tokens
+                    # drop before rebuilding the prompt with (possibly reduced) budget.
+                    self._loop._compress_if_needed(session)
+                    await self._loop._apply_and_recompress(session)
+                    continue
+                logger.error("Context window retries exhausted for session {}", key)
+
+            # Success or non-retryable error — exit retry loop
+            break
 
         # Stage 7: finalize — save, file cap, recovery clear, background schedule
         if msg.ephemeral:
