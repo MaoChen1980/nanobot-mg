@@ -492,10 +492,11 @@ class MemoryVectorIndex:
         self._embedding_count = self._get_embedding_count()
 
     def load(self) -> bool:
-        """Load persisted FAISS index and chunks. Returns True on success.
+        """Load chunks metadata from disk. Returns True on success.
 
-        Embeddings are loaded from SQLite into memory for FAISS.
-        Falls back to keyword-only if SQLite is empty or unreadable.
+        Only loads lightweight metadata (chunks JSON + embedding count).
+        The sentence-transformers model and FAISS index are loaded lazily
+        on the first call to :meth:`search`, keeping startup fast.
         """
         chunks_path = self._index_dir / self._CHUNKS_FILE
         if not chunks_path.exists():
@@ -507,56 +508,7 @@ class MemoryVectorIndex:
             logger.warning("Failed to load memory index chunks")
             return False
 
-        # Try loading from SQLite first
-        if self._load_model():
-            conn = self._get_db()
-            if conn:
-                rows = conn.execute(
-                    """SELECT id, chunk_text, source, heading, embedding
-                       FROM memory_embeddings
-                       ORDER BY id""",
-                ).fetchall()
-                if rows:
-                    import faiss
-                    import numpy as np
+        # Lightweight: get embedding count from SQLite (no model/FAISS needed)
+        self._embedding_count = self._get_embedding_count()
 
-                    # Reconstruct FAISS index from SQLite embeddings
-                    embeddings_list: list[bytes] = []
-                    for row in rows:
-                        if row[4]:  # embedding BLOB
-                            embeddings_list.append(row[4])
-
-                    if embeddings_list:
-                        embeddings = np.array(
-                            [np.frombuffer(e, dtype=np.float32) for e in embeddings_list],
-                            dtype=np.float32,
-                        )
-                        dim = self._model.get_sentence_embedding_dimension()
-                        index = faiss.IndexHNSWFlat(dim, 32, faiss.METRIC_INNER_PRODUCT)
-                        index.hnsw.ef_construction = 80
-                        index.add(embeddings)
-                        self._index = index
-                        self._embedding_count = len(embeddings_list)
-                        logger.info(
-                            "Loaded {} embeddings from SQLite (FAISS index built in-memory)",
-                            self._embedding_count,
-                        )
-                        return True
-
-        # Fallback: load FAISS index file directly (old format)
-        index_path = self._index_dir / self._INDEX_FILE
-        if index_path.exists():
-            try:
-                import faiss
-
-                self._index = faiss.read_index(str(index_path))
-                self._embedding_count = self._index.ntotal
-            except Exception:
-                logger.warning("Failed to load FAISS index at {} — will rebuild", index_path)
-                self._index = None
-
-        # Check dimension when model is already loaded
-        if self._model is not None and self._index is not None:
-            self._check_index_dimension()
-
-        return self._index is not None
+        return True
