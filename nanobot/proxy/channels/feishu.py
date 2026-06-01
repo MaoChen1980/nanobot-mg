@@ -731,7 +731,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             card: dict[str, Any] = {
                 "schema": "2.0",
                 "config": {"width_mode": "fill"},
-                "body": {"elements": elements},
+                "elements": elements,
             }
             if header_text:
                 template = self.config.get("cardTemplate", "blue")
