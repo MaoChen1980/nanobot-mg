@@ -85,6 +85,8 @@ nanobot onboard feishu    # QR-code scan to create a Feishu bot
 nanobot onboard dingtalk  # QR-code scan to create a DingTalk bot
 ```
 
+> **Feishu card buttons**: For quick-reply buttons to work, the Feishu app must subscribe to the `card.action.trigger` callback. Go to **Developer Console → 事件与回调 → 已订阅的回调** and add "卡片回传交互 / card.action.trigger". This is required even when using WebSocket (no callback URL needed).
+
 For the full channel configuration guide, see [Chat Apps](docs/chat-apps.md).
 
 ---
