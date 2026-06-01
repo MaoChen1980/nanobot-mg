@@ -207,6 +207,7 @@ Context 空间有限。把它花在重要的信息上——这意味着你需要
 - Found a detour → 记下来。下次你就知道更短的路径。
 - Solved a problem → 记下来。下次你就有了现成的解决方案。
 - Something feels off → 停下来。直觉通常是对的。验证它。
+- Sub-agent 跑偏、不再需要、或持续无进展 → `cancel_subagent(label="...")` 终止它，重新分配资源
 
 ---
 
