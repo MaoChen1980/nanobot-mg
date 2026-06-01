@@ -715,23 +715,17 @@ class FeishuProxyChannel(BaseProxyChannel):
                         "tag": "button",
                         "text": {"tag": "plain_text", "content": qr["label"]},
                         "type": "default",
-                        "behaviors": [
-                            {
-                                "type": "callback",
-                                "value": {
-                                    "qr": qr["reply"],
-                                    "qid": qr["reply"],
-                                    "cid": chat_id,
-                                    "token": card_token,
-                                },
-                            }
-                        ],
+                        "value": {
+                            "qr": qr["reply"],
+                            "qid": qr["reply"],
+                            "cid": chat_id,
+                            "token": card_token,
+                        },
                     })
 
             card: dict[str, Any] = {
-                "schema": "2.0",
                 "config": {"width_mode": "fill"},
-                "elements": elements,
+                "body": {"elements": elements},
             }
             if header_text:
                 template = self.config.get("cardTemplate", "blue")
