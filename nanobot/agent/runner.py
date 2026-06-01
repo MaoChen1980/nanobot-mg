@@ -44,6 +44,12 @@ from .runner_constants import (
     _PERSISTED_MODEL_ERROR_PLACEHOLDER,
     _SNIP_SAFETY_BUFFER,
 )
+from .runner_retry import (
+    BackoffConfig,
+    BackoffStrategy,
+    RetryContext,
+    RetryState,
+)
 
 # Re-export for backward compatibility
 __all__ = [
@@ -52,6 +58,8 @@ __all__ = [
     "_MAX_EMPTY_RETRIES", "_MAX_INJECTION_CYCLES",
     "_MAX_INJECTIONS_PER_TURN", "_MAX_LENGTH_RECOVERIES",
     "_PERSISTED_MODEL_ERROR_PLACEHOLDER", "_SNIP_SAFETY_BUFFER",
+    # Retry & checkpoint exports
+    "BackoffConfig", "BackoffStrategy", "RetryContext", "RetryState",
 ]
 from .runner_context import (
     drop_orphan_tool_results,
@@ -110,6 +118,11 @@ class AgentRunSpec:
     llm_timeout_s: float | None = None
     max_turns_before_compress: int = 0  # 0 = disabled; compress when assistant turns exceed this
     compressed_turn_count: int = 20  # keep this many turns after compression
+    # Retry & checkpoint configuration
+    retry_context: Any | None = None  # RetryContext for retry tracking
+    max_llm_retries: int = 3  # max retries for LLM errors
+    max_overflow_retries: int = 3  # max retries for context window overflow
+    backoff_config: Any | None = None  # BackoffConfig for retry delays
 
 
 @dataclass(slots=True)
@@ -124,6 +137,9 @@ class AgentRunResult:
     error: str | None = None
     tool_events: list[dict[str, str]] = field(default_factory=list)
     had_injections: bool = False
+    # Retry tracking
+    retry_count: int = 0  # total number of retries performed
+    retry_summary: dict[str, Any] = field(default_factory=dict)  # detailed retry stats
 
 
 class AgentRunner:
@@ -205,8 +221,16 @@ class AgentRunner:
         model_error_retries = 0
         had_injections = False
         injection_cycles = 0
+        total_retry_count = 0
 
         _current_messages_for_subagent.set(messages)
+
+        # Initialize retry context from spec
+        retry_ctx = spec.retry_context
+        backoff_cfg = spec.backoff_config
+
+        if retry_ctx is None:
+            retry_ctx = RetryContext()
 
         def _normalize(spec, tc_id, name, result):
             result = ensure_nonempty_tool_result(name, result)
@@ -411,11 +435,19 @@ class AgentRunner:
             clean = hook.finalize_content(context, response.content)
             if response.finish_reason != "error" and is_blank_text(clean):
                 empty_content_retries += 1
+                total_retry_count += 1
+                retry_ctx.empty_response_state.record_attempt(f"empty response on attempt {empty_content_retries}")
                 if empty_content_retries < _MAX_EMPTY_RETRIES:
                     logger.warning(
                         "Empty response on turn {} for {} ({}/{}); retrying",
                         iteration, spec.session_key or "default",
                         empty_content_retries, _MAX_EMPTY_RETRIES,
+                    )
+                    # Apply backoff before retry
+                    await retry_ctx.wait_with_backoff(
+                        "empty_response",
+                        retry_callback=spec.retry_wait_callback,
+                        config=backoff_cfg,
                     )
                     await hook.on_stream_end(context, resuming=False)
                     await hook.after_iteration(context)
@@ -433,9 +465,12 @@ class AgentRunner:
                 context.usage = dict(raw_usage)
                 context.tool_calls = list(response.tool_calls)
                 clean = hook.finalize_content(context, response.content)
+                retry_ctx.empty_response_state.record_success()
 
             if response.finish_reason == "length" and not is_blank_text(clean):
                 length_recovery_count += 1
+                total_retry_count += 1
+                retry_ctx.length_recovery_state.record_attempt(f"length recovery attempt {length_recovery_count}")
                 if length_recovery_count <= _MAX_LENGTH_RECOVERIES:
                     logger.info(
                         "Output truncated on turn {} for {} ({}/{}); continuing",
@@ -451,6 +486,7 @@ class AgentRunner:
                     ))
                     messages.append(build_length_recovery_message())
                     await hook.after_iteration(context)
+                    retry_ctx.length_recovery_state.record_success()
                     continue
 
             assistant_message: dict[str, Any] | None = None
@@ -492,10 +528,19 @@ class AgentRunner:
                     continue
                 if model_error_retries < _MAX_MODEL_ERROR_RETRIES:
                     model_error_retries += 1
+                    total_retry_count += 1
+                    retry_ctx.llm_request_state.record_attempt(f"model error retry {model_error_retries}")
+                    # Apply backoff for model errors
+                    await retry_ctx.wait_with_backoff(
+                        "llm_request",
+                        retry_callback=spec.retry_wait_callback,
+                        config=backoff_cfg,
+                    )
                     messages.append(build_assistant_message(
                         "[My previous response was blocked by content safety. I'll reformulate and try again.]"
                     ))
                     empty_content_retries = 0
+                    retry_ctx.llm_request_state.record_success()
                     continue
                 break
 
@@ -566,6 +611,8 @@ class AgentRunner:
             error=error,
             tool_events=tool_events,
             had_injections=had_injections,
+            retry_count=total_retry_count,
+            retry_summary=retry_ctx.summary(),
         )
 
     def _log_tool_call(

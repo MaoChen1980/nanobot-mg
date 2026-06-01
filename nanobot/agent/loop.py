@@ -77,6 +77,11 @@ from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 
 # Import from split modules
 from .loop_constants import (
+    _DEFAULT_MAX_RETRIES,
+    _DEFAULT_RETRY_BACKOFF_INITIAL,
+    _DEFAULT_RETRY_BACKOFF_MAX,
+    _DEFAULT_RETRY_BACKOFF_MULTIPLIER,
+    _DEFAULT_RETRY_BACKOFF_JITTER,
     _RUNTIME_CHECKPOINT_KEY,
     _PENDING_USER_TURN_KEY,
 )
@@ -290,6 +295,17 @@ class AgentLoop:
             "_observe_debug": {},
         }
 
+        # ------------------------------------------------------------------
+        # Retry / backoff / checkpoint state
+        # ------------------------------------------------------------------
+        self.retry_count: int = 0          # total retries performed across this turn
+        self.max_retries: int = _DEFAULT_MAX_RETRIES
+        self.backoff_initial: float = _DEFAULT_RETRY_BACKOFF_INITIAL
+        self.backoff_max: float = _DEFAULT_RETRY_BACKOFF_MAX
+        self.backoff_multiplier: float = _DEFAULT_RETRY_BACKOFF_MULTIPLIER
+        self.backoff_jitter: float = _DEFAULT_RETRY_BACKOFF_JITTER
+
+
     # ------------------------------------------------------------------
     # Backward-compat properties for _session_dispatch
     # ------------------------------------------------------------------
@@ -301,6 +317,14 @@ class AgentLoop:
     @property
     def _active_tasks(self) -> dict[str, list[asyncio.Task]]:
         return {k: v.tasks for k, v in self._session_dispatch.items()}
+
+    # ------------------------------------------------------------------
+    # Retry / backoff helpers
+    # ------------------------------------------------------------------
+
+    def reset_retry_state(self) -> None:
+        """Reset retry counters at the start of a new dispatch or turn."""
+        self.retry_count = 0
 
     # ------------------------------------------------------------------
     # Provider snapshot
@@ -560,6 +584,19 @@ class AgentLoop:
             CompositeHook([loop_hook] + self._extra_hooks) if self._extra_hooks else loop_hook
         )
 
+        # Reset retry counters at the start of each turn
+        self.reset_retry_state()
+
+        # Build backoff config and retry context from loop attributes
+        from nanobot.agent.runner_retry import BackoffConfig, RetryContext
+        backoff_cfg = BackoffConfig(
+            initial_delay=self.backoff_initial,
+            max_delay=self.backoff_max,
+            multiplier=self.backoff_multiplier,
+            jitter=self.backoff_jitter,
+        )
+        retry_ctx = RetryContext()
+
         async def _checkpoint(payload: dict[str, Any]) -> None:
             if session is None:
                 return
@@ -645,7 +682,13 @@ class AgentLoop:
             checkpoint_callback=_checkpoint,
             injection_callback=_drain_pending,
             reasoning_effort=self.provider.generation.reasoning_effort,
+            retry_context=retry_ctx,
+            backoff_config=backoff_cfg,
+            max_llm_retries=self.max_retries,
+            max_overflow_retries=self.max_retries,
         ))
+        # Track total retries and token usage across this turn
+        self.retry_count += result.retry_count
         self._last_usage = result.usage
 
         # (IV markers re-entry and completion detection removed)

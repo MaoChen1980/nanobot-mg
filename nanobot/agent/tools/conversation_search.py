@@ -1,11 +1,10 @@
-"""Conversation search tool — search dialogue history and MEMORY.md."""
+"""Conversation search tool — search dialogue history in SQLite."""
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
-from nanobot.agent.memory import MemoryStore
+from nanobot.agent.memory_store import MemoryStore
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 
@@ -19,7 +18,10 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
     ),
 )
 class ConversationSearchTool(Tool):
-    """Search conversation history and MEMORY.md for matching content."""
+    """Search conversation history — find information from past conversation records.
+
+    Uses SQLite storage for persistent session history with keyword + date range filtering.
+    """
 
     def __init__(self, store: MemoryStore):
         self._store = store
@@ -39,7 +41,7 @@ class ConversationSearchTool(Tool):
         "**Parameters**:\n"
         "- keyword — exact substring match, case-insensitive\n"
         "- start/end — filter by time range (YYYY-MM-DD format)\n"
-        "- query — alias for keyword, provide either one\n\n"
+        "- query — alias for keyword, provide this or keyword\n\n"
         "**Note**:\n"
         "- Does not search goal/event/lesson tables (use read_file(\"tasks/TREE.md\") to check goal progress)\n"
         "- Keywords use substring matching — 'deploy' will match 'deployment', 'deploying', etc.\n\n"
@@ -49,61 +51,6 @@ class ConversationSearchTool(Tool):
         "  conversation_search(query='error', start='2026-03-01', end='2026-03-15')"
     )
 
-    # ------------------------------------------------------------------
-    # Date helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _parse_date(date_str: str | None) -> datetime | None:
-        """Parse date string to datetime. Supports ISO 8601 and human formats."""
-        if not date_str:
-            return None
-        try:
-            dt = datetime.fromisoformat(date_str)
-            if dt.tzinfo is None:
-                dt = dt.astimezone()
-            return dt
-        except ValueError:
-            pass
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d %H:%M").astimezone()
-        except ValueError:
-            pass
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d").astimezone()
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _in_date_range(timestamp: str, content: str, start: datetime | None, end: datetime | None) -> bool:
-        if not start and not end:
-            return True
-        ts = ConversationSearchTool._parse_date(timestamp)
-        if ts:
-            if ts.tzinfo is None:
-                ts = ts.astimezone()
-            if (not start or ts >= start) and (not end or ts <= end):
-                return True
-        import re
-        for match in re.finditer(r'\[(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})', content):
-            ct = ConversationSearchTool._parse_date(match.group(1))
-            if ct:
-                if ct.tzinfo is None:
-                    ct = ct.astimezone()
-                if (not start or ct >= start) and (not end or ct <= end):
-                    return True
-        return False
-
-    @staticmethod
-    def _match_text(content: str, text: str | None) -> bool:
-        if not text:
-            return True
-        return text.lower() in content.lower()
-
-    # ------------------------------------------------------------------
-    # Execute
-    # ------------------------------------------------------------------
-
     async def execute(
         self,
         keyword: str | None = None,
@@ -112,64 +59,79 @@ class ConversationSearchTool(Tool):
         end: str | None = None,
         **kwargs: Any,
     ) -> str:
-        search_text = keyword or query
+        search_text = (keyword or query or "").strip()
         if not search_text:
-            return "Provide keyword (or query) to search for."
+            return "Error: Provide keyword (or query) to search for."
 
-        start_dt = self._parse_date(start)
-        end_dt = self._parse_date(end)
-        if end_dt:
-            end_dt = end_dt.replace(hour=23, minute=59, second=59)
+        results: list[dict[str, Any]] = []
 
-        results: list[tuple[str, str]] = []
-
-        # Search MEMORY.md
+        # Search MEMORY.md first
         memory = self._store.read_memory()
-        if memory and self._match_text(memory, search_text):
-            results.append(("", memory))
+        if memory and search_text.lower() in memory.lower():
+            results.append({
+                "source": "memory",
+                "timestamp": "",
+                "content": memory[:2000],
+            })
 
-        # Search history via SQL
+        # Search sessions via SQLite
         if self._store._db is not None:
-            db = self._store._db
-            rows = db._conn.execute(
-                "SELECT timestamp, content FROM history ORDER BY cursor"
-            ).fetchall()
-
-            # Also search current session messages
-            from nanobot.agent.context_vars import _current_session_key
-            current_key = _current_session_key.get()
-            if current_key:
-                msg_rows = db._conn.execute(
-                    "SELECT timestamp, content FROM messages WHERE session_key = ? ORDER BY id",
-                    (current_key,),
-                ).fetchall()
-                for ts, content in msg_rows:
-                    if not self._in_date_range(ts, content, start_dt, end_dt):
-                        continue
-                    if not self._match_text(content, search_text):
-                        continue
-                    results.append((ts, content))
-            for ts, content in rows:
-                if not self._in_date_range(ts, content, start_dt, end_dt):
-                    continue
-                if not self._match_text(content, search_text):
-                    continue
-                results.append((ts, content))
+            session_results = self._store._db.search_sessions(
+                keyword=search_text,
+                start=start,
+                end=end,
+                limit=50,
+            )
+            for r in session_results:
+                results.append({
+                    "source": "session",
+                    "session_key": r.get("session_key", ""),
+                    "role": r.get("role", ""),
+                    "timestamp": r.get("timestamp", ""),
+                    "content": r.get("content", ""),
+                })
 
         if not results:
-            parts = "memories"
+            date_range = ""
             if start:
-                parts += f" from {start}"
+                date_range = f" from {start}"
             if end:
-                parts += f" to {end}"
-            return f"No memories found{'' if parts == 'memories' else f' {parts}'}."
+                date_range += f" to {end}"
+            return f"No conversation history found{date_range}."
 
-        output = ["## Relevant Memories\n"]
-        for ts, content in results[:50]:
-            if ts:
-                output.append(f"[{ts}] {content}")
+        # Format structured output
+        output_parts: list[str] = ["## Conversation Search Results\n"]
+
+        for i, r in enumerate(results[:50], 1):
+            if r.get("source") == "memory":
+                output_parts.append(f"### Result #{i} [memory]")
+                output_parts.append("_Source: MEMORY.md_")
+                content = r.get("content", "")
+                output_parts.append(
+                    content[:1000] + "..." if len(content) > 1000 else content
+                )
             else:
-                output.append(content)
-            output.append("---")
+                ts = r.get("timestamp", "")
+                session = r.get("session_key", "")
+                role = r.get("role", "")
+                content = r.get("content", "")
 
-        return "\n".join(output)
+                header = f"### Result #{i} [{ts}]"
+                output_parts.append(header)
+
+                meta: list[str] = []
+                if role:
+                    meta.append(f"role: {role}")
+                if session:
+                    meta.append(f"session: {session}")
+                if meta:
+                    output_parts.append(f"_{', '.join(meta)}_")
+
+                # Truncate long content for readability
+                truncated = content[:500] + "..." if len(content) > 500 else content
+                output_parts.append(truncated)
+
+            output_parts.append("---")
+
+        output_parts.append(f"\n_Total: {len(results)} result(s)_")
+        return "\n".join(output_parts)

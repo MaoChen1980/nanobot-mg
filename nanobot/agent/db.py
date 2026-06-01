@@ -91,6 +91,7 @@ class NanobotDB:
                 FOREIGN KEY (session_key) REFERENCES sessions(key) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_key);
+            CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
         """)
         self._conn.commit()
         self._migrate_schema()
@@ -204,7 +205,7 @@ class NanobotDB:
     # Sessions + Messages
     # --------------------------------------------------------------------------
 
-    def save_session(self, session: Session) -> None:
+    def save_session(self, session: "Session") -> None:
         """Full save: upsert session metadata, delete and re-insert all messages."""
         with self._conn:
             self._conn.execute(
@@ -236,7 +237,7 @@ class NanobotDB:
                 ),
             )
 
-    def load_session(self, key: str) -> Session | None:
+    def load_session(self, key: str) -> "Session | None":
         from dataclasses import replace
         from nanobot.session.manager import Session
 
@@ -289,6 +290,87 @@ class NanobotDB:
         row = self._conn.execute("SELECT 1 FROM sessions LIMIT 1").fetchone()
         return row is not None
 
+    def search_sessions(
+        self,
+        keyword: str | None = None,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Search session messages by keyword and date range.
+
+        Args:
+            keyword: Substring to match in message content (case-insensitive)
+            start: Start date (YYYY-MM-DD or ISO format), inclusive
+            end: End date (YYYY-MM-DD or ISO format), inclusive
+            limit: Maximum results to return
+
+        Returns:
+            List of dicts with session_key, timestamp, content, role
+        """
+        results: list[dict[str, Any]] = []
+
+        # Parse dates
+        start_dt = None
+        end_dt = None
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start)
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.astimezone()
+            except ValueError:
+                try:
+                    start_dt = datetime.strptime(start, "%Y-%m-%d").astimezone()
+                except ValueError:
+                    pass
+        if end:
+            try:
+                end_dt = datetime.fromisoformat(end)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.astimezone()
+                # Extend to end of day for date-only values
+                if "T" not in end:
+                    end_dt = end_dt.replace(hour=23, minute=59, second=59)
+            except ValueError:
+                try:
+                    end_dt = datetime.strptime(end, "%Y-%m-%d").replace(
+                        hour=23, minute=59, second=59
+                    ).astimezone()
+                except ValueError:
+                    pass
+
+        # Build query for messages
+        query = "SELECT session_key, role, content, timestamp FROM messages WHERE 1=1"
+        args: list[Any] = []
+
+        if keyword:
+            query += " AND LOWER(content) LIKE ?"
+            args.append(f"%{keyword.lower()}%")
+
+        if start_dt:
+            query += " AND timestamp >= ?"
+            args.append(start_dt.isoformat())
+
+        if end_dt:
+            query += " AND timestamp <= ?"
+            args.append(end_dt.isoformat())
+
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        args.append(limit)
+
+        rows = self._conn.execute(query, args).fetchall()
+
+        for session_key, role, content, timestamp in rows:
+            results.append({
+                "session_key": session_key,
+                "role": role,
+                "content": content,
+                "timestamp": timestamp,
+            })
+
+        return results
+
     def close(self) -> None:
         self._conn.close()
 
@@ -340,72 +422,17 @@ class NanobotDB:
             query += " AND success = ?"
             args.append(int(success))
         if min_result_size is not None:
-            query += " AND result_size > ?"
+            query += " AND result_size >= ?"
             args.append(min_result_size)
         query += " ORDER BY id DESC LIMIT ?"
         args.append(limit)
+        cols = ["id", "session_key", "iteration", "turn", "tool_name", "params",
+                "result", "result_size", "success", "error", "duration_ms", "timestamp"]
         rows = self._conn.execute(query, args).fetchall()
-        cols = ["id", "session_key", "iteration", "turn", "tool_name", "params", "result", "result_size", "success", "error", "duration_ms", "timestamp"]
-        return [dict(zip(cols, row)) for row in rows]
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            d = self._row_to_dict(row, cols)
+            d["params"] = json.loads(d["params"]) if d["params"] else {}
+            results.append(d)
+        return results
 
-    def prune_tool_calls(self, keep_days: int = 90) -> int:
-        self._conn.execute("PRAGMA foreign_keys = OFF")
-        cursor = self._conn.execute(
-            "DELETE FROM tool_calls WHERE timestamp < datetime('now', ?)",
-            (f"-{keep_days} days",),
-        )
-        self._conn.execute("PRAGMA foreign_keys = ON")
-        self._conn.commit()
-        return cursor.rowcount
-
-    # --------------------------------------------------------------------------
-    # Facts
-    # --------------------------------------------------------------------------
-
-    def upsert_fact(
-        self,
-        fact: str,
-        *,
-        tags: list[str] | None = None,
-        source: str | None = None,
-        project: str | None = None,
-        confidence: float = 1.0,
-    ) -> int:
-        ts = _utc_now_iso()
-        cursor = self._conn.execute(
-            """INSERT OR REPLACE INTO facts (fact, tags, source, project, confidence, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (fact, json.dumps(tags or []), source, project, confidence, ts, ts),
-        )
-        self._conn.commit()
-        return cursor.lastrowid or 0
-
-    def delete_fact(self, fact_id: int) -> None:
-        self._conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
-        self._conn.commit()
-
-    def list_facts(
-        self,
-        *,
-        project: str | None = None,
-        tag: str | None = None,
-        limit: int = 50,
-    ) -> list[dict[str, Any]]:
-        query = "SELECT id, fact, tags, source, project, created_at, updated_at, confidence FROM facts WHERE 1=1"
-        params: list[Any] = []
-        if project:
-            query += " AND project = ?"
-            params.append(project)
-        if tag:
-            query += " AND EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)"
-            params.append(tag)
-        query += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
-        rows = self._conn.execute(query, params).fetchall()
-        return [
-            {
-                "id": r[0], "fact": r[1], "tags": json.loads(r[2]), "source": r[3],
-                "project": r[4], "created_at": r[5], "updated_at": r[6], "confidence": r[7],
-            }
-            for r in rows
-        ]
