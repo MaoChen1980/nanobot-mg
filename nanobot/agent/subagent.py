@@ -500,11 +500,12 @@ class SubagentManager:
         future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
         self._pending_subagent_questions[subagent_id] = future
 
-        # Notify Orchestrator
+        # Notify Orchestrator — subagent is BLOCKED until responded
         ctx = f"\nContext: {context}" if context else ""
         await self._inject_to_orchestrator(
-            f"[Subagent '{subagent_label}' requests input]: {question}{ctx}\n"
-            f"Use respond_to_subagent(subagent_id='{subagent_label}', response=...) to reply.",
+            f"[Subagent '{subagent_label}' waits for your input] ⏸️ Subagent已阻塞\n"
+            f"Question: {question}{ctx}\n"
+            f"务必用 respond_to_subagent(subagent_id='{subagent_label}', response=...) 回复，否则Subagent会一直卡住。",
             origin,
             metadata={
                 "injected_event": "subagent_request",
@@ -521,17 +522,7 @@ class SubagentManager:
         except asyncio.TimeoutError:
             self._pending_subagent_questions.pop(subagent_id, None)
             logger.warning("Subagent [{}] timed out waiting for Orchestrator input", subagent_label)
-            try:
-                await self.notify_orchestrator(
-                    f"Subagent '{subagent_label}' requested input but timed out after {timeout}s waiting for a response. "
-                    f"Question was: {question[:200]}. Continuing autonomously.",
-                    subagent_id=subagent_id,
-                    subagent_label=subagent_label,
-                    priority="warn",
-                )
-            except Exception:
-                logger.debug("Failed to notify orchestrator of timeout", exc_info=True)
-            return "Orchestrator did not respond in time. Continuing autonomously."
+            return "Error: Orchestrator did not respond in time."
         except asyncio.CancelledError:
             self._pending_subagent_questions.pop(subagent_id, None)
             return "Request cancelled. Continuing autonomously."
