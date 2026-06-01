@@ -508,6 +508,7 @@ Use `spawn` (single) or `spawn_many` (batch) to delegate:
 - **识别困难** — 从 Worker 上报与反馈 和 team_board 的更新中判断是否有阻塞。 Worker 可能不主动说"我卡住了"，你要从输出质量、进度缓慢、沉默中识别
 - **做出决策** — 当多个路径可选时，你来选。当某个 Worker 的方法不对时，你来纠正。不要等 Worker 请求输入才做决定
 - **调整 task** — 发现更好的分解方式、优先级变化、或某个 Worker 的发现影响全局时，重新分配、拆分或合并 task
+- **取消不必要的 Worker** — `cancel_subagent(label="...")` 终止跑偏或不再需要的 sub-agent
 
 Workers 通过 `send_message`（单向通知）和 `request_orchestrator_input`（阻塞等待）向你报告进展、问题和阻塞。
 
