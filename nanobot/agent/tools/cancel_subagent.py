@@ -1,4 +1,4 @@
-"""Tool to cancel a specific running subagent by its worker label."""
+"""Tool to cancel a specific running subagent by its subagent label."""
 
 from __future__ import annotations
 
@@ -13,12 +13,12 @@ if TYPE_CHECKING:
 
 @tool_parameters(
     build_parameters_schema(
-        label=p("string", "The worker label of the subagent to cancel"),
+        label=p("string", "The subagent label of the subagent to cancel"),
         required=["label"],
     )
 )
 class CancelSubagentTool(Tool):
-    """Tool to cancel a specific running subagent by worker label."""
+    """Tool to cancel a specific running subagent by subagent label."""
 
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
@@ -28,13 +28,13 @@ class CancelSubagentTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Cancel a specific running subagent by its worker label. "
+            "**Purpose**: Cancel a specific running subagent by its subagent label. "
             "The subagent will be force-stopped and you will receive a cancellation notice.\n\n"
             "**When to use**:\n"
             "- A subagent is no longer needed (task abandoned)\n"
             "- A subagent is stuck and needs to be terminated\n"
             "- You want to reassign resources to a different task\n\n"
-            "Use `list_subagents` first to see active worker labels.\n"
+            "Use `list_subagents` first to see active subagent labels.\n"
         )
 
     async def execute(self, label: str, **kwargs: Any) -> str:

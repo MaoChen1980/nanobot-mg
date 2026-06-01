@@ -141,7 +141,7 @@ E:\claude\nanobot-mg/
         read_files.py (7KB)
         registry.py (8KB)
         request_input.py (2KB)
-        respond_to_worker.py (2KB)
+        respond_to_subagent.py (2KB)
         sandbox.py (2KB)
         scan_project.py (2KB)
         schema.py (2KB)

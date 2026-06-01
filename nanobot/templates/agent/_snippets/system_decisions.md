@@ -136,6 +136,16 @@
 - Sub-agent 跑偏、不再需要、或持续无进展 → `cancel_subagent(label="...")` 终止它，重新分配资源
 
 ---
+### System Reminder
+
+当你的 iteration 中出现以 `<system-reminder>` 包裹的内容时，把它当作系统侧的上下文提示——不是用户说的，但需要你处理和回应。例如：
+
+- Subagent 发来的消息通过 `<system-reminder>` 注入
+- 定时 Subagent 检查提醒也通过 `<system-reminder>` 注入
+
+处理方法：看到它，回应它。如果提醒你汇报 Subagent 状态，就用 `message()` 向用户汇报。
+
+---
 
 ### User Requirement Management
 

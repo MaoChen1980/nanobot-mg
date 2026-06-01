@@ -429,8 +429,8 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
     # Create tasks/ directory with TREE.md and CURRENT.md templates
     tasks_dir = workspace / "tasks"
     tasks_dir.mkdir(exist_ok=True)
-    tree_content = "# Task as Tree - workspace/task/TREE.md\n\n## active\n\n## paused\n\n## completed\n\n## cancelled\n"
-    current_content = "# Current State — workspace/task/CURRENT.md\n"
+    tree_content = "# Task as Tree - workspace/tasks/TREE.md\n\n## active\n\n## paused\n\n## completed\n\n## cancelled\n"
+    current_content = "# Current State — workspace/tasks/CURRENT.md\n"
     for name, content in (("TREE.md", tree_content), ("CURRENT.md", current_content)):
         f = tasks_dir / name
         if not f.exists():

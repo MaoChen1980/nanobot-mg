@@ -1,4 +1,4 @@
-"""RequestOrchestratorInputTool — blocking Worker → Orchestrator question."""
+"""RequestOrchestratorInputTool — blocking Subagent → Orchestrator question."""
 
 from __future__ import annotations
 
@@ -20,12 +20,12 @@ if TYPE_CHECKING:
     )
 )
 class RequestOrchestratorInputTool(Tool):
-    """Blocking: Worker asks Orchestrator for input, pauses until response or timeout."""
+    """Blocking: Subagent asks Orchestrator for input, pauses until response or timeout."""
 
-    def __init__(self, manager: "SubagentManager", worker_id: str, worker_label: str) -> None:
+    def __init__(self, manager: "SubagentManager", subagent_id: str, subagent_label: str) -> None:
         self._manager = manager
-        self._worker_id = worker_id
-        self._worker_label = worker_label
+        self._subagent_id = subagent_id
+        self._subagent_label = subagent_label
 
     name = "request_orchestrator_input"
 
@@ -38,7 +38,7 @@ class RequestOrchestratorInputTool(Tool):
             "**When to use**:\n"
             "- You need confirmation that your direction is correct\n"
             "- You encounter a decision requiring a global perspective\n"
-            "- You need information produced by another Worker\n\n"
+            "- You need information produced by another Subagent\n\n"
             "**Note**: Execution pauses until the Orchestrator replies. "
             "After a timeout (default 300s), execution resumes autonomously."
         )
@@ -46,8 +46,8 @@ class RequestOrchestratorInputTool(Tool):
     async def execute(self, question: str, context: str = "", timeout: float = 300.0, **kwargs: Any) -> str:
         return await self._manager.request_orchestrator_input(
             question=question,
-            worker_id=self._worker_id,
-            worker_label=self._worker_label,
+            subagent_id=self._subagent_id,
+            subagent_label=self._subagent_label,
             context=context,
             timeout=timeout,
         )

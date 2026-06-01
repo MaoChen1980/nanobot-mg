@@ -940,7 +940,7 @@ class GatewayApplication:
             try:
                 # Skip streaming / progress / control messages
                 meta = msg.metadata or {}
-                if any(meta.get(k) for k in ("_stream_delta", "_stream_end", "_streamed",
+                if any(meta.get(k) for k in ("_stream_delta", "_stream_end",
                                               "_progress", "_retry_wait", "_tool_hint")):
                     continue
 

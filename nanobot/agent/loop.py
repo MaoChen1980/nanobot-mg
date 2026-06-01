@@ -31,7 +31,7 @@ from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.edit_files import EditFilesTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.spawn_many import SpawnManyTool
-from nanobot.agent.tools.respond_to_worker import RespondToWorkerTool
+from nanobot.agent.tools.respond_to_subagent import RespondToSubagentTool
 from nanobot.agent.tools.send_message import SendMessageTool
 from nanobot.agent.tools.check_subagent import CheckSubagentTool
 from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
@@ -112,8 +112,8 @@ class _SessionDispatchState:
 
 
 @dataclasses.dataclass
-class _WorkerCheckState:
-    """Per-session state for worker check throttling."""
+class _SubagentCheckState:
+    """Per-session state for subagent check throttling."""
     last_check: float
     channel: str
     chat_id: str
@@ -249,7 +249,7 @@ class AgentLoop:
             memory_store=self.context.memory,
         )
         self._running = False
-        self._last_worker_check: dict[str, _WorkerCheckState] = {}
+        self._last_subagent_check: dict[str, _SubagentCheckState] = {}
         self._mcp_servers = mcp_servers or {}
         self._mcp_stacks: dict[str, AsyncExitStack] = {}
         self._mcp_connected = False
@@ -393,7 +393,7 @@ class AgentLoop:
         self.tools.register(CheckSubagentTool(manager=self.subagents))
         self.tools.register(CancelSubagentTool(manager=self.subagents))
         self.tools.register(ListSubagentsTool(manager=self.subagents))
-        self.tools.register(RespondToWorkerTool(manager=self.subagents))
+        self.tools.register(RespondToSubagentTool(manager=self.subagents))
         self.tools.register(SendMessageTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(
@@ -714,7 +714,7 @@ class AgentLoop:
                 try:
                     msg = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
                 except asyncio.TimeoutError:
-                    await self._check_workers()
+                    await self._check_subagents()
                     continue
                 except asyncio.CancelledError:
                     if not self._running:
@@ -802,11 +802,11 @@ class AgentLoop:
             logger.exception("run() exiting due to unhandled exception")
             raise
 
-    _WORKER_CHECK_INTERVAL: float = 60.0
+    _SUBAGENT_IDLE_CHECK_INTERVAL: float = 60.0
     _POST_DISPATCH_CHECK_INTERVAL: float = 30.0
     _SUBAGENT_CHECK_INTERVAL: float = 30.0
 
-    async def _publish_worker_check(self, session_key: str, channel: str, chat_id: str) -> None:
+    async def _publish_subagent_check(self, session_key: str, channel: str, chat_id: str) -> None:
         """Publish a proactive subagent check message to the bus.
 
         Routes through UserMessageHandler (not SystemMessageHandler) so the LLM
@@ -818,8 +818,38 @@ class AgentLoop:
             chat_id=chat_id,
             content=(
                 "<system-reminder>\n"
-                "⏰ 定时检查：有 Worker 在运行中。"
-                "用 list_subagents 查看状态，用 check_subagent 检查进度。\n"
+                "⏰ 定时检查：有 Subagent 在运行中。\n"
+                "请用 message() 向用户简短汇报当前 Subagent 状态。\n"
+                "</system-reminder>"
+            ),
+            ephemeral=True,
+            metadata={},
+            session_key_override=session_key,
+        )
+        await self.bus.publish_inbound(msg)
+
+    async def _publish_subagent_check_with_session(self, session_key: str, channel: str, chat_id: str) -> None:
+        """Publish a proactive subagent status check through the LLM path.
+        Records the check in session history and publishes to the inbound bus
+        so the LLM processes it and responds to the user with a status update.
+        """
+        # Record in session so LLM has full context
+        try:
+            session = self.sessions.get_or_create(session_key)
+            session.add_message("assistant", f"[⏰ Subagent 状态检查：{self.subagents.get_running_count_by_session(session_key)} 个 Subagent 在运行]")
+            self.sessions.save(session)
+        except Exception:
+            logger.exception("Failed to record boss status check in session")
+
+        # Notify LLM — it will call list_subagents + message() to report to user
+        msg = InboundMessage(
+            channel=channel,
+            sender_id="user",
+            chat_id=chat_id,
+            content=(
+                "<system-reminder>\n"
+                "⏰ 定时检查：有 Subagent 在运行中。\n"
+                "请用 message() 向用户简短汇报当前 Subagent 状态。\n"
                 "</system-reminder>"
             ),
             ephemeral=True,
@@ -837,7 +867,7 @@ class AgentLoop:
                 await asyncio.sleep(self._SUBAGENT_CHECK_INTERVAL)
                 if self.subagents.get_running_count_by_session(session_key) == 0:
                     break
-                await self._publish_worker_check(session_key, channel, chat_id)
+                await self._publish_subagent_check_with_session(session_key, channel, chat_id)
         except asyncio.CancelledError:
             pass
         finally:
@@ -850,7 +880,7 @@ class AgentLoop:
         task = asyncio.create_task(self._monitor_subagents(session_key, channel, chat_id))
         self._subagent_monitors[session_key] = task
 
-    async def _check_workers(self) -> None:
+    async def _check_subagents(self) -> None:
         """Safety net: inject check reminders when the loop would otherwise
         sit idle with running subagents.
 
@@ -861,16 +891,16 @@ class AgentLoop:
         """
         now = time.time()
 
-        for session_key in list(self._last_worker_check.keys()):
-            state = self._last_worker_check[session_key]
+        for session_key in list(self._last_subagent_check.keys()):
+            state = self._last_subagent_check[session_key]
             if self.subagents.get_running_count_by_session(session_key) == 0:
-                del self._last_worker_check[session_key]
+                del self._last_subagent_check[session_key]
                 continue
-            if now - state.last_check < self._WORKER_CHECK_INTERVAL:
+            if now - state.last_check < self._SUBAGENT_IDLE_CHECK_INTERVAL:
                 continue
 
             state.last_check = now
-            await self._publish_worker_check(session_key, state.channel, state.chat_id)
+            await self._publish_subagent_check_with_session(session_key, state.channel, state.chat_id)
             self._ensure_subagent_monitor(session_key, state.channel, state.chat_id)
 
     async def _dispatch(self, msg: InboundMessage) -> None:
@@ -906,14 +936,14 @@ class AgentLoop:
         # Proactive subagent check: after dispatch, if subagents still
         # running for this session, inject a check so the agent actively
         # pulls their status instead of passively waiting for push results.
-        # This is the primary active mechanism — _check_workers is safety net.
+        # This is the primary active mechanism — _check_subagents is safety net.
         if self.subagents.get_running_count_by_session(session_key) > 0:
             now = time.time()
-            state = self._last_worker_check.get(session_key)
+            state = self._last_subagent_check.get(session_key)
             last = state.last_check if state else 0
             if now - last >= self._POST_DISPATCH_CHECK_INTERVAL:
-                self._last_worker_check[session_key] = _WorkerCheckState(now, msg.channel, msg.chat_id)
-                await self._publish_worker_check(session_key, msg.channel, msg.chat_id)
+                self._last_subagent_check[session_key] = _SubagentCheckState(now, msg.channel, msg.chat_id)
+                await self._publish_subagent_check(session_key, msg.channel, msg.chat_id)
             self._ensure_subagent_monitor(session_key, msg.channel, msg.chat_id)
 
     async def close_mcp(self) -> None:
@@ -1067,7 +1097,7 @@ class AgentLoop:
         task_id = meta.get("subagent_task_id")
         injected_event = meta.get("injected_event", "subagent_result")
 
-        # Only dedup actual subagent results — worker notifications/requests
+        # Only dedup actual subagent results — subagent notifications/requests
         # don't carry a task_id and should always be appended.
         if injected_event == "subagent_result" and task_id and any(
             m.get("injected_event") == "subagent_result" and m.get("subagent_task_id") == task_id
@@ -1239,10 +1269,10 @@ class AgentLoop:
         # sessions also get proactive subagent checks.
         if self.subagents.get_running_count_by_session(session_key) > 0:
             now = time.time()
-            state = self._last_worker_check.get(session_key)
+            state = self._last_subagent_check.get(session_key)
             last = state.last_check if state else 0
             if now - last >= self._POST_DISPATCH_CHECK_INTERVAL:
-                self._last_worker_check[session_key] = _WorkerCheckState(now, channel, chat_id)
-                await self._publish_worker_check(session_key, channel, chat_id)
+                self._last_subagent_check[session_key] = _SubagentCheckState(now, channel, chat_id)
+                await self._publish_subagent_check(session_key, channel, chat_id)
             self._ensure_subagent_monitor(session_key, channel, chat_id)
         return response

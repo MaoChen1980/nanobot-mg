@@ -1,4 +1,4 @@
-"""Tests for send_message, send_to_worker, and related fixes."""
+"""Tests for send_message, send_to_subagent, and related fixes."""
 
 import asyncio
 import time
@@ -13,7 +13,7 @@ _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
 
 @pytest.mark.asyncio
-async def test_send_message_worker_to_main(tmp_path):
+async def test_send_message_subagent_to_main(tmp_path):
     """send_message(recipient='main') delivers message via bus."""
     from nanobot.agent.subagent import SubagentManager
     from nanobot.agent.tools.send_message import SendMessageTool
@@ -29,10 +29,10 @@ async def test_send_message_worker_to_main(tmp_path):
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
     )
 
-    # Simulate a registered worker
-    mgr._worker_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
+    # Simulate a registered subagent
+    mgr._subagent_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
 
-    tool = SendMessageTool(manager=mgr, worker_id="test-w", worker_label="test-worker")
+    tool = SendMessageTool(manager=mgr, subagent_id="test-w", subagent_label="test-subagent")
     result = await tool.execute(recipient="main", message="need help", priority="blocker")
 
     assert "notified" in result or "sent" in result.lower()
@@ -41,12 +41,12 @@ async def test_send_message_worker_to_main(tmp_path):
     bus_msg = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
     assert "need help" in bus_msg.content
     assert "<system-reminder>" in bus_msg.content
-    assert bus_msg.metadata.get("injected_event") == "worker_notification"
+    assert bus_msg.metadata.get("injected_event") == "subagent_notification"
 
 
 @pytest.mark.asyncio
-async def test_send_message_orchestrator_to_worker(tmp_path):
-    """send_message(recipient='worker:label') delivers to subagent inbox."""
+async def test_send_message_orchestrator_to_subagent(tmp_path):
+    """send_message(recipient='subagent:label') delivers to subagent inbox."""
     from nanobot.agent.subagent import SubagentManager
     from nanobot.agent.tools.send_message import SendMessageTool
     from nanobot.bus.queue import MessageBus
@@ -61,19 +61,19 @@ async def test_send_message_orchestrator_to_worker(tmp_path):
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
     )
 
-    # Register a running worker with an inbox
-    mgr._worker_label_to_id["test-worker"] = "test-id"
-    mgr._worker_inboxes["test-id"] = asyncio.Queue()
+    # Register a running subagent with an inbox
+    mgr._subagent_label_to_id["test-subagent"] = "test-id"
+    mgr._subagent_inboxes["test-id"] = asyncio.Queue()
     task = asyncio.create_task(asyncio.Event().wait())  # "running" task
     mgr._running_tasks["test-id"] = task
 
-    tool = SendMessageTool(manager=mgr)  # no worker_id = orchestrator mode
-    result = await tool.execute(recipient="worker:test-worker", message="hello there")
+    tool = SendMessageTool(manager=mgr)  # no subagent_id = orchestrator mode
+    result = await tool.execute(recipient="subagent:test-subagent", message="hello there")
 
     assert "sent" in result.lower()
 
-    # Verify message landed in the worker's inbox
-    inbox_msg = await asyncio.wait_for(mgr._worker_inboxes["test-id"].get(), timeout=1.0)
+    # Verify message landed in the subagent's inbox
+    inbox_msg = await asyncio.wait_for(mgr._subagent_inboxes["test-id"].get(), timeout=1.0)
     assert "hello there" in inbox_msg
 
     task.cancel()
@@ -84,8 +84,8 @@ async def test_send_message_orchestrator_to_worker(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_send_to_worker_toctou_guard(tmp_path):
-    """send_to_worker returns error when subagent already completed."""
+async def test_send_to_subagent_toctou_guard(tmp_path):
+    """send_to_subagent returns error when subagent already completed."""
     from nanobot.agent.subagent import SubagentManager
     from nanobot.bus.queue import MessageBus
 
@@ -99,20 +99,20 @@ async def test_send_to_worker_toctou_guard(tmp_path):
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
     )
 
-    # Register a FINISHED worker (task is done)
+    # Register a FINISHED subagent (task is done)
     done = asyncio.create_task(asyncio.sleep(0))
     await done  # let it complete
-    mgr._worker_label_to_id["gone-worker"] = "gone-id"
+    mgr._subagent_label_to_id["gone-subagent"] = "gone-id"
     mgr._running_tasks["gone-id"] = done
-    mgr._worker_inboxes["gone-id"] = asyncio.Queue()
+    mgr._subagent_inboxes["gone-id"] = asyncio.Queue()
 
-    result = mgr.send_to_worker("gone-worker", "hello")
+    result = mgr.send_to_subagent("gone-subagent", "hello")
     assert "already completed" in result or "Error" in result
 
 
 @pytest.mark.asyncio
-async def test_send_to_worker_unknown_label(tmp_path):
-    """send_to_worker returns error for unknown worker label."""
+async def test_send_to_subagent_unknown_label(tmp_path):
+    """send_to_subagent returns error for unknown subagent label."""
     from nanobot.agent.subagent import SubagentManager
     from nanobot.bus.queue import MessageBus
 
@@ -126,8 +126,8 @@ async def test_send_to_worker_unknown_label(tmp_path):
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
     )
 
-    result = mgr.send_to_worker("nobody", "hello")
-    assert "no worker" in result or "Error" in result
+    result = mgr.send_to_subagent("nobody", "hello")
+    assert "no subagent" in result or "Error" in result
 
 
 @pytest.mark.asyncio
@@ -174,10 +174,10 @@ async def test_notify_orchestrator_actually_sends(tmp_path):
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
     )
 
-    mgr._worker_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
+    mgr._subagent_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
 
     # This should NOT crash — the async bug fix means await happens
-    result = await mgr.notify_orchestrator(message="async works now", worker_id="test-w", worker_label="test")
+    result = await mgr.notify_orchestrator(message="async works now", subagent_id="test-w", subagent_label="test")
     assert "notified" in result or "sent" in result.lower()
 
     # Verify message was actually published to bus
@@ -239,7 +239,7 @@ async def test_subagent_injection_callback_wired(tmp_path):
 
 @pytest.mark.asyncio
 async def test_subagent_injection_callback_receives_messages(tmp_path):
-    """injection_callback drains messages from worker inbox."""
+    """injection_callback drains messages from subagent inbox."""
     from nanobot.agent.subagent import SubagentManager, SubagentStatus
     from nanobot.bus.queue import MessageBus
 
@@ -276,7 +276,7 @@ async def test_subagent_injection_callback_receives_messages(tmp_path):
     )
 
     # Put messages in inbox before running
-    inbox = mgr._worker_inboxes["sub-2"] = asyncio.Queue()
+    inbox = mgr._subagent_inboxes["sub-2"] = asyncio.Queue()
     inbox.put_nowait("msg 1")
     inbox.put_nowait("msg 2")
 

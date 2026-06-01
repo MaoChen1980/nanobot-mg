@@ -1,4 +1,4 @@
-"""NotifyOrchestratorTool — fire-and-forget Worker → Orchestrator notification."""
+"""NotifyOrchestratorTool — fire-and-forget Subagent → Orchestrator notification."""
 
 from __future__ import annotations
 
@@ -19,12 +19,12 @@ if TYPE_CHECKING:
     )
 )
 class NotifyOrchestratorTool(Tool):
-    """Fire-and-forget: send a notification from Worker to Orchestrator."""
+    """Fire-and-forget: send a notification from Subagent to Orchestrator."""
 
-    def __init__(self, manager: "SubagentManager", worker_id: str, worker_label: str) -> None:
+    def __init__(self, manager: "SubagentManager", subagent_id: str, subagent_label: str) -> None:
         self._manager = manager
-        self._worker_id = worker_id
-        self._worker_label = worker_label
+        self._subagent_id = subagent_id
+        self._subagent_label = subagent_label
 
     name = "notify_orchestrator"
 
@@ -47,7 +47,7 @@ class NotifyOrchestratorTool(Tool):
             priority = "info"
         return await self._manager.notify_orchestrator(
             message=message,
-            worker_id=self._worker_id,
-            worker_label=self._worker_label,
+            subagent_id=self._subagent_id,
+            subagent_label=self._subagent_label,
             priority=priority,
         )

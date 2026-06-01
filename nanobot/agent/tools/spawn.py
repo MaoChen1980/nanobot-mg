@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         label=p("string", "Optional short label for the task (for display)"),
         output_schema=p("string", "Optional JSON schema describing the expected output format. When provided, the sub-agent will be instructed to structure its response accordingly, making it easier for you to parse and compose results from multiple sub-agents."),
         max_iterations=p("integer", "Maximum tool call iterations (default 100)"),
-        team_context=p("string", "Optional team context: describe other Workers, their tasks, and dependencies so this Worker understands its role in the team."),
+        team_context=p("string", "Optional team context: describe other Subagents, their tasks, and dependencies so this Subagent understands its role in the team."),
         required=["task"],
     )
 )
@@ -46,8 +46,8 @@ class SpawnTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Delegate a subtask to a Specialist Worker to run independently in the background without blocking the current conversation.\n\n"
-            "You are the Orchestrator; the sub-agent is the Specialist Worker. You are responsible for decomposition, delegation, and composition.\n\n"
+            "**Purpose**: Delegate a subtask to a Subagent to run independently in the background without blocking the current conversation.\n\n"
+            "You are the Orchestrator; the sub-agent is the Subagent. You are responsible for decomposition, delegation, and composition.\n\n"
             "## ⚠️ Important: Embrace Uncertainty\n\n"
             "spawn is fire-and-forget. You must accept when using it:\n"
             "- **Results arrive asynchronously** — they are not guaranteed to return in the current turn; they may be injected into any subsequent turn\n"
@@ -60,7 +60,7 @@ class SpawnTool(Tool):
             "- The subtask runs independently in the background with its own session and context\n"
             "- When the subtask completes, the result is injected into a future conversation turn as a system message\n"
             "- You can use `check_subagent` to proactively query progress\n"
-            "- Use `send_message(recipient='worker:<label>', ...)` to communicate with running subagents\n\n"
+            "- Use `send_message(recipient='subagent:<label>', ...)` to communicate with running subagents\n\n"
             "## When to Use\n\n"
             "- You have independent, parallel subtasks that do not depend on your intermediate decisions\n"
             "- The subtask involves separate file/search/execution work that benefits from its own context\n"

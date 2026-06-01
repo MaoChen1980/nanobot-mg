@@ -87,10 +87,10 @@ class SubagentManager:
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._task_statuses: dict[str, SubagentStatus] = {}
         self._session_tasks: dict[str, set[str]] = {}  # session_key -> {task_id, ...}
-        self._pending_worker_questions: dict[str, asyncio.Future] = {}
-        self._worker_origin: dict[str, dict[str, str]] = {}  # task_id -> origin info
-        self._worker_label_to_id: dict[str, str] = {}  # label -> task_id
-        self._worker_inboxes: dict[str, "asyncio.Queue[str]"] = {}  # task_id -> inbox
+        self._pending_subagent_questions: dict[str, asyncio.Future] = {}
+        self._subagent_origin: dict[str, dict[str, str]] = {}  # task_id -> origin info
+        self._subagent_label_to_id: dict[str, str] = {}  # label -> task_id
+        self._subagent_inboxes: dict[str, "asyncio.Queue[str]"] = {}  # task_id -> inbox
 
     def set_provider(self, provider: LLMProvider, model: str) -> None:
         self.provider = provider
@@ -113,16 +113,16 @@ class SubagentManager:
         display_label = label or task[:30] + ("..." if len(task) > 30 else "")
 
         # Deduplicate label if it already exists
-        if display_label in self._worker_label_to_id:
+        if display_label in self._subagent_label_to_id:
             suffix = 2
-            while f"{display_label}_{suffix}" in self._worker_label_to_id:
+            while f"{display_label}_{suffix}" in self._subagent_label_to_id:
                 suffix += 1
             display_label = f"{display_label}_{suffix}"
 
         origin = {"channel": origin_channel, "chat_id": origin_chat_id, "session_key": session_key}
-        self._worker_origin[task_id] = origin
-        self._worker_label_to_id[display_label] = task_id
-        self._worker_inboxes[task_id] = asyncio.Queue()
+        self._subagent_origin[task_id] = origin
+        self._subagent_label_to_id[display_label] = task_id
+        self._subagent_inboxes[task_id] = asyncio.Queue()
 
         status = SubagentStatus(
             task_id=task_id,
@@ -142,9 +142,9 @@ class SubagentManager:
         def _cleanup(_: asyncio.Task) -> None:
             self._running_tasks.pop(task_id, None)
             self._task_statuses.pop(task_id, None)
-            self._worker_inboxes.pop(task_id, None)
-            self._worker_label_to_id.pop(display_label, None)
-            self._worker_origin.pop(task_id, None)
+            self._subagent_inboxes.pop(task_id, None)
+            self._subagent_label_to_id.pop(display_label, None)
+            self._subagent_origin.pop(task_id, None)
             if session_key and (ids := self._session_tasks.get(session_key)):
                 ids.discard(task_id)
                 if not ids:
@@ -181,13 +181,13 @@ class SubagentManager:
             from nanobot.agent.tools.send_message import SendMessageTool
             from nanobot.agent.tools.request_input import RequestOrchestratorInputTool
             tools.register(NotifyOrchestratorTool(
-                manager=self, worker_id=task_id, worker_label=label,
+                manager=self, subagent_id=task_id, subagent_label=label,
             ))
             tools.register(SendMessageTool(
-                manager=self, worker_id=task_id, worker_label=label,
+                manager=self, subagent_id=task_id, subagent_label=label,
             ))
             tools.register(RequestOrchestratorInputTool(
-                manager=self, worker_id=task_id, worker_label=label,
+                manager=self, subagent_id=task_id, subagent_label=label,
             ))
             system_prompt = build_subagent_prompt(
                 self.workspace,
@@ -207,7 +207,7 @@ class SubagentManager:
             token = _in_subagent.set(True)
             try:
                 # Injection callback for main→subagent messages
-                inbox = self._worker_inboxes.get(task_id)
+                inbox = self._subagent_inboxes.get(task_id)
 
                 async def _drain_inbox(*, limit: int = 10) -> list[dict[str, Any]]:
                     if inbox is None:
@@ -294,7 +294,7 @@ class SubagentManager:
         except asyncio.CancelledError:
             status.phase = "cancelled"
             logger.warning("Subagent [{}] cancelled by orchestrator", task_id)
-            await self._announce_result(task_id, label, task, "Worker cancelled by orchestrator", origin, "error")
+            await self._announce_result(task_id, label, task, "Subagent cancelled by orchestrator", origin, "error")
             raise
         except Exception as e:
             status.phase = "error"
@@ -353,6 +353,8 @@ class SubagentManager:
             metadata={
                 "injected_event": "subagent_result",
                 "subagent_task_id": task_id,
+                "_origin_channel": origin.get("channel", ""),
+                "_origin_chat_id": origin.get("chat_id", ""),
             },
         )
 
@@ -370,20 +372,20 @@ class SubagentManager:
         return len(tasks)
 
     async def cancel_by_label(self, label: str) -> str:
-        """Cancel a specific subagent by its worker label."""
-        task_id = self._worker_label_to_id.get(label)
+        """Cancel a specific subagent by its subagent label."""
+        task_id = self._subagent_label_to_id.get(label)
         if task_id is None:
-            known = list(self._worker_label_to_id.keys())
-            return f"Error: no worker with label '{label}'. Active workers: {known}"
+            known = list(self._subagent_label_to_id.keys())
+            return f"Error: no Subagent with label '{label}'. Active Subagents: {known}"
         task = self._running_tasks.get(task_id)
         if task is None or task.done():
-            return f"Worker '{label}' has already completed."
+            return f"Subagent '{label}' has already completed."
         task.cancel()
         try:
             await task
         except (asyncio.CancelledError, Exception):
             pass
-        return f"Worker '{label}' cancelled."
+        return f"Subagent '{label}' cancelled."
 
     def get_status(self, task_id: str) -> SubagentStatus | None:
         """Return the current status of a subagent task, or None if unknown."""
@@ -401,8 +403,8 @@ class SubagentManager:
             if tid in self._running_tasks and not self._running_tasks[tid].done()
         )
 
-    def get_sessions_with_running_workers(self) -> list[str]:
-        """Return session keys that have at least one running worker."""
+    def get_sessions_with_running_subagents(self) -> list[str]:
+        """Return session keys that have at least one running Subagent."""
         return [
             sk for sk, tids in self._session_tasks.items()
             if any(tid in self._running_tasks and not self._running_tasks[tid].done() for tid in tids)
@@ -413,24 +415,24 @@ class SubagentManager:
         return [s for s in self._task_statuses.values() if s.phase not in ("done", "error")]
 
     # ------------------------------------------------------------------
-    # Team communication: Worker ↔ Orchestrator
+    # Team communication: Subagent ↔ Orchestrator
     # ------------------------------------------------------------------
 
     async def notify_orchestrator(
         self,
         message: str,
-        worker_id: str,
-        worker_label: str,
+        subagent_id: str,
+        subagent_label: str,
         priority: str = "info",
     ) -> str:
-        """Fire-and-forget: publish a notification from Worker to Orchestrator."""
+        """Fire-and-forget: publish a notification from Subagent to Orchestrator."""
         if not self.bus:
             return "Error: message bus not available"
-        origin = self._worker_origin.get(worker_id)
+        origin = self._subagent_origin.get(subagent_id)
         if not origin:
-            return "Error: worker origin not found"
+            return "Error: Subagent origin not found"
 
-        content = f"[Worker '{worker_label}' ({priority})]: {message}"
+        content = f"[Subagent '{subagent_label}' ({priority})]: {message}"
         wrapped = f"<system-reminder>\n{content}\n</system-reminder>"
         msg = InboundMessage(
             channel="system",
@@ -439,58 +441,58 @@ class SubagentManager:
             content=wrapped,
             session_key_override=origin.get("session_key") or f"{origin['channel']}:{origin['chat_id']}",
             metadata={
-                "injected_event": "worker_notification",
-                "worker_id": worker_id,
-                "worker_label": worker_label,
+                "injected_event": "subagent_notification",
+                "subagent_id": subagent_id,
+                "subagent_label": subagent_label,
                 "notification_priority": priority,
             },
         )
         await self.bus.publish_inbound(msg)
-        logger.info("Worker [{}] notified Orchestrator (priority={}): {}", worker_label, priority, message[:80])
+        logger.info("Subagent [{}] notified Orchestrator (priority={}): {}", subagent_label, priority, message[:80])
         return f"Orchestrator notified (priority: {priority})"
 
-    def send_to_worker(self, worker_label: str, content: str) -> str:
-        """Send a message from Orchestrator to a Worker. Fire-and-forget."""
-        task_id = self._worker_label_to_id.get(worker_label)
+    def send_to_subagent(self, subagent_label: str, content: str) -> str:
+        """Send a message from Orchestrator to a Subagent. Fire-and-forget."""
+        task_id = self._subagent_label_to_id.get(subagent_label)
         if task_id is None:
-            known = list(self._worker_label_to_id.keys())
+            known = list(self._subagent_label_to_id.keys())
             return (
-                f"Error: no worker with label '{worker_label}'. "
-                f"Active workers: {known}"
+                f"Error: no Subagent with label '{subagent_label}'. "
+                f"Active Subagents: {known}"
             )
         # TOCTOU guard: check task is still running before accessing inbox
         task = self._running_tasks.get(task_id)
-        inbox = self._worker_inboxes.get(task_id)
+        inbox = self._subagent_inboxes.get(task_id)
         if task is None or task.done() or inbox is None:
-            return f"Error: worker '{worker_label}' has already completed. Message not delivered."
+            return f"Error: Subagent '{subagent_label}' has already completed. Message not delivered."
         inbox.put_nowait(f"[Orchestrator]: {content}")
-        logger.info("Sent message to worker [{}]: {}", worker_label, content[:80])
-        return f"Message sent to worker '{worker_label}'"
+        logger.info("Sent message to Subagent [{}]: {}", subagent_label, content[:80])
+        return f"Message sent to Subagent '{subagent_label}'"
 
     async def request_orchestrator_input(
         self,
         question: str,
-        worker_id: str,
-        worker_label: str,
+        subagent_id: str,
+        subagent_label: str,
         context: str = "",
         timeout: float = 300.0,
     ) -> str:
-        """Blocking: Worker asks Orchestrator for input, waits for response."""
+        """Blocking: Subagent asks Orchestrator for input, waits for response."""
         if not self.bus:
             return "Error: message bus not available"
-        origin = self._worker_origin.get(worker_id)
+        origin = self._subagent_origin.get(subagent_id)
         if not origin:
-            return "Error: worker origin not found"
+            return "Error: Subagent origin not found"
 
         # Create a Future and store it
         future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
-        self._pending_worker_questions[worker_id] = future
+        self._pending_subagent_questions[subagent_id] = future
 
         # Notify Orchestrator
         ctx = f"\nContext: {context}" if context else ""
         content = (
-            f"[Worker '{worker_label}' requests input]: {question}{ctx}\n"
-            f"Use respond_to_worker(worker_id='{worker_label}', response=...) to reply."
+            f"[Subagent '{subagent_label}' requests input]: {question}{ctx}\n"
+            f"Use respond_to_subagent(subagent_id='{subagent_label}', response=...) to reply."
         )
         msg = InboundMessage(
             channel="system",
@@ -499,52 +501,52 @@ class SubagentManager:
             content=content,
             session_key_override=origin.get("session_key"),
             metadata={
-                "injected_event": "worker_request",
-                "worker_id": worker_id,
-                "worker_label": worker_label,
+                "injected_event": "subagent_request",
+                "subagent_id": subagent_id,
+                "subagent_label": subagent_label,
             },
         )
         await self.bus.publish_inbound(msg)
-        logger.info("Worker [{}] requested Orchestrator input: {}", worker_label, question[:80])
+        logger.info("Subagent [{}] requested Orchestrator input: {}", subagent_label, question[:80])
 
         # Wait for response with timeout
         try:
             response = await asyncio.wait_for(future, timeout=timeout)
             return response
         except asyncio.TimeoutError:
-            self._pending_worker_questions.pop(worker_id, None)
-            logger.warning("Worker [{}] timed out waiting for Orchestrator input", worker_label)
+            self._pending_subagent_questions.pop(subagent_id, None)
+            logger.warning("Subagent [{}] timed out waiting for Orchestrator input", subagent_label)
             try:
                 await self.notify_orchestrator(
-                    f"Worker '{worker_label}' requested input but timed out after {timeout}s waiting for a response. "
+                    f"Subagent '{subagent_label}' requested input but timed out after {timeout}s waiting for a response. "
                     f"Question was: {question[:200]}. Continuing autonomously.",
-                    worker_id=worker_id,
-                    worker_label=worker_label,
+                    subagent_id=subagent_id,
+                    subagent_label=subagent_label,
                     priority="warn",
                 )
             except Exception:
                 logger.debug("Failed to notify orchestrator of timeout", exc_info=True)
             return "Orchestrator did not respond in time. Continuing autonomously."
         except asyncio.CancelledError:
-            self._pending_worker_questions.pop(worker_id, None)
+            self._pending_subagent_questions.pop(subagent_id, None)
             return "Request cancelled. Continuing autonomously."
 
-    def respond_to_worker(self, worker_id: str, response: str) -> str:
-        """Orchestrator responds to a Worker's pending request."""
-        # Try worker_id as label first, then as task_id
-        actual_id = self._worker_label_to_id.get(worker_id, worker_id)
-        future = self._pending_worker_questions.pop(actual_id, None)
+    def respond_to_subagent(self, subagent_id: str, response: str) -> str:
+        """Orchestrator responds to a Subagent's pending request."""
+        # Try subagent_id as label first, then as task_id
+        actual_id = self._subagent_label_to_id.get(subagent_id, subagent_id)
+        future = self._pending_subagent_questions.pop(actual_id, None)
         if future is None:
-            # Also try the original worker_id directly (could be task_id)
-            future = self._pending_worker_questions.pop(worker_id, None)
+            # Also try the original subagent_id directly (could be task_id)
+            future = self._pending_subagent_questions.pop(subagent_id, None)
         if future is None:
-            known = list(self._pending_worker_questions.keys())
-            labels = {v: k for k, v in self._worker_label_to_id.items()}
+            known = list(self._pending_subagent_questions.keys())
+            labels = {v: k for k, v in self._subagent_label_to_id.items()}
             known_labels = [labels.get(uid, uid) for uid in known]
             return (
-                f"Error: no pending question from worker '{worker_id}'. "
-                f"Workers with pending questions: {known_labels}"
+                f"Error: no pending question from Subagent '{subagent_id}'. "
+                f"Subagents with pending questions: {known_labels}"
             )
         future.set_result(response)
-        logger.info("Orchestrator responded to worker [{}]: {}", worker_id, response[:80])
-        return f"Response delivered to worker '{worker_id}'"
+        logger.info("Orchestrator responded to Subagent [{}]: {}", subagent_id, response[:80])
+        return f"Response delivered to Subagent '{subagent_id}'"

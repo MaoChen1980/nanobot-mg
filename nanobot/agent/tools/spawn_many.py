@@ -28,7 +28,7 @@ if TYPE_CHECKING:
                 "required": ["task"],
             }
         ),
-        team_context=p("string", "Optional team context: describe all Workers, their tasks, and dependencies so each Worker understands its role."),
+        team_context=p("string", "Optional team context: describe all Subagents, their tasks, and dependencies so each Subagent understands its role."),
         required=["tasks"],
     )
 )

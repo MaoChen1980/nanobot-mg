@@ -96,10 +96,10 @@ def build_subagent_prompt(
     # 10. Epistemic hygiene (shared principle for all agents)
     parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
 
-    # 11. Worker identity and protocol
+    # 11. Subagent identity and protocol
     parts.append(
         "## Role\n\n"
-        "You are a **Specialist Worker** — a focused, task-oriented agent. "
+        "You are a **Subagent** — a focused, task-oriented agent. "
         "You have been spawned by an Orchestrator to execute a specific task.\n\n"
         "You are also a super-senior expert in whatever domain this task belongs to — "
         "automatically identify the domain and operate at that level.\n\n"
@@ -143,11 +143,11 @@ def build_subagent_prompt(
         "- **Boundary**: what you need from the Orchestrator, and why\n"
         "- **Suggestion**: your recommended path forward (if you have one)\n\n"
         "**Learn from and contribute to the team.** Read and write `workspace/tasks/team_board.md`. "
-        "Check it every ~5 iterations: other Workers may have found something relevant. "
+        "Check it every ~5 iterations: other Subagents may have found something relevant. "
         "Write your own findings, blockers, and insights there. "
-        "One Worker's insight becomes the whole team's advantage.\n\n"
+        "One Subagent's insight becomes the whole team's advantage.\n\n"
         "### Orchestrator Directives\n\n"
-        "The Orchestrator can send you commands via `send_message(recipient='worker:<label>', ...)`. "
+        "The Orchestrator can send you commands via `send_message(recipient='subagent:<label>', ...)`. "
         "These commands have the highest priority — they override your current task:\n\n"
         "- **`/abandon`** — Abandon the current task immediately. "
         "Deliver whatever results you have so far as your final response.\n"

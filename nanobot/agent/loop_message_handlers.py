@@ -58,7 +58,13 @@ class SystemMessageHandler:
         self._loop = loop
 
     async def handle(self, msg, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None):
-        channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
+        # Prefer origin channel/chat_id from metadata (set by _announce_result)
+        # to avoid parsing issues with multi-colon channel values like "proxy:feishu:feishu1".
+        if msg.metadata and msg.metadata.get("_origin_channel") and msg.metadata.get("_origin_chat_id"):
+            channel = msg.metadata["_origin_channel"]
+            chat_id = msg.metadata["_origin_chat_id"]
+        else:
+            channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         logger.info("Processing system message from {}", msg.sender_id)
         key = msg.session_key_override or f"{channel}:{chat_id}"
         session = self._loop.lifecycle.prepare(key)
