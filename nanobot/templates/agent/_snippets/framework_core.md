@@ -521,24 +521,55 @@ Subagents 通过 `send_message`（单向通知）和 `request_orchestrator_input
 **`<system-reminder>` 注入的消息有三种来源：**
 
 **1. Subagent 主动发消息** — Subagent 调用 `send_message(recipient='main', ...)` 或 `request_orchestrator_input`
+
+`send_message` 格式：
 ```
 <system-reminder>
-[Subagent 'label']: 消息内容
+[Subagent 'label' (priority)]: 消息内容
 </system-reminder>
 ```
-含义：Subagent 在要资源、求帮忙、报进度、澄清任务。
-处理：回应它（给资源、做决策、扫清障碍）。
+`request_orchestrator_input` 格式：
+```
+<system-reminder>
+[Subagent 'label' requests input]: 问题
+Context: 上下文
+Use respond_to_subagent(subagent_id='label', response=...) to reply.
+</system-reminder>
+```
 
 **2. Subagent 完成任务** — Subagent 正常或异常结束时的自动通知
+
+成功：
 ```
 <system-reminder>
-[Subagent 'label' completed/failed]
-Task: ...
-Result: ...
+[Subagent 'label' completed successfully]
+
+Task: 原任务描述
+
+Result:
+执行结果内容
+
+耗时：45.2s
+使用工具：read_file, grep
+迭代次数：12
 </system-reminder>
 ```
-含义：Subagent 完成了，通知你结果。
-处理：提取结果，更新 TREE.md。还有其它 Subagent 在跑则静默；全部完成则给用户汇总。
+
+失败：
+```
+<system-reminder>
+[Subagent 'label' failed]
+
+Task: 原任务描述
+
+Result:
+Error: 错误信息
+
+耗时：12.3s
+使用工具：read_file
+迭代次数：5
+</system-reminder>
+```
 
 **3. Boss 定时器检查** — 框架定期检查 Subagent 状态
 ```
@@ -558,13 +589,15 @@ Result: ...
 
 **Subagent 主动联系你只有四种目的：要资源、求帮忙扫清障碍、报告进度节点、澄清任务避免跑偏。** 消息都有实际意图，不是闲聊。
 
-**三个通信方式的选择：**
+**通信方式一览：**
 
 | 方式 | 方向 | 语义 | 适合 |
 |------|------|------|------|
 | `send_message(recipient='main', ...)` | Subagent→你 | fire-and-forget | 要资源、求帮忙、报进度、澄清任务 |
 | `request_orchestrator_input` | Subagent→你→Subagent | 阻塞等待 | Subagent 遇到需要你决策才能继续的问题 |
+| `respond_to_subagent(subagent_id, response)` | 你→Subagent | 回复阻塞请求 | 回应 Subagent 的 `request_orchestrator_input` |
 | `send_message(recipient='subagent:<label>', ...)` | 你→Subagent | fire-and-forget | 给信息、给资源、同步团队动态，帮 Subagent 扫清障碍 |
+| `cancel_subagent(label)` | 你→Subagent | 强制终止 | Subagent 卡死、不再需要、或想重新分配资源 |
 
 **什么时候主动联系 Subagent：**
 - 发现 Subagent 缺信息、缺资源、方向可能偏了——主动给，不等它来要
