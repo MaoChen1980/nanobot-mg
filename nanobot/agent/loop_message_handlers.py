@@ -20,32 +20,35 @@ from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.memory_extractor import MemoryExtractor
 from nanobot.agent.tools.message import MessageTool
 
+_STALE_MESSAGE_HOURS = 4
 
-def _has_recent_user_response(session, content, message_id=""):
-    """Check if session already has a matching user message with an assistant response.
 
-    Matches by ``message_id`` first (stored as ``_message_id`` in session messages),
-    falling back to content matching for messages without an ID.
+def _has_stale_duplicate(session, message_id: str) -> bool:
+    """Check if a message with the same ID was already processed long ago.
+
+    Only matches by ``message_id`` — no content matching.
+    Only returns True if the original message is older than ``_STALE_MESSAGE_HOURS``.
     """
+    if not message_id:
+        return False
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=_STALE_MESSAGE_HOURS)
     for i in range(len(session.messages) - 1, -1, -1):
         role = session.messages[i].get("role")
         if role in ("assistant", "tool"):
             continue
         if role == "user":
-            stored_msg_id = session.messages[i].get("_message_id", "") or ""
-            if message_id and stored_msg_id and stored_msg_id == message_id:
-                has_assistant = any(
-                    m.get("role") == "assistant" and m.get("content")
-                    for m in session.messages[i:]
-                )
-                return has_assistant
-            if not message_id and not stored_msg_id:
-                stored = session.messages[i].get("content", "")
-                if stored.strip() == content.strip():
-                    return any(
-                        m.get("role") == "assistant" and m.get("content")
-                        for m in session.messages[i:]
-                    )
+            stored_id = session.messages[i].get("_message_id", "") or ""
+            if stored_id == message_id:
+                ts = session.messages[i].get("timestamp", "")
+                try:
+                    msg_time = datetime.fromisoformat(ts)
+                    if msg_time.tzinfo is None:
+                        msg_time = msg_time.replace(tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    msg_time = datetime.now(timezone.utc)
+                stale = msg_time < cutoff
+                return stale
         break
     return False
 
@@ -175,12 +178,12 @@ class UserMessageHandler:
         if result := await self._dispatch_command(msg, session, key):
             return result
 
-        # Stage 0a: Re-dispatch guard — check BEFORE checkpoint restore so we
-        # don't pollute the session with recovered messages on a duplicate dispatch.
-        # Session already has this user message with an assistant response = prior
-        # dispatch completed, skip this one entirely.
-        if _has_recent_user_response(session, msg.content, msg.metadata.get("message_id", "")):
-            logger.info("Re-dispatch detected for session {} (msg='{}...'), skipping", key, msg.content[:40])
+        # Stage 0a: Stale message guard — skip only if same message_id was
+        # already processed more than N hours ago. Recent re-dispatches
+        # (e.g. from card action callbacks) are allowed through.
+        msg_id = msg.metadata.get("message_id", "") or ""
+        if _has_stale_duplicate(session, msg_id):
+            logger.info("Stale re-dispatch detected for session {} (msg='{}...'), skipping", key, msg.content[:40])
             return None
 
         # Stage 1: session preparation (checkpoint restore & history loading)
