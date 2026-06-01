@@ -872,6 +872,7 @@ class GatewayApplication:
             asyncio.create_task(
                 self._run_api_server(self.config.gateway.host, self.port),
             ),
+            asyncio.create_task(self._consume_outbound()),
         ]
         self._bg_tasks[1].add_done_callback(
             lambda t: logger.error("API server setup failed: {}", t.exception())
@@ -893,6 +894,55 @@ class GatewayApplication:
         except BaseException:
             logger.exception("GATEWAY_TRACE: agent_task raised unexpected exception")
             raise
+
+    async def _consume_outbound(self) -> None:
+        """Consume bus.outbound and route Subagent / progress messages to proxy."""
+        while True:
+            try:
+                msg = await asyncio.wait_for(
+                    self.bus.consume_outbound(), timeout=1.0
+                )
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("_consume_outbound: unexpected error reading outbound queue, continuing")
+                continue
+
+            try:
+                # Skip streaming / progress / control messages
+                meta = msg.metadata or {}
+                if any(meta.get(k) for k in ("_stream_delta", "_stream_end", "_streamed",
+                                              "_progress", "_retry_wait", "_tool_hint")):
+                    continue
+
+                # Only route messages with session_key metadata (from subagent results)
+                session_key = meta.get("_session_key")
+                if not session_key:
+                    continue
+
+                # Extract proxy_key from session_key: "feishu:feishu1:uid_xxx" → "feishu:feishu1"
+                proxy_key = session_key.rsplit(":", 1)[0]
+                if not self.proxy_manager.has_proxy(proxy_key):
+                    continue
+
+                deliver_msg: dict[str, Any] = {
+                    "type": "deliver",
+                    "chat_id": msg.chat_id,
+                    "content": msg.content,
+                }
+                if msg.media:
+                    deliver_msg["media"] = msg.media
+                if msg.buttons:
+                    deliver_msg["buttons"] = msg.buttons
+                logger.info(
+                    "Outbound proxy delivery: key={} chat={} content={}",
+                    proxy_key, msg.chat_id, (msg.content or "")[:60],
+                )
+                await self.proxy_manager.deliver_to_proxy(proxy_key, deliver_msg)
+            except Exception:
+                logger.exception("_consume_outbound: unexpected error processing outbound message, continuing")
 
     async def _run_api_server(self, host: str, api_port: int) -> None:
         """Run the settings server via uvicorn on the gateway port."""

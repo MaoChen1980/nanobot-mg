@@ -1210,6 +1210,13 @@ class OpenAICompatProvider(LLMProvider):
             retry_after = LLMProvider._extract_retry_after(msg)
 
         error_meta = OpenAICompatProvider._extract_error_metadata(e)
+
+        # 429 rate_limit_error with no server-provided retry_after → default
+        if retry_after is None and error_meta.get("error_status_code") == 429:
+            error_type = (error_meta.get("error_type") or "").lower()
+            if "rate_limit" in error_type or "rate_limit" in msg:
+                retry_after = LLMProvider._RATE_LIMIT_RETRY_SECONDS
+
         logger.error(
             "OpenAI-compat API error: status={}, type={}, code={}, msg={}",
             error_meta.get("error_status_code"),
@@ -1222,7 +1229,7 @@ class OpenAICompatProvider(LLMProvider):
             content=msg,
             finish_reason="error",
             retry_after=retry_after,
-            **OpenAICompatProvider._extract_error_metadata(e),
+            **error_meta,
         )
 
     # ------------------------------------------------------------------

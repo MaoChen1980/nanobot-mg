@@ -38,6 +38,17 @@ class DispatchManager:
                     pending_queue=pending,
                 )
                 if response is not None:
+                    # Carry session_key in metadata so gateway consumers
+                    # can route outbound messages (e.g. subagent results)
+                    # to the correct proxy connection.
+                    if msg.session_key:
+                        response = OutboundMessage(
+                            channel=response.channel, chat_id=response.chat_id,
+                            content=response.content, reply_to=response.reply_to,
+                            media=response.media,
+                            metadata={**response.metadata, "_session_key": msg.session_key},
+                            buttons=response.buttons,
+                        )
                     await self._loop.bus.publish_outbound(response)
                 elif msg.channel == "cli":
                     await self._loop.bus.publish_outbound(OutboundMessage(
@@ -65,7 +76,7 @@ class DispatchManager:
             await self._republish_leftover_messages(session_key, pending)
 
     def _effective_session_key(self, msg: InboundMessage) -> str:
-        return msg.session_key or msg.session_key
+        return msg.session_key
 
     def _maybe_streaming(
         self, msg: InboundMessage,

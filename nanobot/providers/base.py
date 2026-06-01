@@ -97,6 +97,7 @@ class LLMProvider(ABC):
     _CHAT_RETRY_DELAYS = (1, 2, 4)
     _PERSISTENT_MAX_DELAY = 60
     _PERSISTENT_IDENTICAL_ERROR_LIMIT = 10
+    _RATE_LIMIT_RETRY_SECONDS = 120
     _RETRY_HEARTBEAT_CHUNK = 30
     _TRANSIENT_ERROR_MARKERS = (
         "429",
@@ -684,6 +685,17 @@ class LLMProvider(ABC):
             return response.error_retry_after_s
         if response.retry_after is not None and response.retry_after > 0:
             return response.retry_after
+
+        # 429 + rate_limit without server-provided retry_after → default
+        if response.error_status_code == 429:
+            type_token = cls._normalize_error_token(response.error_type)
+            code_token = cls._normalize_error_token(response.error_code)
+            content = (response.content or "").lower()
+            if "rate_limit" in (type_token or "") or "rate_limit" in (code_token or ""):
+                return cls._RATE_LIMIT_RETRY_SECONDS
+            if "rate_limit" in content or "rate_limit_error" in content:
+                return cls._RATE_LIMIT_RETRY_SECONDS
+
         return cls._extract_retry_after(response.content)
 
     async def _sleep_with_heartbeat(

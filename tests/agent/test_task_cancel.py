@@ -30,6 +30,7 @@ def _make_loop(*, exec_config=None):
          patch("nanobot.agent.loop.SessionManager"), \
          patch("nanobot.agent.loop.SubagentManager") as MockSubMgr:
         MockSubMgr.return_value.cancel_by_session = AsyncMock(return_value=0)
+        MockSubMgr.return_value.get_running_count_by_session.return_value = 0
         loop = AgentLoop(bus=bus, provider=provider, workspace=workspace, exec_config=exec_config)
     return loop, bus
 

@@ -113,6 +113,14 @@ class _SessionDispatchState:
     pending: asyncio.Queue
 
 
+@dataclasses.dataclass
+class _WorkerCheckState:
+    """Per-session state for worker check throttling."""
+    last_check: float
+    channel: str
+    chat_id: str
+
+
 class AgentLoop:
     """
     The agent loop is the core processing engine.
@@ -243,13 +251,14 @@ class AgentLoop:
             memory_store=self.context.memory,
         )
         self._running = False
-        self._last_worker_check: dict[str, float] = {}
+        self._last_worker_check: dict[str, _WorkerCheckState] = {}
         self._mcp_servers = mcp_servers or {}
         self._mcp_stacks: dict[str, AsyncExitStack] = {}
         self._mcp_connected = False
         self._mcp_connecting = False
         self._session_dispatch: dict[str, _SessionDispatchState] = {}
         self._background_tasks: list[asyncio.Task] = []
+        self._subagent_monitors: dict[str, asyncio.Task] = {}
         self._session_locks: dict[str, asyncio.Lock] = {}
         # NANOBOT_MAX_CONCURRENT_REQUESTS: <=0 means unlimited (default).
         _max = int(os.environ.get("NANOBOT_MAX_CONCURRENT_REQUESTS", "0"))
@@ -758,43 +767,81 @@ class AgentLoop:
             logger.exception("run() exiting due to unhandled exception")
             raise
 
-    # Worker check interval: how often to inject a check message for sessions
-    # with running subagents but no other activity.
-    _WORKER_CHECK_INTERVAL: float = 180.0
+    _WORKER_CHECK_INTERVAL: float = 60.0
+    _POST_DISPATCH_CHECK_INTERVAL: float = 30.0
+    _SUBAGENT_CHECK_INTERVAL: float = 30.0
+
+    async def _publish_worker_check(self, session_key: str, channel: str, chat_id: str) -> None:
+        """Publish a proactive subagent check message to the bus.
+
+        Routes through UserMessageHandler (not SystemMessageHandler) so the LLM
+        gets full session history and can make sense of subagent status.
+        """
+        msg = InboundMessage(
+            channel=channel,
+            sender_id="boss",
+            chat_id=chat_id,
+            content=(
+                "<system-reminder>\n"
+                "⏰ 定时检查：有 Worker 在运行中。"
+                "用 list_subagents 查看状态，用 check_subagent 检查进度。\n"
+                "</system-reminder>"
+            ),
+            ephemeral=True,
+            metadata={},
+            session_key_override=session_key,
+        )
+        await self.bus.publish_inbound(msg)
+
+    async def _monitor_subagents(self, session_key: str, channel: str, chat_id: str) -> None:
+        """Background task: periodically check subagents until all complete."""
+        try:
+            while self._running:
+                if self.subagents.get_running_count_by_session(session_key) == 0:
+                    break
+                await asyncio.sleep(self._SUBAGENT_CHECK_INTERVAL)
+                if self.subagents.get_running_count_by_session(session_key) == 0:
+                    break
+                await self._publish_worker_check(session_key, channel, chat_id)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._subagent_monitors.pop(session_key, None)
+
+    def _ensure_subagent_monitor(self, session_key: str, channel: str, chat_id: str) -> None:
+        """Start a background monitor for session if not already running."""
+        if session_key in self._subagent_monitors:
+            return
+        task = asyncio.create_task(self._monitor_subagents(session_key, channel, chat_id))
+        self._subagent_monitors[session_key] = task
 
     async def _check_workers(self) -> None:
-        """Inject worker check messages for sessions with long-idle subagents."""
+        """Safety net: inject check reminders when the loop would otherwise
+        sit idle with running subagents."""
         now = time.time()
 
-        # Track new sessions that have running workers
         for session_key in self.subagents.get_sessions_with_running_workers():
             if session_key not in self._last_worker_check:
-                self._last_worker_check[session_key] = now
+                # rsplit ensures proxy session_keys like "feishu:feishu1:uid_xxx"
+                # extract channel="feishu:feishu1" (proxy_key) rather than "feishu".
+                _parts = session_key.rsplit(":", 1)
+                self._last_worker_check[session_key] = _WorkerCheckState(
+                    last_check=now,
+                    channel=_parts[0],
+                    chat_id=_parts[1] if len(_parts) > 1 else session_key,
+                )
 
-        # Check tracked sessions — inject or clean up
         for session_key in list(self._last_worker_check.keys()):
+            state = self._last_worker_check[session_key]
             if self.subagents.get_running_count_by_session(session_key) == 0:
                 del self._last_worker_check[session_key]
                 continue
-            if now - self._last_worker_check[session_key] < self._WORKER_CHECK_INTERVAL:
+            if now - state.last_check < self._WORKER_CHECK_INTERVAL:
                 continue
 
-            msg = InboundMessage(
-                channel="cli",
-                sender_id="boss",
-                chat_id=session_key,
-                content=(
-                    "<system-reminder>\n"
-                    "⏰ 定时检查：有 Worker 在运行中。"
-                    "用 list_subagents 查看状态，用 check_subagent 检查进度。\n"
-                    "</system-reminder>"
-                ),
-                ephemeral=True,
-                metadata={},
-                session_key_override=session_key,
-            )
-            await self.bus.publish_inbound(msg)
-            self._last_worker_check[session_key] = now
+            state.last_check = now
+            await self._publish_worker_check(session_key, state.channel, state.chat_id)
+            self._ensure_subagent_monitor(session_key, state.channel, state.chat_id)
 
     async def _dispatch(self, msg: InboundMessage) -> None:
         """Process a message: per-session serial, cross-session concurrent.
@@ -826,10 +873,18 @@ class AgentLoop:
         # itself must be removed here.
         self._session_dispatch.pop(session_key, None)
 
-        # Any dispatch for this session resets the worker check timer — the LLM
-        # has had control, so no need for an automatic reminder right away.
-        if session_key in self._last_worker_check:
-            self._last_worker_check[session_key] = time.time()
+        # Proactive subagent check: after dispatch, if subagents still
+        # running for this session, inject a check so the agent actively
+        # pulls their status instead of passively waiting for push results.
+        # This is the primary active mechanism — _check_workers is safety net.
+        if self.subagents.get_running_count_by_session(session_key) > 0:
+            now = time.time()
+            state = self._last_worker_check.get(session_key)
+            last = state.last_check if state else 0
+            if now - last >= self._POST_DISPATCH_CHECK_INTERVAL:
+                self._last_worker_check[session_key] = _WorkerCheckState(now, msg.channel, msg.chat_id)
+                await self._publish_worker_check(session_key, msg.channel, msg.chat_id)
+            self._ensure_subagent_monitor(session_key, msg.channel, msg.chat_id)
 
     async def close_mcp(self) -> None:
         """Drain pending background archives, then close MCP connections."""
@@ -850,6 +905,9 @@ class AgentLoop:
     def stop(self) -> None:
         """Stop the agent loop."""
         self._running = False
+        for task in list(self._subagent_monitors.values()):
+            task.cancel()
+        self._subagent_monitors.clear()
         logger.info("Agent loop stopping")
 
     async def _process_message(
@@ -1139,7 +1197,7 @@ class AgentLoop:
         )
         _current_inbound.set(msg)
         self._current_session_key = session_key
-        return await self._process_message(
+        response = await self._process_message(
             msg,
             session_key=session_key,
             on_progress=on_progress,
@@ -1147,3 +1205,14 @@ class AgentLoop:
             on_stream_end=on_stream_end,
             pending_queue=pending_queue,
         )
+        # Same post-dispatch monitor trigger as _dispatch() — ensures proxy
+        # sessions also get proactive subagent checks.
+        if self.subagents.get_running_count_by_session(session_key) > 0:
+            now = time.time()
+            state = self._last_worker_check.get(session_key)
+            last = state.last_check if state else 0
+            if now - last >= self._POST_DISPATCH_CHECK_INTERVAL:
+                self._last_worker_check[session_key] = _WorkerCheckState(now, channel, chat_id)
+                await self._publish_worker_check(session_key, channel, chat_id)
+            self._ensure_subagent_monitor(session_key, channel, chat_id)
+        return response
