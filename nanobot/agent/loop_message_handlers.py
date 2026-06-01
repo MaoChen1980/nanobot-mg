@@ -20,7 +20,7 @@ from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.memory_extractor import MemoryExtractor
 from nanobot.agent.tools.message import MessageTool
 
-_STALE_MESSAGE_HOURS = 4
+_STALE_MESSAGE_MINUTES = 20
 
 
 def _has_stale_duplicate(session, message_id: str) -> bool:
@@ -32,7 +32,7 @@ def _has_stale_duplicate(session, message_id: str) -> bool:
     if not message_id:
         return False
     from datetime import datetime, timezone, timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=_STALE_MESSAGE_HOURS)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=_STALE_MESSAGE_MINUTES)
     for i in range(len(session.messages) - 1, -1, -1):
         role = session.messages[i].get("role")
         if role in ("assistant", "tool"):
