@@ -1,14 +1,13 @@
 """
-SelfReflectHook: LLM-powered self-reflection with hook code self-review.
+SelfReflectHook: metrics accumulator + LLM suspect extraction.
 
 Phase 2 of the self-evolution feedback loop. Accumulates metrics across turns,
-then calls LLM to produce structured findings including:
-- Project knowledge, decisions, behavior patterns, corrections
-- **self_bug**: defects in hook source code
-- LLM behavior pattern analysis (bad guesses, repeated errors)
+then calls LLM (no tools, no context) to flag **suspects** in:
+- Hook source code (self_bug)
+- LLM behavior patterns (behavior / correction / knowledge / decision)
 
-The hook reads its own source code and includes it in the reflection prompt
-so the LLM can find bugs in the hooks themselves.
+Output: structured suspects for SelfInsightHook to inject into the agent loop.
+The agent loop has the context and tools to judge whether each suspect is real.
 """
 
 from __future__ import annotations
@@ -72,7 +71,7 @@ REFLECTION_USER_TEMPLATE = """\
 
 ## 可疑点
 
-你只有以上信息——mertrics + hook 代码。逐一检查：
+你只有以上信息——metrics + hook 代码。逐一检查：
 
 1. **代码** (→ type: `self_bug`): 哪里看着不对就标出来。多一次计数、
    少一个判断、异常没处理、变量名写错……
