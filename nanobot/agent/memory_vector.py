@@ -19,6 +19,7 @@ class MemoryVectorIndex:
 
     _MODEL_NAME = "BAAI/bge-small-zh-v1.5"
     _INDEX_FILE = "index.faiss"
+    _INDEX_BAK = "index.faiss.bak"
     _CHUNKS_FILE = "chunks.json"
 
     def __init__(self, memory_dir: Path, index_dir: str = ".vector_index") -> None:
@@ -318,7 +319,11 @@ class MemoryVectorIndex:
         if self._index is not None:
             import faiss
 
-            faiss.write_index(self._index, str(self._index_dir / self._INDEX_FILE))
+            path = str(self._index_dir / self._INDEX_FILE)
+            faiss.write_index(self._index, path)
+            # Keep a backup copy in case the primary gets corrupted
+            import shutil
+            shutil.copy2(path, str(self._index_dir / self._INDEX_BAK))
 
         (self._index_dir / self._CHUNKS_FILE).write_text(
             json.dumps(self._chunks, ensure_ascii=False, indent=2),
@@ -342,14 +347,24 @@ class MemoryVectorIndex:
             logger.warning("Failed to load memory index chunks")
             return False
 
-        # Load FAISS index if it exists (fast — just a file read + deserialize)
+        # Load FAISS index (try primary, fall back to backup)
+        import faiss
+
         index_path = self._index_dir / self._INDEX_FILE
+        bak_path = self._index_dir / self._INDEX_BAK
         if index_path.exists():
             try:
-                import faiss
-
                 self._index = faiss.read_index(str(index_path))
             except Exception:
-                logger.warning("Failed to load FAISS index at {}", index_path)
+                logger.warning("Failed to load FAISS index at {}, trying backup", index_path)
+                if bak_path.exists():
+                    try:
+                        self._index = faiss.read_index(str(bak_path))
+                        logger.info("Loaded FAISS index from backup")
+                    except Exception:
+                        logger.warning("Backup also corrupt")
+        elif bak_path.exists():
+            self._index = faiss.read_index(str(bak_path))
+            logger.info("FAISS index missing, loaded from backup")
 
         return True
