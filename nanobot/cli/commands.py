@@ -845,7 +845,6 @@ def agent(
                 agent_loop.stop()
                 outbound_task.cancel()
                 await asyncio.gather(bus_task, outbound_task, return_exceptions=True)
-                await _archive_session(agent_loop, session_id)
                 await agent_loop.close_mcp()
 
         asyncio.run(run_interactive())
