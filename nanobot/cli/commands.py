@@ -22,6 +22,20 @@ if sys.platform == "win32":
         except Exception:
             logger.debug("Failed to reconfigure stdout/stderr")
 
+    # Enable Virtual Terminal Processing so Rich ANSI escape codes
+    # (colours, cursor movement) render correctly instead of leaking
+    # as raw text like `[36m`, `[?25l`.
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.windll.kernel32
+        h = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = wintypes.DWORD()
+        if kernel32.GetConsoleMode(h, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(h, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    except Exception:
+        pass
+
 import typer
 from loguru import logger
 from prompt_toolkit import PromptSession, print_formatted_text
@@ -727,25 +741,27 @@ def agent(
             turn_done = asyncio.Event()
             turn_done.set()
             turn_response: list[tuple[str, dict]] = []
-            renderer: StreamRenderer | None = None
+            stream_buf = ""
 
             async def _consume_outbound():
+                nonlocal stream_buf
                 while True:
                     try:
                         msg = await asyncio.wait_for(bus.consume_outbound(), timeout=1.0)
 
                         if msg.metadata.get("_stream_delta"):
-                            if renderer:
-                                await renderer.on_delta(msg.content)
+                            stream_buf += msg.content
                             continue
                         if msg.metadata.get("_stream_end"):
-                            if renderer:
-                                await renderer.on_end(
-                                    resuming=msg.metadata.get("_resuming", False),
-                                )
                             continue
                         if msg.metadata.get("_streamed"):
                             turn_done.set()
+                            if msg.content:
+                                await _print_interactive_response(
+                                    msg.content,
+                                    render_markdown=markdown,
+                                    metadata=msg.metadata,
+                                )
                             continue
 
                         if msg.metadata.get("_progress"):
@@ -781,9 +797,6 @@ def agent(
                 while True:
                     try:
                         _flush_pending_tty_input()
-                        # Stop spinner before user input to avoid prompt_toolkit conflicts
-                        if renderer:
-                            renderer.stop_for_input()
                         user_input = await _read_interactive_input_async()
                         command = user_input.strip()
                         if not command:
@@ -796,7 +809,7 @@ def agent(
 
                         turn_done.clear()
                         turn_response.clear()
-                        renderer = StreamRenderer(render_markdown=markdown)
+                        stream_buf = ""
 
                         await bus.publish_inbound(InboundMessage(
                             channel=cli_channel,
@@ -816,14 +829,9 @@ def agent(
 
                         if turn_response:
                             content, meta = turn_response[0]
-                            if content and not meta.get("_streamed"):
-                                if renderer:
-                                    await renderer.close()
-                                _print_agent_response(
-                                    content, render_markdown=markdown, metadata=meta,
-                                )
-                        elif renderer and not renderer.streamed:
-                            await renderer.close()
+                            _print_agent_response(
+                                content, render_markdown=markdown, metadata=meta,
+                            )
                     except KeyboardInterrupt:
                         _restore_terminal()
                         console.print("\nGoodbye!")
