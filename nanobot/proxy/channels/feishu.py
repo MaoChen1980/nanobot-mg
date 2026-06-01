@@ -709,25 +709,26 @@ class FeishuProxyChannel(BaseProxyChannel):
             ]
 
             if quick_replies:
-                card_token = str(time.time_ns())
-                for qr in quick_replies:
-                    elements.append({
+                btn_elements = [
+                    {
                         "tag": "button",
                         "text": {"tag": "plain_text", "content": qr["label"]},
-                        "type": "default",
-                        "value": {
-                            "qr": qr["reply"],
-                            "qid": qr["reply"],
-                            "cid": chat_id,
-                            "token": card_token,
-                        },
-                    })
+                        "action_type": "send_feedback",
+                        "value": {"qr": qr["reply"], "cid": chat_id},
+                    }
+                    for qr in quick_replies
+                ]
+                elements.append({
+                    "tag": "action",
+                    "actions": btn_elements,
+                })
 
+            # V1 schema for full send_feedback button support (V2 removed this)
             card: dict[str, Any] = {
-                "schema": "2.0",
                 "config": {"width_mode": "fill"},
-                "body": {"elements": elements},
+                "schema": "1.0",
             }
+            card["body"] = {"elements": elements}
             if header_text:
                 template = self.config.get("cardTemplate", "blue")
                 card["header"] = {
