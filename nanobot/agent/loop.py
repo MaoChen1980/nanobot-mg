@@ -442,7 +442,7 @@ class AgentLoop:
             sc = getattr(tool, "set_context", None)
             if not sc:
                 continue
-            if name == "spawn":
+            if name in ("spawn", "spawn_many"):
                 sc(channel, chat_id, effective_key=effective_key)
             elif name == "cron":
                 sc(channel, chat_id, metadata=metadata, session_key=session_key)
@@ -814,7 +814,7 @@ class AgentLoop:
         """
         msg = InboundMessage(
             channel=channel,
-            sender_id="boss",
+            sender_id="user",
             chat_id=chat_id,
             content=(
                 "<system-reminder>\n"
@@ -852,19 +852,14 @@ class AgentLoop:
 
     async def _check_workers(self) -> None:
         """Safety net: inject check reminders when the loop would otherwise
-        sit idle with running subagents."""
-        now = time.time()
+        sit idle with running subagents.
 
-        for session_key in self.subagents.get_sessions_with_running_workers():
-            if session_key not in self._last_worker_check:
-                # rsplit ensures proxy session_keys like "feishu:feishu1:uid_xxx"
-                # extract channel="feishu:feishu1" (proxy_key) rather than "feishu".
-                _parts = session_key.rsplit(":", 1)
-                self._last_worker_check[session_key] = _WorkerCheckState(
-                    last_check=now,
-                    channel=_parts[0],
-                    chat_id=_parts[1] if len(_parts) > 1 else session_key,
-                )
+        Only processes sessions already tracked by _dispatch (post-dispatch
+        check), which stores the correct channel/chat_id from the InboundMessage.
+        Never infers chat_id from session_key since it may contain sender_id
+        (e.g. ou_xxx) rather than the actual chat_id (e.g. oc_xxx).
+        """
+        now = time.time()
 
         for session_key in list(self._last_worker_check.keys()):
             state = self._last_worker_check[session_key]
