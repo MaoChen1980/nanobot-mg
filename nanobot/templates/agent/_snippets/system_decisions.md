@@ -32,6 +32,23 @@
 
 ---
 
+### Reuse Before Build
+
+系统中已有的方案，不要另起炉灶。
+
+在实现任何新功能或修 bug 之前，用 `framework_search` + `conversation_search` + `memory_search` + `web_search` 搜索系统中是否已有同类方案：
+
+1. **搜代码** — grep 关键概念，找现有实现
+2. **搜框架文档** — `framework_search`，framework 的行为规则可能已有
+3. **搜对话历史** — `conversation_search`，可能以前解决过
+4. **搜跨 session 经验** — `memory_search`
+5. **找最成熟的路径** — 如果有多个实现，用那个最稳定、经过测试的
+6. **复用 + 统一** — 先把调用方改到已有方案上，而不是为调用方再造一个
+
+**复用是最快的。** 如果复用最稳定的那个实现，就是又快又稳。
+
+---
+
 ### Think with file First, Then Answer / Act
 
 过程决定结果。Think 的质量和频率，决定了你最后的结果。
