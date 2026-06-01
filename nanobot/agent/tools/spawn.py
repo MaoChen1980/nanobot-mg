@@ -115,7 +115,7 @@ def build_context_block(workspace: Path | None = None, team_context: str | None 
             content = _read_workspace_file(workspace, filename)
             if content:
                 parts.append(f"=== {filename} ===\n{content[:800]}\n===============")
-        for rel in ["tasks/TREE.md", "tasks/CURRENT.md"]:
+        for rel in ["tasks/TREE.md", "tasks/CURRENT.md", "tasks/team_board.md"]:
             content = _read_workspace_file(workspace, rel)
             if content:
                 parts.append(f"=== {rel} ===\n{content[:8000]}\n===============")
@@ -126,10 +126,13 @@ def build_context_block(workspace: Path | None = None, team_context: str | None 
         for msg in recent:
             role = msg.get("role", "?")
             content = msg.get("content", "")
-            if content:
-                if len(content) > 400:
-                    content = content[:400] + "..."
-                parts.append(f"[{role}]: {content}")
+            text = content[:400] + "..." if len(content) > 400 else content if content else ""
+            rc = msg.get("reasoning_content")
+            if isinstance(rc, str) and rc.strip():
+                think = rc.strip()[:200] + "..." if len(rc) > 200 else rc.strip()
+                text = f"[think]: {think}\n{text}" if text else f"[think]: {think}"
+            if text:
+                parts.append(f"[{role}]: {text}")
 
     if team_context:
         parts.append(f"## Team Context\n\n{team_context}")

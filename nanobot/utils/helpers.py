@@ -465,15 +465,23 @@ def split_thinking_messages(messages: list[dict]) -> list[dict]:
         has_content_list = isinstance(content, list) and bool(content)
 
         if has_tool_calls or has_real_content or has_content_list:
-            msg_think: dict = {"role": "assistant", "content": thinking}
-            msg_rest: dict = {
-                k: v for k, v in msg.items()
-                if k not in ("reasoning_content", "reasoning_details", "thinking_blocks")
-            }
-            if has_tool_calls:
-                msg_rest["content"] = ""
-            result.append(msg_think)
-            result.append(msg_rest)
+            if has_tool_calls and not has_real_content and not has_content_list:
+                # content="" + tool_calls + thinking → merge into 1 message
+                merged = dict(msg)
+                merged["content"] = thinking
+                for k in ("reasoning_content", "reasoning_details", "thinking_blocks"):
+                    merged.pop(k, None)
+                result.append(merged)
+            else:
+                msg_think: dict = {"role": "assistant", "content": thinking}
+                msg_rest: dict = {
+                    k: v for k, v in msg.items()
+                    if k not in ("reasoning_content", "reasoning_details", "thinking_blocks")
+                }
+                if has_tool_calls:
+                    msg_rest["content"] = ""
+                result.append(msg_think)
+                result.append(msg_rest)
         else:
             cleaned = dict(msg)
             for k in ("reasoning_content", "reasoning_details", "thinking_blocks"):
