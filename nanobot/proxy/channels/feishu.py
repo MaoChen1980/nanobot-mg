@@ -705,7 +705,7 @@ class FeishuProxyChannel(BaseProxyChannel):
 
             header_text, body = self._extract_header(content)
             elements: list[dict[str, Any]] = [
-                {"tag": "div", "text": {"tag": "lark_md", "content": body or content}},
+                {"tag": "markdown", "content": body or content},
             ]
 
             if quick_replies:
