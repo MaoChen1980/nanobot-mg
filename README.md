@@ -28,6 +28,14 @@ cd nanobot
 pip install -e .
 ```
 
+> macOS 用户：直接运行 `bash setup.sh` 即可，脚本会自动检测 Homebrew Python 并创建 .venv
+
+> **One-shot setup scripts** (creates `.venv` and installs everything):
+> - macOS / Linux: `bash setup.sh`
+> - Windows: `setup.bat`
+>
+> Then `source .venv/bin/activate` (macOS/Linux) or `.venv\Scripts\activate` (Windows) before running `nanobot`.
+
 ---
 
 ## Quick Start
