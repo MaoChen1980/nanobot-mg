@@ -302,6 +302,41 @@ class SubagentManager:
             logger.error("Subagent [{}] failed: {}", task_id, e)
             await self._announce_result(task_id, label, task, f"Error: {e}", origin, "error")
 
+    async def _inject_to_orchestrator(
+        self,
+        content: str,
+        origin: dict[str, str],
+        *,
+        sender_id: str = "subagent",
+        metadata: dict[str, Any] | None = None,
+        ephemeral: bool = False,
+    ) -> None:
+        """Unified injection: deliver a message to the Orchestrator via the message bus.
+
+        All Subagent → Orchestrator messages go through this method to ensure
+        consistent routing, session key handling, and metadata.
+
+        - content is automatically wrapped in <system-reminder>
+        - session_key_override resolves with fallback to origin channel:chat_id
+        - _origin_channel/_origin_chat_id are always set for SystemMessageHandler
+        """
+        wrapped = f"<system-reminder>\n{content}\n</system-reminder>"
+        session_key = origin.get("session_key") or f"{origin['channel']}:{origin['chat_id']}"
+        msg = InboundMessage(
+            channel="system",
+            sender_id=sender_id,
+            chat_id=f"{origin['channel']}:{origin['chat_id']}",
+            content=wrapped,
+            session_key_override=session_key,
+            metadata={
+                "_origin_channel": origin.get("channel", ""),
+                "_origin_chat_id": origin.get("chat_id", ""),
+                **(metadata or {}),
+            },
+            ephemeral=ephemeral,
+        )
+        await self.bus.publish_inbound(msg)
+
     async def _announce_result(
         self,
         task_id: str,
@@ -334,31 +369,14 @@ class SubagentManager:
             pt_path=_pt_path,
         )
 
-        # Wrap in <system-reminder> so the main agent's LLM clearly
-        # distinguishes this as system-injected context, not user input.
-        wrapped = f"<system-reminder>\n{announce_content}\n</system-reminder>"
-
-        # Inject as system message to trigger main agent.
-        # Use session_key_override to align with the main agent's effective
-        # session key (which accounts for unified sessions) so the result is
-        # routed to the correct pending queue (mid-turn injection) instead of
-        # being dispatched as a competing independent task.
-        override = origin.get("session_key") or f"{origin['channel']}:{origin['chat_id']}"
-        msg = InboundMessage(
-            channel="system",
-            sender_id="subagent",
-            chat_id=f"{origin['channel']}:{origin['chat_id']}",
-            content=wrapped,
-            session_key_override=override,
+        await self._inject_to_orchestrator(
+            announce_content,
+            origin,
             metadata={
                 "injected_event": "subagent_result",
                 "subagent_task_id": task_id,
-                "_origin_channel": origin.get("channel", ""),
-                "_origin_chat_id": origin.get("chat_id", ""),
             },
         )
-
-        await self.bus.publish_inbound(msg)
         logger.debug("Subagent [{}] announced result to {}:{}", task_id, origin['channel'], origin['chat_id'])
 
     async def cancel_by_session(self, session_key: str) -> int:
@@ -432,14 +450,9 @@ class SubagentManager:
         if not origin:
             return "Error: Subagent origin not found"
 
-        content = f"[Subagent '{subagent_label}' ({priority})]: {message}"
-        wrapped = f"<system-reminder>\n{content}\n</system-reminder>"
-        msg = InboundMessage(
-            channel="system",
-            sender_id="subagent",
-            chat_id=f"{origin['channel']}:{origin['chat_id']}",
-            content=wrapped,
-            session_key_override=origin.get("session_key") or f"{origin['channel']}:{origin['chat_id']}",
+        await self._inject_to_orchestrator(
+            f"[Subagent '{subagent_label}' ({priority})]: {message}",
+            origin,
             metadata={
                 "injected_event": "subagent_notification",
                 "subagent_id": subagent_id,
@@ -447,7 +460,6 @@ class SubagentManager:
                 "notification_priority": priority,
             },
         )
-        await self.bus.publish_inbound(msg)
         logger.info("Subagent [{}] notified Orchestrator (priority={}): {}", subagent_label, priority, message[:80])
         return f"Orchestrator notified (priority: {priority})"
 
@@ -490,23 +502,16 @@ class SubagentManager:
 
         # Notify Orchestrator
         ctx = f"\nContext: {context}" if context else ""
-        content = (
+        await self._inject_to_orchestrator(
             f"[Subagent '{subagent_label}' requests input]: {question}{ctx}\n"
-            f"Use respond_to_subagent(subagent_id='{subagent_label}', response=...) to reply."
-        )
-        msg = InboundMessage(
-            channel="system",
-            sender_id="subagent",
-            chat_id=f"{origin['channel']}:{origin['chat_id']}",
-            content=content,
-            session_key_override=origin.get("session_key"),
+            f"Use respond_to_subagent(subagent_id='{subagent_label}', response=...) to reply.",
+            origin,
             metadata={
                 "injected_event": "subagent_request",
                 "subagent_id": subagent_id,
                 "subagent_label": subagent_label,
             },
         )
-        await self.bus.publish_inbound(msg)
         logger.info("Subagent [{}] requested Orchestrator input: {}", subagent_label, question[:80])
 
         # Wait for response with timeout
