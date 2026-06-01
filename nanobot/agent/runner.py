@@ -666,15 +666,21 @@ class AgentRunner:
         )
 
     @staticmethod
-    def _fmt_tool_metadata(tool_name: str, result: str, timestamp: str = "", duration_ms: int | None = None) -> str:
+    def _fmt_tool_metadata(tool_name: str, result: str | list, timestamp: str = "", duration_ms: int | None = None) -> str:
         """Prefix tool result with metadata: name, time, status, duration, size.
 
         Info-gathering tools get a ``[Source: ...]`` label so the LLM can
         distinguish external facts from its own inferences.
         """
-        size = len(result) if isinstance(result, str) else 0
+        if isinstance(result, list):
+            size = sum(len(str(item)) for item in result)
+            status = "success"
+            result_str = str(result)
+        else:
+            size = len(result)
+            status = "failure" if result.startswith("Error") else "success"
+            result_str = result
         ts = timestamp[:16].replace("T", " ") if timestamp else ""
-        status = "failure" if result.startswith("Error") else "success"
         duration_str = f"time consumed: {duration_ms / 1000:.1f}s" if duration_ms is not None else ""
         prefix = "Source" if tool_name in _SOURCE_TOOLS else "Tool"
         parts = [f"[{prefix}: {tool_name}"]
@@ -685,7 +691,7 @@ class AgentRunner:
             parts.append(duration_str)
         parts.append(f"result: {size} chars]")
         meta = " | ".join(parts)
-        return f"{meta}\n{result}"
+        return f"{meta}\n{result_str}"
 
     # Backward compatibility — delegate to module functions
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)
