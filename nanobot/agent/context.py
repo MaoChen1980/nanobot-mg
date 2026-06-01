@@ -487,8 +487,6 @@ class ContextBuilder:
         runtime_lines = [f"Current Time: {current_time_str(self.timezone)}"]
         if channel:
             runtime_lines.append(f"Channel: {channel}")
-        if cs.current_iteration is not None and cs.max_iterations is not None:
-            runtime_lines.append(f"Iteration: {cs.current_iteration}/{cs.max_iterations}")
         if cs.context_window_tokens is not None:
             runtime_lines.append(f"Context Window: {cs.context_window_tokens} tokens")
         if cs.history_budget_tokens is not None:

@@ -19,13 +19,6 @@ from nanobot.agent.memory import MemoryExtractor
 from nanobot.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunner, AgentRunSpec
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
 from nanobot.agent.subagent import SubagentManager
-from nanobot.agent.tools.ask import (
-    AskUserTool,
-    ask_user_options_from_messages,
-    ask_user_outbound,
-    ask_user_tool_result_messages,
-    pending_ask_user_id,
-)
 from nanobot.agent.tools.cron import CronTool
 from nanobot.agent.tools.filesystem import DeleteFileTool, EditFileTool, ListDirTool, MoveFileTool, ReadFileTool, WriteFileTool
 from nanobot.agent.tools.message import MessageTool
@@ -365,7 +358,6 @@ class AgentLoop:
             self.workspace if (self.restrict_to_workspace or self.exec_config.sandbox) else None
         )
         extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
-        self.tools.register(AskUserTool())
         self.tools.register(
             ReadFileTool(
                 workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read

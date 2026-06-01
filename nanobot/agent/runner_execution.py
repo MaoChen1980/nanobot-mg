@@ -9,7 +9,6 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.runner_injection import drain_injections
-from nanobot.agent.tools.ask import AskUserInterrupt
 from nanobot.agent.runner_constants import _MAX_INJECTION_CYCLES
 from nanobot.utils.runtime import check_repeated_external_lookup
 
@@ -51,13 +50,9 @@ async def execute_tools(
             turn += 1
             tool_results.append(result)
             batch_results.append(result)
-            if isinstance(result[2], AskUserInterrupt):
-                break
             if isinstance(result[2], RuntimeError):
                 interrupted = True
                 break
-        if any(isinstance(error, AskUserInterrupt) for _, _, error in batch_results):
-            break
         if any(isinstance(error, RuntimeError) for _, _, error in batch_results):
             interrupted = True
             break
@@ -142,16 +137,9 @@ async def _run_tool(
             "detail": str(exc),
             "duration_ms": duration_ms,
         }
-        if isinstance(exc, AskUserInterrupt):
-            event["status"] = "waiting"
-            result_str = ""
-            error_str = str(exc)
-        else:
-            result_str = f"Error: {type(exc).__name__}: {exc}"
-            error_str = result_str
+        result_str = f"Error: {type(exc).__name__}: {exc}"
+        error_str = result_str
         self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, result_str, False, error_str, duration_ms)
-        if isinstance(exc, AskUserInterrupt):
-            return "", event, exc
         if spec.fail_on_tool_error:
             return result_str, event, RuntimeError(str(exc))
         return result_str, event, None

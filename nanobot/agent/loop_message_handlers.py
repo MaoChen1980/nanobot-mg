@@ -55,7 +55,6 @@ class SystemMessageHandler:
         self._loop = loop
 
     async def handle(self, msg, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None):
-        from nanobot.agent.tools.ask import ask_user_options_from_messages, ask_user_outbound
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         logger.info("Processing system message from {}", msg.sender_id)
         key = msg.session_key_override or f"{channel}:{chat_id}"
@@ -112,7 +111,6 @@ class SystemMessageHandler:
             self._loop.sessions.save(session)
         self._loop._append_turn_to_session(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
         self._loop.lifecycle.finalize(session)
-        options = ask_user_options_from_messages(all_msgs) if stop_reason == "ask_user" else []
         import re
         if final_content:
             final_content = re.sub(
@@ -120,7 +118,8 @@ class SystemMessageHandler:
                 '',
                 final_content,
             )
-        content, buttons = ask_user_outbound(final_content or "Background task completed.", options, effective_channel)
+        content = final_content or "Background task completed."
+        buttons: list = []
         outbound_metadata: dict[str, Any] = {}
         if effective_channel == "slack" and key.startswith("slack:") and key.count(":") >= 2:
             outbound_metadata["slack"] = {"thread_ts": key.split(":", 2)[2]}
@@ -132,7 +131,6 @@ class UserMessageHandler:
         self._loop = loop
 
     async def handle(self, msg, session_key, on_progress, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None):
-        from nanobot.agent.tools.ask import pending_ask_user_id, ask_user_tool_result_messages
 
         if msg.media:
             # All media (images, files, etc.) → save to workspace, no auto-processing
@@ -320,32 +318,22 @@ class UserMessageHandler:
 
     def _build_initial_messages(self, msg, history, pending, session, budget_adjusted=0, context_window=0):
         """Build the initial message list for the agent loop."""
-        from nanobot.agent.tools.ask import pending_ask_user_id, ask_user_tool_result_messages
-        pending_ask_id = pending_ask_user_id(history)
-        if pending_ask_id:
-            initial_messages = ask_user_tool_result_messages(
-                self._loop.context.build_system_prompt(channel=msg.channel),
-                history,
-                pending_ask_id,
-                msg.content,
-            )
-        else:
-            cs = ContextState(
-                tool_definitions=self._loop.tools.get_definitions(),
-                current_iteration=self._loop._current_iteration,
-                max_iterations=self._loop.max_iterations,
-                context_window_tokens=context_window or None,
-                history_budget_tokens=budget_adjusted or None,
-            )
-            initial_messages = self._loop.context.build_messages(
-                history=history,
-                current_message=msg.content,
-                media=msg.media if msg.media else None,
-                channel=msg.channel,
-                chat_id=self._loop._runtime_chat_id(msg),
-                context_state=cs,
-            )
-        return initial_messages, pending_ask_id
+        cs = ContextState(
+            tool_definitions=self._loop.tools.get_definitions(),
+            current_iteration=self._loop._current_iteration,
+            max_iterations=self._loop.max_iterations,
+            context_window_tokens=context_window or None,
+            history_budget_tokens=budget_adjusted or None,
+        )
+        initial_messages = self._loop.context.build_messages(
+            history=history,
+            current_message=msg.content,
+            media=msg.media if msg.media else None,
+            channel=msg.channel,
+            chat_id=self._loop._runtime_chat_id(msg),
+            context_state=cs,
+        )
+        return initial_messages, None
 
     def _make_bus_progress_callback(self, msg):
         async def _bus_progress(content, *, tool_hint=False, tool_events=None):
@@ -388,7 +376,6 @@ class UserMessageHandler:
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
         """Format the final OutboundMessage for the user."""
         import re
-        from nanobot.agent.tools.ask import ask_user_options_from_messages, ask_user_outbound
         if (mt := self._loop.tools.get("message")) and isinstance(mt, MessageTool) and mt._sent_in_turn:
             if not had_injections or stop_reason == "empty_final_response":
                 return None
@@ -403,11 +390,7 @@ class UserMessageHandler:
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
         meta = dict(msg.metadata or {})
-        final_content, buttons = ask_user_outbound(
-            final_content,
-            ask_user_options_from_messages(all_msgs) if stop_reason == "ask_user" else [],
-            msg.channel,
-        )
-        if on_stream is not None and stop_reason not in {"ask_user", "error"}:
+        buttons: list = []
+        if on_stream is not None and stop_reason != "error":
             meta["_streamed"] = True
         return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=final_content, metadata=meta, buttons=buttons)

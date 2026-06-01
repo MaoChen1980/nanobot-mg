@@ -291,9 +291,6 @@ class AgentRunner:
 
             if response.should_execute_tools:
                 tool_calls = list(response.tool_calls)
-                ask_index = next((i for i, tc in enumerate(tool_calls) if tc.name == "ask_user"), None)
-                if ask_index is not None:
-                    tool_calls = tool_calls[:ask_index + 1]
                 context.tool_calls = list(tool_calls)
                 if response.content:
                     await hook.on_stream(context, response.content)
@@ -371,9 +368,6 @@ class AgentRunner:
 
                 completed_tool_results = []
                 for tool_call, result, ev in zip(tool_calls, results, new_events):
-                    from nanobot.agent.tools.ask import AskUserInterrupt
-                    if isinstance(fatal_error, AskUserInterrupt) and tool_call.name == "ask_user":
-                        continue
                     content = _normalize(spec, tool_call.id, tool_call.name, result)
                     ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else datetime.now(timezone.utc).isoformat()
                     content = self._fmt_tool_metadata(tool_call.name, content, ts, ev.get("duration_ms"))
@@ -385,15 +379,6 @@ class AgentRunner:
                     completed_tool_results.append(tool_message)
 
                 if fatal_error is not None:
-                    from nanobot.agent.tools.ask import AskUserInterrupt
-                    if isinstance(fatal_error, AskUserInterrupt):
-                        final_content = fatal_error.question
-                        stop_reason = "ask_user"
-                        context.final_content = final_content
-                        context.stop_reason = stop_reason
-                        await hook.on_stream_end(context, resuming=False)
-                        await hook.after_iteration(context)
-                        break
                     error = f"Error: {type(fatal_error).__name__}: {fatal_error}"
                     final_content = error
                     stop_reason = "tool_error"
