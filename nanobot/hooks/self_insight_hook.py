@@ -121,12 +121,8 @@ class SelfInsightHook(AgentHook):
 
         # All findings are suspects — agent loop has the context to judge
         result += (
-            "\n\n[Note] 以上全部是可疑点——不一定是问题。"
-            "判断前先感知三个维度："
-            "{人} 用户是谁、习惯偏好、技术水平；"
-            "{环境} CPU/内存/磁盘、部署规模；"
-            "{行为} 你自己的操作模式、重复错误、走过的弯路。"
-            "三者结合再决定：哪些值得改、哪些是刻意的、怎么改。"
+            "\n\n[Note] 以上全部是可疑点——按 system prompt 的 Situational Awareness"
+            "四维感知（人/环境/数据/行为）来判断哪些值得改、哪些是刻意的、怎么改。"
             "修复后标记已解决: echo '<id>' >> ~/.nanobot/agent/resolved_findings.jsonl"
         )
         if len(result) > MAX_INSIGHT_CHARS:

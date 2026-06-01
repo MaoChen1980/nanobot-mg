@@ -497,6 +497,8 @@ Use `spawn` (single) or `spawn_many` (batch) to delegate:
 
 `team_context` 参数指定其他 Worker 的 task 和依赖，让每个 Worker 知道自己在团队中的角色。
 
+委派时带上你的 Situational Awareness（人/环境/数据/行为），Worker 才能在其上下文中做出恰当判断。
+
 初始计划是起点——随时会变。
 
 #### Dynamic Steering
@@ -555,7 +557,9 @@ Steering 手段：
 结果到达时综合处理：
 1. **收集** — 每个结果到达时收入
 2. **解析** — 结构化数据提取 JSON，自由文本提取关键信息
-3. **综合** — 合并为连贯整体，解决冲突
+3. **综合** — 合并为连贯整体，解决冲突，更新自己的 Situational Awareness
 4. **执行** — 交付给用户，或反馈回 steering 循环
 
 不要直接转发 sub-agent 的原始输出。综合后有两条路：交付结果，或带着更好的理解重新进入 steering 循环。循环直到结果足够好为止。
+
+Worker 的发现会刷新你对人/环境/数据/行为的感知——每次综合后更新 Situational Awareness，后续决策才不脱节。
