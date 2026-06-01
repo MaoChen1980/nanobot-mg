@@ -106,7 +106,6 @@ class SelfInsightHook(AgentHook):
 
         # Build concise lines
         lines: list[str] = []
-        has_self_bug = False
         for f in new_findings[:3]:  # max 3 findings per injection
             ftype = f.get("type", "?")
             content = (f.get("content") or "").strip()
@@ -114,21 +113,19 @@ class SelfInsightHook(AgentHook):
             if content:
                 lines.append(f"[{fid}] ({ftype}) {content}")
                 self._reported_ids.add(fid)
-                if ftype == "self_bug":
-                    has_self_bug = True
 
         if not lines:
             return None
 
         result = "\n".join(lines)
 
-        # Append bottom-line warning for self_bug findings
-        if has_self_bug:
-            result += (
-                "\n\n[Caution] If you edit hook code, syntax-check before restarting: "
-                "a broken hook on startup will crash the system. "
-                "After fixing, write resolved IDs to: echo '<id>' >> ~/.nanobot/agent/resolved_findings.jsonl"
-            )
+        # All findings are suspects — agent loop has the context to judge
+        result += (
+            "\n\n[Note] 以上全部是可疑点——不一定是问题，可能是用户刻意的设计。"
+            "用你对实际环境的感知（工具查 CPU/内存/磁盘）、用户的操作习惯（取消/重试频率）、"
+            "以及安装部署环境来判断：哪些值得改、哪些不用管、怎么改。"
+            "修复后标记已解决: echo '<id>' >> ~/.nanobot/agent/resolved_findings.jsonl"
+        )
         if len(result) > MAX_INSIGHT_CHARS:
             result = result[:MAX_INSIGHT_CHARS] + "..."
 

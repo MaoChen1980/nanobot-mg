@@ -27,27 +27,22 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 # --- Reflection prompt -------------------------------------------------------
 
 REFLECTION_SYSTEM_PROMPT = """\
-你是 nanobot，正在对 this session 进行自我反思。
+你是 nanobot，正在回顾 this session 的对话。
 
-你的 task 是：回顾 this session 对话，提取**值得记住的信息**。
+你没有上下文、没有工具、不在 agent loop。你**只能怀疑，不能判断**——
+你的输出都是 suspect，留给主循环验证。
 
-## Filtering Criteria
+## 值得怀疑的信息
 
-只记录**同时满足以下两个条件**的信息：
-1. 这不是 LLM 训练数据中已有的通用知识（而是项目特有的架构决策、配置约定、历史原因等）
-2. 这条信息在当前 task 或可预见的未来 task 中会被复用
+以下类型的可疑点值得挑出来：
 
-符合条件的信息类型：
-
-| 类型 | 说明 | 示例 |
-|------|------|------|
-| **knowledge** | 项目特定的技术知识 | "这个项目的 provider 初始化有依赖顺序" |
-| **decision** | 架构/设计决策及其理由 | "选 MiniMax 是因为长上下文" |
-| **behavior** | 更高效的执行模式 | "改 provider 前应该先看所有 consumer" |
-| **correction** | 用户纠正的认知偏差 | "用户说 cut 应按 turn 数不是按消息数" |
-| **self_bug** | nanobot 自身代码中的缺陷 | "SelfReflectHook.after_turn 行 149 多了一次 _turn_count += 1" |
-
-不符合以上条件的信息：**不要记录**。即使它看起来很重要。
+| 类型 | 怀疑方向 | 说人话 |
+|------|----------|--------|
+| **knowledge** | 这个"知识"可能只是偶然 | "我当时是这么理解的，不一定对" |
+| **decision** | 看起来像刻意的决定，也可能只是随手 | "选了 A 没选 B，不一定有理由" |
+| **behavior** | 这个模式看起来效率不高 | "总在同一个文件上改，有点怪" |
+| **correction** | 用户纠正过什么 | "用户上次说不要这样做" |
+| **self_bug** | 代码哪里看着不对 | "这里多了一次计数？" |
 
 ## Output Format
 
@@ -56,14 +51,14 @@ REFLECTION_SYSTEM_PROMPT = """\
   "findings": [
     {
       "type": "knowledge|decision|behavior|correction|self_bug",
-      "content": "具体信息",
-      "relevance": "这条会在什么 task 场景下被复用"
+      "content": "什么地方、为什么觉得可疑",
+      "relevance": "这条怀疑如果成立，会在什么场景下被用到"
     }
   ]
 }
 ```
 
-如果没有任何符合条件的信息，输出 {"findings": []}
+如果没有任何可疑的东西，输出 {"findings": []}
 """
 
 REFLECTION_USER_TEMPLATE = """\
@@ -75,16 +70,18 @@ REFLECTION_USER_TEMPLATE = """\
 
 {hook_code}
 
-Analyze the execution log AND the hook source code above. Check for:
+## 可疑点
 
-1. **Hook code bugs** (→ type: `self_bug`): double counting, off-by-one, fragile regex parsing,
-   incorrect state management, resource leaks, logic errors in detection/injection flow.
+你只有以上信息——mertrics + hook 代码。逐一检查：
 
-2. **LLM behavior patterns** (→ type: `correction` or `behavior`): Is the LLM making
-   repeated bad guesses (wrong file paths, calling tools without preparation)?
-   Are there recurring error patterns from incorrect tool usage?
+1. **代码** (→ type: `self_bug`): 哪里看着不对就标出来。多一次计数、
+   少一个判断、异常没处理、变量名写错……
 
-请输出 JSON findings。
+2. **模式** (→ type: `behavior` / `correction` / `knowledge` / `decision`):
+   从 execution log 看，有没有什么重复模式看起来不太对劲？
+   比如总在调用同一个工具、读同一个文件、走同样的弯路。
+
+你不在 agent loop，无法验证——没关系，全部当成 suspect 输出就行。
 """
 
 # --- Hook files for self-review ------------------------------------------------
@@ -292,7 +289,10 @@ class SelfReflectHook(AgentHook):
         response = await provider.chat(
             messages=[
                 {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},
-                {"role": "user", "content": REFLECTION_USER_TEMPLATE.format(metrics_summary=metrics_text, hook_code=hook_code)},
+                {"role": "user", "content": REFLECTION_USER_TEMPLATE.format(
+                    metrics_summary=metrics_text,
+                    hook_code=hook_code,
+                )},
             ],
             tools=None,
             max_tokens=1024,
