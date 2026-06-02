@@ -279,6 +279,35 @@ class MemoryVectorIndex:
             logger.warning("FAISS not installed, cannot build vector index incrementally")
             return False
 
+        # Some FAISS versions don't support remove_ids on IndexIDMap — fall back to full rebuild
+        try:
+            return self._incremental_update(file_map, current_files, deleted, changed, new_files)
+        except Exception as e:
+            logger.warning("FAISS incremental update failed: {}, falling back to full rebuild", e)
+            file_texts: dict[str, str] = {}
+            for rel in current_files:
+                try:
+                    content = (self._memory_dir / rel).read_text(encoding="utf-8")
+                    if content.strip():
+                        file_texts[rel] = content
+                except Exception:
+                    continue
+            if file_texts:
+                self.build_from_files(file_texts)
+            return True
+
+    def _incremental_update(
+        self,
+        file_map: dict,
+        current_files: dict[str, int],
+        deleted: set[str],
+        changed: set[str],
+        new_files: set[str],
+    ) -> bool:
+        """Incremental FAISS update with remove_ids. Extracted so fallback is clean."""
+        import faiss
+        import numpy as np
+
         files = file_map.get("files", {})
         next_id = file_map.get("next_id", 0)
 

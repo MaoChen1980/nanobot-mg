@@ -207,12 +207,23 @@ class ContextBuilder:
         """Get the core identity section."""
         workspace_path = self.workspace.expanduser().resolve().as_posix()
         from nanobot.config.paths import get_data_dir
+        import shutil
         data_dir = get_data_dir().as_posix()
         system = platform.system()
 
         os_platform = "macOS" if system == "Darwin" else ("Windows" if system == "Windows" else "Linux")
         arch = platform.machine()
         python_version = platform.python_version()
+
+        # System resources — read once at identity build time
+        cpu_cores = os.cpu_count() or 1
+        try:
+            du = shutil.disk_usage(workspace_path)
+            disk_free_str = _fmt_gb(du.free)
+        except Exception:
+            disk_free_str = "unknown"
+        memory_total_str, memory_avail_str = _get_memory_info()
+        gpu_str = _get_gpu_info()
 
         kwargs: dict[str, object] = dict(
             workspace_path=workspace_path,
@@ -231,6 +242,11 @@ class ContextBuilder:
             exec_timeout=self._framework_config.get("exec_timeout", 60),
             subagent_max_iterations=self._framework_config.get("subagent_max_iterations", 100),
             heartbeat_interval_minutes=self._framework_config.get("heartbeat_interval_minutes", 30),
+            cpu_cores=cpu_cores,
+            memory_total=memory_total_str,
+            memory_available=memory_avail_str,
+            disk_free=disk_free_str,
+            gpu=gpu_str,
         )
 
         if include_vector_search:
@@ -279,7 +295,7 @@ class ContextBuilder:
         if not content:
             return ""
         return (
-            "## Task Tree\n\n"
+            "# Task Tree - workspace/tasks/TREE.md\n\n"
             "Current task tree. Tasks are managed as files under workspace/tasks/ — "
             "use read_file/write_file/edit_file to update them.\n\n"
             + self._shift_headings(content, offset=1)
@@ -298,7 +314,7 @@ class ContextBuilder:
         if not content:
             return ""
         return (
-            "## Working Context\n\n"
+            "# Working Context - workspace/tasks/CURRENT.md\n\n"
             "Session-level working context. Tracks what you're doing this session. "
             "Create and update it with write_file.\n\n"
             + self._shift_headings(content, offset=1)
@@ -319,7 +335,7 @@ class ContextBuilder:
                 lines = lines[1:]
             index_text = "\n".join(lines).strip()
             if index_text:
-                parts.append(index_text)
+                parts.append(f"# Memory - workspace/memory/MEMORY.md\n\n{index_text}")
 
         # Also inline key memory files so rules/preferences are visible without recall
         for name in ("system.md", "user.md"):
@@ -396,7 +412,11 @@ class ContextBuilder:
                     tpl = pkg_files("nanobot") / "templates" / filename
                     if tpl.is_file():
                         content = tpl.read_text(encoding="utf-8")
-                        parts.append(f"## {filename}\n\n{self._shift_headings(content, offset=1)}")
+                        name = filename.replace(".md", "").title()
+                        if filename == "TOOLS.md":
+                            parts.append(f"# {name} - workspace/{filename}\n\n{content}")
+                        else:
+                            parts.append(f"# {name} - workspace/{filename}\n\n{self._shift_headings(content, offset=1)}")
                 except Exception as e:
                     logger.warning("Failed to load bundled template {}: {}", filename, e)
                 continue
@@ -420,7 +440,11 @@ class ContextBuilder:
                 self._bootstrap_cache[filename] = (mtime, content)
                 content_str = content
 
-            parts.append(f"## {filename}\n\n{self._shift_headings(content_str, offset=1)}")
+            name = filename.replace(".md", "").title()
+            if filename == "TOOLS.md":
+                parts.append(f"# {name} - workspace/{filename}\n\n{content_str}")
+            else:
+                parts.append(f"# {name} - workspace/{filename}\n\n{self._shift_headings(content_str, offset=1)}")
 
         return "\n\n".join(parts) if parts else ""
 
@@ -601,3 +625,86 @@ class ContextBuilder:
             thinking_blocks=thinking_blocks,
         ))
         return messages
+
+
+# -- resource introspection helpers (used by _get_identity) -------------------------
+
+
+def _fmt_gb(n: float | int | None) -> str:
+    """Format bytes to GB string."""
+    if n is None:
+        return "unknown"
+    gb = n / (1024 ** 3)
+    return f"{gb:.1f} GB"
+
+
+def _get_memory_info() -> tuple[str, str]:
+    """Return (total_memory_str, available_memory_str), best-effort."""
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        return _fmt_gb(mem.total), _fmt_gb(mem.available)
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # Fallback: platform-specific commands
+    import subprocess
+    import sys
+    try:
+        if sys.platform == "win32":
+            out = subprocess.check_output(
+                "wmic OS get TotalVisibleMemorySize,FreePhysicalMemory",
+                shell=True, text=True, timeout=5
+            )
+            lines = out.strip().splitlines()
+            if len(lines) >= 2:
+                parts = lines[1].split()
+                if len(parts) >= 2:
+                    total_kb = int(parts[0])
+                    free_kb = int(parts[1])
+                    return _fmt_gb(total_kb * 1024), _fmt_gb(free_kb * 1024)
+        elif sys.platform == "darwin":
+            out = subprocess.check_output(
+                ["sysctl", "hw.memsize"], text=True, timeout=5
+            )
+            total_b = int(out.strip().split(":")[1].strip())
+            return _fmt_gb(total_b), "unknown"
+        elif sys.platform == "linux":
+            out = subprocess.check_output(
+                ["free", "-b"], text=True, timeout=5
+            )
+            for line in out.splitlines():
+                if line.startswith("Mem:"):
+                    parts = line.split()
+                    return _fmt_gb(int(parts[1])), _fmt_gb(int(parts[3]))
+    except Exception:
+        pass
+    return "unknown", "unknown"
+
+
+def _get_gpu_info() -> str | None:
+    """Return GPU description string, or None if no GPU detected."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            count = torch.cuda.device_count()
+            names: list[str] = []
+            for i in range(count):
+                names.append(torch.cuda.get_device_name(i))
+            return ", ".join(names)
+    except Exception:
+        pass
+    import subprocess
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+            text=True, timeout=10
+        )
+        gpus = [line.strip() for line in out.strip().splitlines() if line.strip()]
+        if gpus:
+            return "; ".join(gpus)
+    except Exception:
+        pass
+    return None

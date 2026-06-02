@@ -885,7 +885,7 @@ async function loadMemory(path) {
 
 function memoryGoBack() {
   if (memoryStack.length > 1) memoryStack.pop();
-  loadMemory(memoryStack[memoryStack.length - 1]);
+  loadMemory();
 }
 
 async function doMemorySearch() {

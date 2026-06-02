@@ -1,3 +1,5 @@
+# Tools - workspace/TOOLS.md
+
 ## Creating New Tools
 
 你可以通过编写自己的 tools 来扩展 nanobot 的能力。每个 tool 独立存放在 `workspace/tools/` 下的子目录中。
