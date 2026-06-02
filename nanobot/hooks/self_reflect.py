@@ -21,6 +21,7 @@ from typing import Any
 
 from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext
+from nanobot.providers.base import LLMProvider
 
 
 # --- Reflection prompt -------------------------------------------------------
@@ -149,15 +150,24 @@ class SelfReflectHook(AgentHook):
 
     def __init__(self, reraise: bool = False, interval: int | None = None) -> None:
         super().__init__(reraise)
-        self._iteration = 0  # LLM iterations (for entry labeling)
         self._turn_count = 0  # user turns (for interval check)
         self._entries_accumulated = []
         self._interval = interval if interval is not None else self.DEFAULT_INTERVAL
+        # Optional provider override — if set, _call_llm uses it instead of
+        # make_provider(config). The agent loop calls set_provider() after
+        # discovery so reflection uses the same model as the main task.
+        self._provider: LLMProvider | None = None
+        self._model: str | None = None
+
+    def set_provider(self, provider: LLMProvider, model: str | None = None) -> None:
+        """Inject the provider/model the main agent is using."""
+        self._provider = provider
+        if model is not None:
+            self._model = model
 
     # -- after_iteration: accumulate metrics in memory ------------------------
 
     async def after_iteration(self, context: AgentHookContext) -> None:
-        self._iteration += 1
         try:
             self._entries_accumulated.append(self._build_entry(context))
         except Exception:
@@ -169,9 +179,13 @@ class SelfReflectHook(AgentHook):
             for tc in (context.tool_calls or [])
         ]
         usage = context.usage or {}
+        real_messages = [
+            m for m in (context.messages or [])
+            if m.get("_source") != "self_insight_hook"
+        ]
         return {
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "iteration": self._iteration,
+            "iteration": context.iteration,
             "tool_calls": tool_calls_data,
             "tool_count": len(tool_calls_data),
             "usage": {
@@ -179,7 +193,7 @@ class SelfReflectHook(AgentHook):
                 "completion_tokens": usage.get("completion_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
             },
-            "message_count": len(context.messages),
+            "message_count": len(real_messages),
             "final_content_len": len(context.final_content or ""),
             "error": context.error,
         }
@@ -199,11 +213,10 @@ class SelfReflectHook(AgentHook):
         if self._turn_count < self._interval:
             return  # keep accumulating
 
-        # Fire reflection and reset
+        # Fire reflection and reset batch
         entries = self._entries_accumulated
         self._entries_accumulated = []
         self._turn_count = 0
-        self._iteration = 0
 
         try:
             await self._run_turn_reflection(entries)
@@ -279,12 +292,20 @@ class SelfReflectHook(AgentHook):
         return self._parse_findings(response)
 
     async def _call_llm(self, metrics_text: str, hook_code: str) -> str:
-        """Make a minimal LLM call for structured findings extraction."""
-        from nanobot.config.loader import load_config
-        from nanobot.providers.factory import make_provider
+        """Make a minimal LLM call for structured findings extraction.
 
-        config = load_config()
-        provider = make_provider(config)
+        Uses self._provider if set via set_provider(). Otherwise falls
+        back to make_provider(config), which yields the config-default provider.
+        """
+        if self._provider is None:
+            from nanobot.config.loader import load_config
+            from nanobot.providers.factory import make_provider
+
+            config = load_config()
+            provider = make_provider(config)
+        else:
+            provider = self._provider
+
         response = await provider.chat(
             messages=[
                 {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},

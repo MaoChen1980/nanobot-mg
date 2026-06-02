@@ -1132,6 +1132,19 @@ class AgentLoop:
             for path in sorted(hooks_dir.glob("*.py")):
                 self._try_load_hook(path, discovered)
 
+        # 3. Wire the active provider into hooks that opt in via set_provider().
+        for hook in discovered:
+            inject = getattr(hook, "set_provider", None)
+            if callable(inject):
+                try:
+                    inject(self.provider, self.model)
+                except Exception as e:
+                    logger.warning(
+                        "Hook {} set_provider failed: {}",
+                        type(hook).__name__,
+                        e,
+                    )
+
         return discovered
 
     @staticmethod
