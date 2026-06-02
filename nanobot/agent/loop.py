@@ -815,37 +815,16 @@ class AgentLoop:
         )
         await self.bus.publish_inbound(msg)
 
-    async def _publish_subagent_check_with_session(self, session_key: str, channel: str, chat_id: str) -> None:
-        """Publish a proactive subagent status check through the LLM path.
-        Records the check in session history and publishes to the inbound bus
-        so the LLM processes it and responds to the user with a status update.
-        """
-        # Record in session so LLM has full context
+    async def _record_subagent_check(self, session_key: str) -> None:
+        """Record subagent status in session silently (no LLM notification)."""
         try:
             session = self.sessions.get_or_create(session_key)
-            session.add_message("assistant", f"[⏰ Subagent 状态检查：{self.subagents.get_running_count_by_session(session_key)} 个 Subagent 在运行]")
+            session.add_message("assistant", f"[⏰ Subagent 状态检查：{self.subagents.get_running_count_by_session(session_key)} 个 Subagent 在运行]", status="synthetic")
             self.sessions.save(session)
         except Exception:
-            logger.exception("Failed to record boss status check in session")
+            logger.exception("Failed to record subagent status check in session")
 
-        # Notify LLM — it will call list_subagents + message() to report to user
-        msg = InboundMessage(
-            channel=channel,
-            sender_id="user",
-            chat_id=chat_id,
-            content=(
-                "<system-reminder>\n"
-                "⏰ 定时检查：有 Subagent 在运行中。\n"
-                "请用 message() 向用户简短汇报当前 Subagent 状态。\n"
-                "</system-reminder>"
-            ),
-            ephemeral=True,
-            metadata={},
-            session_key_override=session_key,
-        )
-        await self.bus.publish_inbound(msg)
-
-    async def _monitor_subagents(self, session_key: str, channel: str, chat_id: str) -> None:
+    async def _monitor_subagents(self, session_key: str) -> None:
         """Background task: periodically check subagents until all complete."""
         try:
             while self._running:
@@ -854,7 +833,7 @@ class AgentLoop:
                 await asyncio.sleep(self._SUBAGENT_CHECK_INTERVAL)
                 if self.subagents.get_running_count_by_session(session_key) == 0:
                     break
-                await self._publish_subagent_check_with_session(session_key, channel, chat_id)
+                await self._record_subagent_check(session_key)
         except asyncio.CancelledError:
             pass
         finally:
@@ -864,7 +843,7 @@ class AgentLoop:
         """Start a background monitor for session if not already running."""
         if session_key in self._subagent_monitors:
             return
-        task = asyncio.create_task(self._monitor_subagents(session_key, channel, chat_id))
+        task = asyncio.create_task(self._monitor_subagents(session_key))
         self._subagent_monitors[session_key] = task
 
     async def _check_subagents(self) -> None:
@@ -887,7 +866,7 @@ class AgentLoop:
                 continue
 
             state.last_check = now
-            await self._publish_subagent_check_with_session(session_key, state.channel, state.chat_id)
+            await self._record_subagent_check(session_key)
             self._ensure_subagent_monitor(session_key, state.channel, state.chat_id)
 
     async def _dispatch(self, msg: InboundMessage) -> None:
