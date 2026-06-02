@@ -56,7 +56,7 @@ from nanobot.config.schema import AgentDefaults
 from nanobot.providers.base import LLMProvider
 from nanobot.providers.factory import ProviderSnapshot
 from nanobot.session.manager import Session, SessionManager
-from nanobot.session.orchestrator import SessionLifecycle
+from nanobot.session.lifecycle import SessionLifecycle
 from nanobot.utils.document import separate_and_extract_media
 from nanobot.utils.media_decode import image_placeholder_text
 from nanobot.utils.helpers import truncate_text as truncate_text_fn

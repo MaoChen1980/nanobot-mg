@@ -102,7 +102,7 @@ class MessagePipe:
 | `nanobot/agent/loop.py` | 删除 `_compress_if_needed()`、`_apply_and_recompress()`、`_summarize_turns()`、`_pending_compression`、相关状态管理 |
 | `nanobot/agent/loop_message_handlers.py` | 删除 retry loop (for 循环)、`_has_context_window_error()`、`_prepare_session` 里 compress 调用、`_finalize_turn` 里 pending 处理 |
 | `nanobot/session/manager.py` | `get_history()` 删掉 `"pending_compress"` 过滤 |
-| `nanobot/session/orchestrator.py` | 注释更新 |
+| `nanobot/session/lifecycle.py` | 注释更新 |
 
 ### 测试
 - `tests/agent/test_loop_context_compression.py` → 重写为 `tests/agent/test_message_pipe.py`
