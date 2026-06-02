@@ -9,7 +9,7 @@
 **必须做：**
 1. `list_dir` 看顶层结构
 2. `explore_module` 或读入口文件（README/__init__）
-3. `recall` 查记忆
+3. `memory_search` 查记忆
 4. 如果涉及外部信息 → `web_search`
 
 **不允许：**

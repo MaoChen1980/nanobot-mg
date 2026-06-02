@@ -18,6 +18,14 @@ from nanobot.config.paths import get_workspace_path
 @tool_parameters(
     build_parameters_schema(
         content=p("string", "The message content to send"),
+        channel=p("string",
+            "Optional: target channel override (e.g. 'slack', 'feishu'). "
+            "Defaults to the current conversation channel.",
+        ),
+        chat_id=p("string",
+            "Optional: target chat/recipient override. "
+            "Defaults to the current conversation chat.",
+        ),
         media=p("array",
             "Optional: list of absolute file paths to attach. Supports images, video, audio, documents.",
             items=p("string", "Absolute path to a file"),
@@ -100,10 +108,15 @@ class MessageTool(Tool):
     name = "message"
 
     description = (
-        "**Purpose**: Send messages to the user, supporting text and file attachments.\n\n"
+        "**Purpose**: Send a mid-process message to the user, then continue working. "
+        "Unlike natural text output (which ends the turn and waits for user reply), "
+        "this tool delivers the message immediately while the agent loop continues.\n\n"
         "**When to use**:\n"
-        "- When you need to send a text message or file attachments to the user\n"
-        "- When you need to send interactive messages with buttons\n\n"
+        "- You need to send a message AND continue calling other tools afterward\n"
+        "- You need to send attachments (media) or interactive buttons\n"
+        "- You need to send to a different channel (not the current conversation)\n\n"
+        "**When NOT to use**:\n"
+        "- If you're done working and just want to reply — use natural text output instead\n"
     )
 
     async def execute(
