@@ -29,7 +29,7 @@ class TestHeartbeatContextBridge:
 
         # Reload and verify
         reloaded = session_mgr.get_or_create(target_key)
-        messages = reloaded.get_history(max_messages=0)
+        messages = reloaded.messages
         roles = [m["role"] for m in messages]
         assert roles == ["user", "assistant"]
         assert "3 new emails" in messages[-1]["content"]
@@ -63,7 +63,7 @@ class TestHeartbeatContextBridge:
 
         # Verify: get_history includes the heartbeat injection
         reloaded = session_mgr.get_or_create(target_key)
-        history = reloaded.get_history(max_messages=0)
+        history = reloaded.messages
         roles = [m["role"] for m in history]
         assert roles == ["user", "assistant", "assistant", "user"]
         assert "mark that email" in history[2]["content"]
@@ -93,7 +93,7 @@ class TestHeartbeatContextBridge:
 
         # Verify
         reloaded = session_mgr.get_or_create(target_key)
-        history = reloaded.get_history(max_messages=0)
+        history = reloaded.messages
         roles = [m["role"] for m in history]
         assert roles == ["user", "assistant", "user", "assistant"]
         assert "meeting in 30 minutes" in history[-1]["content"]
@@ -113,7 +113,7 @@ class TestHeartbeatContextBridge:
         session_mgr.save(session)
 
         reloaded = session_mgr.get_or_create(target_key)
-        history = reloaded.get_history(max_messages=0)
+        history = reloaded.messages
         assert len(history) == 2
         assert history[0]["role"] == "assistant"
         assert "sandstorm" in history[0]["content"]

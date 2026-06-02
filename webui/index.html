@@ -475,6 +475,8 @@ function renderAgent() {
     <div class="card">
       <div class="card-header">Session</div>
       ${selectField('timezone', 'Timezone', a.timezone, 'agents.defaults.timezone', TIMEZONES.map(t => ({v:t,l:t})))}
+      ${field('compress_trigger_tokens', 'Compress Trigger (tokens)', a.compress_trigger_tokens, 'number', 'agents.defaults.compress_trigger_tokens')}
+      ${field('history_token_limit', 'History Token Limit', a.history_token_limit, 'number', 'agents.defaults.history_token_limit')}
       ${field('disabled_skills', 'Disabled Skills', Array.isArray(a.disabled_skills) ? a.disabled_skills.join(', ') : '', 'text', 'agents.defaults.disabled_skills')}
       <div class="row"><label></label><span class="hint">Comma-separated skill names</span></div>
     </div>

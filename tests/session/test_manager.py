@@ -32,26 +32,26 @@ class TestSessionAddMessage:
         assert s.updated_at >= old
 
 
-class TestSessionGetHistory:
-    def test_max_messages_slicing(self):
+class TestSessionFormatHistory:
+    def test_returns_all_messages(self):
         s = Session(key="ch:u")
         for i in range(20):
             s.add_message("user", f"msg-{i}")
-        assert len(s.get_history(max_messages=5)) == 5
+        assert len(s.format_history()) == 20
 
     def test_start_from_user_turn(self):
         s = Session(key="ch:u")
         s.add_message("assistant", "hi")
         s.add_message("user", "hello")
         s.add_message("assistant", "world")
-        history = s.get_history(max_messages=10)
+        history = s.format_history()
         assert history[0]["role"] == "user"
 
     def test_drops_orphan_tool_results(self):
         s = Session(key="ch:u")
         s.add_message("tool", "result", tool_call_id="orphan")
         s.add_message("user", "hello")
-        history = s.get_history(max_messages=10)
+        history = s.format_history()
         assert len(history) == 1
         assert history[0]["role"] == "user"
 
@@ -59,7 +59,7 @@ class TestSessionGetHistory:
         s = Session(key="ch:u")
         ts = "2026-01-01T00:00:00Z"
         s.add_message("user", "hi", timestamp=ts)
-        history = s.get_history(max_messages=10, include_timestamps=True)
+        history = s.format_history(include_timestamps=True)
         assert history[0]["content"] == "hi"
         assert history[0]["timestamp"] == "2026-01-01 00:00:00 UTC"
 
@@ -67,7 +67,7 @@ class TestSessionGetHistory:
         s = Session(key="ch:u")
         ts = "2026-01-01T00:00:00Z"
         s.add_message("assistant", "reply", timestamp=ts)
-        history = s.get_history(max_messages=10, include_timestamps=True)
+        history = s.format_history(include_timestamps=True)
         assert history[0]["content"] == "reply"
         assert history[0]["timestamp"] == "2026-01-01 00:00:00 UTC"
 
@@ -75,7 +75,7 @@ class TestSessionGetHistory:
         s = Session(key="ch:u")
         ts = "2026-01-01T00:00:00Z"
         s.add_message("assistant", "delivery", timestamp=ts, _channel_delivery=True)
-        history = s.get_history(max_messages=10, include_timestamps=True)
+        history = s.format_history(include_timestamps=True)
         assert history[0]["content"] == "delivery"
         assert history[0]["timestamp"] == "2026-01-01 00:00:00 UTC"
 
@@ -98,19 +98,8 @@ class TestSessionGetHistory:
     def test_media_breadcrumbs(self):
         s = Session(key="ch:u")
         s.add_message("user", "text", media=["/path/to/img.png"])
-        history = s.get_history(max_messages=10)
+        history = s.format_history()
         assert "[image:" in history[0]["content"]
-
-    def test_max_tokens_recovered_user_turn(self, monkeypatch):
-        s = Session(key="ch:u")
-        s.add_message("user", "first")
-        s.add_message("assistant", "long" * 50)
-        monkeypatch.setattr(
-            "nanobot.session.manager.estimate_message_tokens",
-            lambda m: 1000,
-        )
-        history = s.get_history(max_messages=10, max_tokens=50)
-        assert any(m["role"] == "user" for m in history)
 
 
 class TestGetOrCreate:
@@ -377,12 +366,12 @@ class TestFormatTimestampEdgeCases:
         assert result is None
 
 
-class TestGetHistoryEdgeCases:
+class TestFormatHistoryEdgeCases:
     def test_channel_delivery_before_user_turn(self):
         s = Session(key="ch:u")
         s.add_message("assistant", "delivered", _channel_delivery=True)
         s.add_message("user", "reply")
-        history = s.get_history(max_messages=10)
+        history = s.format_history()
         assert len(history) >= 2
 
     def test_orphan_tool_at_front_shifted(self):
@@ -390,24 +379,9 @@ class TestGetHistoryEdgeCases:
         s.add_message("tool", "result", tool_call_id="orphan")
         s.add_message("user", "hi")
         s.add_message("assistant", "hello")
-        history = s.get_history(max_messages=10)
+        history = s.format_history()
         assert len(history) == 2
         assert history[0]["role"] == "user"
-
-    def test_max_tokens_find_legal_start(self, monkeypatch):
-        s = Session(key="ch:u")
-        s.add_message("user", "hello")
-        s.add_message("assistant", "world")
-        monkeypatch.setattr(
-            "nanobot.session.manager.estimate_message_tokens",
-            lambda m: 10,
-        )
-        history = s.get_history(max_messages=10, max_tokens=15)
-        assert len(history) >= 1
-
-
-class TestGetHistoryLine97:
-    """Orphan tool after user turn hits sliced[start:] at line 97."""
 
     def test_orphan_tool_after_user_triggers_alignment(self):
         s = Session(key="ch:u")
@@ -417,24 +391,5 @@ class TestGetHistoryLine97:
              "timestamp": "2026-01-01T00:00:01"},
             {"role": "assistant", "content": "hi", "timestamp": "2026-01-01T00:00:02"},
         ]
-        history = s.get_history(max_messages=10)
+        history = s.format_history()
         assert len(history) == 1 and history[0]["role"] == "assistant"
-
-
-class TestGetHistoryLine150:
-    """max_tokens truncation where kept gets cleaned by find_legal_message_start."""
-
-    def test_orphan_after_token_recovery_triggers_cleanup(self, monkeypatch):
-        s = Session(key="ch:u")
-        s.messages = [
-            {"role": "user", "content": "hello", "timestamp": "2026-01-01T00:00:00"},
-            {"role": "assistant", "content": "response", "timestamp": "2026-01-01T00:00:01"},
-            {"role": "tool", "content": "result", "tool_call_id": "orphan",
-             "timestamp": "2026-01-01T00:00:02"},
-        ]
-        monkeypatch.setattr(
-            "nanobot.session.manager.estimate_message_tokens",
-            lambda m: 10,
-        )
-        history = s.get_history(max_messages=10, max_tokens=15)
-        assert len(history) == 3

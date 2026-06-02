@@ -10,10 +10,7 @@ from typing import Any
 
 from loguru import logger
 
-from nanobot.utils.helpers import estimate_message_tokens
 from nanobot.utils.media_decode import image_placeholder_text
-
-HISTORY_MAX_MESSAGES = 120
 
 
 @dataclass
@@ -68,20 +65,18 @@ class Session:
         self.messages.append(msg)
         self.updated_at = datetime.now(timezone.utc)
 
-    def get_history(
+    def format_history(
         self,
-        max_messages: int = HISTORY_MAX_MESSAGES,
         *,
-        max_tokens: int = 0,
-        max_turns: int = 0,
         include_timestamps: bool = False,
         timezone: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Return unconsolidated messages for LLM input.
+        """Return formatted messages for LLM input (no truncation).
 
-        History is sliced by turn count (``max_turns``, each turn starts with an
-        assistant message) or message count (``max_messages``), then by token
-        budget from the tail (``max_tokens``) when provided.
+        Applies media breadcrumbs, timestamp formatting, and orphan tool
+        result cleanup.  Does **not** truncate by turn/message/token count
+        — compression is handled by the caller (see
+        :func:`nanobot.agent.compress`).
 
         When *timezone* (e.g. ``"Asia/Shanghai"``) is given together with
         ``include_timestamps=True``, the ``[Message Time]`` annotations are
@@ -89,20 +84,10 @@ class Session:
         context's ``Current Time``.
         """
         unconsolidated = [m for m in self.messages if m.get("status") != "excluded"]
-        if max_turns > 0:
-            turns = self._split_turns_by_assistant(unconsolidated)
-            # Keep synthetic turns (summary pairs) regardless of max_turns limit
-            synthetic = [t for t in turns if any(m.get("status") == "synthetic" for m in t)]
-            regular = [t for t in turns if not any(m.get("status") == "synthetic" for m in t)]
-            keep_regular = regular[-max(max_turns - len(synthetic), 0):] if len(regular) > max_turns else regular
-            # Restore original order: synthetic first, then most recent regular turns
-            keep = synthetic + keep_regular
-            sliced = [m for turn in keep for m in turn]
-        else:
-            sliced = unconsolidated[-max_messages:]
 
         # Avoid starting mid-turn when possible, except for proactive
         # assistant deliveries that the user may be replying to.
+        sliced = list(unconsolidated)
         for i, message in enumerate(sliced):
             if message.get("role") == "user":
                 if message.get("status") == "synthetic":
@@ -143,46 +128,25 @@ class Session:
                     entry["timestamp"] = formatted_ts
             out.append(entry)
 
-        if max_tokens > 0 and out:
-            # Slice by whole turns (assistant-anchored) instead of by message,
-            # so the LLM never sees a partial turn with orphan tool calls.
-            turns = self._split_turns_by_assistant(out)
-            kept_turns: list[list[dict]] = []
-            used = 0
-            for turn in reversed(turns):
-                turn_tokens = sum(estimate_message_tokens(m) for m in turn)
-                if kept_turns and used + turn_tokens > max_tokens:
-                    break
-                kept_turns.append(turn)
-                used += turn_tokens
-            kept_turns.reverse()
-            kept = [m for turn in kept_turns for m in turn]
-
-            # Keep history aligned to the first visible user turn.
-            # Mirror the max_turns path: include the synthetic assistant
-            # message (summary content) when the first user is synthetic.
-            first_user = next((i for i, m in enumerate(kept) if m.get("role") == "user"), None)
-            if first_user is not None:
-                if kept[first_user].get("status") == "synthetic" and first_user > 0:
-                    first_user -= 1
-                kept = kept[first_user:]
-            else:
-                # Tight token budgets can otherwise leave assistant-only tails.
-                # If a user turn exists in the unsliced output, recover the
-                # nearest one even if it slightly exceeds the token budget.
-                recovered_user = next(
-                    (i for i in range(len(out) - 1, -1, -1) if out[i].get("role") == "user"),
-                    None,
-                )
-                if recovered_user is not None:
-                    kept = out[recovered_user:]
-
-            # And keep a legal tool-call boundary at the front.
-            start = find_legal_message_start(kept)
-            if start:
-                kept = kept[start:]
-            out = kept
         return out
+
+    # Backward-compat alias
+    def get_history(
+        self,
+        max_messages: int = 0,
+        *,
+        max_tokens: int = 0,
+        max_turns: int = 0,
+        include_timestamps: bool = False,
+        timezone: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Deprecated: use :meth:`format_history` instead."""
+        logger.warning(
+            "Session.get_history() is deprecated, use format_history() instead "
+            "(called with max_messages=%s, max_tokens=%s, max_turns=%s)",
+            max_messages, max_tokens, max_turns,
+        )
+        return self.format_history(include_timestamps=include_timestamps, timezone=timezone)
 
     def clear(self) -> None:
         """Clear all messages and reset session to initial state."""

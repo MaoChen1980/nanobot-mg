@@ -650,36 +650,36 @@ def _get_memory_info() -> tuple[str, str]:
     except Exception:
         pass
 
-    # Fallback: platform-specific commands
-    import subprocess
+    # Fallback: platform-specific commands (Windows) / pure Python (macOS, Linux)
     import sys
     try:
         if sys.platform == "win32":
-            out = subprocess.check_output(
-                "wmic OS get TotalVisibleMemorySize,FreePhysicalMemory",
-                shell=True, text=True, timeout=5
+            import subprocess
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty TotalVisibleMemorySize,FreePhysicalMemory"],
+                capture_output=True, text=True, timeout=5,
             )
-            lines = out.strip().splitlines()
-            if len(lines) >= 2:
-                parts = lines[1].split()
+            if result.returncode == 0:
+                parts = result.stdout.strip().split()
                 if len(parts) >= 2:
                     total_kb = int(parts[0])
                     free_kb = int(parts[1])
                     return _fmt_gb(total_kb * 1024), _fmt_gb(free_kb * 1024)
         elif sys.platform == "darwin":
-            out = subprocess.check_output(
-                ["sysctl", "hw.memsize"], text=True, timeout=5
-            )
-            total_b = int(out.strip().split(":")[1].strip())
-            return _fmt_gb(total_b), "unknown"
+            import os as _os
+            total = _os.sysconf('SC_PHYS_PAGES') * _os.sysconf('SC_PAGE_SIZE')
+            return _fmt_gb(total), "unknown"
         elif sys.platform == "linux":
-            out = subprocess.check_output(
-                ["free", "-b"], text=True, timeout=5
-            )
-            for line in out.splitlines():
-                if line.startswith("Mem:"):
-                    parts = line.split()
-                    return _fmt_gb(int(parts[1])), _fmt_gb(int(parts[3]))
+            with open("/proc/meminfo") as _f:
+                total_kb = avail_kb = 0
+                for _line in _f:
+                    if _line.startswith("MemTotal:"):
+                        total_kb = int(_line.split()[1])
+                    elif _line.startswith("MemAvailable:"):
+                        avail_kb = int(_line.split()[1])
+            if total_kb:
+                return _fmt_gb(total_kb * 1024), _fmt_gb(avail_kb * 1024)
     except Exception:
         pass
     return "unknown", "unknown"

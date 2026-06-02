@@ -182,14 +182,14 @@ class AgentDefaults(Base):
     reasoning_effort: Optional[str] = "high"  # low / medium / high / max / adaptive - enables LLM thinking mode
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
-    output_token_reserve_cap: int = Field(
-        default=65536,
+    compress_trigger_tokens: int = Field(
+        default=150_000,
         ge=1024,
-    )  # Max tokens reserved for LLM output when computing history budget
-    history_safety_margin: int = Field(
-        default=4096,
-        ge=0,
-    )  # Safety margin subtracted from context window for history budget
+    )  # History exceeds this → trigger compression (target: history_token_limit)
+    history_token_limit: int = Field(
+        default=80_000,
+        ge=1024,
+    )  # Target token count after compression
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
     self_review: SelfReviewConfig = Field(default_factory=SelfReviewConfig)
 

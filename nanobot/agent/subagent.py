@@ -238,8 +238,6 @@ class SubagentManager:
                     injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
                     session_key=origin["session_key"],
-                    max_turns_before_compress=50,
-                    compressed_turn_count=20,
                 ))
 
                 # Save conversation snapshot for MemoryExtractor

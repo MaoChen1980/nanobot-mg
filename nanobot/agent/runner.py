@@ -19,8 +19,6 @@ from nanobot.session.manager import find_legal_message_start
 from nanobot.utils.compat import dataclass
 from nanobot.utils.helpers import (
     build_assistant_message,
-    estimate_message_tokens,
-    estimate_prompt_tokens_chain,
     maybe_persist_tool_result,
     split_thinking_messages,
     truncate_text,
@@ -64,7 +62,6 @@ __all__ = [
 from .runner_context import (
     drop_orphan_tool_results,
     backfill_missing_tool_results,
-    trim_history_to_budget,
 )
 from .runner_injection import drain_injections, append_injected_messages
 from .runner_llm import (
@@ -116,8 +113,6 @@ class AgentRunSpec:
     checkpoint_callback: Any | None = None
     injection_callback: Any | None = None
     llm_timeout_s: float | None = None
-    max_turns_before_compress: int = 0  # 0 = disabled; compress when assistant turns exceed this
-    compressed_turn_count: int = 20  # keep this many turns after compression
     # Retry & checkpoint configuration
     retry_context: Any | None = None  # RetryContext for retry tracking
     max_llm_retries: int = 3  # max retries for LLM errors
@@ -255,16 +250,8 @@ class AgentRunner:
             return content
 
         for iteration in range(spec.max_iterations):
-            if spec.max_turns_before_compress > 0:
-                self._compress_by_turns(
-                    messages, spec.max_turns_before_compress,
-                    spec.compressed_turn_count, spec.session_key,
-                )
             try:
                 messages_for_model = drop_orphan_tool_results(messages)
-                messages_for_model = backfill_missing_tool_results(messages_for_model)
-                messages_for_model = trim_history_to_budget(self.provider, spec, messages_for_model)
-                messages_for_model = drop_orphan_tool_results(messages_for_model)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
                 messages_for_model = split_thinking_messages(messages_for_model)
             except Exception as exc:
@@ -636,34 +623,6 @@ class AgentRunner:
         if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
             return
         messages.append(build_assistant_message(_PERSISTED_MODEL_ERROR_PLACEHOLDER))
-
-    @staticmethod
-    def _compress_by_turns(
-        messages: list[dict[str, Any]],
-        max_turns: int,
-        keep_turns: int,
-        session_key: str | None,
-    ) -> None:
-        """Drop oldest assistant turns when total exceeds *max_turns*, keeping *keep_turns*."""
-        assistant_indices = [i for i, m in enumerate(messages) if m.get("role") == "assistant"]
-        if len(assistant_indices) <= max_turns:
-            return
-
-        cutoff = assistant_indices[-keep_turns]
-        system_count = 0
-        for m in messages:
-            if m.get("role") == "system":
-                system_count += 1
-            else:
-                break
-
-        kept = messages[:system_count] + messages[cutoff:]
-        n_dropped = len(messages) - len(kept)
-        messages[:] = kept
-        logger.warning(
-            "Compressed session {}: {} assistant turns -> {} (dropped {} messages)",
-            session_key or "runner", len(assistant_indices), keep_turns, n_dropped,
-        )
 
     @staticmethod
     def _fmt_tool_metadata(tool_name: str, result: str | list, timestamp: str = "", duration_ms: int | None = None) -> str:

@@ -162,8 +162,8 @@ class AgentLoop:
         provider_signature: tuple[object, ...] | None = None,
         db=None,
         pt_save_interval: int = 30,
-        output_token_reserve_cap: int | None = None,
-        history_safety_margin: int | None = None,
+        compress_trigger_tokens: int | None = None,
+        history_token_limit: int | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig, ToolsConfig, WebToolsConfig
 
@@ -198,15 +198,15 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
-        self._output_token_reserve_cap = (
-            output_token_reserve_cap
-            if output_token_reserve_cap is not None
-            else defaults.output_token_reserve_cap
+        self._compress_trigger_tokens = (
+            compress_trigger_tokens
+            if compress_trigger_tokens is not None
+            else defaults.compress_trigger_tokens
         )
-        self._history_safety_margin = (
-            history_safety_margin
-            if history_safety_margin is not None
-            else defaults.history_safety_margin
+        self._history_token_limit = (
+            history_token_limit
+            if history_token_limit is not None
+            else defaults.history_token_limit
         )
         self.project_root = project_root
         self._extra_hooks: list[AgentHook] = hooks or []
@@ -510,19 +510,6 @@ class AgentLoop:
         Uses the same convention as proxy messages: channel:chat_id.
         """
         return f"{channel}:{chat_id}"
-
-    def _compute_history_budget(self) -> int:
-        """Budget for history replay — cap output reservation so history isn't starved."""
-        if self.context_window_tokens <= 0:
-            return 0
-        max_output = getattr(getattr(self.provider, "generation", None), "max_tokens", 4096)
-        try:
-            reserved_output = int(max_output)
-        except (TypeError, ValueError):
-            reserved_output = 4096
-        reserved_output = min(reserved_output, self._output_token_reserve_cap)
-        budget = self.context_window_tokens - max(1, reserved_output) - self._history_safety_margin
-        return budget if budget > 0 else max(self._history_safety_margin, self.context_window_tokens // 4)
 
     # (IV markers and completion detection removed)
 

@@ -81,28 +81,49 @@ class SystemMessageHandler:
         # For all other channels (cron, proxy, direct), use msg.channel directly.
         effective_channel = channel if msg.channel == "system" else msg.channel
         self._loop._set_tool_context(effective_channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
+
         from nanobot.utils.helpers import estimate_message_tokens
-        raw_budget = self._loop._compute_history_budget()
-        tool_defs = self._loop.tools.get_definitions()
-        sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
-        sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
-        adjusted = raw_budget - sys_tokens
-        if adjusted < 1024:
-            adjusted = raw_budget
-        self._loop._last_adjusted_budget = adjusted
-        history = session.get_history(max_turns=0, max_messages=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
+        # Format full history (no budget-based truncation)
+        history = session.format_history(include_timestamps=True, timezone=self._loop.context.timezone)
+
+        # Compression check: trigger → compress
+        trigger = self._loop._compress_trigger_tokens
+        limit = self._loop._history_token_limit
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
-        hist_turns = sum(1 for m in history if m.get("role") == "assistant")
+        if hist_tokens > trigger:
+            from nanobot.agent.compress import (
+                split_history_by_budget, summarize_turns,
+                _compress_session, _prepend_summary, MIN_KEEP_TURNS,
+            )
+            keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
+                session.messages, history, limit=limit, min_keep_turns=MIN_KEEP_TURNS)
+            summary = None
+            if to_compress_fmt:
+                try:
+                    summary = await summarize_turns(
+                        [m for turn in to_compress_fmt for m in turn],
+                        self._loop.provider, self._loop.model,
+                        future_context=[m for turn in keeps_fmt for m in turn],
+                    )
+                except Exception:
+                    logger.exception("Summary LLM call failed, skipping summary")
+            _compress_session(session, keeps_raw, db=self._loop._db, summary=summary or "")
+            if summary:
+                history = _prepend_summary(keeps_fmt, summary)
+            else:
+                history = [m for turn in keeps_fmt for m in turn]
+
+        hist_tokens_after = sum(estimate_message_tokens(m) for m in history) if history else 0
+        hist_turns_after = sum(1 for m in history if m.get("role") == "assistant")
         logger.info(
-            "HISTORY_DBG: key={}, budget_adjusted={}, history_msgs={}, history_turns={}, history_tokens={}",
-            key, adjusted, len(history), hist_turns, hist_tokens,
+            "HISTORY_DBG: key={}, history_msgs={}, history_turns={}, history_tokens={}",
+            key, len(history), hist_turns_after, hist_tokens_after,
         )
+
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
-            context_window_tokens=self._loop.context_window_tokens or None,
-            history_budget_tokens=adjusted or None,
         )
         messages = self._loop.context.build_messages(
             history=history,
@@ -193,17 +214,45 @@ class UserMessageHandler:
             return None
 
         # Stage 1: session preparation (checkpoint restore & history loading)
-        session, pending, history, channel, chat_id, key, budget_adjusted, context_window = self._prepare_session(msg, session_key)
+        session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
 
         # Reset iteration counter — each new turn starts at 0
         self._loop._current_iteration = 0
+
+        # Stage 1.5: compression check — if formatted history exceeds trigger, compress
+        from nanobot.utils.helpers import estimate_message_tokens
+        trigger = self._loop._compress_trigger_tokens
+        limit = self._loop._history_token_limit
+        hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
+        if hist_tokens > trigger:
+            from nanobot.agent.compress import (
+                split_history_by_budget, summarize_turns,
+                _compress_session, _prepend_summary, MIN_KEEP_TURNS,
+            )
+            keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
+                session.messages, history, limit=limit, min_keep_turns=MIN_KEEP_TURNS)
+            summary = None
+            if to_compress_fmt:
+                try:
+                    summary = await summarize_turns(
+                        [m for turn in to_compress_fmt for m in turn],
+                        self._loop.provider, self._loop.model,
+                        future_context=[m for turn in keeps_fmt for m in turn],
+                    )
+                except Exception:
+                    logger.exception("Summary LLM call failed, skipping summary")
+            _compress_session(session, keeps_raw, db=self._loop._db, summary=summary or "")
+            if summary:
+                history = _prepend_summary(keeps_fmt, summary)
+            else:
+                history = [m for turn in keeps_fmt for m in turn]
 
         # Stage 2: tool context
         self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         self._maybe_start_message_tool()
 
         # Stage 3: build initial messages
-        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session, budget_adjusted, context_window)
+        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session)
         initial_msgs_count = len(initial_messages)
 
         # Stage 4: callbacks
@@ -264,48 +313,21 @@ class UserMessageHandler:
         )
 
         pending = None
-        raw_budget = self._loop._compute_history_budget()
-        tool_defs = self._loop.tools.get_definitions()
-        sys_prompt = self._loop.context.build_system_prompt(channel=msg.channel, tool_definitions=tool_defs)
-        sys_tokens = estimate_message_tokens({"role": "system", "content": sys_prompt})
-        adjusted = raw_budget - sys_tokens
-        if adjusted < 1024:
-            adjusted = raw_budget
-        self._loop._last_adjusted_budget = adjusted
-        history = session.get_history(max_turns=0, max_messages=0, max_tokens=max(128, adjusted), include_timestamps=True, timezone=self._loop.context.timezone)
-        # Log what get_history actually returned
+        from nanobot.utils.helpers import estimate_message_tokens
+
+        # Format full history (no budget-based truncation)
+        history = session.format_history(include_timestamps=True, timezone=self._loop.context.timezone)
+
+        # Log what format_history actually returned
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns = sum(1 for m in history if m.get("role") == "assistant")
         logger.info(
-            "HISTORY_DBG: key={}, budget_adjusted={}, history_msgs={}, history_turns={}, history_tokens={}",
-            key, adjusted, len(history), hist_turns, hist_tokens,
+            "HISTORY_DBG: key={}, history_msgs={}, history_turns={}, history_tokens={}",
+            key, len(history), hist_turns, hist_tokens,
         )
 
-        # Fallback 1: If history is empty but session has messages, try max_tokens=0
-        if not history and session.messages:
-            logger.warning(
-                "get_history returned empty for session {} ({} msgs, {} turns, {} tokens, budget={}, "
-                "sys_tokens={}), falling back to max_tokens=0",
-                key, len(session.messages), assistant_count, total_tokens, adjusted, sys_tokens,
-            )
-            history = session.get_history(max_turns=80, max_tokens=0, include_timestamps=True, timezone=self._loop.context.timezone)
-
-        if not history and session.messages:
-            logger.error(
-                "get_history returned empty even with max_tokens=0 for session {} "
-                "({} msgs, {} turns, {} tokens), falling back to raw session.messages",
-                key, len(session.messages), assistant_count, total_tokens,
-            )
-            # Last-resort fallback: manually build history entries from raw messages.
-            for m in session.messages:
-                entry: dict[str, Any] = {"role": m["role"], "content": m.get("content", "")}
-                for k in ("tool_calls", "tool_call_id", "name", "reasoning_content", "reasoning_details", "thinking_blocks"):
-                    if k in m:
-                        entry[k] = m[k]
-                history.append(entry)
-
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
-        return session, pending, history, channel, chat_id, key, adjusted, self._loop.context_window_tokens
+        return session, pending, history, channel, chat_id, key
 
     async def _dispatch_command(self, msg, session, key):
         """Run command dispatch, return result if handled."""
@@ -325,14 +347,12 @@ class UserMessageHandler:
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
 
-    def _build_initial_messages(self, msg, history, pending, session, budget_adjusted=0, context_window=0):
+    def _build_initial_messages(self, msg, history, pending, session):
         """Build the initial message list for the agent loop."""
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
-            context_window_tokens=context_window or None,
-            history_budget_tokens=budget_adjusted or None,
         )
         initial_messages = self._loop.context.build_messages(
             history=history,

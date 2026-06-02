@@ -589,7 +589,7 @@ def test_prompt_merge_does_not_replace_standalone_subagent_history_entry(tmp_pat
 
     builder = ContextBuilder(tmp_path)
     projected = builder.build_messages(
-        history=session.get_history(max_messages=0),
+        history=session.format_history(),
         current_message="",
         current_role="assistant",
         channel="cli",
