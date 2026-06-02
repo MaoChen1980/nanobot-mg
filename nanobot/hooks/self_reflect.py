@@ -90,16 +90,18 @@ _HOOKS_DIR = Path(__file__).resolve().parent
 _HOOK_FILES = ["self_review.py", "self_reflect.py", "self_insight_hook.py"]
 
 
-RESOLVED_FILE = Path.home() / ".nanobot" / "agent" / "resolved_findings.jsonl"
+RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
 
 
-def _read_resolved_ids() -> set[str]:
+def _read_resolved_ids(max_ids: int = 200) -> set[str]:
     """Read resolved finding IDs from JSONL file (one ID per line)."""
     if not RESOLVED_FILE.exists():
         return set()
     ids: set[str] = set()
     try:
-        for line in RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines():
+        lines = RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines()
+        # Keep only the last max_ids to prevent unbounded growth
+        for line in lines[-max_ids:]:
             line = line.strip()
             if line:
                 ids.add(line)
@@ -144,8 +146,8 @@ class SelfReflectHook(AgentHook):
     - Accumulate more data for better pattern detection
     """
 
-    LOG_FILE = Path.home() / ".nanobot" / "agent" / "self_log.md"
-    FINDINGS_FILE = Path.home() / ".nanobot" / "agent" / "self_reflect_findings.json"
+    LOG_FILE = Path.home() / ".nanobot" / "self_improve" / "self_log.md"
+    FINDINGS_FILE = Path.home() / ".nanobot" / "self_improve" / "self_reflect_findings.json"
     DEFAULT_INTERVAL = 15  # fire once every N turns
 
     def __init__(self, reraise: bool = False, interval: int | None = None) -> None:
@@ -382,20 +384,21 @@ class SelfReflectHook(AgentHook):
         findings: list[dict[str, Any]],
     ) -> None:
         """Write human-readable reflection to markdown log."""
+        # Skip empty findings to reduce noise
+        if not findings:
+            return
+
         self.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
         finding_lines: list[str] = []
-        if findings:
-            for f in findings:
-                ftype = f["type"]
-                content = f["content"]
-                relevance = f.get("relevance", "")
-                line = f"- **{ftype}**: {content}"
-                if relevance:
-                    line += f"  \n  -> {relevance}"
-                finding_lines.append(line)
-        else:
-            finding_lines.append("(nothing actionable)")
+        for f in findings:
+            ftype = f["type"]
+            content = f["content"]
+            relevance = f.get("relevance", "")
+            line = f"- **{ftype}**: {content}"
+            if relevance:
+                line += f"  \n  -> {relevance}"
+            finding_lines.append(line)
 
         has_error = bool(errors)
         findings_text = "\n".join(finding_lines)
@@ -408,3 +411,14 @@ class SelfReflectHook(AgentHook):
         with open(self.LOG_FILE, "a", encoding="utf-8") as f:
             f.write(header)
             f.write(f"\n{findings_text}\n\n")
+
+        # Cap log at 500 lines, keep last 200
+        MAX_LOG_LINES = 500
+        KEEP_LAST = 200
+        try:
+            lines = self.LOG_FILE.read_text(encoding="utf-8").splitlines()
+            if len(lines) > MAX_LOG_LINES:
+                truncated = lines[-KEEP_LAST:]
+                self.LOG_FILE.write_text("\n".join(truncated) + "\n", encoding="utf-8")
+        except OSError:
+            pass

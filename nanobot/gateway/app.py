@@ -596,12 +596,12 @@ class GatewayApplication:
                     session_key=cfg.session_key,
                     message=(
                         "每日自我审视 task\n\n"
-                        "1. 读 ~/.nanobot/agent/self_log.md 最新的 10 条记录，"
+                        "1. 读 ~/.nanobot/self_improve/self_log.md 最新的 10 条记录，"
                         "问自己：这周有什么别扭的地方是重复出现的？\n"
-                        "2. 读 ~/.nanobot/agent/session_metrics.json，"
+                        "2. 读 ~/.nanobot/self_improve/session_metrics.json，"
                         "看 token 使用量、错误率、工具调用模式有没有异常\n"
                         "3. 如果发现可改进的地方，具体写一行到 "
-                        "~/.nanobot/agent/capacity_notes.md\n"
+                        "~/.nanobot/self_improve/capacity_notes.md\n"
                         "4. 把这次审视结论简短附在这条记录后面\n\n"
                         "不要做太多，一个有价值的发现就够了。"
                     ),
@@ -633,7 +633,7 @@ class GatewayApplication:
                     to=cfg.to,
                     session_key=cfg.session_key,
                     message=(
-                        "分析 ~/.nanobot/agent/self_log.md，总结近期经验教训，"
+                        "分析 ~/.nanobot/self_improve/self_log.md，总结近期经验教训，"
                         "然后：\n"
                         "1. 识别可以改进的地方\n"
                         "2. 评估置信度 (>90% 再改)\n"

@@ -21,19 +21,21 @@ from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext
 
 
-FINDINGS_FILE = Path.home() / ".nanobot" / "agent" / "self_reflect_findings.json"
-RESOLVED_FILE = Path.home() / ".nanobot" / "agent" / "resolved_findings.jsonl"
+FINDINGS_FILE = Path.home() / ".nanobot" / "self_improve" / "self_reflect_findings.json"
+RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
 
 MAX_INSIGHT_CHARS = 600
 
 
-def _read_resolved_ids() -> set[str]:
+def _read_resolved_ids(max_ids: int = 200) -> set[str]:
     """Read resolved finding IDs from JSONL file (one ID per line)."""
     if not RESOLVED_FILE.exists():
         return set()
     ids: set[str] = set()
     try:
-        for line in RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines():
+        lines = RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines()
+        # Keep only the last max_ids to prevent unbounded growth
+        for line in lines[-max_ids:]:
             line = line.strip()
             if line:
                 ids.add(line)
@@ -123,7 +125,7 @@ class SelfInsightHook(AgentHook):
         result += (
             "\n\n[Note] 以上全部是可疑点——按 system prompt 的 Situational Awareness"
             "四维感知（人/环境/数据/行为）来判断哪些值得改、哪些是刻意的、怎么改。"
-            "修复后标记已解决: echo '<id>' >> ~/.nanobot/agent/resolved_findings.jsonl"
+            "修复后标记已解决: echo '<id>' >> ~/.nanobot/self_improve/resolved_findings.jsonl"
         )
         if len(result) > MAX_INSIGHT_CHARS:
             result = result[:MAX_INSIGHT_CHARS] + "..."

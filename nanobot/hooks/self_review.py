@@ -8,7 +8,7 @@ Phase 3 (SelfInsightHook) injects insights back into agent context.
 Together they form the self-evolution feedback loop:
   SelfReviewHook (capture) → SelfReflectHook (reflect) → SelfInsightHook (inject)
 
-Log file: ~/.nanobot/agent/self_review_log.jsonl
+Log file: ~/.nanobot/self_improve/self_review_log.jsonl
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ class SelfReviewHook(AgentHook):
     Phase 2 (SelfReflectHook) and Phase 3 (SelfInsightHook) complete the loop.
     """
 
-    LOG_FILE = Path.home() / ".nanobot" / "agent" / "self_review_log.jsonl"
+    LOG_FILE = Path.home() / ".nanobot" / "self_improve" / "self_review_log.jsonl"
 
     # Patterns that count as "discomfort" signals
     DISCOMFORT_PATTERNS = [
