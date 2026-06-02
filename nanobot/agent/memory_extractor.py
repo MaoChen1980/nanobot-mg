@@ -522,7 +522,8 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def _rebuild_indexes(self) -> None:
-        """Regenerate MEMORY.md, tree.json, and rebuild FAISS indexes."""
+        """Regenerate index.md, MEMORY.md, tree.json, and rebuild FAISS indexes."""
+        self._generate_index_files()
         self._generate_memory_index()
         self._generate_tree_json()
         loop = asyncio.get_running_loop()
@@ -901,6 +902,18 @@ class MemoryExtractor:
                 topic_str += " …"
             lines.append(f"- **{label}/** ({len(files)}) — {topic_str}")
 
+        # Make category labels clickable (point to index.md), misc stays plain
+        final: list[str] = []
+        for line in lines:
+            m = re.match(r"^- \*\*(.+?)\*\* \((\d+)\) — (.+)$", line)
+            if m and m.group(1).rstrip("/") not in (".", "misc"):
+                cat_name = m.group(1).rstrip("/")
+                rest = f"{m.group(2)} — {m.group(3)}"
+                final.append(f"- **[`{cat_name}/`]({cat_name}/index.md)** {rest}")
+            else:
+                final.append(line)
+        lines[:] = final
+
         self.store.memory_file.write_text("\n".join(lines), encoding="utf-8")
         logger.info(
             "MemoryExtractor: re-generated MEMORY.md with {} files in {} categories",
@@ -962,6 +975,72 @@ class MemoryExtractor:
         logger.info(
             "MemoryExtractor: re-generated tree.json with {} entries", len(recent_entries),
         )
+
+    # ------------------------------------------------------------------
+    # Directory index generation
+    # ------------------------------------------------------------------
+
+    def _generate_index_files(self) -> None:
+        """Generate index.md per directory for hierarchical navigation."""
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "pending_skills.md"}
+        generated = 0
+
+        # Collect all dirs that contain .md files
+        dirs_with_md: set[Path] = set()
+        for p in self.store.memory_dir.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            dirs_with_md.add(p.parent)
+
+        for dir_path in sorted(dirs_with_md):
+            rel = dir_path.relative_to(self.store.memory_dir).as_posix()
+            files: list[tuple[str, str]] = []
+            subdirs: list[str] = []
+
+            for p in sorted(dir_path.iterdir()):
+                if p.is_file() and p.suffix == ".md" and p.name not in exclude_names:
+                    heading = p.stem
+                    try:
+                        for line in p.read_text(encoding="utf-8").split("\n"):
+                            s = line.strip()
+                            if s.startswith("# "):
+                                heading = s.lstrip("# ").strip()
+                                break
+                    except OSError:
+                        pass
+                    files.append((p.name, heading))
+
+                elif p.is_dir() and p.name != ".vector_index":
+                    if any(
+                        f.is_file() and f.suffix == ".md" and f.name not in exclude_names
+                        for f in p.rglob("*.md")
+                    ):
+                        subdirs.append(p.name)
+
+            if not files and not subdirs:
+                continue
+
+            label = str(rel) if str(rel) != "." else "Memory"
+            lines = [f"# {label}\n", ""]
+
+            if files:
+                lines.append("## Files\n")
+                for name, heading in files:
+                    lines.append(f"- [{heading}]({name})")
+                lines.append("")
+
+            if subdirs:
+                lines.append("## Subdirectories\n")
+                for name in subdirs:
+                    lines.append(f"- [{name}]({name}/index.md)")
+                lines.append("")
+
+            index_path = dir_path / "index.md"
+            index_path.write_text("\n".join(lines), encoding="utf-8")
+            generated += 1
+
+        if generated:
+            logger.info("MemoryExtractor: generated {} index.md file(s)", generated)
 
     # ------------------------------------------------------------------
     # Cleanup check
