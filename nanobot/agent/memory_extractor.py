@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -199,6 +200,7 @@ class MemoryExtractor:
     async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]]) -> None:
         """Write all findings to target files, then cleanup-check SOUL.md/USER.md, then commit and rebuild FAISS."""
         topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
+        pinned_paragraphs: set[str] = set()  # paragraphs marked as pinned
 
         for finding in findings:
             ftype = finding.get("type", "skip")
@@ -234,6 +236,9 @@ class MemoryExtractor:
 
                 topic_files.setdefault(rel_path, []).append(paragraph)
 
+                if finding.get("pinned"):
+                    pinned_paragraphs.add(paragraph)
+
             else:
                 logger.warning("MemoryExtractor: unknown finding type '{}', dropped", ftype)
 
@@ -254,6 +259,8 @@ class MemoryExtractor:
                         with open(full_path, "a", encoding="utf-8") as f:
                             for p in new_paragraphs:
                                 f.write(f"\n\n{p}\n")
+                                if p in pinned_paragraphs:
+                                    f.write("<!--pinned-->\n")
                         modified_for_cleanup.append(rel_path)
                     if skipped:
                         logger.info(
@@ -264,6 +271,8 @@ class MemoryExtractor:
                     lines = [f"# {full_path.stem}\n"]
                     for p in paragraphs:
                         lines.append(f"\n{p}\n")
+                        if p in pinned_paragraphs:
+                            lines.append("<!--pinned-->\n")
                     lines.append(f"\n---\n\n*创建: {date_str}*\n")
                     full_path.write_text("".join(lines), encoding="utf-8")
                     modified_for_cleanup.append(rel_path)
@@ -465,8 +474,9 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def _rebuild_indexes(self) -> None:
-        """Regenerate MEMORY.md and rebuild FAISS indexes."""
+        """Regenerate MEMORY.md, tree.json, and rebuild FAISS indexes."""
         self._generate_memory_index()
+        self._generate_tree_json()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self.store.build_vector_index)
         await loop.run_in_executor(None, self.store.build_framework_index)
@@ -733,42 +743,184 @@ class MemoryExtractor:
                 logger.debug("MemoryExtractor: added backlinks to {}", rel)
 
     # ------------------------------------------------------------------
-    # MEMORY.md auto-generation
+    # MEMORY.md + tree.json generation
     # ------------------------------------------------------------------
 
     def _generate_memory_index(self) -> None:
-        """Scan memory/ directory and generate MEMORY.md index."""
+        """Scan memory/ and generate compact MEMORY.md for agent system prompt.
+
+        Format: Recent changes (15 newest) + per-category summary with file count and topics.
+        """
         exclude_names = {"MEMORY.md", "topic-map.json"}
 
-        files = sorted(
-            p.relative_to(self.store.memory_dir)
-            for p in self.store.memory_dir.rglob("*.md")
-            if ".vector_index" not in p.parts and p.name not in exclude_names
-        )
+        # Collect file metadata + pinned items
+        file_meta: list[tuple[str, int, str, str, str]] = []  # (rel, mtime_ns, category, stem, heading)
+        pinned: list[str] = []  # formatted pinned lines, max 5
+        for p in self.store.memory_dir.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            rel = p.relative_to(self.store.memory_dir).as_posix()
+            try:
+                text = p.read_text(encoding="utf-8")
+                mtime = p.stat().st_mtime_ns
+            except OSError:
+                continue
+            if not text.strip():
+                continue
 
-        if not files:
+            heading = ""
+            for line in text.split("\n"):
+                s = line.strip()
+                if s.startswith("# "):
+                    heading = s.lstrip("# ").strip()
+                    break
+            if not heading:
+                heading = text.strip().split("\n")[0].strip()[:60]
+
+            parent = rel.rsplit("/", 1)[0] if "/" in rel else "."
+            stem = Path(rel).stem
+            file_meta.append((rel, mtime, parent, stem, heading))
+
+            # Detect pinned
+            if len(pinned) < 5 and "<!--pinned-->" in text:
+                summary = heading
+                for line in text.split("\n"):
+                    s = line.strip()
+                    if s and not s.startswith("#") and "<!--pinned-->" not in s:
+                        summary = s[:60].lstrip("- *💡⚠️ ").strip()
+                        break
+                pinned.append(f"- [{heading}]({rel}) — {summary}")
+
+        if not file_meta:
             return
 
         lines = ["# Memory\n", ""]
-        category_index: dict[str, list[Path]] = {}
-        for rel in files:
-            cat = rel.parent if rel.parent.name != "." else "."
-            category_index.setdefault(cat, []).append(rel)
 
-        for cat in sorted(category_index, key=lambda c: (c == ".", c if isinstance(c, str) else str(c))):
-            cat_files = category_index[cat]
-            label = str(cat) if cat != "." else "misc"
-            lines.append(f"## {label}\n")
-            for rel in cat_files:
-                link = rel.as_posix()
-                lines.append(f"- [{rel.stem}]({link})")
+        if pinned:
+            lines.append("## Pinned\n")
+            lines.extend(pinned)
             lines.append("")
 
-        self.store.memory_file.write_text(
-            "\n".join(lines), encoding="utf-8"
-        )
+        # Per-category index
+        category_index: dict[str, list[tuple[str, str, str]]] = {}
+        for rel, _mtime, parent, stem, heading in file_meta:
+            category_index.setdefault(parent, []).append((rel, stem, heading))
+
+        # Recent changes (top 15, newest first)
+        recent = sorted(file_meta, key=lambda x: -x[1])[:15]
+        now_s = time.time()
+        two_days = 2 * 86400
+        lines.append("## Recent changes\n")
+        for rel, mtime_ns, _, _stem, heading in recent:
+            preview = heading if heading else Path(rel).stem
+            rel_link = rel.replace(chr(92), '/')
+            age_s = now_s - (mtime_ns / 1_000_000_000)
+
+            if age_s < two_days:
+                # Recent enough to show full content for small entries
+                full_path = self.store.memory_dir / rel
+                try:
+                    body = full_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    body = ""
+                if body:
+                    body_lines = [l for l in body.split("\n")
+                                  if l.strip() and not l.startswith("# ") and "<!--pinned-->" not in l]
+                    if len(body_lines) <= 3:
+                        # Inline — small entry within 2 days
+                        inline = body_lines[0][:120] if body_lines else ""
+                        lines.append(f"- **{preview}** — {inline}")
+                        continue
+
+                # Link + one-line summary
+                summary = ""
+                for line in body.split("\n") if body else []:
+                    s = line.strip()
+                    if s and not s.startswith("#"):
+                        summary = s[:50].lstrip("- *💡⚠️ ").strip()
+                        break
+                if summary:
+                    lines.append(f"- [{preview}]({rel_link}) — {summary}")
+                else:
+                    lines.append(f"- [{preview}]({rel_link})")
+            else:
+                lines.append(f"- [{preview}]({rel_link})")
+        lines.append("")
+
+        # Category summary with clickable links
+        cat_order = sorted(category_index, key=lambda c: (c == ".", c))
+        for cat in cat_order:
+            files = category_index[cat]
+            label = cat if cat != "." else "misc"
+            links: list[str] = []
+            for rel, _stem, heading in sorted(files, key=lambda x: x[2]):
+                display = heading if heading else Path(rel).stem
+                links.append(f"[{display}]({rel})")
+            topic_str = " · ".join(links[:8])
+            if len(links) > 8:
+                topic_str += " …"
+            lines.append(f"- **{label}/** ({len(files)}) — {topic_str}")
+
+        self.store.memory_file.write_text("\n".join(lines), encoding="utf-8")
         logger.info(
-            "MemoryExtractor: re-generated MEMORY.md with {} file(s)", len(files)
+            "MemoryExtractor: re-generated MEMORY.md with {} files in {} categories",
+            len(file_meta), len(category_index),
+        )
+
+    def _generate_tree_json(self) -> None:
+        """Generate tree.json for WebUI — file tree + recent changes."""
+        exclude_names = {"MEMORY.md", "topic-map.json", "tree.json"}
+        tree_path = self.store.memory_dir / "tree.json"
+
+        tree: dict[str, Any] = {"recent": [], "tree": {}}
+        recent_entries: list[dict[str, Any]] = []
+
+        for p in sorted(self.store.memory_dir.rglob("*.md")):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            rel = p.relative_to(self.store.memory_dir)
+            try:
+                text = p.read_text(encoding="utf-8")
+                mtime = p.stat().st_mtime_ns
+            except OSError:
+                continue
+            if not text.strip():
+                continue
+
+            # Extract H1 title and preview
+            title = Path(rel).stem
+            preview = ""
+            for line in text.split("\n"):
+                s = line.strip()
+                if s.startswith("# "):
+                    title = s.lstrip("# ").strip()
+                elif s and not s.startswith("#") and not preview:
+                    preview = s[:120]
+                    break
+
+            # Insert into nested tree dict
+            parts = list(rel.parts[:-1])
+            filename = rel.name
+            current: dict = tree["tree"]
+            for part in parts:
+                if part not in current:
+                    current[part] = {}
+                current = current[part]
+            current[filename] = {"title": title, "mtime": mtime}
+
+            recent_entries.append({
+                "path": rel.as_posix(),
+                "title": title,
+                "mtime": mtime,
+                "preview": preview,
+            })
+
+        recent_entries.sort(key=lambda x: -x["mtime"])
+        tree["recent"] = recent_entries[:50]
+
+        tree_path.write_text(json.dumps(tree, ensure_ascii=False), encoding="utf-8")
+        logger.info(
+            "MemoryExtractor: re-generated tree.json with {} entries", len(recent_entries),
         )
 
     # ------------------------------------------------------------------
