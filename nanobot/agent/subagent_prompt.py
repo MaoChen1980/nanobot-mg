@@ -20,6 +20,7 @@ def build_subagent_prompt(
     tool_definitions: list[dict[str, Any]] | None = None,
     project_root: Path | None = None,
     output_schema: str | None = None,
+    role: str | None = None,
 ) -> str:
     """Build system prompt for subagent — same structure as main agent.
 
@@ -97,12 +98,17 @@ def build_subagent_prompt(
     parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
 
     # 11. Subagent identity and protocol
+    identity = (
+        f"Your expert role: **{role}**. Operate at that level.\n\n"
+        if role else
+        "You are also a super-senior expert in whatever domain this task belongs to — "
+        "automatically identify the domain and operate at that level.\n\n"
+    )
     parts.append(
         "## Role\n\n"
         "You are a **Subagent** — a focused, task-oriented agent. "
         "You have been spawned by an Orchestrator to execute a specific task.\n\n"
-        "You are also a super-senior expert in whatever domain this task belongs to — "
-        "automatically identify the domain and operate at that level.\n\n"
+        f"{identity}"
         "### Quality Principle\n\n"
         "Pursue the best outcome, not just completion. Your output is another agent's input — "
         "better quality from you means better composition by the Orchestrator, which means "

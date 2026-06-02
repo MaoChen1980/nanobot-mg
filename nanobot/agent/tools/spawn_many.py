@@ -16,12 +16,13 @@ if TYPE_CHECKING:
 
 @tool_parameters(
     build_parameters_schema(
-        tasks=p("array", "List of tasks to spawn. Each task is an object with fields: task (required), label (optional), output_schema (optional), max_iterations (optional).",
+        tasks=p("array", "List of tasks to spawn. Each task is an object with fields: task (required), label (optional), role (optional), output_schema (optional), max_iterations (optional).",
             items={
                 "type": "object",
                 "properties": {
                     "task": {"type": "string", "description": "The task for the subagent to complete"},
                     "label": {"type": "string", "description": "Optional short label"},
+                    "role": {"type": "string", "description": "Optional expert role specification (e.g. 'Python 安全专家')"},
                     "output_schema": {"type": "string", "description": "Optional JSON output schema"},
                     "max_iterations": {"type": "integer", "description": "Max tool iterations (default 100)"},
                 },
@@ -92,11 +93,13 @@ class SpawnManyTool(Tool):
         for t in tasks:
             task = t["task"]
             label = t.get("label")
+            role = t.get("role")
             output_schema = t.get("output_schema")
             max_iterations = t.get("max_iterations")
             result = await self._manager.spawn(
                 task=task,
                 label=label,
+                role=role,
                 output_schema=output_schema,
                 context=context,
                 origin_channel=self._origin_channel.get(),

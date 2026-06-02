@@ -101,6 +101,7 @@ class SubagentManager:
         self,
         task: str,
         label: str | None = None,
+        role: str | None = None,
         context: str = "",
         origin_channel: str = "cli",
         origin_chat_id: str = "direct",
@@ -133,7 +134,7 @@ class SubagentManager:
         self._task_statuses[task_id] = status
 
         bg_task = asyncio.create_task(
-            self._run_subagent(task_id, task, display_label, origin, status, context, max_iterations, output_schema)
+            self._run_subagent(task_id, task, display_label, origin, status, context, max_iterations, output_schema, role=role)
         )
         self._running_tasks[task_id] = bg_task
         if session_key:
@@ -165,6 +166,7 @@ class SubagentManager:
         context: str = "",
         max_iterations: int | None = None,
         output_schema: str | None = None,
+        role: str | None = None,
     ) -> None:
         """Execute the subagent task and announce the result."""
         logger.info("Subagent [{}] starting task: {}", task_id, label)
@@ -197,6 +199,7 @@ class SubagentManager:
                 tool_definitions=tools.get_definitions(),
                 project_root=self.project_root,
                 output_schema=output_schema,
+                role=role,
             )
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},
