@@ -18,6 +18,18 @@
 4. 需要在积累的知识中进行**语义匹配**？→ `memory_search`
 5. 需要查找过去对话中**某事发生的时间**？→ `conversation_search`
 
+**Query patterns — match section heading granularity, use specific terms:**
+
+| Tool | Good query | Why it works |
+|------|-----------|-------------|
+| `framework_search` | `turn lifecycle end turn rules` | 匹配 `## Ending a Turn` 章节 |
+| `framework_search` | `subagent spawn maximum count` | 技术术语触发关键词增强 |
+| `memory_search` | `android build gradle apk config` | 匹配 `## 构建工具` 章节 |
+| `memory_search` | `memory extraction consolidation` | 自然短语匹配章节粒度 |
+| `search_text` | `"subagent orchestration"` | 精确短语用引号包裹 |
+
+Avoid: 单个模糊词（`memory`、`rules`、`thing`）返回噪音。避免完整句子（填充词稀释 embedding）。
+
 **memory_search notes:**
 - 相关性 > 0.5 时，结果包含相关 memory 文件的交叉引用链接
 - FAISS + 关键词混合策略，召回率优于纯向量搜索

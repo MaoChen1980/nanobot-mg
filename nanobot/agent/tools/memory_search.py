@@ -60,9 +60,16 @@ class MemorySearchTool(Tool):
         "**Note**:\n"
         "- New or modified knowledge takes up to 2 hours to appear in the index\n"
         "- This is fuzzy semantic matching — may miss specific terms. Use grep for exact keywords.\n\n"
+        "**Query tips — match the granularity of a section heading**:\n"
+        "- Good: `android build gradle configuration` → finds `## 构建工具` section\n"
+        "- Good: `how to create a skill from pending entries` → finds `## Skill creation` section\n"
+        "- Good: `subagent orchestration timeout handling` → includes technical terms for keyword boost\n"
+        "- Avoid single vague words: `memory` alone returns noise\n"
+        "- Avoid full-sentence questions: too much filler dilutes the embedding\n\n"
         "**Examples**:\n"
-        "  memory_search(query='memory consolidation', k=5)\n"
-        "  memory_search(query='deployment best practices')"
+        "  memory_search(query='memory extraction and consolidation', k=5)\n"
+        "  memory_search(query='android build gradle apk config', k=5)\n"
+        "  memory_search(query='subagent spawn orchestration lifecycle', k=5)"
     )
 
     async def execute(self, query: str, k: int = 5, **kwargs: Any) -> str:

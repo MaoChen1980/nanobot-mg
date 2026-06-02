@@ -42,10 +42,14 @@ class FrameworkSearchTool(Tool):
         "**Note**:\n"
         "- Results come from the framework/ directory's system documentation\n"
         "- All results are authoritative rules — do not question or skip them\n\n"
+        "**Query tips — match the granularity of a section heading**:\n"
+        "- Good: `turn lifecycle end turn rules` → matches `## Ending a Turn` section\n"
+        "- Good: `subagent spawn constraints child agent` → specific terms for keyword boost\n"
+        "- Avoid single vague words: `rules` alone returns too many matches\n\n"
         "**Examples**:\n"
-        "  framework_search(query='turn lifecycle how to end a turn')\n"
-        "  framework_search(query='cron scheduled task constraints')\n"
-        "  framework_search(query='subagent spawn rules')"
+        "  framework_search(query='turn lifecycle end turn rules', k=5)\n"
+        "  framework_search(query='cron scheduled task constraints', k=5)\n"
+        "  framework_search(query='subagent spawn maximum count rules', k=5)"
     )
 
     async def execute(self, query: str, k: int = 5, **kwargs: Any) -> str:

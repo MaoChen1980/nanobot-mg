@@ -234,6 +234,9 @@ class MemoryExtractor:
 
                 topic_files.setdefault(rel_path, []).append(paragraph)
 
+            else:
+                logger.warning("MemoryExtractor: unknown finding type '{}', dropped", ftype)
+
         # ── Flush additions to files ──
         changed = bool(topic_files)
         modified_for_cleanup: list[str] = []  # rel_paths written to
@@ -274,14 +277,11 @@ class MemoryExtractor:
             logger.info("MemoryExtractor: no actionable findings to write")
             return
 
-        # ── Step 2b: cleanup check ──
-        await self._cleanup_check(modified_for_cleanup)
-
-        # ── Step 2c: materialize skills from pending_skills.md ──
+        # ── Step 2b: materialize skills from pending_skills.md ──
         if "pending_skills.md" in topic_files:
             await self._materialize_skills()
 
-        # ── Git commit ──
+        # ── Git commit (findings + skills, before cleanup/backlinks for safety) ──
         if self.store.git.is_initialized():
             utc_now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
             msg = f"extractor: {utc_now} UTC, {len(findings)} finding(s)"
@@ -289,8 +289,20 @@ class MemoryExtractor:
             if sha:
                 logger.info("MemoryExtractor: committed {}", sha)
 
+        # ── Step 2c: cleanup check (after commit, safe to modify files) ──
+        await self._cleanup_check(modified_for_cleanup)
+
+        # ── Backlinks (after commit, safe to modify) ──
+        self._add_backlinks()
+
         # ── FAISS rebuild ──
         await self._rebuild_indexes()
+
+        # ── Commit post-processing (cleanup + backlinks) if any changes ──
+        if self.store.git.is_initialized():
+            sha = self.store.git.auto_commit("memory: cleanup and backlinks")
+            if sha:
+                logger.info("MemoryExtractor: committed post-processing {}", sha)
 
     # ------------------------------------------------------------------
     # Skill creation — Phase 2: pending_skills.md → skills/<name>/SKILL.md

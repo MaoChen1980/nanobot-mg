@@ -53,6 +53,10 @@ class SearchTextTool(Tool):
         "**When NOT to use**:\n"
         "- 已经知道具体关键词 → 用 grep\n"
         "- 想从头到尾读文件 → 用 read_file\n\n"
+        "**Query examples**:\n"
+        "  search_text(query='error handling timeout logic', path='/src/main.py')\n"
+        "  search_text(query='authentication encryption security', text='...')\n"
+        "  search_text(query='configuration setup initialization', path='/app/config.py')\n\n"
     )
 
     async def execute(
