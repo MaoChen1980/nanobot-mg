@@ -96,7 +96,7 @@ class MemoryStore:
         """Return all .md files under memory/ (excluding .vector_index/)."""
         return sorted(
             p for p in self.memory_dir.rglob("*.md")
-            if ".vector_index" not in p.parts
+            if ".vector_index" not in p.parts and p.name != "index.md"
         )
 
     def read_categorized_file(self, rel_path: str) -> str:

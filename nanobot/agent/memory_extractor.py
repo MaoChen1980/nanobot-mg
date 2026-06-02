@@ -130,7 +130,39 @@ class MemoryExtractor:
         return True
 
     # ------------------------------------------------------------------
-    # Step 1 — LLM analysis
+    #  Recent findings tracking for MEMORY.md Recent changes
+    # ------------------------------------------------------------------
+
+    _RECENT_JSON = ".recent.json"  # inside memory_dir
+
+    def _load_recent_findings(self) -> list[dict[str, Any]]:
+        """Load persisted recent findings (max 15)."""
+        p = self.store.memory_dir / self._RECENT_JSON
+        if not p.exists():
+            return []
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, OSError):
+            return []
+
+    def _append_recent_findings(self, new_entries: list[dict[str, Any]]) -> None:
+        """Append findings and persist top 15."""
+        existing = self._load_recent_findings()
+        existing.extend(new_entries)
+        existing.sort(key=lambda x: -x.get("ts", 0))
+        # Dedup by (path, text) keeping first occurrence (newest due to sort)
+        seen: set[tuple[str, str]] = set()
+        deduped: list[dict[str, Any]] = []
+        for e in existing:
+            key = (e.get("path", ""), e.get("text", ""))
+            if key not in seen:
+                seen.add(key)
+                deduped.append(e)
+        self.store.memory_dir.joinpath(self._RECENT_JSON).write_text(
+            json.dumps(deduped[:15], ensure_ascii=False), encoding="utf-8",
+        )
+
     # ------------------------------------------------------------------
 
     async def _analysis_llm(
@@ -201,6 +233,7 @@ class MemoryExtractor:
         """Write all findings to target files, then cleanup-check SOUL.md/USER.md, then commit and rebuild FAISS."""
         topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
         pinned_paragraphs: set[str] = set()  # paragraphs marked as pinned
+        recent_candidates: list[dict[str, Any]] = []  # (rel_path, content, heading) for Recent section
 
         for finding in findings:
             ftype = finding.get("type", "skip")
@@ -213,6 +246,9 @@ class MemoryExtractor:
 
             if ftype == "preference":
                 topic_files.setdefault("user.md", []).append(f"- {content}")
+                recent_candidates.append({
+                    "path": "user.md", "text": content[:80], "ts": time.time(),
+                })
 
             elif ftype == "skill":
                 name = (finding.get("name") or "").strip()
@@ -220,6 +256,9 @@ class MemoryExtractor:
                     topic_files.setdefault(
                         "pending_skills.md", []
                     ).append(f"- **{name}**: {content}")
+                    recent_candidates.append({
+                        "path": "pending_skills.md", "text": name, "ts": time.time(),
+                    })
 
             elif ftype in ("knowledge", "pitfall", "pattern"):
                 topic = (finding.get("topic") or "").strip()
@@ -238,6 +277,11 @@ class MemoryExtractor:
 
                 if finding.get("pinned"):
                     pinned_paragraphs.add(paragraph)
+
+                # Track for Recent changes
+                recent_candidates.append({
+                    "path": rel_path, "text": content[:80], "ts": time.time(),
+                })
 
             else:
                 logger.warning("MemoryExtractor: unknown finding type '{}', dropped", ftype)
@@ -281,6 +325,10 @@ class MemoryExtractor:
                     len(paragraphs),
                     rel_path,
                 )
+
+        # ── Capture written findings for Recent changes ──
+        if recent_candidates:
+            self._append_recent_findings(recent_candidates)
 
         if not changed:
             logger.info("MemoryExtractor: no actionable findings to write")
@@ -487,7 +535,7 @@ class MemoryExtractor:
         Returns True if any merges were executed.
         """
         # Collect files per category dir (excluding root files like MEMORY.md, user.md, etc.)
-        exclude_names = {"MEMORY.md", "topic-map.json", "pending_skills.md", "lessons.md", "self_mod.md", "system.md", "user.md"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "pending_skills.md", "lessons.md", "self_mod.md", "system.md", "user.md"}
         dir_files: dict[str, list[tuple[str, int]]] = {}  # dir → [(filename, line_count)]
 
         for p in self.store.memory_dir.rglob("*.md"):
@@ -612,7 +660,7 @@ class MemoryExtractor:
     def _snapshot_memory_dir(memory_dir: Path) -> dict[str, int]:
         """Scan memory/ and return {relative_path: mtime_ns} for all .md files."""
         snapshot: dict[str, int] = {}
-        exclude_names = {"MEMORY.md", "topic-map.json"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
         for p in sorted(memory_dir.rglob("*.md")):
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
@@ -652,7 +700,7 @@ class MemoryExtractor:
         Returns mapping from normalized term to set of file paths.
         """
         index: dict[str, set[str]] = {}
-        exclude_names = {"MEMORY.md", "topic-map.json"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
 
         for p in self.store.memory_dir.rglob("*.md"):
             if ".vector_index" in p.parts or p.name in exclude_names:
@@ -695,7 +743,7 @@ class MemoryExtractor:
         if not ref_index:
             return
 
-        exclude_names = {"MEMORY.md", "topic-map.json"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
         # Sort terms by length (longest first) to prefer multi-word matches
         sorted_terms = sorted(ref_index.keys(), key=len, reverse=True)
 
@@ -751,7 +799,7 @@ class MemoryExtractor:
 
         Format: Recent changes (15 newest) + per-category summary with file count and topics.
         """
-        exclude_names = {"MEMORY.md", "topic-map.json"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
 
         # Collect file metadata + pinned items
         file_meta: list[tuple[str, int, str, str, str]] = []  # (rel, mtime_ns, category, stem, heading)
@@ -806,46 +854,38 @@ class MemoryExtractor:
         for rel, _mtime, parent, stem, heading in file_meta:
             category_index.setdefault(parent, []).append((rel, stem, heading))
 
-        # Recent changes (top 15, newest first)
-        recent = sorted(file_meta, key=lambda x: -x[1])[:15]
-        now_s = time.time()
-        two_days = 2 * 86400
-        lines.append("## Recent changes\n")
-        for rel, mtime_ns, _, _stem, heading in recent:
-            preview = heading if heading else Path(rel).stem
-            rel_link = rel.replace(chr(92), '/')
-            age_s = now_s - (mtime_ns / 1_000_000_000)
+        # Recent changes — shows actual findings from last extraction(s)
+        recent = self._load_recent_findings()
+        if recent:
+            now_s = time.time()
+            two_days = 2 * 86400
+            lines.append("## Recent changes\n")
+            for r in recent:
+                path = r.get("path", "")
+                text = r.get("text", "")
+                ts = r.get("ts", 0)
+                rel_link = path.replace(chr(92), "/")
 
-            if age_s < two_days:
-                # Recent enough to show full content for small entries
-                full_path = self.store.memory_dir / rel
+                # Get heading from file's H1
+                heading = Path(path).stem
+                full_header_path = self.store.memory_dir / path
                 try:
-                    body = full_path.read_text(encoding="utf-8").strip()
+                    for line in full_header_path.read_text(encoding="utf-8").split("\n"):
+                        s = line.strip()
+                        if s.startswith("# "):
+                            heading = s.lstrip("# ").strip()
+                            break
                 except OSError:
-                    body = ""
-                if body:
-                    body_lines = [l for l in body.split("\n")
-                                  if l.strip() and not l.startswith("# ") and "<!--pinned-->" not in l]
-                    if len(body_lines) <= 3:
-                        # Inline — small entry within 2 days
-                        inline = body_lines[0][:120] if body_lines else ""
-                        lines.append(f"- **{preview}** — {inline}")
-                        continue
+                    pass
 
-                # Link + one-line summary
-                summary = ""
-                for line in body.split("\n") if body else []:
-                    s = line.strip()
-                    if s and not s.startswith("#"):
-                        summary = s[:50].lstrip("- *💡⚠️ ").strip()
-                        break
-                if summary:
-                    lines.append(f"- [{preview}]({rel_link}) — {summary}")
+                age_s = now_s - ts
+                if age_s < two_days and len(text) <= 80:
+                    lines.append(f"- **{heading}** — {text.lstrip('- *💡⚠️ ')}")
+                elif text:
+                    lines.append(f"- [{heading}]({rel_link}) — {text[:50]}")
                 else:
-                    lines.append(f"- [{preview}]({rel_link})")
-            else:
-                lines.append(f"- [{preview}]({rel_link})")
-        lines.append("")
+                    lines.append(f"- [{heading}]({rel_link})")
+            lines.append("")
 
         # Category summary with clickable links
         cat_order = sorted(category_index, key=lambda c: (c == ".", c))
@@ -869,7 +909,7 @@ class MemoryExtractor:
 
     def _generate_tree_json(self) -> None:
         """Generate tree.json for WebUI — file tree + recent changes."""
-        exclude_names = {"MEMORY.md", "topic-map.json", "tree.json"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "tree.json"}
         tree_path = self.store.memory_dir / "tree.json"
 
         tree: dict[str, Any] = {"recent": [], "tree": {}}
