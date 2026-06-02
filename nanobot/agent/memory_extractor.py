@@ -6,6 +6,7 @@ Replaces the old Consolidator + Dream two-stage pipeline.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import re
 import time
@@ -234,6 +235,7 @@ class MemoryExtractor:
         topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
         pinned_paragraphs: set[str] = set()  # paragraphs marked as pinned
         recent_candidates: list[dict[str, Any]] = []  # (rel_path, content, heading) for Recent section
+        modified_for_cleanup: set[str] = set()  # rel_paths written to
 
         for finding in findings:
             ftype = finding.get("type", "skip")
@@ -266,12 +268,30 @@ class MemoryExtractor:
                     continue
                 rel_path = self._topic_to_filepath(topic) + ".md"
 
-                if ftype == "pitfall":
-                    paragraph = f"- ⚠️ {content}"
-                elif ftype == "pattern":
-                    paragraph = f"- 💡 {content}"
-                else:
-                    paragraph = f"- {content}"
+                paragraph = self._format_finding_paragraph(ftype, content)
+
+                supersedes = (finding.get("supersedes") or "").strip()
+                if supersedes:
+                    # Embed pinned marker directly in replacement text
+                    replacement = paragraph
+                    if finding.get("pinned") and "<!--pinned-->" not in replacement:
+                        replacement = replacement.rstrip() + "\n<!--pinned-->"
+                    applied, modified_path = self._apply_supersedes(supersedes, replacement)
+                    if applied:
+                        track_path = modified_path or rel_path
+                        logger.info(
+                            "MemoryExtractor: supersedes applied in {} for '{}'",
+                            track_path, content[:60],
+                        )
+                        recent_candidates.append({
+                            "path": track_path, "text": content[:80], "ts": time.time(),
+                        })
+                        modified_for_cleanup.add(track_path)
+                        continue
+                    logger.info(
+                        "MemoryExtractor: supersedes target not found for '{}', falling back to append",
+                        supersedes[:60],
+                    )
 
                 topic_files.setdefault(rel_path, []).append(paragraph)
 
@@ -287,8 +307,7 @@ class MemoryExtractor:
                 logger.warning("MemoryExtractor: unknown finding type '{}', dropped", ftype)
 
         # ── Flush additions to files ──
-        changed = bool(topic_files)
-        modified_for_cleanup: list[str] = []  # rel_paths written to
+        changed = bool(topic_files or modified_for_cleanup)
 
         if topic_files:
             for rel_path, paragraphs in topic_files.items():
@@ -305,7 +324,7 @@ class MemoryExtractor:
                                 f.write(f"\n\n{p}\n")
                                 if p in pinned_paragraphs:
                                     f.write("<!--pinned-->\n")
-                        modified_for_cleanup.append(rel_path)
+                        modified_for_cleanup.add(rel_path)
                     if skipped:
                         logger.info(
                             "MemoryExtractor: skipped {} duplicate(s) in {}",
@@ -319,7 +338,7 @@ class MemoryExtractor:
                             lines.append("<!--pinned-->\n")
                     lines.append(f"\n---\n\n*创建: {date_str}*\n")
                     full_path.write_text("".join(lines), encoding="utf-8")
-                    modified_for_cleanup.append(rel_path)
+                    modified_for_cleanup.add(rel_path)
                 logger.info(
                     "MemoryExtractor: wrote {} paragraph(s) to {}",
                     len(paragraphs),
@@ -347,7 +366,7 @@ class MemoryExtractor:
                 logger.info("MemoryExtractor: committed {}", sha)
 
         # ── Step 2c: cleanup check (after commit, safe to modify files) ──
-        await self._cleanup_check(modified_for_cleanup)
+        await self._cleanup_check(list(modified_for_cleanup))
 
         # ── Backlinks (after commit, safe to modify) ──
         self._add_backlinks()
@@ -360,6 +379,96 @@ class MemoryExtractor:
             sha = self.store.git.auto_commit("memory: cleanup and backlinks")
             if sha:
                 logger.info("MemoryExtractor: committed post-processing {}", sha)
+
+    # ------------------------------------------------------------------
+    # Supersedes — replace old content with new content using FAISS
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_finding_paragraph(ftype: str, content: str) -> str:
+        """Format a finding as a markdown paragraph."""
+        if ftype == "pitfall":
+            return f"- ⚠️ {content}"
+        elif ftype == "pattern":
+            return f"- 💡 {content}"
+        return f"- {content}"
+
+    def _apply_supersedes(self, supersedes: str, new_paragraph: str) -> tuple[bool, str | None]:
+        """Search memory files for *supersedes* text and replace with *new_paragraph*.
+
+        Uses FAISS to find the best-matching file and chunk, then does paragraph-level
+        matching within that file for precision.
+
+        Returns ``(True, modified_rel_path)`` if replacement was done,
+        ``(False, None)`` if no suitable target was found.
+        """
+        # Search FAISS for the superseded content
+        results = self.store.vector_index.search(supersedes, k=3, min_score=0.3)
+
+        if not results:
+            # Fallback: grep across all memory files
+            results = self._full_text_search(supersedes)
+
+        if not results:
+            return (False, None)
+
+        for result in results:
+            source = result.get("source", "")
+            if not source:
+                continue
+            full_path = self.store.memory_dir / source
+            if not full_path.exists():
+                continue
+            if self._replace_in_file(full_path, supersedes, new_paragraph):
+                return (True, source)
+
+        return (False, None)
+
+    @staticmethod
+    def _replace_in_file(path: Path, old_text: str, new_text: str) -> bool:
+        """Replace *old_text* with *new_text* at paragraph level in *path*.
+
+        Splits the file into blank-line-separated paragraphs and uses
+        ``difflib.SequenceMatcher`` to find the best match for *old_text*.
+        Returns True if a match was found and replaced.
+        """
+        text = path.read_text(encoding="utf-8").strip()
+        raw_paragraphs = re.split(r"\n\n+", text)
+        # Filter out empty paragraphs that arise from leading/trailing whitespace
+        paragraphs = [p for p in raw_paragraphs if p.strip()]
+
+        best_idx = -1
+        best_ratio = 0.0
+        old_lower = old_text.lower()
+
+        for i, para in enumerate(paragraphs):
+            ratio = difflib.SequenceMatcher(None, old_lower, para.lower()).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_idx = i
+
+        if best_ratio > 0.65 and best_idx >= 0:
+            paragraphs[best_idx] = new_text
+            path.write_text("\n\n".join(paragraphs), encoding="utf-8")
+            return True
+
+        return False
+
+    def _full_text_search(self, query: str) -> list[dict[str, Any]]:
+        """Fallback: simple substring search across all memory files."""
+        results: list[dict[str, Any]] = []
+        q = query.lower()
+        for p in self.store.memory_dir.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name in ("MEMORY.md", "index.md"):
+                continue
+            try:
+                content = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if q in content.lower():
+                rel = p.relative_to(self.store.memory_dir).as_posix()
+                results.append({"source": rel, "text": content[:200], "score": 0.5})
+        return results
 
     # ------------------------------------------------------------------
     # Skill creation — Phase 2: pending_skills.md → skills/<name>/SKILL.md
@@ -804,7 +913,7 @@ class MemoryExtractor:
 
         # Collect file metadata + pinned items
         file_meta: list[tuple[str, int, str, str, str]] = []  # (rel, mtime_ns, category, stem, heading)
-        pinned: list[str] = []  # formatted pinned lines, max 5
+        pinned_candidates: list[tuple[str, int, str]] = []  # (rel, mtime_ns, summary)
         for p in self.store.memory_dir.rglob("*.md"):
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
@@ -830,15 +939,23 @@ class MemoryExtractor:
             stem = Path(rel).stem
             file_meta.append((rel, mtime, parent, stem, heading))
 
-            # Detect pinned
-            if len(pinned) < 5 and "<!--pinned-->" in text:
+            # Detect pinned — collect all, sort later
+            if "<!--pinned-->" in text:
                 summary = heading
                 for line in text.split("\n"):
                     s = line.strip()
                     if s and not s.startswith("#") and "<!--pinned-->" not in s:
                         summary = s[:60].lstrip("- *💡⚠️ ").strip()
                         break
-                pinned.append(f"- [{heading}]({rel}) — {summary}")
+                pinned_candidates.append((rel, mtime, summary))
+
+        # Sort pinned by recency (newest first), take top 5
+        pinned_candidates.sort(key=lambda x: -x[1])
+        rel_to_heading = {rel: h for rel, _, _, _, h in file_meta}
+        pinned: list[str] = [
+            f"- [{rel_to_heading.get(rel, rel)}]({rel}) — {summary}"
+            for rel, _mtime, summary in pinned_candidates[:5]
+        ]
 
         if not file_meta:
             return

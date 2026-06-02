@@ -96,7 +96,7 @@ class MemoryStore:
         """Return all .md files under memory/ (excluding .vector_index/)."""
         return sorted(
             p for p in self.memory_dir.rglob("*.md")
-            if ".vector_index" not in p.parts and p.name != "index.md"
+            if ".vector_index" not in p.parts and p.name not in ("index.md", "MEMORY.md")
         )
 
     def read_categorized_file(self, rel_path: str) -> str:
@@ -120,16 +120,8 @@ class MemoryStore:
         return "\n\n".join(parts)
 
     def build_vector_index(self) -> None:
-        """Rebuild the FAISS vector index from all memory files."""
-        file_texts: dict[str, str] = {}
-        for f in self.list_memory_files():
-            content = self.read_file(f)
-            if content.strip():
-                rel = str(f.relative_to(self.memory_dir))
-                file_texts[rel] = content
-        if file_texts:
-            self.vector_index.build_from_files(file_texts)
-            self.vector_index.save()
+        """Rebuild the FAISS vector index (incremental if index exists)."""
+        self.vector_index.build_incremental()
 
     # -- framework index -------------------------------------------------------
 
@@ -144,16 +136,8 @@ class MemoryStore:
         )
 
     def build_framework_index(self) -> None:
-        """Rebuild the FAISS index from all framework/ docs."""
-        file_texts: dict[str, str] = {}
-        for f in self._list_framework_files():
-            content = self.read_file(f)
-            if content.strip():
-                rel = str(f.relative_to(self.workspace / "framework"))
-                file_texts[rel] = content
-        if file_texts:
-            self.framework_index.build_from_files(file_texts)
-            self.framework_index.save()
+        """Rebuild the FAISS index from all framework/ docs (incremental if exists)."""
+        self.framework_index.build_incremental()
 
     def condense_session_to_history(self, messages: list[dict]) -> int:
         """Archive session messages into history, grouped by turns.
