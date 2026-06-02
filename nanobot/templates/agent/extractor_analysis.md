@@ -14,17 +14,29 @@ You are analyzing a conversation snapshot. The snapshot has two parts: system pr
 不要判断对话内容是否"有用"——仅凭聊天记录无法判断。
 相反，要看 **tool execution results**（工具执行结果）。这是唯一可验证的信号。
 
-| Tool result | What to record |
-|-------------|----------------|
-| 工具成功，产出了有用的输出，多步骤工作流 | `skill` — 可复用的多步骤工作流，值得保存为正式 skill |
+| Signal | What to record |
+|--------|----------------|
+| 工具成功，产出了有用的输出，多步骤工作流 | `skill` — 可复用的多步骤工作流或避雷指南，值得保存为正式 skill |
 | 工具成功，产出了有用的输出，单次技术操作 | `pattern` — 经过验证的有效路径（还不足以成为独立 skill） |
 | 工具失败或输出错误结果 | `pitfall` — 一次失误，不要重蹈覆辙 |
+| 走了一大段弯路后发现的捷径 | `skill` — 弯路不是 skill，但弯路尽头找到的简单方案是 skill。比如：做复杂注入后发现框架本来就有这个机制 → "直接用框架机制" |
 
-- 只记录**实际通过 tool calls 执行**的行为。
-- 绝不记录仅在文本中讨论或描述的内容。
-- 当工作流包含 3 个以上 distinct steps、tool calls 或决策点，值得他人逐步参考时，使用 `skill`。
-- 对于单个技术、标志位或快捷方式，使用 `pattern`。
-- `pitfall` 是已验证的错误——需记录出错原因及如何避免。
+## Skill Criteria — Shortcut Pattern (捷径)
+
+Skill 是一条**捷径**。它的价值是：以后遇到相同场景，不需要重新摸索，直接走这条。
+
+两条发现途径：
+
+1. **直接走通的** — 成功执行过的多步骤工作流，按步骤走就行
+2. **绕路后发现的** — 走了一大段弯路，最后发现一个简单方案。弯路本身不是 skill，但弯路尽头找到的 insight 是。比如：做了复杂注入后发现框架本来就有这个机制 → "直接用框架机制"
+
+以下条件**全部**满足时才标记为 `skill`：
+
+1. **重复 2+ 次**：同一工作流或同一陷阱在对话历史中出现过 2 次或以上
+2. **有明确信号**：有可识别的触发条件（不是似是而非的"小心"）
+3. **非显而易见**：没有这个 skill，agent 不会自然做对或会走弯路。如果步骤太简单（1+1=2），每次都能自然地推导出来，就不值得记住——存储和检索的成本高于收益。
+
+如果一条记录有价值但不符合 skill 标准，使用 `pattern`（单次技术操作）或 `knowledge`（事实性知识）。
 
 ## What NOT to Record
 
@@ -38,10 +50,13 @@ You are analyzing a conversation snapshot. The snapshot has two parts: system pr
 
 ## Topic Naming
 
-使用宽泛、稳定的 topic 名称，使相关内容积累在同一文件中。
+使用宽泛、稳定的 topic 名称，使相关内容积累在同一文件中。**避免碎片化**——不要把相关的事实拆分到多个文件里。
 
-好：`Project/nanobot`, `AI/harness-design`, `Python/async`
-差：`Project/nanobot-db-schema-fix`（太窄）
+- 好：`Project/nanobot`, `AI/harness-design`, `Python/async`（宽泛，能积累）
+- 差：`Project/nanobot-db-schema-fix`（太窄）
+- 差：`Android/apk-analysis` 和 `Android/assets` 和 `Android/gradle` 作为三个独立文件（应合并为 `Android/build`）
+
+**规则**：如果单个 topic 目录下有超过 2 个相关的小知识点，优先合并到同一文件，而不是各开新文件。
 
 ## Output Format
 

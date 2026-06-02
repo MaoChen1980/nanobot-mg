@@ -63,22 +63,29 @@ class MemoryExtractor:
     async def run(self) -> bool:
         """Step 0 → Step 1 → Step 2. Returns True if any work was done."""
         all_findings: list[dict[str, Any]] = []
+        did_work = False
 
         # ── Step 0: detect memory/ changes from external writes ──
         if self._memory_dir_changed():
-            self._generate_memory_index()
             self._add_backlinks()
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self.store.build_vector_index)
-            await loop.run_in_executor(None, self.store.build_framework_index)
+            await self._rebuild_indexes()
             if self.store.git.is_initialized():
                 self.store.git.auto_commit("memory: sync external changes")
+
+        # ── Consolidate fragmented small topic files (independent of .pt files) ──
+        if await self._consolidate_memory():
+            did_work = True
 
         # ── Step 1: extract findings from .pt files ──
         pt_files = sorted(self.prompts_dir.glob("*.pt"))
         if not pt_files:
             logger.debug("MemoryExtractor: no .pt files to process")
-            return False
+            if did_work:
+                self._add_backlinks()
+                await self._rebuild_indexes()
+                if self.store.git.is_initialized():
+                    self.store.git.auto_commit("memory: consolidate fragmented files")
+            return did_work
 
         for pt_path in pt_files:
             processing_path = pt_path.with_suffix(".pt.processing")
@@ -110,7 +117,12 @@ class MemoryExtractor:
 
         if not all_findings:
             logger.info("MemoryExtractor: Step 1 done, no findings; skipping Step 2")
-            return False
+            if did_work:
+                self._add_backlinks()
+                await self._rebuild_indexes()
+                if self.store.git.is_initialized():
+                    self.store.git.auto_commit("memory: consolidate fragmented files")
+            return did_work
 
         # ── Step 2: write findings + cleanup ──
         await self._write_cleanup_and_rebuild(all_findings)
@@ -152,21 +164,21 @@ class MemoryExtractor:
         return self._parse_json_output(raw)
 
     @staticmethod
-    def _parse_json_output(raw: str) -> dict[str, Any] | None:
+    def _parse_json_output(raw: str, required_key: str = "findings") -> dict[str, Any] | None:
         """Parse and validate the LLM JSON response."""
-        # Try to extract JSON from markdown code block if present
-        match = re.search(r"```(?:json)?\s*\n(.*?)\n```", raw, re.DOTALL)
-        if match:
-            raw = match.group(1).strip()
+        clean = MemoryExtractor._extract_json_from_llm_output(raw)
 
         try:
-            result = json.loads(raw)
+            result = json.loads(clean)
         except json.JSONDecodeError:
             logger.warning("MemoryExtractor: failed to parse LLM JSON output")
             return None
 
-        if not isinstance(result, dict) or "findings" not in result:
+        if not isinstance(result, dict) or required_key not in result:
             return None
+
+        if required_key != "findings":
+            return result
 
         findings = result.get("findings", [])
         if not isinstance(findings, list):
@@ -262,11 +274,12 @@ class MemoryExtractor:
             logger.info("MemoryExtractor: no actionable findings to write")
             return
 
-        # ── Re-generate MEMORY.md index ──
-        self._generate_memory_index()
-
         # ── Step 2b: cleanup check ──
         await self._cleanup_check(modified_for_cleanup)
+
+        # ── Step 2c: materialize skills from pending_skills.md ──
+        if "pending_skills.md" in topic_files:
+            await self._materialize_skills()
 
         # ── Git commit ──
         if self.store.git.is_initialized():
@@ -277,13 +290,297 @@ class MemoryExtractor:
                 logger.info("MemoryExtractor: committed {}", sha)
 
         # ── FAISS rebuild ──
-        loop = asyncio.get_event_loop()
+        await self._rebuild_indexes()
+
+    # ------------------------------------------------------------------
+    # Skill creation — Phase 2: pending_skills.md → skills/<name>/SKILL.md
+    # ------------------------------------------------------------------
+
+    async def _materialize_skills(self) -> None:
+        """Convert pending_skills.md entries to real skills/<name>/SKILL.md files."""
+        pending_path = self.store.memory_dir / "pending_skills.md"
+        if not pending_path.exists():
+            return
+
+        pending_text = pending_path.read_text(encoding="utf-8").strip()
+        if not pending_text:
+            return
+
+        # Scan existing skills for dedup
+        skills_dir = self.store.workspace / "skills"
+        existing_skills: list[dict[str, str]] = []
+        if skills_dir.is_dir():
+            for child in sorted(skills_dir.iterdir()):
+                if not child.is_dir():
+                    continue
+                skill_file = child / "SKILL.md"
+                if skill_file.exists():
+                    content = skill_file.read_text(encoding="utf-8")
+                    name = ""
+                    desc = ""
+                    for line in content.split("\n"):
+                        if line.startswith("name:"):
+                            name = line.split(":", 1)[1].strip()
+                        elif line.startswith("description:"):
+                            desc = line.split(":", 1)[1].strip()
+                    existing_skills.append({"name": name, "description": desc, "path": child.name})
+
+        existing_text = "\n".join(
+            f"- {s['name']}: {s['description']}" for s in existing_skills
+        ) if existing_skills else "(none)"
+
+        user_content = (
+            f"## Pending skill entries\n\n{pending_text}\n\n"
+            f"## Existing skills\n\n{existing_text}"
+        )
+
+        prompt = render_template("agent/extractor_skill_creator.md")
+        try:
+            response = await self.provider.chat_with_retry(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                max_tokens=16384,
+                tools=None,
+                tool_choice=None,
+            )
+        except Exception:
+            logger.exception("MemoryExtractor: skill creation LLM call failed")
+            return
+
+        raw = (response.content or "").strip()
+        if not raw:
+            return
+
+        try:
+            raw_clean = self._extract_json_from_llm_output(raw)
+            parsed = json.loads(raw_clean)
+        except json.JSONDecodeError:
+            logger.warning("MemoryExtractor: failed to parse skill creator JSON output (raw[:300]={}..., cleaned={})", raw[:300], raw_clean[:800])
+            return
+
+        skills = parsed.get("skills", []) if isinstance(parsed, dict) else []
+        if not skills:
+            logger.info("MemoryExtractor: no skills to create (all deduped or skipped)")
+            return
+
+        created: list[str] = []
+        for skill in skills:
+            name = skill.get("name", "").strip()
+            content = skill.get("content", "").strip()
+            if not name or not content:
+                continue
+
+            skill_dir = skills_dir / name
+            if skill_dir.exists():
+                logger.info("MemoryExtractor: skill dir already exists, skipping: {}", name)
+                continue
+
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+            created.append(name)
+            logger.info("MemoryExtractor: created skill: {}", name)
+
+        if not created:
+            return
+
+        # Remove materialized entries from pending_skills.md
+        self._remove_materialized_from_pending(pending_path, created)
+
+        # Git commit for new skills
+        if self.store.git.is_initialized():
+            sha = self.store.git.auto_commit(
+                f"extractor: created {len(created)} skill(s): {', '.join(created)}"
+            )
+            if sha:
+                logger.info("MemoryExtractor: committed skill creation {}", sha)
+
+    @staticmethod
+    def _extract_json_from_llm_output(text: str) -> str:
+        """Extract JSON from LLM output that may contain <think> tags and markdown fences."""
+        # Step 1: isolate content after </think> (the actual JSON output)
+        think_end = text.find("</think>")
+        if think_end >= 0:
+            after_think = text[think_end + len("</think>"):].strip()
+        else:
+            # <think> unclosed or absent — try the whole text, but strip leading <think> if present
+            after_think = text.strip()
+            if after_think.startswith("<think>"):
+                # Unclosed think tag — search for JSON in remaining content only
+                after_think = ""
+        # Step 2: find the LAST ```json or ``` code block
+        matches = list(re.finditer(r"```(?:json)?\s*\n(.*?)\n```", after_think, re.DOTALL))
+        if matches:
+            return matches[-1].group(1).strip()
+        # Step 3: try to find standalone { ... } JSON object
+        brace_start = after_think.find("{")
+        if brace_start >= 0:
+            depth = 0
+            for i in range(brace_start, len(after_think)):
+                if after_think[i] == "{":
+                    depth += 1
+                elif after_think[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return after_think[brace_start : i + 1]
+        # Step 4: return as-is and let json.loads fail if invalid
+        return after_think
+
+    @staticmethod
+    def _remove_materialized_from_pending(pending_path: Path, created_names: list[str]) -> None:
+        """Remove materialized skill entries from pending_skills.md."""
+        text = pending_path.read_text(encoding="utf-8")
+        lines = text.split("\n")
+        kept: list[str] = []
+        removed = 0
+        for line in lines:
+            if any(f"**{name}**" in line for name in created_names):
+                removed += 1
+                continue
+            kept.append(line)
+
+        if removed:
+            pending_path.write_text("\n".join(kept), encoding="utf-8")
+            logger.info(
+                "MemoryExtractor: removed {} materialized entry(ies) from pending_skills.md",
+                removed,
+            )
+
+    # ------------------------------------------------------------------
+    # Memory consolidation — merge narrow topic files
+    # ------------------------------------------------------------------
+
+    async def _rebuild_indexes(self) -> None:
+        """Regenerate MEMORY.md and rebuild FAISS indexes."""
+        self._generate_memory_index()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self.store.build_vector_index)
         await loop.run_in_executor(None, self.store.build_framework_index)
 
-    # ------------------------------------------------------------------
-    # Skill creation
-    # ------------------------------------------------------------------
+    async def _consolidate_memory(self) -> bool:
+        """Consolidate fragmented small memory files into broader topic files.
+
+        Returns True if any merges were executed.
+        """
+        # Collect files per category dir (excluding root files like MEMORY.md, user.md, etc.)
+        exclude_names = {"MEMORY.md", "topic-map.json", "pending_skills.md", "lessons.md", "self_mod.md", "system.md", "user.md"}
+        dir_files: dict[str, list[tuple[str, int]]] = {}  # dir → [(filename, line_count)]
+
+        for p in self.store.memory_dir.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            rel = p.relative_to(self.store.memory_dir)
+            if rel.parent.name == ".":
+                continue  # skip root-level files
+            parent = str(rel.parent)
+            lines = len(p.read_text(encoding="utf-8").splitlines())
+            if lines <= 10:
+                dir_files.setdefault(parent, []).append((rel.name, lines))
+
+        # Only act on categories with significant fragmentation
+        candidates = {d: files for d, files in dir_files.items() if len(files) >= 3}
+        if not candidates:
+            return False
+
+        # Build prompt for LLM
+        parts = ["Some memory topic files are very small (<=10 lines). Consider merging related ones into a broader file."]
+        for cat_dir, files in sorted(candidates.items()):
+            parts.append(f"\n### {cat_dir}/")
+            for name, lines in sorted(files):
+                parts.append(f"- {name} ({lines} lines)")
+        user_content = "\n".join(parts)
+
+        system_msg = (
+            "You are consolidating a knowledge base. Review the small files listed below, "
+            "which are grouped by category directory. Suggest which files should be merged "
+            "into a single broader file.\n\n"
+            "Output JSON:\n"
+            '{"merges": [{"target": "merged-file-name.md", "category": "CategoryDir", '
+            '"sources": ["file1.md", "file2.md"], "reason": "brief reason"}]}\n\n'
+            "Rules:\n"
+            "- Only merge files that share a clear common topic\n"
+            "- Use the category dir as the merge target location\n"
+            "- Do NOT suggest changes to the knowledge content, just consolidation\n"
+            "- Return empty list if no meaningful merges are possible"
+        )
+
+        try:
+            response = await self.provider.chat_with_retry(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_content},
+                ],
+                tools=None,
+                tool_choice=None,
+            )
+        except Exception:
+            logger.exception("MemoryExtractor: consolidation LLM call failed")
+            return False
+
+        raw = (response.content or "").strip()
+        if not raw:
+            return False
+
+        try:
+            raw_clean = self._extract_json_from_llm_output(raw)
+            parsed = json.loads(raw_clean)
+        except json.JSONDecodeError:
+            logger.warning("MemoryExtractor: failed to parse consolidation JSON output")
+            return False
+
+        merges = parsed.get("merges", []) if isinstance(parsed, dict) else []
+        if not merges:
+            logger.info("MemoryExtractor: no consolidation merges suggested")
+            return False
+
+        for merge in merges:
+            target_name = merge.get("target", "")
+            category = merge.get("category", "")
+            sources = merge.get("sources", [])
+            if not target_name or not category or not sources:
+                continue
+
+            cat_dir_path = self.store.memory_dir / category
+            target_path = cat_dir_path / target_name
+            if target_path.exists():
+                logger.info("MemoryExtractor: merge target already exists, skipping: {}", target_name)
+                continue
+
+            # Read and combine source files
+            combined: list[str] = [f"# {Path(target_name).stem}\n"]
+            for src_name in sources:
+                src_path = cat_dir_path / src_name
+                if src_path.exists():
+                    content = src_path.read_text(encoding="utf-8")
+                    # Strip the title line if present, keep content
+                    lines = content.split("\n")
+                    body = "\n".join(l for l in lines if not l.startswith("# ") and not l.startswith("---"))
+                    combined.append(body.strip())
+                    combined.append("")
+
+            content = "\n".join(combined).strip()
+            if not content:
+                continue
+
+            # Add creation date
+            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            content += f"\n\n---\n\n*合并 Consolidation: {date_str}*"
+
+            target_path.write_text(content, encoding="utf-8")
+
+            # Delete source files
+            for src_name in sources:
+                src_path = cat_dir_path / src_name
+                if src_path.exists():
+                    src_path.unlink()
+                    logger.info("MemoryExtractor: consolidated {} into {}", src_name, target_name)
+
+            logger.info("MemoryExtractor: merged {} into {}", ", ".join(sources), target_name)
+
+        return True
 
     # ------------------------------------------------------------------
     # Memory directory change detection
@@ -513,7 +810,7 @@ class MemoryExtractor:
         if not raw:
             return
 
-        parsed = self._parse_json_output(raw)
+        parsed = self._parse_json_output(raw, required_key="suggestions")
         if not parsed:
             return
 
