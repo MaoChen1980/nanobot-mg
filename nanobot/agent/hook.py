@@ -147,7 +147,10 @@ class CompositeHook(AgentHook):
 
     def finalize_content(self, context: AgentHookContext, content: str | None) -> str | None:
         for h in self._hooks:
-            content = h.finalize_content(context, content)
+            try:
+                content = h.finalize_content(context, content)
+            except Exception:
+                logger.exception("AgentHook.finalize_content error in {}", type(h).__name__)
         return content
 
     def before_llm_call(
