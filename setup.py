@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-MIRRORS: list[str | None] = [
+MIRRORS = [
     "https://pypi.tuna.tsinghua.edu.cn/simple",
     "https://mirrors.aliyun.com/pypi/simple",
     "https://pypi.douban.com/simple",
@@ -11,11 +11,11 @@ MIRRORS: list[str | None] = [
 ]
 
 
-def _is_pep668(text: str) -> bool:
+def _is_pep668(text):
     return "externally-managed-environment" in text or "PEP 668" in text
 
 
-def _install(mirror: str | None) -> int:
+def _install(mirror):
     """Try pip install. If PEP 668 blocks, retry with --break-system-packages."""
     root = Path(__file__).resolve().parent
     base = [sys.executable, "-m", "pip", "install", "--user"]
@@ -29,7 +29,6 @@ def _install(mirror: str | None) -> int:
 
     stderr = (result.stderr or "") + (result.stdout or "")
     if _is_pep668(stderr):
-        # Homebrew/Debian 系统 Python — 加 --break-system-packages 重试
         retry = base.copy()
         retry.insert(retry.index("--user") + 1, "--break-system-packages")
         result = subprocess.run(retry)
@@ -37,7 +36,7 @@ def _install(mirror: str | None) -> int:
     return result.returncode
 
 
-def main() -> int:
+def main():
     print("正在安装 nanobot-mg 依赖...")
     for mirror in MIRRORS:
         label = mirror or "PyPI 官方"
