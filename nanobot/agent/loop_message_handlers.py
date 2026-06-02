@@ -69,14 +69,9 @@ class SystemMessageHandler:
         key = msg.session_key_override or f"{channel}:{chat_id}"
         session = self._loop.lifecycle.prepare(key)
         pending = None
-        is_subagent = msg.sender_id == "subagent"
-        # Subagent result is NOT persisted before the LLM loop, because:
-        # _persist_subagent_followup saves it as an "assistant" message, and
-        # get_history → build_messages would put it in history as the last
-        # assistant message with no user message after it. The LLM then sees
-        # the subagent result as its own past output and produces nothing.
-        # Instead, pass the subagent result as a user message (prompting LLM
-        # to respond), then persist after the loop for durability.
+        # Subagent messages arrive on "system" channel from _inject_to_orchestrator,
+        # identified by _origin_channel/_origin_chat_id metadata.
+        is_subagent = bool(msg.metadata.get("_origin_channel"))
         # For "system" channel (subagent), use channel extracted from chat_id (e.g. "slack").
         # For all other channels (cron, proxy, direct), use msg.channel directly.
         effective_channel = channel if msg.channel == "system" else msg.channel
@@ -125,9 +120,19 @@ class SystemMessageHandler:
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
         )
+        if is_subagent:
+            # Inject two messages so the LLM sees a natural self-reminder +
+            # directive sequence, all API-compliant (assistant→user→response).
+            # These messages are ephemeral — not persisted to session.
+            history = list(history)
+            history.append({"role": "assistant", "content": "spawn subagent 之后我需要干什么？"})
+            history.append({"role": "user", "content": f"Subagent 返回了结果。\n\n{msg.content.strip()}\n\n请检查 Subagent 状态轮数、检查 team_board.md、处理/更新最新任务状态，有必要的话调整任务、添加新的 subagent、或 cancel 不需要的 subagent。"})
+            current_message = ""
+        else:
+            current_message = msg.content
         messages = self._loop.context.build_messages(
             history=history,
-            current_message=msg.content,
+            current_message=current_message,
             channel=effective_channel,
             chat_id=chat_id,
             current_role="user",
@@ -135,13 +140,10 @@ class SystemMessageHandler:
         )
         final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         msgs_count = len(messages)
-        # Persist subagent result after the LLM loop so it appears in session
-        # before the LLM's response (correct chronological order).
         if is_subagent and self._loop._persist_subagent_followup(session, msg):
             self._loop.sessions.save(session)
         self._loop._append_turn_to_session(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
         self._loop.lifecycle.finalize(session)
-        import re
         if final_content:
             final_content = re.sub(
                 r'^(?:\[Message Time: [^\]]*\]|====== Message Time: [^=]+ ======)\s*\n?',
@@ -215,6 +217,13 @@ class UserMessageHandler:
 
         # Stage 1: session preparation (checkpoint restore & history loading)
         session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
+
+        # Stage 1a: proactive check → inject two-message pattern for API-compliant delivery
+        if msg.metadata.get("proactive_check"):
+            history = list(history)
+            history.append({"role": "assistant", "content": "spawn subagent 之后我需要干什么？"})
+            history.append({"role": "user", "content": msg.content})
+            msg = dataclasses.replace(msg, content="")
 
         # Reset iteration counter — each new turn starts at 0
         self._loop._current_iteration = 0

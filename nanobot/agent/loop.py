@@ -256,7 +256,6 @@ class AgentLoop:
         self._mcp_connecting = False
         self._session_dispatch: dict[str, _SessionDispatchState] = {}
         self._background_tasks: list[asyncio.Task] = []
-        self._subagent_monitors: dict[str, asyncio.Task] = {}
         self._session_locks: dict[str, asyncio.Lock] = {}
         # NANOBOT_MAX_CONCURRENT_REQUESTS: <=0 means unlimited (default).
         _max = int(os.environ.get("NANOBOT_MAX_CONCURRENT_REQUESTS", "0"))
@@ -789,66 +788,58 @@ class AgentLoop:
             logger.exception("run() exiting due to unhandled exception")
             raise
 
-    _SUBAGENT_IDLE_CHECK_INTERVAL: float = 60.0
-    _POST_DISPATCH_CHECK_INTERVAL: float = 30.0
-    _SUBAGENT_CHECK_INTERVAL: float = 30.0
+    _PROACTIVE_CHECK_INTERVAL: float = 180.0     # LLM-triggering proactive check interval (~3 min)
 
     async def _publish_subagent_check(self, session_key: str, channel: str, chat_id: str) -> None:
         """Publish a proactive subagent check message to the bus.
 
-        Routes through UserMessageHandler (not SystemMessageHandler) so the LLM
-        gets full session history and can make sense of subagent status.
+        Routes through UserMessageHandler which detects the proactive_check
+        metadata flag and injects the two-message pattern (assistant self-reminder
+        + user directive) for API-compliant delivery.
         """
+        count = self.subagents.get_running_count_by_session(session_key)
         msg = InboundMessage(
             channel=channel,
             sender_id="user",
             chat_id=chat_id,
             content=(
-                "<system-reminder>\n"
-                "⏰ 定时检查：有 Subagent 在运行中。\n"
-                "请用 message() 向用户简短汇报当前 Subagent 状态。\n"
-                "</system-reminder>"
+                f"⏰ 主动调度检查（{count} 个 Subagent 运行中）：\n"
+                "这是主动性机会，你是项目经理，请自主判断下一步行动：\n"
+                "\n"
+                "**进度跟踪**\n"
+                "• Subagent 进展如何？用 list_subagents / check_subagent 检查状态，有没卡住或完成的\n"
+                "• 读 team_board.md — subagent 可能写了发现、踩坑、阻塞，需要你关注或同步\n"
+                "• 读 TREE.md — 检查 task backlog，决定下一步调度\n"
+                "• 需要你回复或指导某个 subagent 吗？→ respond_to_subagent 处理阻塞等待的\n"
+                "• 发现信息不对称？→ send_message 主动告知，不要等 subagent 来问\n"
+                "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
+                "\n"
+                "**调度决策**\n"
+                "• 跑偏/无进展的 subagent → cancel\n"
+                "• 还有可并行的任务 → spawn 更多\n"
+                "• 当前方向还对吗？用户需求变了？→ 评估影响，cancel+重 spawn\n"
+                "• 拆解有问题？→ 收半成品，重新分解再 spawn\n"
+                "\n"
+                "**质量与迭代**\n"
+                "• Subagent 频繁卡住或产出不达标？→ 不是硬扛，是调 prompt 重 spawn\n"
+                "• 某类 task 多次做不好？→ 是拆法问题，不是 subagent 的问题，迭代拆解方式\n"
+                "• Subagent 完事了但质量不满意？→ 接受/重做/部分重做/重新拆解\n"
+                "\n"
+                "**收尾与输出**\n"
+                "• 全部结束了？→ 分析结果、更新 TREE.md、综合汇报\n"
+                "• 中间结果需要记录到 memory/文档吗？\n"
+                "• 需要向用户汇报进度或请示决策吗？\n"
+                "\n"
+                "你决定做什么。一切正常无需行动就简短确认，不用长篇大论。"
             ),
             ephemeral=True,
-            metadata={},
+            metadata={"proactive_check": True},
             session_key_override=session_key,
         )
         await self.bus.publish_inbound(msg)
 
-    async def _record_subagent_check(self, session_key: str) -> None:
-        """Record subagent status in session silently (no LLM notification)."""
-        try:
-            session = self.sessions.get_or_create(session_key)
-            session.add_message("assistant", f"[⏰ Subagent 状态检查：{self.subagents.get_running_count_by_session(session_key)} 个 Subagent 在运行]", status="synthetic")
-            self.sessions.save(session)
-        except Exception:
-            logger.exception("Failed to record subagent status check in session")
-
-    async def _monitor_subagents(self, session_key: str) -> None:
-        """Background task: periodically check subagents until all complete."""
-        try:
-            while self._running:
-                if self.subagents.get_running_count_by_session(session_key) == 0:
-                    break
-                await asyncio.sleep(self._SUBAGENT_CHECK_INTERVAL)
-                if self.subagents.get_running_count_by_session(session_key) == 0:
-                    break
-                await self._record_subagent_check(session_key)
-        except asyncio.CancelledError:
-            pass
-        finally:
-            self._subagent_monitors.pop(session_key, None)
-
-    def _ensure_subagent_monitor(self, session_key: str, channel: str, chat_id: str) -> None:
-        """Start a background monitor for session if not already running."""
-        if session_key in self._subagent_monitors:
-            return
-        task = asyncio.create_task(self._monitor_subagents(session_key))
-        self._subagent_monitors[session_key] = task
-
     async def _check_subagents(self) -> None:
-        """Safety net: inject check reminders when the loop would otherwise
-        sit idle with running subagents.
+        """Proactive subagent check when the loop would otherwise sit idle.
 
         Only processes sessions already tracked by _dispatch (post-dispatch
         check), which stores the correct channel/chat_id from the InboundMessage.
@@ -862,12 +853,11 @@ class AgentLoop:
             if self.subagents.get_running_count_by_session(session_key) == 0:
                 del self._last_subagent_check[session_key]
                 continue
-            if now - state.last_check < self._SUBAGENT_IDLE_CHECK_INTERVAL:
+            if now - state.last_check < self._PROACTIVE_CHECK_INTERVAL:
                 continue
 
             state.last_check = now
-            await self._record_subagent_check(session_key)
-            self._ensure_subagent_monitor(session_key, state.channel, state.chat_id)
+            await self._publish_subagent_check(session_key, state.channel, state.chat_id)
 
     async def _dispatch(self, msg: InboundMessage) -> None:
         """Process a message: per-session serial, cross-session concurrent.
@@ -907,10 +897,9 @@ class AgentLoop:
             now = time.time()
             state = self._last_subagent_check.get(session_key)
             last = state.last_check if state else 0
-            if now - last >= self._POST_DISPATCH_CHECK_INTERVAL:
+            if now - last >= self._PROACTIVE_CHECK_INTERVAL:
                 self._last_subagent_check[session_key] = _SubagentCheckState(now, msg.channel, msg.chat_id)
                 await self._publish_subagent_check(session_key, msg.channel, msg.chat_id)
-            self._ensure_subagent_monitor(session_key, msg.channel, msg.chat_id)
 
     async def close_mcp(self) -> None:
         """Drain pending background archives, then close MCP connections."""
@@ -931,9 +920,6 @@ class AgentLoop:
     def stop(self) -> None:
         """Stop the agent loop."""
         self._running = False
-        for task in list(self._subagent_monitors.values()):
-            task.cancel()
-        self._subagent_monitors.clear()
         logger.info("Agent loop stopping")
 
     async def _process_message(
@@ -1250,8 +1236,7 @@ class AgentLoop:
             now = time.time()
             state = self._last_subagent_check.get(session_key)
             last = state.last_check if state else 0
-            if now - last >= self._POST_DISPATCH_CHECK_INTERVAL:
+            if now - last >= self._PROACTIVE_CHECK_INTERVAL:
                 self._last_subagent_check[session_key] = _SubagentCheckState(now, channel, chat_id)
                 await self._publish_subagent_check(session_key, channel, chat_id)
-            self._ensure_subagent_monitor(session_key, channel, chat_id)
         return response

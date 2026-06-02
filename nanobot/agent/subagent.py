@@ -308,7 +308,7 @@ class SubagentManager:
         content: str,
         origin: dict[str, str],
         *,
-        sender_id: str = "subagent",
+        sender_id: str = "user",
         metadata: dict[str, Any] | None = None,
         ephemeral: bool = False,
     ) -> None:
@@ -317,17 +317,16 @@ class SubagentManager:
         All Subagent → Orchestrator messages go through this method to ensure
         consistent routing, session key handling, and metadata.
 
-        - content is automatically wrapped in <system-reminder>
+        - sender_id is always "user" so all bus messages present as user-originated
+        - _origin_channel/_origin_chat_id identify the subagent message for handler
         - session_key_override resolves with fallback to origin channel:chat_id
-        - _origin_channel/_origin_chat_id are always set for SystemMessageHandler
         """
-        wrapped = f"<system-reminder>\n{content}\n</system-reminder>"
         session_key = origin.get("session_key") or f"{origin['channel']}:{origin['chat_id']}"
         msg = InboundMessage(
             channel="system",
             sender_id=sender_id,
             chat_id=f"{origin['channel']}:{origin['chat_id']}",
-            content=wrapped,
+            content=content,
             session_key_override=session_key,
             metadata={
                 "_origin_channel": origin.get("channel", ""),

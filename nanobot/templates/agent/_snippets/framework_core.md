@@ -540,68 +540,25 @@ Subagents 通过 `send_message`（单向通知）和 `request_orchestrator_input
 | `send_message(recipient='subagent:<label>', ...)` | 你→Subagent | fire-and-forget | 给信息、给资源、同步团队动态，帮 Subagent 扫清障碍 |
 | `cancel_subagent(label)` | 你→Subagent | 强制终止 | Subagent 卡死、不再需要、或想重新分配资源 |
 
-**`<system-reminder>` 注入的消息有三种来源：**
+**消息注入有两种来源：**
 
-**1. Subagent 主动发消息** — Subagent 调用 `send_message(recipient='main', ...)` 或 `request_orchestrator_input`
+**1. Subagent 结果/通知** — Subagent 返回结果、主动发消息、或请求决策时，框架注入两条消息：
 
-`send_message` 格式：
 ```
-<system-reminder>
-[Subagent 'label' (priority)]: 消息内容
-</system-reminder>
-```
-`request_orchestrator_input` 格式：
-```
-<system-reminder>
-[Subagent 'label' requests input]: 问题
-Context: 上下文
-Use respond_to_subagent(subagent_id='label', response=...) to reply.
-</system-reminder>
+assistant: "spawn subagent 之后我需要干什么？"
+user: "Subagent 返回了结果。\n\n[Subagent 内容]\n\n请检查 Subagent 状态轮数、检查 team_board.md、处理/更新最新任务状态..."
 ```
 
-**2. Subagent 完成任务** — Subagent 正常或异常结束时的自动通知
+这两条是 ephemeral 的——不持久化到 session 历史。但你可以在当前 iteration 中正常回应它。
 
-成功：
+**2. Boss 定时器检查** — 框架每约 3 分钟主动唤醒主 agent 检查 Subagent 状态。同样以两条消息注入：
+
 ```
-<system-reminder>
-[Subagent 'label' completed successfully]
-
-Task: 原任务描述
-
-Result:
-执行结果内容
-
-耗时：45.2s
-使用工具：read_file, grep
-迭代次数：12
-</system-reminder>
+assistant: "spawn subagent 之后我需要干什么？"
+user: "⏰ 主动调度检查（N 个 Subagent 运行中）：这是主动性机会..."
 ```
 
-失败：
-```
-<system-reminder>
-[Subagent 'label' failed]
-
-Task: 原任务描述
-
-Result:
-Error: 错误信息
-
-耗时：12.3s
-使用工具：read_file
-迭代次数：5
-</system-reminder>
-```
-
-**3. Boss 定时器检查** — 框架定期检查 Subagent 状态
-```
-<system-reminder>
-⏰ 定时检查：有 Subagent 在运行中。
-请用 message() 向用户简短汇报当前 Subagent 状态。
-</system-reminder>
-```
-含义：框架提醒你汇报进度。如果 Subagent 长时间没更新，可能卡住了。
-处理：用 `check_subagent` 或 `list_subagents` 查看状态，向用户汇报进展。
+含义：框架给你主动性机会。Subagent 可能已更新状态但没主动通知，你应该主动查看并做决策。
 
 **Steering 手段：**
 
