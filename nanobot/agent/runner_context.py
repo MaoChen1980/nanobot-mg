@@ -26,24 +26,98 @@ def merge_message_content(left: Any, right: Any) -> str | list[dict[str, Any]]:
 
 
 def drop_orphan_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Drop tool results that have no matching assistant tool_call earlier in the history."""
-    declared: set[str] = set()
-    updated: list[dict[str, Any]] | None = None
-    for idx, msg in enumerate(messages):
+    """Drop orphan tool results and strip duplicate/consumed tool_calls.
+
+    1. Drop tool results whose ID was never declared by any assistant.
+    2. Strip tool_calls from assistant messages when their ID was already
+       consumed by a completed assistant→tool pair from an *earlier* turn.
+    3. Strip tool_calls with duplicate IDs within the same assistant message.
+    4. Drop tool results whose ID was already fulfilled (duplicate turn).
+
+    This prevents ``_sanitize_messages`` from silently removing only the
+    *result* (via ``_skip``) while the orphaned tool_call survives and
+    triggers MiniMax error 2013.
+    """
+    fulfilled: set[str] = set()     # IDs that completed assistant→tool cycle
+    all_declared: set[str] = set()  # all IDs ever declared across history
+    result: list[dict[str, Any]] = []
+
+    for msg in messages:
         role = msg.get("role")
+
         if role == "assistant":
-            for tc in msg.get("tool_calls") or []:
-                if isinstance(tc, dict) and tc.get("id"):
-                    declared.add(str(tc["id"]))
-        if role == "tool":
-            tid = msg.get("tool_call_id")
-            if tid and str(tid) not in declared:
-                if updated is None:
-                    updated = [dict(m) for m in messages[:idx]]
+            tcs = msg.get("tool_calls")
+            if not tcs:
+                result.append(msg)
                 continue
-        if updated is not None:
-            updated.append(dict(msg))
-    return updated if updated is not None else messages
+
+            seen_in_turn: set[str] = set()
+            new_tcs: list[dict[str, Any]] = []
+            for tc in tcs:
+                if not isinstance(tc, dict):
+                    new_tcs.append(tc)
+                    continue
+                tid = tc.get("id")
+                if not tid:
+                    new_tcs.append(tc)
+                    continue
+                str_tid = str(tid)
+                if str_tid in fulfilled or str_tid in seen_in_turn:
+                    continue  # strip — already consumed or duplicate in this turn
+                seen_in_turn.add(str_tid)
+                new_tcs.append(tc)
+                all_declared.add(str_tid)
+
+            if len(new_tcs) == len(tcs):
+                result.append(msg)
+            else:
+                d = dict(msg)
+                if new_tcs:
+                    d["tool_calls"] = new_tcs
+                else:
+                    d.pop("tool_calls", None)
+                result.append(d)
+
+        elif role == "tool":
+            tid = msg.get("tool_call_id")
+            if not tid:
+                result.append(msg)
+                continue
+            str_tid = str(tid)
+            if str_tid not in all_declared or str_tid in fulfilled:
+                continue  # orphan tool result or duplicate turn
+            fulfilled.add(str_tid)
+            result.append(msg)
+
+        else:
+            result.append(msg)
+
+    # Return original list when no changes were made
+    if len(result) == len(messages) and all(a is b for a, b in zip(result, messages)):
+        return messages
+    return result
+
+
+def strip_bypassed_tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove tool messages with [BYPASSED] or [PENDING] content.
+
+    These are transient state from interruption that should not be sent to the
+    LLM — they represent tool calls that were cancelled or interrupted, and
+    keeping them inflates history with irrelevant status messages.
+    """
+    kept: list[dict[str, Any]] = []
+    changed = False
+    for msg in messages:
+        if msg.get("role") == "tool":
+            content = msg.get("content", "")
+            if isinstance(content, str) and ("[BYPASSED]" in content or "[PENDING]" in content):
+                changed = True
+                continue
+        kept.append(msg)
+    # Normalize dicts only when stripping occurred to avoid unnecessary copies
+    if not changed:
+        return messages
+    return [dict(m) for m in kept]
 
 
 def backfill_missing_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

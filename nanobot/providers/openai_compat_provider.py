@@ -448,14 +448,75 @@ class OpenAICompatProvider(LLMProvider):
                 clean["content"] = self._coerce_content_to_string(clean.get("content"))
         result = self._enforce_role_alternation(sanitized)
         result = [m for m in result if not m.get("_skip")]
-        pattern = " | ".join(
-            f"{m.get('role','?')}"
-            f"{'[tc:' + ','.join(str(tc.get('id',''))[:6] for tc in (m.get('tool_calls') or []) if isinstance(tc,dict)) + ']' if m.get('tool_calls') else ''}"
-            f"{'[tr:' + str(m.get('tool_call_id',''))[:6] + ']' if m.get('tool_call_id') else ''}"
-            for m in result[-10:]
-        )
-        logger.info("SANITIZED_MSG_PATTERN (last 10): {}", pattern)
+
+        # Full-sequence validation: find any tool_call/tool_result mismatch
+        # across ALL messages, not just the last N.
+        _validate_tool_sequence(result)
+
         return result
+
+def _validate_tool_sequence(messages: list[dict[str, Any]]) -> None:
+    """Walk all messages, validate tool_call/tool_result pairing, log mismatches."""
+    # Track every occurrence — dict would mask duplicate IDs.
+    declared: list[tuple[str, int]] = []   # (tool_call_id, assistant msg index)
+    results_seen: list[tuple[str, int]] = []  # (tool_call_id, tool msg index)
+    orphans: list[str] = []
+
+    for i, msg in enumerate(messages):
+        role = msg.get("role")
+        if role == "assistant":
+            for tc in msg.get("tool_calls") or []:
+                tid = tc.get("id") if isinstance(tc, dict) else None
+                if tid:
+                    declared.append((tid, i))
+        elif role == "tool":
+            tid = msg.get("tool_call_id")
+            if tid:
+                results_seen.append((tid, i))
+                if not any(dt == tid for dt, _ in declared):
+                    orphans.append(f"  msg[{i}] tool result '{tid[:12]}...' has no matching assistant tool_call")
+
+    # Multi-set: consume declared IDs in order against results
+    unmatched_declared = list(declared)
+    for rtid, ri in results_seen:
+        for j, (dtid, di) in enumerate(unmatched_declared):
+            if dtid == rtid:
+                unmatched_declared.pop(j)
+                break
+
+    missing_results = []
+    for tid, asst_idx in unmatched_declared:
+        missing_results.append(f"  msg[{asst_idx}] tool_call '{tid[:12]}...' has no matching tool result")
+
+    # Detect duplicate tool_call_ids across turns
+    seen_ids: dict[str, list[int]] = {}
+    dupe_warnings: list[str] = []
+    for tid, idx in declared:
+        if tid in seen_ids:
+            seen_ids[tid].append(idx)
+        else:
+            seen_ids[tid] = [idx]
+    for tid, indices in seen_ids.items():
+        if len(indices) > 1:
+            dupe_warnings.append(f"  tool_call_id '{tid[:12]}...' appears in {len(indices)} assistant messages ({indices})")
+
+    total = len(messages)
+    if orphans or missing_results or dupe_warnings:
+        parts = []
+        if orphans:
+            parts.append("Orphan tool results:\n" + "\n".join(orphans))
+        if missing_results:
+            parts.append("Missing tool results:\n" + "\n".join(missing_results))
+        if dupe_warnings:
+            parts.append("Duplicate IDs:\n" + "\n".join(dupe_warnings))
+        logger.warning(
+            "TOOL_SEQ_MISMATCH in {} messages:\n{}",
+            total,
+            "\n\n".join(parts),
+        )
+    else:
+        logger.info("TOOL_SEQ_OK ({} messages, {} tool_calls, {} tool_results)",
+                     total, len(declared), len(results_seen))
 
     # ------------------------------------------------------------------
     # Build kwargs
@@ -614,13 +675,16 @@ class OpenAICompatProvider(LLMProvider):
                         # requests with assistant messages missing reasoning_content.
                         if not msg.get("reasoning_content"):
                             msg["reasoning_content"] = " "
-                    # MiniMax fix: _sanitize_messages sets content=None on assistant
-                    # tool-call messages (to satisfy providers that reject non-empty
-                    # content alongside tool_calls).  MiniMax with reasoning_split
-                    # reverses this requirement — it rejects content=None.
-                    if (spec and spec.thinking_style == "reasoning_split"
-                            and msg.get("tool_calls") and msg.get("content") is None):
-                        msg["content"] = " "
+
+        # MiniMax: _sanitize_messages unconditionally sets content=None on ALL
+        # assistant tool-call messages (line 434).  MiniMax reverses the usual
+        # convention and rejects content=null — even when thinking mode is not
+        # active.  Run this fix unconditionally so that non-thinking requests
+        # also get non-null content on historical tool-call messages.
+        if spec and spec.thinking_style == "reasoning_split":
+            for msg in kwargs["messages"]:
+                if msg.get("tool_calls") and msg.get("content") is None:
+                    msg["content"] = " "
 
         # GLM: preserved thinking across multi-turn (clear_thinking: False).
         # Without this, GLM clears historical reasoning each turn.
@@ -635,6 +699,28 @@ class OpenAICompatProvider(LLMProvider):
         logger.info("_build_kwargs: model={} extra_body={} max_tokens={} temperature={} reasoning_effort={}",
                      model_name, kwargs.get("extra_body"), kwargs.get("max_tokens"),
                      kwargs.get("temperature"), kwargs.get("reasoning_effort"))
+
+        # Pre-send dump: show last 15 messages with roles, content length, tool_call count
+        dump_msgs = kwargs["messages"][-15:]
+        dump_lines = []
+        for i, m in enumerate(dump_msgs):
+            role = m.get("role", "?")
+            c = m.get("content")
+            content_preview = f"len={len(c)}" if isinstance(c, str) else ("None" if c is None else f"type={type(c).__name__}")
+            tc_ids = []
+            for tc in (m.get("tool_calls") or []):
+                if isinstance(tc, dict) and tc.get("id"):
+                    tc_ids.append(str(tc["id"])[:8])
+            tr_id = str(m.get("tool_call_id", ""))[:8] if m.get("tool_call_id") else ""
+            extra = ""
+            if tc_ids:
+                extra += f" tc=[{','.join(tc_ids)}]"
+            if tr_id:
+                extra += f" tr={tr_id}"
+            if m.get("reasoning_content"):
+                extra += " rc=present"
+            dump_lines.append(f"  msg[-{15-i}] {role:>9} content={content_preview}{extra}")
+        logger.debug("PRE_SEND_MSGS (last 15):\n{}", "\n".join(dump_lines))
         return kwargs
 
     def _should_use_responses_api(

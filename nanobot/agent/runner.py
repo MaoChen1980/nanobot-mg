@@ -62,6 +62,7 @@ __all__ = [
 from .runner_context import (
     drop_orphan_tool_results,
     backfill_missing_tool_results,
+    strip_bypassed_tool_messages,
 )
 from .runner_injection import drain_injections, append_injected_messages
 from .runner_llm import (
@@ -251,7 +252,8 @@ class AgentRunner:
 
         for iteration in range(spec.max_iterations):
             try:
-                messages_for_model = drop_orphan_tool_results(messages)
+                messages_for_model = strip_bypassed_tool_messages(messages)
+                messages_for_model = drop_orphan_tool_results(messages_for_model)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
                 messages_for_model = split_thinking_messages(messages_for_model)
             except Exception as exc:
@@ -260,7 +262,8 @@ class AgentRunner:
                     iteration, spec.session_key or "default", exc,
                 )
                 try:
-                    messages_for_model = drop_orphan_tool_results(messages)
+                    messages_for_model = strip_bypassed_tool_messages(messages)
+                    messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
                     messages_for_model = split_thinking_messages(messages_for_model)
                 except Exception:
