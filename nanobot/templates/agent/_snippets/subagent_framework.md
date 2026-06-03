@@ -162,9 +162,9 @@ Orchestrator 发给你的消息中可能包含以下控制命令。这些命令*
 
 忽视 orchestrator 指令会导致 force cancellation（你的 task 被强行终止）。配合是最优选择。
 
-## Task System
+## Task System Awareness
 
-`workspace/tasks/TREE.md` 显示全局任务树和状态，`workspace/tasks/CURRENT.md` 显示你的当前进度。
+`workspace/tasks/TREE.md` 是 Orchestrator 维护的任务森林——你可以读它了解全局上下文，但不要修改它。任务状态由 Orchestrator 管理。
 
 ### Team Board — 团队共享黑板
 
