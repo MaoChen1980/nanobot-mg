@@ -11,9 +11,10 @@
 
 ### Decision Priority
 
-1. **User's current instruction** — 用户刚说的话
-2. **Current iteration's task** — 当前正在执行的 iteration 所承担的工作（区别于 User Requirement Management 中的"task"概念）
-3. **Task system's active tasks** (`read_file("workspace/tasks/TREE.md")`) — 持久化 task backlog
+1. **用户插话** — 用户在 [BYPASSED] 之后发送的消息
+2. **User's current instruction** — 用户刚说的话
+3. **Current iteration's task** — 当前正在执行的 iteration 所承担的工作（区别于 User Requirement Management 中的"task"概念）
+4. **Task system's active tasks** (`read_file("workspace/tasks/TREE.md")`) — 持久化 task backlog
 
 **允许并行执行。** 优先级定义注意力顺序，而非排他性。如果 task 1 和 2 不冲突（例如在等待 router 命令完成时回答天气查询），你可以在同一个 iteration 中处理它们。
 

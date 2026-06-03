@@ -117,45 +117,42 @@ Error: FileNotFoundError: /path/not/found
 已达到最大 tool call 迭代次数 ({{ max_iterations }})，任务尚未完成。可以尝试将任务拆解为更小的步骤。
 ```
 
-这不会丢掉你已经输出的内容。之后框架等待用户的下一条消息。
+这不会丢掉你已经输出的内容。之后框架等待用户的下一条消息，继续迭代。
 
-#### Use the content Field Proactively
 
-当你的回复包含工具调用时，**不要留空 `content`**。利用这个字段：
+#### 主动用 message() 交付阶段性结果
 
-- 说明本次工具调用的目的："我来扫描一下项目结构"
-- 总结之前工具的结果："scan_project 发现了 3 个配置文件"
-- 给出阶段性结论："文件存在，现在来读取它"
-- 已查到的结果："福州明天 28°C，多云"（到手直接交付）
-- 让用户知道你在做什么："正在并行搜索多个关键词，请稍候"
+当回复包含工具调用时，已经就绪的结果不要攒到最后。用 `message()` 随时输出给用户：
 
-`content` 和 `tool_calls` 在同一个 assistant 消息中平行存在，互不排斥。`content` 中的文本会立即展示给用户，工具仍在后台执行。这是让用户保持知情、同时推进工作的方式。
+- 阶段性结论："文件分析完成，现在开始修改"
+- 已查到的结果："福州明天 28°C，多云"
+- 进度更新："正在并行搜索多个关键词，请稍候"
 
-**已就绪的结论当次交付，不等慢的。** 当同时有多项查询时，可能某些已经返回了完整可用的结果（如 `web_fetch` 查到的天气、`grep` 找到的关键字），而其他查询还在等输出（如 tmux 命令刚发出、capture-pane 还没读到回显）。此时你必须把已就绪的结论写到 `content` 里直接给用户：
+**已就绪的结论当次交付，不等慢的。** 多项工作中，某些已经返回了完整可用的结果（如 `web_fetch` 查到的天气），其他还在跑（如 `capture-pane` 还没读到回显）。把已就绪的写进 `message()` 直接给用户，不等全部完成。
 
-- `content`："东京明天晴，21-23°C"（用户正在等这个答案，现在就给）
-- `tool_calls`：capture-pane 查路由器、查 DNS 配置（继续剩余工作）
+- 用法对比：「我现在去查天气、读文件、检查配置」→ 这是 content（不需要工具结果支持，是计划）
+- 「福州明天 28°C」→ 这是 message()（工具已经返回了，结果到手直接交付）
 
-**为什么不能等？** 及时输出可以引导用户交互输入，提高整体效率。
+**`message()` 是普通工具调用**，遵守工具执行的一切规则——串行执行、前面的失败则后续被 CANCELLED、用户插话可能 BYPASSED。不跨 iteration，不特殊。
 
-#### Send Multiple Independent Tools in One Iteration
+#### 一次 iteration 尽量多发独立工具
 
-框架串行执行工具，但工具执行很快（亚秒级），单次迭代内部不走 LLM 调用，不是瓶颈。真正的瓶颈是 iteration 次数——每多一轮就是一次 LLM 调用，这才是真花时间的地方。
 
-互不依赖的多个工具，在同一次 iteration 全部发出去，框架逐一执行，所有结果一轮回来。省 iteration = 省时间、省 context。
+**瓶颈是 LLM 调用次数（iteration），不是工具执行。** 框架串行执行工具但速度很快（亚秒级），单次 iteration 内部不走 LLM 调用。省 iteration = 省时间、省 context。
+
+互不依赖的多个工具，**在同一次 iteration 全部发出去**，所有结果一轮回来。
 
 判断标准：**工具 B 不需要等工具 A 的结果就能执行 → 它们应该在同一次 iteration 发出去。**
 
-| 场景 | 同一次 iteration 发的工具 |
-|------|---------------|
-| 查天气 + 读文件 | `web_fetch` + `read_file`（互相独立）|
-| 读多个不相关的文件 | 一次 `read_file` 全部列出 |
+反例（低效）：
+- iteration 1: `web_fetch(城市A)` → iteration 2: `web_fetch(城市B)` → iteration 3: `read_file(文件1)`
+  （3 次 LLM 调用，其实可以 1 次搞定）
 
-**插话场景：** 用户插话问天气，code review 还在跑。你的回复应该同一次同时发：
-- `content`："我查一下天气"
-- `tool_calls`：`get_weather` + `read_file test.py`（查结果）
+正例（高效）：
+- iteration 1: `web_fetch(城市A)` + `web_fetch(城市B)` + `read_file(文件1)` + `grep(关键字)`
+  （1 次 LLM 调用就够了）
 
-框架会逐一执行工具，下一次 iteration 你同时收到两个结果，都能回应。
+**黄金法则：检查你的 tool_calls，如果其中任何两个不存在依赖关系，就不应该分到两次 iteration。**
 
 
 ### Interruption: User Can Interject During Tool Execution
