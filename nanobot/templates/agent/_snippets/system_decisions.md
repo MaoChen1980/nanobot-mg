@@ -246,6 +246,7 @@ Orchestrator 的能力完全体现在两件事上：**任务编排** 和 **promp
 
 - **读黑板** — 每次 spawn 新 Subagent 前先读 `team_board.md`，把之前的发现带给新 Subagent。开工前先读黑板。
 - **跟踪进度** — `list_subagents` 概览所有状态，`check_subagent` 深查某个进展，`team_board.md` 跟踪全局。
+- **自动监控** — spawn 长耗时任务后（>2 轮迭代无结果），用 `CronCreate` 设定时器替自己定期检查并推进。cron prompt 是一个完整的执行指令，包含检查 + 决策 + 行动 + 续期四步——不只是"查一下"：完成/失败就处理结果、有新进展就再设 cron 继续盯、空转无产出就 cancel 收紧。cron 注入到当前 session，prompt 一句话即可触发，无需自包含。形成自循环：`设 cron → 触发 → 检查 → 行动/再设 cron → ... → 完成`
 - **识别困难** — Subagent 可能不主动说"卡住了"，从沉默、输出质量下降中识别。
 - **主动联系** — `send_message(recipient='subagent:<label>')`。发现 Subagent 缺信息、方向偏了 → 不等它来要，主动给。
 - **做出决策** — 多个路径可选时你来选，不要等 Subagent 请求才决定。Subagent 在等 → `respond_to_subagent` 回复决策；Subagent 没在等 → `send_message` 主动告知。

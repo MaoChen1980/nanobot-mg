@@ -200,6 +200,7 @@ class SubagentManager:
                 project_root=self.project_root,
                 output_schema=output_schema,
                 role=role,
+                task_description=task,
             )
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},

@@ -12,6 +12,92 @@ if TYPE_CHECKING:
     from nanobot.agent.tools.registry import ToolRegistry
 
 
+_TEAM_BOARD_PATH = "tasks/team_board.md"
+_STOP_WORDS = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "need", "dare", "ought",
+    "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
+    "into", "through", "during", "before", "after", "above", "below",
+    "between", "out", "off", "over", "under", "again", "further", "then",
+    "once", "here", "there", "when", "where", "why", "how", "all", "each",
+    "every", "both", "few", "more", "most", "other", "some", "such", "no",
+    "nor", "not", "only", "own", "same", "so", "than", "too", "very",
+    "and", "but", "or", "if", "because", "about", "up", "it", "its",
+    "this", "that", "these", "those", "i", "me", "my", "we", "our",
+    "you", "your", "he", "him", "his", "she", "her", "they", "them",
+    "their", "what", "which", "who", "whom",
+})
+
+
+def _tokenize(text: str) -> set[str]:
+    """Extract meaningful keywords from text."""
+    import re
+    tokens = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{1,}", text.lower())
+    return {t for t in tokens if t not in _STOP_WORDS and not t.isdigit()}
+
+
+def _search_team_board(task_description: str, workspace: Path, top_k: int = 3) -> str | None:
+    """Search team_board.md for sections relevant to the task description.
+
+    Uses simple keyword overlap scoring — fast, no external dependencies.
+    Returns formatted markdown section or None if no relevant content found.
+    """
+    board_path = workspace / _TEAM_BOARD_PATH
+    if not board_path.exists():
+        return None
+
+    content = board_path.read_text(encoding="utf-8")
+    if not content.strip():
+        return None
+
+    # Parse into sections by ## heading
+    lines = content.split("\n")
+    sections: list[tuple[str, list[str]]] = []
+    current_heading = "(preamble)"
+    current_lines: list[str] = []
+    for line in lines:
+        if line.startswith("## "):
+            if current_lines:
+                sections.append((current_heading, current_lines))
+            current_heading = line.strip("# ")
+            current_lines = []
+        else:
+            current_lines.append(line)
+    if current_lines:
+        sections.append((current_heading, current_lines))
+
+    task_keywords = _tokenize(task_description)
+    if not task_keywords:
+        return None
+
+    # Score each section by keyword overlap
+    scored: list[tuple[int, str, str]] = []
+    for heading, section_lines in sections:
+        section_text = " ".join(section_lines)
+        section_kw = _tokenize(section_text)
+        overlap = len(task_keywords & section_kw)
+        if overlap >= 1:  # minimum relevance threshold
+            section_body = "\n".join(section_lines).strip()
+            scored.append((overlap, heading, section_body))
+
+    if not scored:
+        return None
+
+    scored.sort(key=lambda x: -x[0])
+    selected = scored[:top_k]
+
+    lines_out = ["## Relevant Team Experience\n\n",
+                  "The following sections from the team's shared knowledge board "
+                  "may be relevant to your task:\n"]
+    for _, heading, body in selected:
+        lines_out.append(f"### {heading}\n")
+        lines_out.append(body)
+        lines_out.append("")
+
+    return "\n".join(lines_out)
+
+
 def build_subagent_prompt(
     workspace: Path,
     disabled_skills: set[str],
@@ -21,11 +107,15 @@ def build_subagent_prompt(
     project_root: Path | None = None,
     output_schema: str | None = None,
     role: str | None = None,
+    task_description: str | None = None,
 ) -> str:
     """Build system prompt for subagent — same structure as main agent.
 
     Reuses ContextBuilder so the subagent sees the same bootstrap files,
     skills, and tool descriptions as the main agent, minus spawn capability.
+
+    If *task_description* is provided, searches team_board.md for relevant
+    sections and injects them into the prompt.
     """
     ctx = ContextBuilder(
         workspace,
@@ -75,16 +165,22 @@ def build_subagent_prompt(
     if bootstrap:
         parts.append(bootstrap)
 
-    # 7. Framework rules (adapted for subagent)
+    # 7. Relevant team experience (searched from team_board.md)
+    if task_description:
+        board_section = _search_team_board(task_description, workspace)
+        if board_section:
+            parts.append(board_section)
+
+    # 8. Framework rules (adapted for subagent)
     parts.append(render_template("agent/_snippets/subagent_framework.md"))
 
-    # 8. Operating principles (shared rules adapted for subagent)
+    # 9. Operating principles (shared rules adapted for subagent)
     parts.append(render_template("agent/_snippets/subagent_decisions.md"))
 
-    # 9. Search tool selector
+    # 10. Search tool selector
     parts.append(render_template("agent/resolver.md"))
 
-    # 9. Output schema (optional)
+    # 11. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"
@@ -94,10 +190,10 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 10. Epistemic hygiene (shared principle for all agents)
+    # 12. Epistemic hygiene (shared principle for all agents)
     parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
 
-    # 11. Subagent identity and protocol
+    # 13. Subagent identity and protocol
     identity = (
         f"Your expert role: **{role}**. Operate at that level.\n\n"
         if role else

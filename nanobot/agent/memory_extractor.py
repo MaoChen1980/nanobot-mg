@@ -30,6 +30,18 @@ _SANITIZE_MAX_LEN = 64
 _ANALYSIS_MAX_CHARS = 200_000  # Max chars of .pt content sent to analysis LLM
 
 
+def _trim_sentence(text: str, max_len: int = 150) -> str:
+    """Trim text to max_len, cutting at sentence boundary when possible."""
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    for sep in ("。", "！", "？", ". ", "! ", "? "):
+        idx = truncated.rfind(sep)
+        if idx > max_len * 0.4:
+            return truncated[:idx + len(sep)].strip()
+    return truncated.rstrip() + "…"
+
+
 class MemoryExtractor:
     """Two-step memory processor: extract findings from .pt files, then write + cleanup.
 
@@ -89,6 +101,8 @@ class MemoryExtractor:
                     self.store.git.auto_commit("memory: consolidate fragmented files")
             return did_work
 
+        session_summaries: list[str] = []
+
         for pt_path in pt_files:
             processing_path = pt_path.with_suffix(".pt.processing")
             try:
@@ -109,15 +123,18 @@ class MemoryExtractor:
                             len(findings),
                             processing_path.name,
                         )
+                    summary = (analysis.get("session_summary") or "").strip()
+                    if summary:
+                        session_summaries.append(summary)
                 processed_name = processing_path.name.replace(".pt.processing", ".pt")
-                processing_path.rename(self.processed_dir / processed_name)
+                processing_path.replace(self.processed_dir / processed_name)
             except Exception:
                 logger.exception("MemoryExtractor: failed to process {}", processing_path)
                 self.failed_dir.mkdir(parents=True, exist_ok=True)
                 failed_name = processing_path.name.replace(".pt.processing", ".pt")
                 processing_path.rename(self.failed_dir / failed_name)
 
-        if not all_findings:
+        if not all_findings and not session_summaries:
             logger.info("MemoryExtractor: Step 1 done, no findings; skipping Step 2")
             if did_work:
                 self._add_backlinks()
@@ -127,7 +144,7 @@ class MemoryExtractor:
             return did_work
 
         # ── Step 2: write findings + cleanup ──
-        await self._write_cleanup_and_rebuild(all_findings)
+        await self._write_cleanup_and_rebuild(all_findings, session_summaries)
         return True
 
     # ------------------------------------------------------------------
@@ -161,7 +178,7 @@ class MemoryExtractor:
                 seen.add(key)
                 deduped.append(e)
         self.store.memory_dir.joinpath(self._RECENT_JSON).write_text(
-            json.dumps(deduped[:15], ensure_ascii=False), encoding="utf-8",
+            json.dumps(deduped[:12], ensure_ascii=False), encoding="utf-8",
         )
 
     # ------------------------------------------------------------------
@@ -230,7 +247,7 @@ class MemoryExtractor:
     # Step 2 — Write findings + cleanup
     # ------------------------------------------------------------------
 
-    async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]]) -> None:
+    async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]], session_summaries: list[str] | None = None) -> None:
         """Write all findings to target files, then cleanup-check SOUL.md/USER.md, then commit and rebuild FAISS."""
         topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
         pinned_paragraphs: set[str] = set()  # paragraphs marked as pinned
@@ -245,12 +262,13 @@ class MemoryExtractor:
             content = (finding.get("content") or "").strip()
             if not content:
                 continue
+            # Quality gate: reject vague Chinese advice without technical substance
+            if re.match(r"^[-*—\s]*(注意|建议|需要|应该|可以|最好|不要)[：:]\s*[^，。]*[的了]$", content):
+                logger.debug("MemoryExtractor: skipped vague finding: {}", content[:60])
+                continue
 
             if ftype == "preference":
                 topic_files.setdefault("user.md", []).append(f"- {content}")
-                recent_candidates.append({
-                    "path": "user.md", "text": content[:80], "ts": time.time(),
-                })
 
             elif ftype == "skill":
                 name = (finding.get("name") or "").strip()
@@ -258,9 +276,6 @@ class MemoryExtractor:
                     topic_files.setdefault(
                         "pending_skills.md", []
                     ).append(f"- **{name}**: {content}")
-                    recent_candidates.append({
-                        "path": "pending_skills.md", "text": name, "ts": time.time(),
-                    })
 
             elif ftype in ("knowledge", "pitfall", "pattern"):
                 topic = (finding.get("topic") or "").strip()
@@ -283,9 +298,6 @@ class MemoryExtractor:
                             "MemoryExtractor: supersedes applied in {} for '{}'",
                             track_path, content[:60],
                         )
-                        recent_candidates.append({
-                            "path": track_path, "text": content[:80], "ts": time.time(),
-                        })
                         modified_for_cleanup.add(track_path)
                         continue
                     logger.info(
@@ -297,11 +309,6 @@ class MemoryExtractor:
 
                 if finding.get("pinned"):
                     pinned_paragraphs.add(paragraph)
-
-                # Track for Recent changes
-                recent_candidates.append({
-                    "path": rel_path, "text": content[:80], "ts": time.time(),
-                })
 
             else:
                 logger.warning("MemoryExtractor: unknown finding type '{}', dropped", ftype)
@@ -344,6 +351,16 @@ class MemoryExtractor:
                     len(paragraphs),
                     rel_path,
                 )
+
+        # ── Append session summaries to recent changes ──
+        if session_summaries:
+            ts = time.time()
+            for summary in session_summaries:
+                recent_candidates.append({
+                    "path": "_session_work.md",
+                    "text": summary,
+                    "ts": ts,
+                })
 
         # ── Capture written findings for Recent changes ──
         if recent_candidates:
@@ -583,11 +600,13 @@ class MemoryExtractor:
         if think_end >= 0:
             after_think = text[think_end + len("</think>"):].strip()
         else:
-            # <think> unclosed or absent — try the whole text, but strip leading <think> if present
+            # <think> unclosed or absent — try the whole text
             after_think = text.strip()
-            if after_think.startswith("<think>"):
-                # Unclosed think tag — search for JSON in remaining content only
-                after_think = ""
+            # strip leading <think> if present, keep rest for JSON search
+            after_think = after_think.removeprefix("<think>").strip()
+            if not after_think:
+                # <think> with nothing after — no JSON possible
+                return ""
         # Step 2: find the LAST ```json or ``` code block
         matches = list(re.finditer(r"```(?:json)?\s*\n(.*?)\n```", after_think, re.DOTALL))
         if matches:
@@ -640,50 +659,101 @@ class MemoryExtractor:
         await loop.run_in_executor(None, self.store.build_framework_index)
 
     async def _consolidate_memory(self) -> bool:
-        """Consolidate fragmented small memory files into broader topic files.
+        """Consolidate memory files: merge small files, reorganize dirs under 20 limit.
 
-        Returns True if any merges were executed.
+        Supports three operations:
+        - ``merge_files``: combine small related files within one directory
+        - ``merge_dirs``: merge a whole directory into another (files moved, source removed)
+        - ``move_file``: move a single file to a different directory (topic rename)
+
+        Returns True if any changes were executed.
         """
-        # Collect files per category dir (excluding root files like MEMORY.md, user.md, etc.)
         exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "pending_skills.md", "lessons.md", "self_mod.md", "system.md", "user.md"}
-        dir_files: dict[str, list[tuple[str, int]]] = {}  # dir → [(filename, line_count)]
 
+        # Collect ALL topic directories and their files
+        all_topics: dict[str, list[str]] = {}  # dir → [filenames]
+        for p in self.store.memory_dir.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name in exclude_names:
+                continue
+            rel = p.relative_to(self.store.memory_dir)
+            parent = str(rel.parent)
+            all_topics.setdefault(parent, []).append(rel.name)
+
+        # Count topic directories (exclude root ".")
+        topic_dirs = sorted(d for d in all_topics if d != ".")
+        total_dirs = len(topic_dirs)
+        over_limit = total_dirs >= 20
+
+        # Collect small files (≤10 lines, ≥3 per dir) for merge candidates
+        small_candidates: dict[str, list[tuple[str, int]]] = {}
         for p in self.store.memory_dir.rglob("*.md"):
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
             rel = p.relative_to(self.store.memory_dir)
             if rel.parent.name == ".":
-                continue  # skip root-level files
+                continue
             parent = str(rel.parent)
-            lines = len(p.read_text(encoding="utf-8").splitlines())
+            text = p.read_text(encoding="utf-8")
+            lines = len(text.splitlines())
             if lines <= 10:
-                dir_files.setdefault(parent, []).append((rel.name, lines))
+                small_candidates.setdefault(parent, []).append((rel.name, lines))
 
-        # Only act on categories with significant fragmentation
-        candidates = {d: files for d, files in dir_files.items() if len(files) >= 3}
-        if not candidates:
+        has_small_clusters = any(len(v) >= 3 for v in small_candidates.values())
+
+        if not over_limit and not has_small_clusters:
             return False
 
-        # Build prompt for LLM
-        parts = ["Some memory topic files are very small (<=10 lines). Consider merging related ones into a broader file."]
-        for cat_dir, files in sorted(candidates.items()):
-            parts.append(f"\n### {cat_dir}/")
-            for name, lines in sorted(files):
-                parts.append(f"- {name} ({lines} lines)")
+        # ── Build prompt ──
+        parts = [f"你正在整理知识库的目录结构。唯一约束：目录数不超过 20。当前 {total_dirs}/20。\n"]
+        if over_limit:
+            parts.append("⚠️ 超过上限，需要合并！")
+
+        # Extract first heading from each file for content-aware organization
+        def _first_heading(p: Path) -> str:
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+                for line in text.splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith("## ") or stripped.startswith("# "):
+                        return stripped
+                return ""
+            except OSError:
+                return ""
+
+        parts.append("\n### 当前目录")
+        for d in topic_dirs:
+            files = all_topics.get(d, [])
+            parts.append(f"- {d}/ ({len(files)} 个文件)")
+            for name in sorted(files):
+                fpath = self.store.memory_dir / d / name
+                heading = _first_heading(fpath)
+                tag = f" ← {heading}" if heading else ""
+                parts.append(f"  - {name}{tag}")
+
+        if has_small_clusters:
+            parts.append("\n### 小文件（候选合并）")
+            for cat_dir, files in sorted(small_candidates.items()):
+                if len(files) >= 3:
+                    parts.append(f"\n{cat_dir}/")
+                    for name, lines in sorted(files):
+                        parts.append(f"  - {name} ({lines} 行)")
+
         user_content = "\n".join(parts)
 
         system_msg = (
-            "You are consolidating a knowledge base. Review the small files listed below, "
-            "which are grouped by category directory. Suggest which files should be merged "
-            "into a single broader file.\n\n"
-            "Output JSON:\n"
-            '{"merges": [{"target": "merged-file-name.md", "category": "CategoryDir", '
-            '"sources": ["file1.md", "file2.md"], "reason": "brief reason"}]}\n\n'
-            "Rules:\n"
-            "- Only merge files that share a clear common topic\n"
-            "- Use the category dir as the merge target location\n"
-            "- Do NOT suggest changes to the knowledge content, just consolidation\n"
-            "- Return empty list if no meaningful merges are possible"
+            "你负责整理知识库目录。目标：让分类更清晰、容易查找。\n"
+            "看文件的实际内容，把相关主题归类到一起。例如同一项目的散落笔记可以合并，"
+            "同类型工具可以统一目录。不相关的不要硬凑。\n\n"
+            "唯一硬约束：目录数不超过 20。如果当前已经满足，不做无意义的调整。\n\n"
+            "可用操作（三种，按实际情况选用）：\n"
+            "1. merge_dirs: 整个目录合并到另一个已存在的目录\n"
+            '   {"type": "merge_dirs", "category": "", "sources": ["DirA"], "target": "DirB"}\n'
+            "2. merge_files: 同一目录下合并多个小文件为一个\n"
+            '   {"type": "merge_files", "category": "Path", "sources": ["a.md", "b.md"], "target": "ab.md"}\n'
+            "3. move_file: 移动单个文件到合适目录\n"
+            '   {"type": "move_file", "sources": ["f.md"], "category": "TargetDir", "target": "f.md"}\n\n'
+            "规则：merge_dirs 的 target 目录必须已存在。没把握就不动。\n\n"
+            '只输出 JSON：{"operations": [...]}'
         )
 
         try:
@@ -708,59 +778,113 @@ class MemoryExtractor:
             raw_clean = self._extract_json_from_llm_output(raw)
             parsed = json.loads(raw_clean)
         except json.JSONDecodeError:
-            logger.warning("MemoryExtractor: failed to parse consolidation JSON output")
+            logger.warning("MemoryExtractor: failed to parse consolidation JSON (raw[:500]={})", raw[:500])
             return False
 
-        merges = parsed.get("merges", []) if isinstance(parsed, dict) else []
-        if not merges:
-            logger.info("MemoryExtractor: no consolidation merges suggested")
+        operations = parsed.get("operations", []) if isinstance(parsed, dict) else []
+        if not operations:
+            logger.info("MemoryExtractor: no consolidation operations suggested")
             return False
 
-        for merge in merges:
-            target_name = merge.get("target", "")
-            category = merge.get("category", "")
-            sources = merge.get("sources", [])
-            if not target_name or not category or not sources:
+        executed = False
+
+        for op in operations:
+            op_type = op.get("type", "")
+            category = op.get("category", "")
+            sources = op.get("sources", [])
+            target = op.get("target", "")
+            reason = op.get("reason", "")
+
+            if op_type == "merge_files":
+                if not target or not category or not sources:
+                    continue
+                cat_dir = self.store.memory_dir / category
+                target_path = cat_dir / target
+                if not cat_dir.is_dir() or target_path.exists():
+                    continue
+                combined: list[str] = [f"# {Path(target).stem}\n"]
+                for src_name in sources:
+                    src_path = cat_dir / src_name
+                    if src_path.exists():
+                        content = src_path.read_text(encoding="utf-8")
+                        body_lines = content.split("\n")
+                        body = "\n".join(
+                            l for l in body_lines
+                            if not l.startswith("# ") and not l.startswith("---")
+                        )
+                        combined.append(body.strip())
+                        combined.append("")
+                text = "\n".join(combined).strip()
+                if not text:
+                    continue
+                date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                text += f"\n\n---\n\n*合并 Consolidation: {date_str}*"
+                target_path.write_text(text, encoding="utf-8")
+                for src_name in sources:
+                    (cat_dir / src_name).unlink(missing_ok=True)
+                logger.info("MemoryExtractor: merged {} files into {}/{}", len(sources), category, target)
+                executed = True
+
+            elif op_type == "merge_dirs":
+                if not target or not sources:
+                    continue
+                target_dir = self.store.memory_dir / category / target if category else self.store.memory_dir / target
+                if not target_dir.is_dir():
+                    continue
+                for src_name in sources:
+                    src_dir = (self.store.memory_dir / category / src_name) if category else (self.store.memory_dir / src_name)
+                    self._move_all_files(src_dir, target_dir)
+                    # Remove empty source dir
+                    try:
+                        remaining = list(src_dir.rglob("*"))
+                        if not remaining or all(
+                            p.name == "index.md" or ".vector_index" in p.parts
+                            for p in remaining
+                        ):
+                            import shutil
+                            shutil.rmtree(src_dir)
+                    except OSError:
+                        pass
+                    logger.info("MemoryExtractor: merged dir {} into {}", src_name, target)
+                executed = True
+
+            elif op_type == "move_file":
+                if not target or not sources:
+                    continue
+                for src_path_str in sources:
+                    src_parts = src_path_str.split("/", 1)
+                    src_rel = src_path_str
+                    full_src = self.store.memory_dir / src_rel
+                    if not full_src.exists():
+                        continue
+                    # destination: category + target filename
+                    dst_dir = self.store.memory_dir / category if category else self.store.memory_dir
+                    dst_dir.mkdir(parents=True, exist_ok=True)
+                    dst_path = dst_dir / target
+                    if dst_path.exists():
+                        continue
+                    full_src.rename(dst_path)
+                    logger.info("MemoryExtractor: moved {} → {}/{}", src_rel, category, target)
+                    executed = True
+
+            else:
+                logger.debug("MemoryExtractor: unknown consolidation op '{}', skipped", op_type)
+
+        return executed
+
+    @staticmethod
+    def _move_all_files(src: Path, dst: Path) -> None:
+        """Move all .md files from src into dst, preserving directory structure."""
+        for p in src.rglob("*.md"):
+            if ".vector_index" in p.parts or p.name == "index.md":
                 continue
-
-            cat_dir_path = self.store.memory_dir / category
-            target_path = cat_dir_path / target_name
-            if target_path.exists():
-                logger.info("MemoryExtractor: merge target already exists, skipping: {}", target_name)
-                continue
-
-            # Read and combine source files
-            combined: list[str] = [f"# {Path(target_name).stem}\n"]
-            for src_name in sources:
-                src_path = cat_dir_path / src_name
-                if src_path.exists():
-                    content = src_path.read_text(encoding="utf-8")
-                    # Strip the title line if present, keep content
-                    lines = content.split("\n")
-                    body = "\n".join(l for l in lines if not l.startswith("# ") and not l.startswith("---"))
-                    combined.append(body.strip())
-                    combined.append("")
-
-            content = "\n".join(combined).strip()
-            if not content:
-                continue
-
-            # Add creation date
-            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            content += f"\n\n---\n\n*合并 Consolidation: {date_str}*"
-
-            target_path.write_text(content, encoding="utf-8")
-
-            # Delete source files
-            for src_name in sources:
-                src_path = cat_dir_path / src_name
-                if src_path.exists():
-                    src_path.unlink()
-                    logger.info("MemoryExtractor: consolidated {} into {}", src_name, target_name)
-
-            logger.info("MemoryExtractor: merged {} into {}", ", ".join(sources), target_name)
-
-        return True
+            rel = p.relative_to(src)
+            target = dst / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                p.rename(target)
+            except OSError:
+                pass
 
     # ------------------------------------------------------------------
     # Memory directory change detection
@@ -945,16 +1069,20 @@ class MemoryExtractor:
                 for line in text.split("\n"):
                     s = line.strip()
                     if s and not s.startswith("#") and "<!--pinned-->" not in s:
-                        summary = s[:60].lstrip("- *💡⚠️ ").strip()
+                        # Use description field if available, else first content line
+                        if s.startswith("description:"):
+                            summary = _trim_sentence(s[len("description:"):].strip())
+                        else:
+                            summary = _trim_sentence(s[:200].lstrip("- *💡⚠️ ").strip())
                         break
                 pinned_candidates.append((rel, mtime, summary))
 
-        # Sort pinned by recency (newest first), take top 5
+        # Sort pinned by recency (newest first), take top 6
         pinned_candidates.sort(key=lambda x: -x[1])
         rel_to_heading = {rel: h for rel, _, _, _, h in file_meta}
         pinned: list[str] = [
             f"- [{rel_to_heading.get(rel, rel)}]({rel}) — {summary}"
-            for rel, _mtime, summary in pinned_candidates[:5]
+            for rel, _mtime, summary in pinned_candidates[:6]
         ]
 
         if not file_meta:
@@ -979,38 +1107,32 @@ class MemoryExtractor:
             two_days = 2 * 86400
             lines.append("## Recent changes\n")
             for r in recent:
-                path = r.get("path", "")
+                if r.get("path") != "_session_work.md":
+                    continue  # only session summaries belong here
                 text = r.get("text", "")
                 ts = r.get("ts", 0)
-                rel_link = path.replace(chr(92), "/")
-
-                # Get heading from file's H1
-                heading = Path(path).stem
-                full_header_path = self.store.memory_dir / path
-                try:
-                    for line in full_header_path.read_text(encoding="utf-8").split("\n"):
-                        s = line.strip()
-                        if s.startswith("# "):
-                            heading = s.lstrip("# ").strip()
-                            break
-                except OSError:
-                    pass
-
                 age_s = now_s - ts
-                if age_s < two_days and len(text) <= 80:
-                    lines.append(f"- **{heading}** — {text.lstrip('- *💡⚠️ ')}")
+                if age_s < two_days and text:
+                    lines.append(f"- **{_trim_sentence(text, 200)}**")
                 elif text:
-                    lines.append(f"- [{heading}]({rel_link}) — {text[:50]}")
-                else:
-                    lines.append(f"- [{heading}]({rel_link})")
+                    lines.append(f"- {_trim_sentence(text, 200)}")
             lines.append("")
 
-        # Category summary with clickable links
-        cat_order = sorted(category_index, key=lambda c: (c == ".", c))
+        # Category summary with clickable links (max 20 folders)
+        cat_order = sorted(category_index, key=lambda c: (c == ".", c))[:20]
         for cat in cat_order:
             files = category_index[cat]
             label = cat if cat != "." else "misc"
             links: list[str] = []
+            # Sub-directory links first (any depth)
+            cat_path = self.store.memory_dir / cat if cat != "." else self.store.memory_dir
+            if cat_path.is_dir():
+                for child in sorted(cat_path.iterdir()):
+                    if child.is_dir() and child.name != ".vector_index":
+                        if any(f.is_file() and f.suffix == ".md" for f in child.rglob("*.md")):
+                            sub_rel = f"{cat}/{child.name}/index.md" if cat != "." else f"{child.name}/index.md"
+                            links.append(f"[{child.name}/]({sub_rel})")
+            # File links after directories
             for rel, _stem, heading in sorted(files, key=lambda x: x[2]):
                 display = heading if heading else Path(rel).stem
                 links.append(f"[{display}]({rel})")
