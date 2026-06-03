@@ -243,6 +243,63 @@ def _responses_circuit_key(
     return f"{model_name}:{effort}"
 
 
+def _validate_tool_sequence(messages: list[dict[str, Any]]) -> None:
+    """Walk all messages, validate tool_call/tool_result pairing, log mismatches."""
+    declared: list[tuple[str, int]] = []
+    results_seen: list[tuple[str, int]] = []
+    orphans: list[str] = []
+
+    for i, msg in enumerate(messages):
+        role = msg.get("role")
+        if role == "assistant":
+            for tc in msg.get("tool_calls") or []:
+                tid = tc.get("id") if isinstance(tc, dict) else None
+                if tid:
+                    declared.append((tid, i))
+        elif role == "tool":
+            tid = msg.get("tool_call_id")
+            if tid:
+                results_seen.append((tid, i))
+                if not any(dt == tid for dt, _ in declared):
+                    orphans.append(f"  msg[{i}] tool result has no matching assistant tool_call")
+
+    unmatched_declared = list(declared)
+    for rtid, ri in results_seen:
+        for j, (dtid, di) in enumerate(unmatched_declared):
+            if dtid == rtid:
+                unmatched_declared.pop(j)
+                break
+
+    missing_results = []
+    for tid, asst_idx in unmatched_declared:
+        missing_results.append(f"  msg[{asst_idx}] tool_call '{tid[:12]}...' has no matching tool result")
+
+    seen_ids: dict[str, list[int]] = {}
+    dupe_warnings: list[str] = []
+    for tid, idx in declared:
+        if tid in seen_ids:
+            seen_ids[tid].append(idx)
+        else:
+            seen_ids[tid] = [idx]
+    for tid, indices in seen_ids.items():
+        if len(indices) > 1:
+            dupe_warnings.append(f"  tool_call_id appears in {len(indices)} assistant messages")
+
+    total = len(messages)
+    if orphans or missing_results or dupe_warnings:
+        parts = []
+        if orphans:
+            parts.append("Orphan tool results:\n" + "\n".join(orphans))
+        if missing_results:
+            parts.append("Missing tool results:\n" + "\n".join(missing_results))
+        if dupe_warnings:
+            parts.append("Duplicate IDs:\n" + "\n".join(dupe_warnings))
+        logger.warning("TOOL_SEQ_MISMATCH in {} messages:\n{}", total, "\n\n".join(parts))
+    else:
+        logger.info("TOOL_SEQ_OK ({} messages, {} tool_calls, {} tool_results)",
+                     total, len(declared), len(results_seen))
+
+
 class OpenAICompatProvider(LLMProvider):
     """Unified provider for all OpenAI-compatible APIs.
 
@@ -454,69 +511,6 @@ class OpenAICompatProvider(LLMProvider):
         _validate_tool_sequence(result)
 
         return result
-
-def _validate_tool_sequence(messages: list[dict[str, Any]]) -> None:
-    """Walk all messages, validate tool_call/tool_result pairing, log mismatches."""
-    # Track every occurrence — dict would mask duplicate IDs.
-    declared: list[tuple[str, int]] = []   # (tool_call_id, assistant msg index)
-    results_seen: list[tuple[str, int]] = []  # (tool_call_id, tool msg index)
-    orphans: list[str] = []
-
-    for i, msg in enumerate(messages):
-        role = msg.get("role")
-        if role == "assistant":
-            for tc in msg.get("tool_calls") or []:
-                tid = tc.get("id") if isinstance(tc, dict) else None
-                if tid:
-                    declared.append((tid, i))
-        elif role == "tool":
-            tid = msg.get("tool_call_id")
-            if tid:
-                results_seen.append((tid, i))
-                if not any(dt == tid for dt, _ in declared):
-                    orphans.append(f"  msg[{i}] tool result '{tid[:12]}...' has no matching assistant tool_call")
-
-    # Multi-set: consume declared IDs in order against results
-    unmatched_declared = list(declared)
-    for rtid, ri in results_seen:
-        for j, (dtid, di) in enumerate(unmatched_declared):
-            if dtid == rtid:
-                unmatched_declared.pop(j)
-                break
-
-    missing_results = []
-    for tid, asst_idx in unmatched_declared:
-        missing_results.append(f"  msg[{asst_idx}] tool_call '{tid[:12]}...' has no matching tool result")
-
-    # Detect duplicate tool_call_ids across turns
-    seen_ids: dict[str, list[int]] = {}
-    dupe_warnings: list[str] = []
-    for tid, idx in declared:
-        if tid in seen_ids:
-            seen_ids[tid].append(idx)
-        else:
-            seen_ids[tid] = [idx]
-    for tid, indices in seen_ids.items():
-        if len(indices) > 1:
-            dupe_warnings.append(f"  tool_call_id '{tid[:12]}...' appears in {len(indices)} assistant messages ({indices})")
-
-    total = len(messages)
-    if orphans or missing_results or dupe_warnings:
-        parts = []
-        if orphans:
-            parts.append("Orphan tool results:\n" + "\n".join(orphans))
-        if missing_results:
-            parts.append("Missing tool results:\n" + "\n".join(missing_results))
-        if dupe_warnings:
-            parts.append("Duplicate IDs:\n" + "\n".join(dupe_warnings))
-        logger.warning(
-            "TOOL_SEQ_MISMATCH in {} messages:\n{}",
-            total,
-            "\n\n".join(parts),
-        )
-    else:
-        logger.info("TOOL_SEQ_OK ({} messages, {} tool_calls, {} tool_results)",
-                     total, len(declared), len(results_seen))
 
     # ------------------------------------------------------------------
     # Build kwargs
