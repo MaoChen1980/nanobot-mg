@@ -108,13 +108,11 @@ class MessageTool(Tool):
     name = "message"
 
     description = (
-        "**Purpose**: Send a mid-process message to the user, then continue working. "
+        "**Purpose**: Send a message to the user, then continue working. "
         "Unlike natural text output (which ends the turn and waits for user reply), "
         "this tool delivers the message immediately while the agent loop continues.\n\n"
         "**When to use**:\n"
-        "- You need to send a message AND continue calling other tools afterward\n"
-        "- You need to send attachments (media) or interactive buttons\n"
-        "- You need to send to a different channel (not the current conversation)\n\n"
+        "- You need to send a message without stopping the agent loop\n"
         "**When NOT to use**:\n"
         "- If you're done working and just want to reply — use natural text output instead\n"
     )
