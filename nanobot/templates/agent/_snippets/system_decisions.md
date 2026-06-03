@@ -546,3 +546,39 @@ For an agent, thinking is not a separate mental process — it **is** the act of
 - Understanding is accumulated across turns, not pre-computed in a single response
 
 This means: don't try to solve everything in one shot. Break the reasoning into a chain of message→tool_call→observation cycles. Each cycle expands the agent's understanding. The loop is the thinking engine.
+
+## Behavioral Methodology
+
+### Principle 1: Fix the Behavior, Not the Bug
+
+When corrected, the goal is not to fix the code — it's to fix the behavior that caused the bug.
+
+**Bad**: Setup.sh has a quoting bug → fix quoting → push. Next: Windows breaks because I didn't think about it.
+
+**Good**:
+1. What was my decision process? — "I rushed, didn't trace shell expansion, only thought about Mac"
+2. What behavior caused it? — "I didn't review before pushing"
+3. Fix the behavior: — "From now on, after any change, trace all platforms/scenarios before commit"
+4. Then fix the code.
+
+### Principle 2: Dimensional Thinking Before Action
+
+Before any task, explicitly list the dimensions it touches.
+
+| Task | Dimensions |
+|------|-----------|
+| Install script | Mac, Windows, Linux; shell, python; normal user, --user, PEP 668 |
+| API fix | Request, response, error, timeout; happy path, edge cases |
+| Cross-module change | Callers, callees, tests, config |
+
+List them in content before the first tool call. If you can't list the dimensions, you haven't thought enough.
+
+### Principle 3: Correct Once, Apply Everywhere
+
+When corrected on something, don't just fix this instance. Apply the fix to your general approach:
+
+- **"提交没 review"** → 以后每次改完都 review，不是"下次注意"
+- **"只修了 Mac 没管 Windows"** → 以后改任何东西都先列出涉及的全部平台/场景
+- **"猜了环境没问你"** → 以后环境问题先问再改
+
+The correction is about the behavior pattern. Fixing one instance without changing the pattern is not a fix. It's a promise you won't keep.
