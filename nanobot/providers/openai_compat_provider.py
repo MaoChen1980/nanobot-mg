@@ -448,6 +448,13 @@ class OpenAICompatProvider(LLMProvider):
                 clean["content"] = self._coerce_content_to_string(clean.get("content"))
         result = self._enforce_role_alternation(sanitized)
         result = [m for m in result if not m.get("_skip")]
+        pattern = " | ".join(
+            f"{m.get('role','?')}"
+            f"{'[tc:' + ','.join(str(tc.get('id',''))[:6] for tc in (m.get('tool_calls') or []) if isinstance(tc,dict)) + ']' if m.get('tool_calls') else ''}"
+            f"{'[tr:' + str(m.get('tool_call_id',''))[:6] + ']' if m.get('tool_call_id') else ''}"
+            for m in result[-10:]
+        )
+        logger.info("SANITIZED_MSG_PATTERN (last 10): {}", pattern)
         return result
 
     # ------------------------------------------------------------------
