@@ -6,7 +6,7 @@ import asyncio
 import random
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ class RetryContext:
         self,
         category: str,
         *,
-        retry_callback: Callable[[str], Any] | None = None,
+        retry_callback: Callable[[str], Awaitable[None]] | None = None,
         config: BackoffConfig | None = None,
     ) -> None:
         """Wait with exponential backoff for the given retry category."""
@@ -98,7 +98,7 @@ class RetryContext:
         delay = max(0.1, capped + random.uniform(-jitter_range, jitter_range))
 
         if retry_callback:
-            retry_callback(category)
+            await retry_callback(category)
 
         await asyncio.sleep(delay)
 

@@ -20,7 +20,7 @@ from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.helpers import build_assistant_message, current_time_str, format_message_header
 from nanobot.utils.helpers import split_thinking_messages as _split_thinking_messages
-from nanobot.utils.media_decode import detect_image_mime
+from nanobot.utils.media_decode import compress_image, detect_image_mime, image_placeholder_text
 from nanobot.utils.prompt_templates import render_template
 from nanobot.utils.tools_index import rebuild_tools_index as _rebuild_tools_index
 
@@ -394,6 +394,67 @@ class ContextBuilder:
 
         return _to_blocks(left) + _to_blocks(right)
 
+    @staticmethod
+    def _strip_old_images(messages: list[dict[str, Any]]) -> None:
+        """Replace base64 media in ALL history messages with text placeholders.
+
+        Mutates *messages* in-place.  Only the incoming user message (appended
+        *after* this call) keeps its image_url blocks — everything in history
+        gets cleaned so old base64 never wastes context budget on subsequent
+        turns.
+
+        Handles both list content (``image_url`` / ``image`` / ``input_*``
+        blocks in user messages) and string content (``data:...;base64,``
+        embedded in tool results).  ``maybe_persist_tool_result`` skips mixed
+        ``[image_url, text]`` lists, so the runner embeds full base64 directly
+        in tool message text — this is where the string-case cleanup applies.
+        """
+        _BASE64_DATA_RE = re.compile(r"data:[^;]+;base64,[A-Za-z0-9+/=]{100,}")
+
+        for msg in messages:
+            content = msg.get("content")
+            role = msg.get("role")
+
+            # ---- list content: find and replace media blocks ----
+            if isinstance(content, list):
+                cleaned: list[dict[str, Any]] | None = None
+                path_from_meta = ""
+
+                for b in content:
+                    if not isinstance(b, dict):
+                        if cleaned is not None:
+                            cleaned.append(b)  # type: ignore[arg-type]
+                        continue
+
+                    bt = b.get("type", "")
+
+                    # Detect media blocks: image_url, image, input_image, etc.
+                    is_media = (
+                        "image" in bt
+                        or bt.startswith("input_")
+                        or (
+                            isinstance(b.get("source"), dict)
+                            and b["source"].get("type") == "base64"
+                        )
+                    )
+
+                    if is_media:
+                        cleaned = cleaned if cleaned is not None else list(content[: content.index(b)])
+                        path_from_meta = (b.get("_meta") or {}).get("path", "") or path_from_meta
+                    elif cleaned is not None:
+                        cleaned.append(b)
+
+                if cleaned is not None:
+                    if not cleaned:
+                        placeholder = image_placeholder_text(path_from_meta or "", empty="[image]")
+                        cleaned = [{"type": "text", "text": placeholder}]
+                    msg["content"] = cleaned
+                continue
+
+            # ---- string content: strip embedded base64 (tool results) ----
+            if isinstance(content, str) and _BASE64_DATA_RE.search(content):
+                msg["content"] = _BASE64_DATA_RE.sub("[base64 data omitted]", content)
+
     def _load_bootstrap_files(self) -> str:
         """Load all bootstrap files from workspace (cached by file mtime).
 
@@ -548,6 +609,11 @@ class ContextBuilder:
 
         messages.extend(retained_history)
 
+        # Strip image data from history — only the incoming user message keeps
+        # its image_url blocks.  Old images and base64-laden tool results are
+        # replaced with text placeholders to prevent token bloat across turns.
+        self._strip_old_images(messages)
+
         # Clean user message — no injected metadata
         user_content = self._build_user_content(current_message, media)
         if messages[-1].get("role") == current_role:
@@ -590,10 +656,11 @@ class ContextBuilder:
             mime = detect_image_mime(raw) or mimetypes.guess_type(path)[0]
             if not mime or not mime.startswith("image/"):
                 continue
-            b64 = base64.b64encode(raw).decode()
+            compressed, out_mime = compress_image(raw, mime, max_bytes=200 * 1024)
+            b64 = base64.b64encode(compressed).decode()
             images.append({
                 "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"},
+                "image_url": {"url": f"data:{out_mime};base64,{b64}"},
                 "_meta": {"path": str(p)},
             })
 

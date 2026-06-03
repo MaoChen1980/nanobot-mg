@@ -190,16 +190,29 @@ class SessionManager:
     def _fix_tool_protocol_violations(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Remove tool_calls from assistant messages that lack corresponding tool results.
 
-        When an assistant message with tool_calls is loaded from session but has no
-        tool result immediately following it, the tool_calls must be cleared — otherwise
-        the API returns "insufficient tool messages" error.
+        Must run AFTER ``_strip_bypassed_tool_messages`` so BYPASSED/PENDING
+        tool results are already gone.  Verifies every individual
+        ``tool_call_id`` against all following tool results — the old approach
+        of just checking the next-message role missed cases where a subset of
+        tool_calls had their results stripped.
         """
+        fulfilled: set[str] = set()
+        for msg in messages:
+            if msg.get("role") == "tool":
+                tid = msg.get("tool_call_id")
+                if isinstance(tid, str):
+                    fulfilled.add(tid)
+
         fixed = 0
-        for i, msg in enumerate(messages):
+        for msg in messages:
             if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                next_msg = messages[i + 1] if i + 1 < len(messages) else None
-                if not (next_msg and next_msg.get("role") == "tool"):
+                tcs = msg["tool_calls"]
+                keep = [tc for tc in tcs if isinstance(tc, dict) and tc.get("id") in fulfilled]
+                if not keep:
                     msg.pop("tool_calls", None)
+                    fixed += 1
+                elif len(keep) < len(tcs):
+                    msg["tool_calls"] = keep
                     fixed += 1
         if fixed:
             logger.info("Fixed {} orphaned tool_calls in session load", fixed)
@@ -234,8 +247,8 @@ class SessionManager:
         session = self._db.load_session(key)
         if session is None:
             return None
-        session.messages = self._fix_tool_protocol_violations(session.messages)
         session.messages = self._strip_bypassed_tool_messages(session.messages)
+        session.messages = self._fix_tool_protocol_violations(session.messages)
         return session
 
     def save(self, session: Session) -> None:
