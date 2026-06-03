@@ -17,8 +17,6 @@ else
     PY=/opt/homebrew/bin/python3
 fi
 
-# 检查版本
-VER=$("$PY" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-echo "使用 Python $VER：$PY"
+echo "使用 Python：$("$PY" --version)"
 
 exec "$PY" setup.py "$@"
