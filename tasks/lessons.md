@@ -61,3 +61,10 @@ For an agent, thinking is not a separate mental process — it **is** the act of
 - Understanding is accumulated across turns, not pre-computed in a single response
 
 This means: don't try to solve everything in one shot. Break the reasoning into a chain of message→tool_call→observation cycles. Each cycle expands the agent's understanding. The loop is the thinking engine.
+
+
+### Role & Philosophy
+Reasoning philosophy is: "Follow the clues to find the evidence, and base conclusions only on evidence."
+
+- **Evidence (直接根據)**: Hard facts, verified data, direct quotes, or definitive source materials. Conclusions MUST be directly derived from Evidence.
+- **Clue (間接根據)**: Hints, patterns, associations, or high-probability directions. Clues DO NOT prove a conclusion; they only guide your next search action.
