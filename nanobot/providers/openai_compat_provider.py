@@ -51,6 +51,51 @@ _ALNUM = string.ascii_letters + string.digits
 _STANDARD_TC_KEYS = frozenset({"id", "type", "index", "function"})
 _STANDARD_FN_KEYS = frozenset({"name", "arguments"})
 
+# Regex patterns to detect unparsed tool calls in LLM content (XML/ReAct, etc.)
+_UNPARSED_TOOL_PATTERNS = [
+    r"<invoke\s+name\s*=\s*[\"']([^\"']+)[\"']\s*>",
+    r"<tool>([^<]+)</tool>",
+    r"Action\s*:\s*(\w+)",
+]
+_UNPARSED_TOOL_RE = re.compile("|".join(f"(?:{p})" for p in _UNPARSED_TOOL_PATTERNS))
+
+# Safe regex for retry — only matches explicit <invoke name="..."> XML tool
+# calls (MiniMax format).  NOT the broader Action: or <tool> patterns that
+# would cause false positives in normal conversation.
+_SAFE_INVOKE_RE = re.compile(r"<invoke\s+name\s*=\s*[\"']([^\"']+)[\"']\s*>")
+
+# When content looks like it contains an unparsed tool call, this prompt is
+# appended as a user message and the API is called ONCE more so the LLM can
+# self-correct.  One retry only — if it fails again the original response
+# passes through as-is.
+_RETRY_CORRECTION_PROMPT = (
+    "你的回答中包含文本形式的工具调用（如 XML/ReAct 格式），"
+    "但框架未识别为结构化 tool_call。请重新输出，使用 tool_calls 结构化字段来调用工具。"
+)
+
+
+def _detect_unparsed_tool_calls(content: str | None) -> bool:
+    """Return True if content contains unparsed tool call patterns from the LLM.
+
+    Some providers (MiniMax, etc.) return tool calls as XML in ``content``
+    instead of the structured ``tool_calls`` field.  This logs a warning
+    so the operator knows the LLM's intent was lost.
+    """
+    if not content:
+        return False
+    m = _UNPARSED_TOOL_RE.search(content)
+    if not m:
+        return False
+    for i, g in enumerate(m.groups()):
+        if g:
+            logger.warning(
+                "LLM content contains unparsed tool call '{}' (pattern: {}). "
+                "The API did not return a structured tool_call — treating as plain text.",
+                g, _UNPARSED_TOOL_PATTERNS[i].split("(")[0].strip("\\"),
+            )
+            return True
+    return False
+
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Recursively deep-merge override into base. Does not mutate inputs."""
@@ -1046,6 +1091,8 @@ class OpenAICompatProvider(LLMProvider):
                     function_provider_specific_fields=fn_prov,
                 ))
 
+            if not parsed_tool_calls:
+                _detect_unparsed_tool_calls(content)
             return LLMResponse(
                 content=content,
                 tool_calls=parsed_tool_calls,
@@ -1107,6 +1154,9 @@ class OpenAICompatProvider(LLMProvider):
                             parts.append(t)
                 if parts:
                     reasoning_content = "\n".join(parts)
+
+        if not tool_calls:
+            _detect_unparsed_tool_calls(content)
 
         return LLMResponse(
             content=content,
@@ -1357,7 +1407,27 @@ class OpenAICompatProvider(LLMProvider):
                 messages, tools, model, max_tokens, temperature,
                 reasoning_effort, tool_choice,
             )
-            return self._parse(await self._client.chat.completions.create(**kwargs))
+            result = self._parse(await self._client.chat.completions.create(**kwargs))
+
+            # Retry once when content looks like an unparsed tool call
+            # (XML in text instead of structured tool_calls).
+            # Only matches the safe <invoke name="..."> pattern (MiniMax).
+            if not result.tool_calls and result.content and _SAFE_INVOKE_RE.search(result.content):
+                retry_msgs = [
+                    *messages,
+                    {"role": "assistant", "content": result.content or ""},
+                    {"role": "user", "content": _RETRY_CORRECTION_PROMPT},
+                ]
+                retry_kwargs = self._build_kwargs(
+                    retry_msgs, tools, model, max_tokens, temperature,
+                    reasoning_effort, tool_choice,
+                )
+                try:
+                    result = self._parse(await self._client.chat.completions.create(**retry_kwargs))
+                except Exception:
+                    logger.warning("Retry after unparsed tool call also failed — using original response")
+
+            return result
         except Exception as e:
             return self._handle_error(e, spec=self._spec, api_base=self.api_base)
 
