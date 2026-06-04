@@ -5,7 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from nanobot.agent.tools.filesystem import ListDirTool, ReadFileTool, WriteFileTool, EditFileTool
+from nanobot.agent.tools.filesystem import (
+    ListDirTool,
+    ReadFileTool,
+    WriteFileTool,
+    EditFileTool,
+    DeleteFileTool,
+    MoveFileTool,
+)
+from nanobot.agent.tools.edit_files import EditFilesTool
 from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.agent.tools.shell import ExecTool
@@ -43,8 +51,9 @@ def build_subagent_tools(
     tools.register(ListDirTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(GlobTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(GrepTool(workspace=workspace, allowed_dir=allowed_dir))
-    for cls in (WriteFileTool, EditFileTool):
+    for cls in (WriteFileTool, EditFileTool, DeleteFileTool, MoveFileTool):
         tools.register(cls(workspace=workspace, allowed_dir=allowed_dir))
+    tools.register(EditFilesTool(workspace=workspace, allowed_dir=allowed_dir))
 
     # --- batch read & analysis (read-only) ---
     tools.register(ReadFilesTool(workspace=workspace, allowed_dir=allowed_dir))
