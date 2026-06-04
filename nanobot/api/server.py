@@ -125,40 +125,92 @@ async def handle_memory_search(request: Request) -> Response:
     return JSONResponse(resp)
 
 
-def _grep_memory(workspace: Path, q: str, k: int = 5) -> list[dict]:
-    """Simple grep-based memory search when FAISS index is unavailable."""
+def _tokenize_query(q: str) -> list[str]:
+    """Split query into individual tokens: Chinese chars + English words."""
     import re
-    memory_dir = workspace / "memory"
-    if not memory_dir.is_dir():
+    _CJK_STOP = frozenset("的了吗吧啊呢呀哦嗯嘛呗么啊啦喔哟是吧也")
+    tokens: list[str] = []
+    for part in re.findall(r"[一-鿿]+|[a-zA-Z0-9_]+", q):
+        part_lower = part.lower()
+        if re.match(r"^[一-鿿]+$", part):
+            tokens.append(part_lower)
+            if len(part) >= 2:
+                for ch in part_lower:
+                    if ch not in _CJK_STOP:
+                        tokens.append(ch)
+        else:
+            if len(part_lower) >= 2:
+                tokens.append(part_lower)
+    return list(set(tokens))
+
+
+def _grep_directory(directory: Path, q: str, k: int = 5, score_boost: float = 1.0) -> list[dict]:
+    """Keyword-based search across markdown files in a directory."""
+    if not directory.is_dir():
         return []
+    tokens = _tokenize_query(q)
+    if not tokens:
+        return []
+
+    # Classify tokens: English/short words count more than single Chinese chars
+    import re
+    _CJK_PATTERN = re.compile(r"^[一-鿿]+$")
+
+    def _token_weight(t: str) -> float:
+        return 0.5 if _CJK_PATTERN.match(t) and len(t) == 1 else 1.0
+
+    token_weights = {t: _token_weight(t) for t in tokens}
+    total_weight = sum(token_weights.values())
+
     results: list[dict] = []
-    for f in sorted(memory_dir.rglob("*.md")):
-        if ".vector_index" in f.parts:
+    for f in sorted(directory.rglob("*.md")):
+        if any(seg.startswith(".") for seg in f.relative_to(directory).parts):
             continue
         try:
             text = f.read_text(encoding="utf-8")
         except Exception:
-            logger.debug("Failed to read memory file for grep: {}", f)
             continue
+        text_lower = text.lower()
         lines = text.split("\n")
-        # Score: count matching lines (case-insensitive)
-        q_lower = q.lower()
-        match_lines = [i for i, line in enumerate(lines) if q_lower in line.lower()]
-        if not match_lines:
+        lines_lower = [line.lower() for line in lines]
+
+        # Find which tokens matched
+        matched_weight: float = 0.0
+        match_line_indices: set[int] = set()
+        for token, w in token_weights.items():
+            for i, line_lower in enumerate(lines_lower):
+                if token in line_lower:
+                    matched_weight += w
+                    match_line_indices.add(i)
+                    break  # count each token once
+
+        if matched_weight == 0:
             continue
-        score = min(1.0, len(match_lines) / max(1, len(lines)) * 10)
-        # Extract context around first match
-        start = max(0, match_lines[0] - 2)
-        context = "\n".join(lines[start:match_lines[0] + 3])
-        rel = str(f.relative_to(memory_dir))
+
+        # Score: weighted token ratio + line coverage bonus
+        token_score = matched_weight / total_weight
+        line_ratio = len(match_line_indices) / max(1, len(lines))
+        score = min(1.0, token_score + line_ratio * 3) * score_boost
+
+        # Build context: show first matched line with surrounding lines
+        first_match = min(match_line_indices)
+        start = max(0, first_match - 2)
+        context = "\n".join(lines[start:first_match + 3])
+
         results.append({
-            "source": rel,
+            "source": str(f.relative_to(directory)),
             "heading": "",
             "text": context[:500],
             "score": round(score, 4),
         })
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:k]
+
+
+def _grep_memory(workspace: Path, q: str, k: int = 5) -> list[dict]:
+    """Simple grep-based memory search when FAISS index is unavailable."""
+    memory_dir = workspace / "memory"
+    return _grep_directory(memory_dir, q, k=k)
 
 
 async def handle_memory_rebuild_index(request: Request) -> Response:
@@ -175,9 +227,11 @@ async def handle_memory_rebuild_index(request: Request) -> Response:
         from nanobot.agent.memory_store import MemoryStore
         store = MemoryStore(workspace)
         store.build_vector_index()
+        store.build_tasks_index()
         return {
             "faiss_available": store.vector_index._index is not None,
             "chunks": len(store.vector_index._chunks),
+            "tasks_chunks": len(store.tasks_index._chunks) if store.tasks_index else 0,
         }
 
     try:
@@ -470,6 +524,15 @@ async def handle_memory_chat(request: Request) -> Response:
     if not results:
         results = _grep_memory(workspace, message)
 
+    # Also search workspace tasks via FAISS (with grep fallback)
+    task_results: list[dict] = []
+    if store.tasks_index is not None:
+        task_results = store.tasks_index.search(message, k=3)
+    if not task_results:
+        task_results = _grep_directory(workspace / "tasks", message, k=3, score_boost=2.0)
+    if task_results:
+        results = task_results + results
+
     # Build system prompt with search results as context
     sources_data: list[dict] = []
     context_parts: list[str] = []
@@ -486,7 +549,8 @@ async def handle_memory_chat(request: Request) -> Response:
     context_str = "\n\n".join(context_parts) if context_parts else "No relevant memory found."
 
     system_prompt = (
-        "You are an AI assistant answering questions about the user's personal memory and knowledge base. "
+        "You are an AI assistant answering questions about the user's personal memory, "
+        "knowledge base, and current task progress. "
         "Use the retrieved context below to answer. "
         "Cite sources inline using the format `[source: filename]`. "
         "If the context doesn't contain relevant information, say so clearly.\n\n"

@@ -57,6 +57,15 @@ class MemoryStore:
             logger.info("No framework index found — building from existing framework/ files")
             self.build_framework_index()
 
+        self.tasks_dir = workspace / "tasks"
+        if self.tasks_dir.is_dir():
+            self.tasks_index = MemoryVectorIndex(self.tasks_dir, index_dir=".tasks_index")
+            if not self.tasks_index.load() and list(self._list_tasks_files()):
+                logger.info("No tasks FAISS index found — building from existing tasks/ files")
+                self.build_tasks_index()
+        else:
+            self.tasks_index = None
+
     @property
     def git(self) -> GitStore:
         return self._git
@@ -138,6 +147,20 @@ class MemoryStore:
     def build_framework_index(self) -> None:
         """Rebuild the FAISS index from all framework/ docs (incremental if exists)."""
         self.framework_index.build_incremental()
+
+    def _list_tasks_files(self) -> list[Path]:
+        """Return all .md files under tasks/ (excluding .tasks_index/)."""
+        if not self.tasks_dir.is_dir():
+            return []
+        return sorted(
+            p for p in self.tasks_dir.rglob("*.md")
+            if ".tasks_index" not in p.parts
+        )
+
+    def build_tasks_index(self) -> None:
+        """Rebuild the FAISS index from all tasks/ files (incremental if exists)."""
+        if self.tasks_index is not None:
+            self.tasks_index.build_incremental()
 
     def condense_session_to_history(self, messages: list[dict]) -> int:
         """Archive session messages into history, grouped by turns.
