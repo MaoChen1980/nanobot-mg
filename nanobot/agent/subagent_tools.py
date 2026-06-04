@@ -11,7 +11,7 @@ from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.read_files import ReadFilesTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
-from nanobot.agent.tools.stage import ShowStagesTool
+from nanobot.agent.tools.stage import SaveStageTool, ShowStagesTool, RestoreStageTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.diagnose_tool import DiagnoseTool
 from nanobot.agent.tools.semantic_search import SearchTextTool
@@ -49,7 +49,9 @@ def build_subagent_tools(
     # --- batch read & analysis (read-only) ---
     tools.register(ReadFilesTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(ExploreModuleTool(workspace=workspace, allowed_dir=allowed_dir))
+    tools.register(SaveStageTool())
     tools.register(ShowStagesTool())
+    tools.register(RestoreStageTool())
     tools.register(AnalyzeTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(DiagnoseTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(SearchTextTool(workspace=workspace, allowed_dir=allowed_dir))
