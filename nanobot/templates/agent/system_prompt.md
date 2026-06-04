@@ -2,6 +2,10 @@
 
 ════════
 
+{% include 'agent/_snippets/think_framework.md' %}
+
+════════
+
 {% include 'agent/_snippets/framework_core.md' %}
 
 ════════

@@ -171,16 +171,19 @@ def build_subagent_prompt(
         if board_section:
             parts.append(board_section)
 
-    # 8. Framework rules (adapted for subagent)
+    # 8. Thinking framework (three-phase task methodology)
+    parts.append(render_template("agent/_snippets/think_framework.md"))
+
+    # 9. Framework rules (adapted for subagent)
     parts.append(render_template("agent/_snippets/subagent_framework.md"))
 
-    # 9. Operating principles (shared rules adapted for subagent)
+    # 10. Operating principles (shared rules adapted for subagent)
     parts.append(render_template("agent/_snippets/subagent_decisions.md"))
 
-    # 10. Search tool selector
+    # 11. Search tool selector
     parts.append(render_template("agent/resolver.md"))
 
-    # 11. Output schema (optional)
+    # 12. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"
@@ -190,10 +193,10 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 12. Epistemic hygiene (shared principle for all agents)
+    # 13. Epistemic hygiene (shared principle for all agents)
     parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
 
-    # 13. Subagent identity and protocol
+    # 14. Subagent identity and protocol
     identity = (
         f"Your expert role: **{role}**. Operate at that level.\n\n"
         if role else
