@@ -350,9 +350,20 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ---
 
-### Stage Management — 自主阶段管理
+### Version Management — 版本管理
 
-三个工具组成轻量阶段管理系统（基于 git，纯 Python 实现，不依赖系统 git）：
+两种场景分别对待：
+
+#### 场景一：代码开发 — `exec` git
+
+如果 task 涉及代码开发（Orchestrator 可能已经给你分配了独立分支）：
+- **小颗粒 commit** — 每完成一个逻辑单元，`exec git commit -m "feat/fix/refactor: ..."`
+- **commit message 写清楚意图** — "add login validation" 好过 "update"
+- **改完通知 Orchestrator** — `send_message(recipient='main', message="分支 xxx 已完成，请 review 合并")`
+
+#### 场景二：非代码工作 / 快速保存 — stage 工具
+
+处理文档、配置、中间结果等场景：
 
 | 工具 | 用途 |
 |------|------|
@@ -361,24 +372,14 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 | `restore_stage(path, sha)` | 回滚到之前某阶段 |
 
 **使用时机（自主判断，不需要问任何人）：**
-
-- **完成一个自然工作节点时** — 写完了一组文件、生成了中间结果、子任务的一个步骤完成 → 立即 `save_stage`
-- **大规模改动之前** — 你要重构或大幅度修改文件之前，先保存当前状态。万一改坏了可以回退
-- **不确定时** — 不知道要不要保存 → 那就保存。保存没有成本，不保存可能丢工作
+- **完成一个自然工作节点时** — 写完了一组文件、生成了中间结果、子任务的一个步骤完成 → 保存
+- **不确定时** → 那就保存。保存没有成本，不保存可能丢工作
 
 **和 Orchestrator 的协作：**
+- 重要节点保存后，用 `send_message` 告知
+- 不需要为每次保存都发消息。里程碑才通知
 
-- 重要节点保存后，用 `send_message(recipient='main', ...)` 告知："第一阶段完成，已保存"
-- 不需要为每次保存都发消息。小步保存不通知，里程碑才通知
-- 如果是团队协作，把阶段信息写入 `team_board.md` 让其他 Subagent 了解进展
-
-**最佳实践：**
-- `save_stage` 会列出所有改动（新增/修改），你可以判断是否需要排除某些文件
-- 不需要的文件写到 `.gitignore` 再重新保存
-- `restore_stage` 只写文件，不删除文件（即使目标版本没有它）
-- 保存前先用 `show_stages` 看看最近的历史，确认进度
-
-**注意：** 你的 workspace 目录可能已经在 main agent 的 stage 管理下。你只需要对自己的产出目录负责。如果被分配的 task 是修改已有文件，先看 `show_stages` 了解历史再动手。
+**注意：** 用 git 的场景不要用 stage 工具。如果已经在 git 分支上工作，直接用 `exec git commit`。
 
 ---
 

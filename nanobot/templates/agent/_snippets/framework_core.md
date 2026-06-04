@@ -427,9 +427,40 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ---
 
-### Stage Management — 阶段管理
+### Version Management — 版本管理
 
-三个工具组成轻量阶段管理系统（基于 git，纯 Python 实现，不依赖系统 git）：
+两种场景，两套工具。
+
+#### 场景一：代码开发 — 用 `exec` 调 git
+
+代码开发（尤其是多 subagent 并行）用 git 就够了——branch 隔离、小颗粒 commit、合并 review。
+
+**工作模式：**
+- **每个独立功能/修复/模块开一个分支** — `exec git checkout -b feat/xxx`
+- **分支内小颗粒提交** — 每完成一个逻辑单元就 `exec git commit -m "feat: ..."`
+- **合入主分支前 review** — `exec git diff main...HEAD` 检查改动，确认无误后 merge
+
+**多 subagent 并行：**
+- 每个 subagent 分配到独立分支，互不干扰
+- subagent 完成后，主 agent review diff，合入主分支
+- 小型 bug fix 或简单修改可以不走分支，直接在主分支 commit 后让 subagent review
+
+**常用命令：**
+| 场景 | 命令 |
+|------|------|
+| 新功能 | `git checkout -b feat/login` → 开发 → commit → `git merge feat/login` |
+| 修 bug | `git checkout -b fix/empty-email` → 修复 → commit → 合入主分支 |
+| 查历史 | `git log --oneline`、`git diff HEAD~2`、`git show <sha>` |
+| 回退 | `git revert <sha>`（保留历史）、`git reset --hard <sha>`（丢弃历史，慎用） |
+
+**为什么要这么做：**
+- 小颗粒 commit 让每步改动都可追溯、可精准回退
+- 分支隔离让多个 subagent 并行互不干扰
+- review 保证质量，问题合入前发现而不是合入后
+
+#### 场景二：非代码工作 / 快速保存 — 用 stage 工具
+
+处理 PPT、文档、配置实验等没有 git 仓库的场景，或不想开分支的快速实验：
 
 | 工具 | 用途 |
 |------|------|
@@ -440,18 +471,12 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 **使用时机：**
 - 完成一个自然阶段（如生成了 PPT、写完了一组文件）→ `save_stage` 保存一版
 - 大规模改动前，建议先保存一版以便回滚
-- 用 `show_stages` 查历史、看改动，用 `restore_stage` 回退
-
-**什么时候一定要主动问用户要不要保存：**
-
-- **完成一个可独立验证的成果时** — PPT 大纲写完了、初稿完成了、核心功能跑通了 → `save_stage`
-- **大规模改动之前** — "接下来要改配色方案，先保存当前版本好吗？"
-- **不确定时** — 不知道要不要保存 → 那就保存。保存没有成本，不保存可能丢工作。
+- 不确定时 → 那就保存。保存没有成本，不保存可能丢工作
 
 **最佳实践：**
 - `save_stage` 会列出所有改动（新增/修改），你可以判断是否需要排除某些文件
 - 不需要的文件写到 `.gitignore` 再重新保存
-- **每次保存前先问用户**："当前阶段已完成，要保存一版吗？"
+- **用 git 的场景不要用 stage 工具** — 代码开发请用场景一的方式
 - `restore_stage` 只写文件，不删除文件（即使目标版本没有它）
 
 ---
