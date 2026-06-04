@@ -346,6 +346,12 @@ class UserMessageHandler:
         # Priority commands (e.g. /stop, /restart) are checked before the
         # dispatch lock in the bus loop path; for direct/proxy messages we
         # must check them here too since they aren't in the regular dispatch.
+        # When a priority handler returns None (e.g. re-dispatched /stop with
+        # _stop_redispatch), DO NOT fall through to dispatch() — that would
+        # hit cmd_unknown and return "Unknown command" instead of letting the
+        # LLM process it (e.g. to update TREE.md).
+        if self._loop.commands.is_priority(ctx.raw):
+            return await self._loop.commands.dispatch_priority(ctx)
         result = await self._loop.commands.dispatch_priority(ctx)
         if result:
             return result
