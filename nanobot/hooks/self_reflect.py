@@ -29,36 +29,38 @@ from nanobot.providers.base import LLMProvider
 REFLECTION_SYSTEM_PROMPT = """\
 你是 nanobot，正在回顾 this session 的对话。
 
-你没有上下文、没有工具、不在 agent loop。你**只能怀疑，不能判断**——
-你的输出都是 suspect，留给主循环验证。
+你没有上下文、没有工具、不在 agent loop。你的工作是**挑出所有可疑的东西**——
+你的输出都是 suspect，留给主循环验证。宁可误报，不可漏报。普通、正常、没有明确问题的行为也要质疑。
 
-## 值得怀疑的信息
+## 必须要怀疑的方向
 
-以下类型的可疑点值得挑出来：
+以下是必须检查的怀疑方向。不要跳过任何一个。
 
 | 类型 | 怀疑方向 | 说人话 |
 |------|----------|--------|
-| **knowledge** | 这个"知识"可能只是偶然 | "我当时是这么理解的，不一定对" |
+| **behavior** | 这模式看起来效率不高、不够自然 | "总在同一个文件上改"、"频繁调用同一个工具"、"改了又改" |
+| **knowledge** | 这个"知识"只是出于偶然，不是稳定事实 | "当时这么理解的，不一定对" |
 | **decision** | 看起来像刻意的决定，也可能只是随手 | "选了 A 没选 B，不一定有理由" |
-| **behavior** | 这个模式看起来效率不高 | "总在同一个文件上改，有点怪" |
 | **correction** | 用户纠正过什么 | "用户上次说不要这样做" |
 | **self_bug** | 代码哪里看着不对 | "这里多了一次计数？" |
 
-## Output Format
+**注意：** `behavior` 是最容易找到信号的类型。工具调用频次、重复度、时序模式都在 metrics 里——先从这里入手。
+
+## 输出格式
 
 ```json
 {
   "findings": [
     {
-      "type": "knowledge|decision|behavior|correction|self_bug",
-      "content": "什么地方、为什么觉得可疑",
+      "type": "behavior|knowledge|decision|correction|self_bug",
+      "content": "哪个具体指标或代码、为什么觉得可疑",
       "relevance": "这条怀疑如果成立，会在什么场景下被用到"
     }
   ]
 }
 ```
 
-如果没有任何可疑的东西，输出 {"findings": []}
+**你必须在任何时候都输出至少 1 条 finding。** 可以在你看起来最没有问题的度量里也要去质疑它。没有零结果。
 """
 
 REFLECTION_USER_TEMPLATE = """\
@@ -233,34 +235,46 @@ class SelfReflectHook(AgentHook):
         iteration_range = f"#{entries[0]['iteration']}-#{entries[-1]['iteration']}"
         time_str = entries[-1]["time"]
 
-        # Detect repeated tool patterns
+        # Tool call frequency (all tools, not just repeated)
         tool_name_counts: dict[str, int] = {}
+        file_read_targets: dict[str, int] = {}
         for e in entries:
             for tc in e.get("tool_calls", []):
                 tool_name_counts[tc["name"]] = tool_name_counts.get(tc["name"], 0) + 1
-        repeated = {name: cnt for name, cnt in tool_name_counts.items() if cnt >= 3}
-        rep_summary = ""
-        if repeated:
-            parts = [f"    {name} x {cnt}" for name, cnt in sorted(repeated.items())]
-            rep_summary = "  Repeated tools:\n" + "\n".join(parts) + "\n"
-
-        # Detect same-file edits
-        file_edit_targets: dict[str, int] = {}
-        for e in entries:
-            for tc in e.get("tool_calls", []):
-                if tc["name"] == "edit_file":
+                if tc["name"] in ("read_file", "edit_file", "write_file"):
                     path = (
                         tc.get("arguments", {}).get("file_path")
                         or tc.get("arguments", {}).get("path")
                         or ""
                     )
                     if path:
-                        file_edit_targets[path] = file_edit_targets.get(path, 0) + 1
-        edit_summary = ""
-        repeated_edits = {p: c for p, c in file_edit_targets.items() if c >= 3}
-        if repeated_edits:
-            parts = [f"    {p} x {cnt} edits" for p, cnt in sorted(repeated_edits.items())]
-            edit_summary = "  Repeated edits:\n" + "\n".join(parts) + "\n"
+                        key = tc["name"] + ":" + path
+                        file_read_targets[key] = file_read_targets.get(key, 0) + 1
+
+        freq_lines = []
+        if tool_name_counts:
+            freq_lines.append("  Tool frequency:")
+            for name, cnt in sorted(tool_name_counts.items(), key=lambda x: -x[1]):
+                freq_lines.append(f"    {name}: {cnt}")
+        freq_summary = "\n".join(freq_lines)
+
+        file_focus_lines = []
+        repeated_file = {k: v for k, v in file_read_targets.items() if v >= 2}
+        if repeated_file:
+            file_focus_lines.append("  File focus (≥2 accesses):")
+            for key, cnt in sorted(repeated_file.items(), key=lambda x: -x[1]):
+                file_focus_lines.append(f"    {key} x{cnt}")
+        file_summary = "\n".join(file_focus_lines)
+
+        # Per-iteration tool sequence for pattern detection
+        seq_lines = ["  Tool call sequence:"]
+        for e in entries:
+            names = [tc["name"] for tc in e.get("tool_calls", [])]
+            if names:
+                seq_lines.append(f"    iter#{e['iteration']}: {' → '.join(names)}")
+            else:
+                seq_lines.append(f"    iter#{e['iteration']}: (no tools)")
+        seq_summary = "\n".join(seq_lines)
 
         metrics_text = (
             f"  Iterations: {iteration_range} @ {time_str}\n"
@@ -268,8 +282,9 @@ class SelfReflectHook(AgentHook):
             f"  Total token usage: {total_tokens}\n"
             f"  Total tool calls: {total_tool_calls}\n"
             f"  Errors: {len(errors)}\n"
-            f"{rep_summary}"
-            f"{edit_summary}"
+            f"{freq_summary}\n"
+            f"{file_summary}\n"
+            f"{seq_summary}"
         )
 
         # Read hook source code for self-review
