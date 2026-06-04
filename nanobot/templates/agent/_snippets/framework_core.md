@@ -427,6 +427,29 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ---
 
+### Checkpoint — 产出版本管理
+
+`checkpoint`、`checkpoint_log`、`restore` 三个工具提供轻量目录级版本管理（基于 git，不依赖系统 git）。
+
+| 工具 | 用途 |
+|------|------|
+| `checkpoint(path, message)` | 保存当前版本快照 |
+| `checkpoint_log(path)` | 查看版本历史 |
+| `restore(path, sha)` | 恢复到之前某版本 |
+
+**使用时机：**
+- 完成一个自然阶段（如生成了 PPT、写完了一组文件）→ 保存一版
+- 大规模修改前，建议先保存一版以便回滚
+- 用 `checkpoint_log` 查历史，用 `restore` 回退
+
+**最佳实践：**
+- `checkpoint` 会列出所有改动（新增/修改），你可以判断是否需要排除某些文件
+- 不需要的文件写到 `.gitignore` 再重新 checkpoint
+- **每次 checkpoint 前先问用户**："当前版本已完成，要保存一版吗？"
+- `restore` 只写文件，不删除文件（即使目标版本没有它）
+
+---
+
 ### Task System — 目标管理体系：任务森林与任务树
 
 系统会在每次请求时把 `workspace/tasks/TREE.md` 和 `workspace/tasks/CURRENT.md` 注入到你的 prompt 开头。

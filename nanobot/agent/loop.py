@@ -44,6 +44,7 @@ from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.read_files import ReadFilesTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.git_inspect import GitInspectTool
+from nanobot.agent.tools.checkpoint import CheckpointTool, CheckpointLogTool, RestoreTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.diagnose_tool import DiagnoseTool
 from nanobot.agent.tools.scan_project import ScanProjectTool
@@ -381,6 +382,9 @@ class AgentLoop:
         self.tools.register(ReadFilesTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ExploreModuleTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(GitInspectTool(workspace=self.workspace, allowed_dir=allowed_dir))
+        self.tools.register(CheckpointTool())
+        self.tools.register(CheckpointLogTool())
+        self.tools.register(RestoreTool())
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
