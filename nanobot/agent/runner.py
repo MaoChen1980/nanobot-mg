@@ -79,7 +79,7 @@ from .runner_execution import execute_tools
 # "I read this from a file" from "I inferred this."
 _SOURCE_TOOLS = frozenset({
     "read_file", "read_files", "list_dir", "glob", "grep",
-    "web_search", "web_fetch", "git_inspect",
+    "web_search", "web_fetch", "show_stages",
     "memory_search", "conversation_search", "search_text", "explore_module", "analyze",
     "diagnose",
 })

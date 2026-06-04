@@ -198,9 +198,9 @@ class ExecTool(Tool):
         if lower.startswith("git"):
             rest = lower[3:].strip()
             if rest.startswith("log"):
-                return "Suggestion: Usegit_inspect(action='log', ...)** to browse commit history."
+                return "Suggestion: Use `show_stages(path)` to browse stage history."
             if rest.startswith("show"):
-                return "Suggestion: Usegit_inspect(action='show', ...)** to inspect commits."
+                return "Suggestion: Use `show_stages(path, sha=...)` to inspect a specific stage."
         return None
 
     async def execute(

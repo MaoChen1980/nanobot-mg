@@ -12,8 +12,8 @@
 - 目标是定位到出错的函数/模块
 
 ## Step 3: Trace Design Intent
-- 用 `git_inspect(path="<file>")` 查看文件的 commit 历史，找到引入该代码的 commit
-- 用 `git_inspect(path="<file>", commit="<sha>")` 查看那个 commit 的完整 diff
+- 用 `show_stages(path="<file>")` 查看文件的版本历史，找到引入该代码的版本
+- 用 `show_stages(path="<file>", sha="<sha>")` 查看那个版本的完整改动
 - 读 commit message 和 diff，理解当初为什么这么写
 - 问自己：这个 bug 是设计决策的自然结果吗？修复会不会破坏那个设计？
 

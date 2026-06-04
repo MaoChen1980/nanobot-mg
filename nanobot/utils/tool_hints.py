@@ -23,7 +23,7 @@ _TOOL_FORMATS: dict[str, tuple[list[str], str, bool, bool]] = {
     "explore_module": (["path"],                           "explore {}",       True,  False),
     "notebook_edit":  (["notebook_path", "path"],          "notebook {}",      True,  False),
     "analyze":        (["file_path", "path"],              "analyze {}",       True,  False),
-    "git_inspect":    (["path"],                           "git {}",           True,  False),
+    "show_stages":    (["path"],                           "git {}",           True,  False),
     "recall":         (["query"],                          'recall("{}")',     False, False),
     "search_text":    (["query"],                          'search("{}")',     False, False),
     "ask_user":       (["question"],                       'ask("{}")',        False, False),
