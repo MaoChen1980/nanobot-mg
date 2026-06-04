@@ -427,20 +427,20 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ---
 
-### Checkpoint — 产出版本管理
+### Version Control (Git) — 版本管理
 
-`checkpoint`、`checkpoint_log`、`restore` 三个工具提供轻量目录级版本管理（基于 git，不依赖系统 git）。
+三个工具组成轻量版本控制系统（基于 git，纯 Python 实现，不依赖系统 git）：
 
 | 工具 | 用途 |
 |------|------|
-| `checkpoint(path, message)` | 保存当前版本快照 |
-| `checkpoint_log(path)` | 查看版本历史 |
-| `restore(path, sha)` | 恢复到之前某版本 |
+| `checkpoint(path, message)` | 保存当前版本（新增/修改的文件全部记录） |
+| `git_inspect(path)` | 查看版本历史；传 `sha` 看具体改动（diff） |
+| `restore(path, sha)` | 回滚到之前某版本 |
 
 **使用时机：**
-- 完成一个自然阶段（如生成了 PPT、写完了一组文件）→ 保存一版
+- 完成一个自然阶段（如生成了 PPT、写完了一组文件）→ `checkpoint` 保存一版
 - 大规模修改前，建议先保存一版以便回滚
-- 用 `checkpoint_log` 查历史，用 `restore` 回退
+- 用 `git_inspect` 查历史、看改动，用 `restore` 回退
 
 **最佳实践：**
 - `checkpoint` 会列出所有改动（新增/修改），你可以判断是否需要排除某些文件

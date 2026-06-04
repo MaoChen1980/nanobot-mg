@@ -1,18 +1,16 @@
 """Checkpoint tools — git versioning for LLM task outputs.
 
-Three tools sharing dulwich-based git operations:
+Two tools sharing dulwich-based git operations:
 
 - ``checkpoint(path, message)`` — save a version snapshot
-- ``checkpoint_log(path)`` — view version history
 - ``restore(path, sha)`` — restore files from a previous version
 
+Use ``git_inspect`` to view version history and inspect changes.
 No system ``git`` required — all operations use the pure-Python dulwich library.
 """
 
 from __future__ import annotations
 
-import os
-import time
 from pathlib import Path
 from typing import Any
 
@@ -38,26 +36,6 @@ def _ensure_repo(path: str) -> Path:
     return p
 
 
-def _has_repo(path: str) -> bool:
-    return (Path(path).resolve() / ".git").is_dir()
-
-
-def _resolve_sha(repo, short_sha: str) -> bytes | None:
-    try:
-        head = repo.refs[b"HEAD"]
-    except KeyError:
-        return None
-    sha = head
-    while sha:
-        if sha.hex().startswith(short_sha):
-            return sha
-        commit = repo[sha]
-        if commit.type_name != b"commit":
-            break
-        sha = commit.parents[0] if commit.parents else None
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Tool: checkpoint — save a version snapshot
 # ---------------------------------------------------------------------------
@@ -67,8 +45,8 @@ def _resolve_sha(repo, short_sha: str) -> bytes | None:
     properties={
         "path": p(
             "string",
-            "Absolute path to the directory to checkpoint. "
-            "All file changes in this directory will be saved. "
+            "Absolute path to the directory to version. "
+            "All file changes in this directory will be saved as a new version. "
             "If the directory doesn't exist it will be created. "
             "If it doesn't have a git repo yet, one is automatically initialized.",
         ),
@@ -81,16 +59,17 @@ def _resolve_sha(repo, short_sha: str) -> bytes | None:
     required=["path", "message"],
 )
 class CheckpointTool(Tool):
-    """Save a version snapshot of all files in a directory.
+    """Save a version snapshot of all files in a directory (git-based versioning).
 
     Creates a git commit using dulwich (no system git required).
-    If the directory doesn't have a git repo yet, one is automatically
-    created. Files already listed in ``.gitignore`` are excluded.
+    If the directory doesn't have a git repo yet, one is automatically created.
+    Files already listed in ``.gitignore`` are excluded.
 
     Use at natural milestones — ask the user first:
     '当前版本已完成，要保存一版吗？'
 
     To exclude files, write patterns to ``.gitignore`` *before* calling.
+    Use ``git_inspect`` to view history and ``restore`` to revert.
     """
 
     name = "checkpoint"
@@ -132,73 +111,6 @@ class CheckpointTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# Tool: checkpoint_log — view version history (read-only)
-# ---------------------------------------------------------------------------
-
-
-@tool_parameters(
-    properties={
-        "path": p(
-            "string",
-            "Absolute path to the directory to inspect. "
-            "Must have been checkpointed before (have a git repo).",
-        ),
-        "max_entries": p(
-            "integer",
-            "Maximum number of entries to show (default 20, max 50).",
-            minimum=1,
-            maximum=50,
-            default=20,
-        ),
-    },
-    required=["path"],
-)
-class CheckpointLogTool(Tool):
-    """View saved version history for a directory.
-
-    Returns a list of saved versions with their SHA, timestamp and message.
-    Use this to find which version to restore.
-    """
-
-    name = "checkpoint_log"
-    read_only = True
-
-    async def execute(self, path: str, max_entries: int = 20, **kwargs: Any) -> str:
-        if not _has_repo(path):
-            return "No checkpoint history — this directory has never been saved."
-
-        from dulwich.repo import Repo
-
-        entries: list[dict[str, str]] = []
-        repo_path = Path(path).resolve()
-
-        with Repo(str(repo_path)) as repo:
-            try:
-                head = repo.refs[b"HEAD"]
-            except KeyError:
-                return "No checkpoint history — no commits found."
-
-            sha = head
-            while sha and len(entries) < max_entries:
-                commit = repo[sha]
-                if commit.type_name != b"commit":
-                    break
-                ts = time.strftime(
-                    "%Y-%m-%d %H:%M",
-                    time.localtime(commit.commit_time),
-                )
-                msg = commit.message.decode("utf-8", errors="replace").strip()
-                entries.append({"sha": sha.hex()[:8], "message": msg, "timestamp": ts})
-                sha = commit.parents[0] if commit.parents else None
-
-        if not entries:
-            return "No checkpoint history."
-
-        lines = [f"{e['sha']}  {e['timestamp']}  {e['message']}" for e in entries]
-        return f"{len(entries)} saved version(s):\n" + "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
 # Tool: restore — restore files from a previous version
 # ---------------------------------------------------------------------------
 
@@ -224,18 +136,18 @@ def _restore_tree(repo, tree_obj, repo_path: Path, prefix: str = "") -> list[str
         "path": p(
             "string",
             "Absolute path to the directory to restore files into. "
-            "Must have been checkpointed before.",
+            "Must be a directory previously versioned with ``checkpoint``.",
         ),
         "sha": p(
             "string",
             "The commit SHA (or prefix) to restore. "
-            "Use checkpoint_log first to find the target SHA.",
+            "Use ``git_inspect`` first to find the target SHA.",
         ),
     },
     required=["path", "sha"],
 )
 class RestoreTool(Tool):
-    """Restore files to a previously saved version.
+    """Restore files to a previously saved version (git-based rollback).
 
     Reads files from the saved commit and writes them to the working directory.
     Files that don't exist in the target version are NOT deleted.
@@ -248,17 +160,23 @@ class RestoreTool(Tool):
     read_only = False
 
     async def execute(self, path: str, sha: str, **kwargs: Any) -> str:
-        if not _has_repo(path):
-            return "Error: No git repo in this directory. Use checkpoint first to create one."
-
         from dulwich.repo import Repo
 
         repo_path = Path(path).resolve()
+        git_dir = repo_path / ".git"
+        if not git_dir.is_dir() and not git_dir.is_file():
+            return (
+                "Error: No git repository in this directory. "
+                "Use ``checkpoint(path, message)`` first to initialize version control."
+            )
 
         with Repo(str(repo_path)) as repo:
-            full_sha = _resolve_sha(repo, sha)
+            full_sha = self._resolve_sha(repo, sha)
             if not full_sha:
-                return f"Error: Version '{sha}' not found. Use checkpoint_log to see available versions."
+                return (
+                    f"Error: Version '{sha}' not found. "
+                    "Use ``git_inspect`` to see available versions."
+                )
 
             commit = repo[full_sha]
             if commit.type_name != b"commit":
@@ -274,3 +192,20 @@ class RestoreTool(Tool):
             f"Restored {len(restored)} file(s) from {sha[:8]}:\n"
             + "\n".join(f"  {f}" for f in restored)
         )
+
+    @staticmethod
+    def _resolve_sha(repo, short_sha: str) -> bytes | None:
+        try:
+            head = repo.refs[b"HEAD"]
+        except KeyError:
+            return None
+        sha = head
+        target = short_sha
+        while sha:
+            if sha.hex().startswith(target):
+                return sha
+            commit = repo[sha]
+            if commit.type_name != b"commit":
+                break
+            sha = commit.parents[0] if commit.parents else None
+        return None
