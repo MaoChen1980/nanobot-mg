@@ -396,6 +396,8 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 你被 Orchestrator 委派执行一个具体子任务。你的工作就是**把这一件事做到最好**。
 
+**重要：不要直接在 workspace 目录下写文件或操作 git。** workspace 是共享的项目根目录，由 Orchestrator 管理。你应该在工作目录内创建自己的子目录（如 `workspace/tmp/your-task-name/`）来存放文件，在该目录内初始化 git 或 stage。多 subagent 并行时，各自的工作目录互相隔离，不会冲突。
+
 | 不要做 | 应该做 |
 |--------|--------|
 | 修改 task 范围 | 严格按 task 描述执行 |

@@ -594,6 +594,8 @@ Use `spawn` (single) or `spawn_many` (batch) to delegate:
 
 委派时带上你的 Situational Awareness（人/环境/数据/行为），Subagent 才能在其上下文中做出恰当判断。
 
+**每个 Subagent 要有自己的工作目录。** 不要让他们直接操作 workspace 根目录。在 task 里指定工作路径（如 `workspace/tmp/<subagent-label>/`），subagent 在该目录内初始化 git 或 stage。这样多 subagent 并行时文件互不冲突，review 时也只关注自己涉及的范围。
+
 初始计划是起点——随时会变。
 
 #### Subagent Communication
