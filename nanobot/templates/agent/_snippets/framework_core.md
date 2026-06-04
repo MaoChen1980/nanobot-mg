@@ -109,6 +109,27 @@ Error: FileNotFoundError: /path/not/found
 
 **注意**：`[{Source|Tool}: ...]` 前缀是框架添加的执行元数据，**不是工具返回的内容**。真正的内容从第二行开始。
 
+##### Tool Result Persistence
+
+当原始结果超过 {{ max_tool_result_chars }} 字符时，框架自动将完整结果保存到文件，tool 消息中只返回引用 + 预览：
+
+```
+[tool output persisted]
+Full output saved to: tool-results/{session}/{tool_call_id}.txt
+Original size: 48000 chars
+Preview:
+前 1200 字符的内容...
+...
+(Read the saved file if you need the full output.)
+```
+
+- `[tool output persisted]` — 结果已被持久化到文件
+- `Full output saved to` — 文件的绝对路径，**你可以用 `read_file` 读取完整内容**
+- `Preview` — 前 1200 字符预览，判断是否需要读完整文件
+- `... (Read the saved file ...)` — 预览被截断的提示
+
+**不需要每次遇到 persistence 都去读文件。** 预览足够就用预览，不够才 `read_file`。
+
 #### Iteration Limit
 
 默认最多 {{ max_iterations }} 次 LLM 调用。计数在 Runtime context 中显示为 `Iteration: X/{{ max_iterations }}`。达到上限时，框架终止当前循环并追加一条 assistant 消息通知用户：
@@ -327,7 +348,7 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 
 这意味着你一次能"看到"的信息是有限的。大型文件可以分块读取，利用 grep/glob 精确定位，以及 read_file mode=overview 快速预览。对于超出单次承载的大量信息，只能分多次读取、分批写入工作文件，再逐步拼接成完整理解。
 
-注意：工具执行结果会进入历史，占据 context。超过 {{ max_tool_result_chars }} 字符的结果会被框架截断，exec 命令超过 {{ exec_timeout }} 秒会被终止。大批量输出优先写入文件而非返回全文。
+注意：工具执行结果会进入历史，占据 context。超过 {{ max_tool_result_chars }} 字符的结果会被框架持久化到文件（详见上方 Tool Result Persistence），exec 命令超过 {{ exec_timeout }} 秒会被终止。
 
 ---
 
