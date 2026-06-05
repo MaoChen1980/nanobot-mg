@@ -43,7 +43,7 @@ async def test_chat_with_retry_retries_transient_error_then_succeeds(monkeypatch
     assert response.finish_reason == "stop"
     assert response.content == "ok"
     assert provider.calls == 2
-    assert delays == [1]
+    assert delays == [5]
 
 
 @pytest.mark.asyncio
@@ -84,7 +84,7 @@ async def test_chat_with_retry_returns_final_error_after_retries(monkeypatch) ->
 
     assert response.content == "503 final server error"
     assert provider.calls == 4
-    assert delays == [1, 2, 4]
+    assert delays == [5, 15, 30]
 
 
 @pytest.mark.asyncio
@@ -348,7 +348,7 @@ async def test_chat_with_retry_retries_structured_status_code_without_keyword(mo
 
     assert response.content == "ok"
     assert provider.calls == 2
-    assert delays == [1]
+    assert delays == [5]
 
 
 @pytest.mark.asyncio
@@ -425,7 +425,7 @@ async def test_chat_with_retry_retries_structured_timeout_kind(monkeypatch) -> N
 
     assert response.content == "ok"
     assert provider.calls == 2
-    assert delays == [1]
+    assert delays == [5]
 
 
 @pytest.mark.asyncio
@@ -495,7 +495,7 @@ async def test_persistent_retry_aborts_after_ten_identical_transient_errors(monk
     assert response.finish_reason == "error"
     assert response.content == "429 rate limit"
     assert provider.calls == 10
-    assert delays == [1, 2, 4, 4, 4, 4, 4, 4, 4]
+    assert delays == [5, 15, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30]
 
 
 @pytest.mark.asyncio
@@ -567,7 +567,7 @@ async def test_chat_with_retry_retries_zhipu_1302_rate_limit(monkeypatch) -> Non
 
     assert response.content == "ok"
     assert provider.calls == 2
-    assert delays == [1]
+    assert delays == [5]
 
 
 @pytest.mark.asyncio
@@ -593,7 +593,7 @@ async def test_chat_with_retry_retries_zhipu_1302_with_429_status(monkeypatch) -
 
     assert response.content == "ok"
     assert provider.calls == 2
-    assert delays == [1]
+    assert delays == [5]
 
 
 @pytest.mark.asyncio

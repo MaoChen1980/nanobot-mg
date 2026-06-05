@@ -397,7 +397,7 @@ class MemoryExtractor:
             # Sort newest-first so dedup keeps the latest version
             seen: set[str] = set()
             unique: list[dict[str, Any]] = []
-            for e in sorted(merged, key=lambda x: -x["ts"]):
+            for e in sorted(merged, key=lambda x: -(x["ts"] or 0)):
                 clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").strip()
                 if clean not in seen:
                     seen.add(clean)
@@ -444,7 +444,7 @@ class MemoryExtractor:
                 })
 
         # Sort recent by ts (newest first), take top 12
-        recent_entries.sort(key=lambda x: -x["ts"])
+        recent_entries.sort(key=lambda x: -(x["ts"] or 0))
         self._last_modified_files = list(memory_state.keys())
         return recent_entries[:12]
 

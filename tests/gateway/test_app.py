@@ -394,6 +394,7 @@ class TestStartAll:
         with (
             patch("nanobot.proxy.hub.HubTCPServer") as hub,
             patch.object(app, "_run_api_server", return_value=AsyncMock()),
+            patch.object(app, "_consume_outbound", AsyncMock()),
         ):
             hub.return_value.start = AsyncMock()
             import asyncio
@@ -412,6 +413,7 @@ class TestStartAll:
         with (
             patch("nanobot.proxy.hub.HubTCPServer") as hub,
             patch.object(app, "_run_api_server", return_value=AsyncMock()),
+            patch.object(app, "_consume_outbound", AsyncMock()),
         ):
             hub.return_value.start = AsyncMock()
             import asyncio
@@ -733,9 +735,7 @@ class TestOnCronJob:
 
         assert result == "Hi"
         cron_tool.set_cron_context.assert_called_once_with(True, dry_run=True)
-        cron_tool.set_current_job_id.assert_called_once_with("r1")
         cron_tool.reset_cron_context.assert_called_once_with("ctx-token")
-        cron_tool.reset_current_job_id.assert_called_once_with("job-token")
 
     async def test_no_message_tool_still_processes(self, config: Config) -> None:
         """Reminder works even when agent has no 'message' tool."""

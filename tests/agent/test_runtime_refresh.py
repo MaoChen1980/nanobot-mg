@@ -10,7 +10,7 @@ from nanobot.providers.factory import ProviderSnapshot
 def _provider(default_model: str, max_tokens: int = 123) -> MagicMock:
     provider = MagicMock()
     provider.get_default_model.return_value = default_model
-    provider.generation = SimpleNamespace(max_tokens=max_tokens)
+    provider.generation = SimpleNamespace(max_tokens=max_tokens, reasoning_effort="medium")
     return provider
 
 
