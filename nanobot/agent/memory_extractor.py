@@ -127,12 +127,14 @@ class MemoryExtractor:
                     if summary:
                         session_summaries.append(summary)
                 processed_name = processing_path.name.replace(".pt.processing", ".pt")
-                processing_path.replace(self.processed_dir / processed_name)
+                if processing_path.is_file():
+                    processing_path.replace(self.processed_dir / processed_name)
             except Exception:
                 logger.exception("MemoryExtractor: failed to process {}", processing_path)
-                self.failed_dir.mkdir(parents=True, exist_ok=True)
-                failed_name = processing_path.name.replace(".pt.processing", ".pt")
-                processing_path.rename(self.failed_dir / failed_name)
+                if processing_path.is_file():
+                    self.failed_dir.mkdir(parents=True, exist_ok=True)
+                    failed_name = processing_path.name.replace(".pt.processing", ".pt")
+                    processing_path.rename(self.failed_dir / failed_name)
 
         if not all_findings and not session_summaries:
             logger.info("MemoryExtractor: Step 1 done, no findings; skipping Step 2")
