@@ -398,22 +398,26 @@ class SelfReflectHook(AgentHook):
         errors: list[dict],
         findings: list[dict[str, Any]],
     ) -> None:
-        """Write human-readable reflection to markdown log."""
-        # Skip empty findings to reduce noise
-        if not findings:
-            return
+        """Write human-readable reflection to markdown log.
 
+        Always writes to log even when findings is empty — this ensures the file
+        exists for external readers (e.g., daily-evolution cron) to analyze.
+        When findings is empty, writes a 'nothing actionable' status instead.
+        """
         self.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
         finding_lines: list[str] = []
-        for f in findings:
-            ftype = f["type"]
-            content = f["content"]
-            relevance = f.get("relevance", "")
-            line = f"- **{ftype}**: {content}"
-            if relevance:
-                line += f"  \n  -> {relevance}"
-            finding_lines.append(line)
+        if findings:
+            for f in findings:
+                ftype = f["type"]
+                content = f["content"]
+                relevance = f.get("relevance", "")
+                line = f"- **{ftype}**: {content}"
+                if relevance:
+                    line += f"  \n  -> {relevance}"
+                finding_lines.append(line)
+        else:
+            finding_lines = ["(nothing actionable)"]
 
         has_error = bool(errors)
         findings_text = "\n".join(finding_lines)
