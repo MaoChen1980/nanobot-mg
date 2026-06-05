@@ -94,7 +94,8 @@ _SYNTHETIC_USER_CONTENT = "(conversation continued)"
 class LLMProvider(ABC):
     """Base class for LLM providers."""
 
-    _CHAT_RETRY_DELAYS = (1, 2, 4)
+    _CHAT_RETRY_DELAYS = (5, 15, 30, 60)
+    _STANDARD_RETRY_DELAYS = (5, 15, 30)
     _PERSISTENT_MAX_DELAY = 60
     _PERSISTENT_IDENTICAL_ERROR_LIMIT = 10
     _RATE_LIMIT_RETRY_SECONDS = 120
@@ -728,8 +729,10 @@ class LLMProvider(ABC):
         on_retry_wait: Callable[[str], Awaitable[None]] | None,
     ) -> LLMResponse:
         attempt = 0
-        delays = list(self._CHAT_RETRY_DELAYS)
         persistent = retry_mode == "persistent"
+        delays = list(
+            self._CHAT_RETRY_DELAYS if persistent else self._STANDARD_RETRY_DELAYS
+        )
         last_response: LLMResponse | None = None
         last_error_key: str | None = None
         identical_error_count = 0
