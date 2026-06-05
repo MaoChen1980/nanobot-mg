@@ -195,7 +195,7 @@ class MemoryExtractor:
         prompt = render_template("agent/extractor_analysis.md")
 
         try:
-            response = await self.provider.chat_with_retry(
+            response = await self.provider.chat_stream_with_retry(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": prompt},
@@ -531,7 +531,7 @@ class MemoryExtractor:
 
         prompt = render_template("agent/extractor_skill_creator.md")
         try:
-            response = await self.provider.chat_with_retry(
+            response = await self.provider.chat_stream_with_retry(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": prompt},
@@ -757,7 +757,7 @@ class MemoryExtractor:
         )
 
         try:
-            response = await self.provider.chat_with_retry(
+            response = await self.provider.chat_stream_with_retry(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_msg},
@@ -1309,7 +1309,7 @@ class MemoryExtractor:
             return
 
         try:
-            response = await self.provider.chat_with_retry(
+            response = await self.provider.chat_stream_with_retry(
                 model=self.model,
                 messages=[
                     {

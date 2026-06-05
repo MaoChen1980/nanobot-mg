@@ -323,7 +323,7 @@ class SelfReflectHook(AgentHook):
         else:
             provider = self._provider
 
-        response = await provider.chat(
+        response = await provider.chat_stream(
             messages=[
                 {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},
                 {"role": "user", "content": REFLECTION_USER_TEMPLATE.format(
