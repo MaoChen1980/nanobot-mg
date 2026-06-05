@@ -403,7 +403,7 @@ class MemoryExtractor:
                     seen.add(clean)
                     unique.append(e)
             # Restore chronological order for final output
-            unique.sort(key=lambda x: x["ts"])
+            unique.sort(key=lambda x: x["ts"] or 0)
 
             # Remove orphaned subheadings (## or ### with no content after them)
             filtered: list[dict[str, Any]] = []
