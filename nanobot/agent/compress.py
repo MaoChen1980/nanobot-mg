@@ -162,7 +162,7 @@ async def summarize_turns(
         prompt = _build_prompt(current_turns, current_future, previous_summary)
 
         try:
-            resp = await provider.chat(
+            resp = await provider.chat_stream(
                 [{"role": "user", "content": prompt}],
                 model=model,
             )
