@@ -546,8 +546,6 @@ class GatewayApplication:
         from nanobot.cron.types import CronJob, CronPayload
 
         extractor_cfg = self.config.agents.defaults.extractor
-        if extractor_cfg.model_override:
-            self.agent.extractor.model = extractor_cfg.model_override
         self.cron.register_system_job(
             CronJob(
                 id="extractor",

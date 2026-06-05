@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from pydantic_settings import BaseSettings
 
@@ -136,10 +136,6 @@ class ExtractorConfig(Base):
 
     interval_h: float = Field(default=0.5, ge=0.5)  # Cron interval (hours)
     cron: Optional[str] = Field(default=None, exclude=True)  # Legacy compatibility override
-    model_override: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices("modelOverride", "model", "model_override"),
-    )  # Optional extractor-specific model override
     save_interval: int = Field(default=30, ge=1)  # M: save .pt every N turns per-session
 
     def build_schedule(self, timezone: str) -> CronSchedule:

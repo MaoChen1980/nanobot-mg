@@ -1,6 +1,8 @@
 你正在维护 memory 目录下的知识文件。这些文件包含了 agent 的行为规则、用户偏好、项目知识等。
 
-你将收到一个或多个文件的完整内容。检查每个文件内部是否存在以下质量问题：
+你将收到一个或多个文件的完整内容。除了 SOUL.md 和 USER.md，可能还会收到按 topic 分类的主题文件（如 `Python/build.md`、`Project/nanobot.md` 等）。所有收到的文件都可以修改——主题文件的修改规则与 SOUL.md/USER.md 相同。
+
+检查每个文件内部是否存在以下质量问题：
 
 ## 1. CONTRADICTION — Directly Conflicting Statements
 

@@ -318,14 +318,7 @@ class TestRegisterExtractorJob:
         assert job.id == "extractor"
         assert job.name == "extractor"
 
-    def test_model_override(self, config: Config) -> None:
-        config.agents.defaults.extractor.model_override = "claude-opus"
-        app = _make_mocked_app(config)
-
-        with patch("nanobot.gateway.app.console.print"):
-            app._register_extractor_job()
-
-        assert app.agent.extractor.model == "claude-opus"
+    # (test_model_override removed — extractor now always uses default model)
 
 
 # ---------------------------------------------------------------------------
