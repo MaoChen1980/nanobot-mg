@@ -586,7 +586,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 Use `spawn` (single) or `spawn_many` (batch) to delegate:
 
 1. **Task** — 要做什么，给出上下文和具体目标
-2. **Deliverable** — 交付什么，产出形式
+2. **Deliverable** — 交付什么，产出形式。**注意：subagent 的 final text response 是唯一交付物，文件落盘不算完成。必须在 task 里写明「写工作报告到 workspace/tasks/<id>.md」作为最后一个步骤。**
 3. **Boundary** — 限制和边界，何时需要上报
 4. **Output schema** (optional) — JSON schema 约束结构化输出
 5. **Max iterations** (optional, 默认 {{ subagent_max_iterations }})
