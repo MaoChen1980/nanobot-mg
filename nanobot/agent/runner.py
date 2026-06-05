@@ -15,7 +15,7 @@ from nanobot.agent.context_vars import _current_messages_for_subagent
 from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.providers.base import LLMProvider
 from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.session.manager import find_legal_message_start
+from nanobot.session.manager import Session, find_legal_message_start
 from nanobot.utils.compat import dataclass
 from nanobot.utils.helpers import (
     build_assistant_message,
@@ -215,6 +215,7 @@ class AgentRunner:
         empty_content_retries = 0
         length_recovery_count = 0
         model_error_retries = 0
+        consecutive_timeout_count = 0
         had_injections = False
         injection_cycles = 0
         total_retry_count = 0
@@ -487,6 +488,10 @@ class AgentRunner:
                 continue
 
             if response.finish_reason == "error":
+                if response.error_kind == "timeout":
+                    consecutive_timeout_count += 1
+                else:
+                    consecutive_timeout_count = 0
                 final_content = clean or spec.error_message or _DEFAULT_ERROR_MESSAGE
                 stop_reason = "error"
                 error = final_content
@@ -502,6 +507,37 @@ class AgentRunner:
                     had_injections = True
                     continue
                 if model_error_retries < _MAX_MODEL_ERROR_RETRIES:
+                    # Compress context on repeated timeout: keep last 10 turns,
+                    # summarize older turns so the retry works with less context.
+                    if consecutive_timeout_count >= 3:
+                        from nanobot.agent.compress import summarize_turns
+                        from nanobot.agent.loop_utils import strip_think
+
+                        turns = Session._split_turns_by_assistant(messages)
+                        if len(turns) > 10:
+                            s_turns = turns[:-10]
+                            boundary = sum(len(t) for t in s_turns)
+                            summary = await summarize_turns(
+                                [m for t in s_turns for m in t],
+                                self.provider, spec.model,
+                                future_context=[m for t in turns[-10:] for m in t],
+                            )
+                            summary = strip_think(summary).strip() if summary else ""
+                            if summary:
+                                for m in messages[:boundary]:
+                                    m["status"] = "excluded"
+                                ts = datetime.now(timezone.utc).isoformat()
+                                messages[boundary:boundary] = [
+                                    {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
+                                    {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
+                                ]
+                            logger.warning(
+                                "Summarized {} old turns {} for {} after consecutive timeouts",
+                                len(s_turns),
+                                f"({len(str(summary))} chars)" if summary else "(summary failed)",
+                                spec.session_key or "default",
+                            )
+                        consecutive_timeout_count = 0
                     model_error_retries += 1
                     total_retry_count += 1
                     retry_ctx.llm_request_state.record_attempt(f"model error retry {model_error_retries}")
