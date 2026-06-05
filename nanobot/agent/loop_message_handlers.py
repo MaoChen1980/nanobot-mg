@@ -96,10 +96,12 @@ class SystemMessageHandler:
             summary = None
             if to_compress_fmt:
                 try:
+                    prev = getattr(session, '_last_summary', None)
                     summary = await summarize_turns(
                         [m for turn in to_compress_fmt for m in turn],
                         self._loop.provider, self._loop.model,
                         future_context=[m for turn in keeps_fmt for m in turn],
+                        previous_summary=prev,
                     )
                 except Exception:
                     logger.exception("Summary LLM call failed, skipping summary")
@@ -244,10 +246,12 @@ class UserMessageHandler:
             summary = None
             if to_compress_fmt:
                 try:
+                    prev = getattr(session, '_last_summary', None)
                     summary = await summarize_turns(
                         [m for turn in to_compress_fmt for m in turn],
                         self._loop.provider, self._loop.model,
                         future_context=[m for turn in keeps_fmt for m in turn],
+                        previous_summary=prev,
                     )
                 except Exception:
                     logger.exception("Summary LLM call failed, skipping summary")

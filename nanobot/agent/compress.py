@@ -52,10 +52,17 @@ _SUMMARY_PROMPT_TEMPLATE = (
     "如果你觉得某个信息在后面还有用，不管它属于哪类，都保留。\n"
     "如果你觉得某个信息后面已经用不上了，不管它看似多重要，都丢弃。\n"
     "\n"
+    "## 必须保留（不参与判断，无条件保留）\n"
+    "- 用户最近一次提出的核心任务需求、目标和成功标准\n"
+    "- 系统当前正在执行的 task 描述（如果有）\n"
+    "\n"
+    "*必须保留是指这类信息必须在摘要里存在，不意味着保留原文。如果后面的对话对任务目标有更正/缩小范围，取最新版本。*\n"
+    "\n"
     "关键原则：同一类信息，只保留最晚的那个版本。\n"
     "## 输出\n"
     "简洁的要点列表，按主题分组。不要按 turn 顺序。\n"
     "\n"
+    "{previous_summary}"
     "以下是即将被裁剪的旧对话：\n\n"
     "{turns_text}\n\n"
     "---\n"
@@ -125,11 +132,16 @@ async def summarize_turns(
     provider: Any,
     model: str,
     future_context: list[dict] | None = None,
+    previous_summary: str | None = None,
 ) -> str:
     """Summarise *turns* (flat messages) via the LLM.
 
     *future_context* — flat messages from the retained history, used so the
     LLM can judge which information in the old turns is still relevant.
+
+    *previous_summary* — summary from the last compression round. Included
+    in the prompt so the LLM can merge new information into it rather than
+    rewriting from scratch.
 
     Returns the summary text (empty string on failure).
     Never raises: all exceptions are caught and logged.
@@ -144,7 +156,7 @@ async def summarize_turns(
     current_future: list[dict] = list(future_context) if future_context else []
 
     for attempt in range(6):
-        prompt = _build_prompt(current_turns, current_future)
+        prompt = _build_prompt(current_turns, current_future, previous_summary)
 
         try:
             resp = await provider.chat(
@@ -218,11 +230,27 @@ def _format_turns(msgs: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_prompt(turns: list[dict], future_context: list[dict]) -> str:
+def _build_prompt(
+    turns: list[dict],
+    future_context: list[dict],
+    previous_summary: str | None = None,
+) -> str:
     """Build the summary prompt for the LLM."""
     turns_text = _format_turns(turns)
     future_text = _format_turns(future_context) if future_context else ""
-    return _SUMMARY_PROMPT_TEMPLATE.format(turns_text=turns_text, future_text=future_text)
+
+    prev_section = ""
+    if previous_summary:
+        prev_section = (
+            "## 已有摘要（只更新不裁剪，必须包含全部已有内容）\n"
+            f"{previous_summary}\n\n"
+        )
+
+    return _SUMMARY_PROMPT_TEMPLATE.format(
+        turns_text=turns_text,
+        future_text=future_text,
+        previous_summary=prev_section,
+    )
 
 
 def _compress_session(
@@ -260,6 +288,8 @@ def _compress_session(
             logger.exception("Failed to persist compressed history to DB")
 
     session.messages[:] = flat
+    if summary:
+        session._last_summary = summary
     logger.info(
         "Compressed session {}: dropped {} messages, kept {}",
         session.key, len(replaced), len(flat),
