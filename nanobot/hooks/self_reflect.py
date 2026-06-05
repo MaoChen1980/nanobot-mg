@@ -232,7 +232,7 @@ class SelfReflectHook(AgentHook):
         total_tokens = sum(e.get("usage", {}).get("total_tokens", 0) for e in entries)
         total_tool_calls = sum(e.get("tool_count", 0) for e in entries)
         errors = [e for e in entries if e.get("error")]
-        iteration_range = f"#{entries[0]['iteration']}-#{entries[-1]['iteration']}"
+        iteration_range = f"#{min(e['iteration'] for e in entries)}-#{max(e['iteration'] for e in entries)}"
         time_str = entries[-1]["time"]
 
         # Tool call frequency (all tools, not just repeated)
