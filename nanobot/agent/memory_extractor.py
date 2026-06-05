@@ -6,7 +6,6 @@ Replaces the old Consolidator + Dream two-stage pipeline.
 from __future__ import annotations
 
 import asyncio
-import difflib
 import json
 import re
 import time
@@ -29,6 +28,26 @@ _SANITIZE_MAX_LEN = 64
 
 _ANALYSIS_MAX_CHARS = 200_000  # Max chars of .pt content sent to analysis LLM
 
+_TS_RE = re.compile(r"<!--ts:(\d+(?:\.\d+)?)-->")  # embedded timestamp in memory files
+
+
+def _parse_ts(ts_str: str | None) -> float | None:
+    """Parse ISO 8601 timestamp string to float, or return None."""
+    if not ts_str:
+        return None
+    # Normalize: handle non-standard ISO 8601 where time uses dashes
+    # (e.g. "2026-06-06T10-30-00" from save_prompt_snapshot)
+    normalized = re.sub(r"(?<=T)(\d{2})-(\d{2})-(\d{2})", r"\1:\2:\3", ts_str)
+    try:
+        return datetime.fromisoformat(normalized).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def _format_ts(ts: float) -> str:
+    """Format float timestamp to ISO 8601 string."""
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 def _trim_sentence(text: str, max_len: int = 150) -> str:
     """Trim text to max_len, cutting at sentence boundary when possible."""
@@ -43,11 +62,11 @@ def _trim_sentence(text: str, max_len: int = 150) -> str:
 
 
 class MemoryExtractor:
-    """Two-step memory processor: extract findings from .pt files, then write + cleanup.
+    """Three-step memory processor: extract findings from .pt files, then write + cleanup, then index.
 
     Step 1 — Extract: process saved prompts, call LLM to find new information.
-    Step 2 — Write + Cleanup: write findings to files, cleanup-check SOUL.md/USER.md,
-             git commit once, rebuild FAISS.
+    Step 2 — Write + Cleanup: write findings to files, cleanup-check SOUL.md/USER.md.
+    Step 3 — Post-process: materialize skills, consolidate memory, index rebuild, git commit.
     """
 
     def __init__(
@@ -55,7 +74,6 @@ class MemoryExtractor:
         store: MemoryStore,
         provider: LLMProvider,
         model: str,
-        max_tool_result_chars: int = 32_000,
         timezone: str | None = None,
     ):
         self.store = store
@@ -65,6 +83,7 @@ class MemoryExtractor:
         self.prompts_dir = ensure_dir(store.workspace / "prompts")
         self.failed_dir = ensure_dir(self.prompts_dir / "failed")
         self.processed_dir = ensure_dir(self.prompts_dir / "processed")
+        self._last_modified_files: list[str] = []
 
     def set_provider(self, provider: LLMProvider, model: str) -> None:
         self.provider = provider
@@ -75,47 +94,43 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def run(self) -> bool:
-        """Step 0 → Step 1 → Step 2. Returns True if any work was done."""
+        """Step 1 (extract) → Step 2 (write + cleanup) → Step 3 (post-process)."""
         all_findings: list[dict[str, Any]] = []
-        did_work = False
 
-        # ── Step 0: detect memory/ changes from external writes ──
-        if self._memory_dir_changed():
-            self._add_backlinks()
-            await self._rebuild_indexes()
-            if self.store.git.is_initialized():
-                self.store.git.auto_commit("memory: sync external changes")
-
-        # ── Consolidate fragmented small topic files (independent of .pt files) ──
-        if await self._consolidate_memory():
-            did_work = True
-
-        # ── Step 1: extract findings from .pt files ──
-        pt_files = sorted(self.prompts_dir.glob("*.pt"))
+        # ── Step 1: collect .pt + .pt.processing (crash survivors) ──
+        pt_files = sorted(
+            p for p in self.prompts_dir.iterdir()
+            if p.suffix == ".pt" or p.name.endswith(".pt.processing")
+        )
         if not pt_files:
             logger.debug("MemoryExtractor: no .pt files to process")
-            if did_work:
-                self._add_backlinks()
-                await self._rebuild_indexes()
-                if self.store.git.is_initialized():
-                    self.store.git.auto_commit("memory: consolidate fragmented files")
-            return did_work
+            return False
 
-        session_summaries: list[str] = []
+        processed: list[Path] = []  # .pt.processing files that succeeded
 
         for pt_path in pt_files:
-            processing_path = pt_path.with_suffix(".pt.processing")
-            try:
-                pt_path.rename(processing_path)
-            except OSError:
-                logger.warning("MemoryExtractor: race on {}, skipping", pt_path)
-                continue
+            # Claim the file: rename .pt → .pt.processing if needed
+            if pt_path.suffix == ".pt":
+                processing_path = pt_path.with_suffix(".pt.processing")
+                try:
+                    pt_path.rename(processing_path)
+                except OSError:
+                    logger.warning("MemoryExtractor: race on {}, skipping", pt_path)
+                    continue
+            else:
+                processing_path = pt_path  # already .pt.processing, retry it
 
             try:
                 content = json.loads(processing_path.read_text(encoding="utf-8"))
+                saved_at = content.get("saved_at", "")
                 analysis = await self._analysis_llm(content)
                 if analysis:
                     findings = analysis.get("findings", [])
+                    code_ts = _parse_ts(saved_at) or time.time()
+                    for f in findings:
+                        # Inject ts if LLM didn't provide one
+                        if not f.get("ts"):
+                            f["ts"] = _format_ts(code_ts)
                     if findings:
                         all_findings.extend(findings)
                         logger.info(
@@ -123,12 +138,7 @@ class MemoryExtractor:
                             len(findings),
                             processing_path.name,
                         )
-                    summary = (analysis.get("session_summary") or "").strip()
-                    if summary:
-                        session_summaries.append(summary)
-                processed_name = processing_path.name.replace(".pt.processing", ".pt")
-                if processing_path.is_file():
-                    processing_path.replace(self.processed_dir / processed_name)
+                processed.append(processing_path)
             except Exception:
                 logger.exception("MemoryExtractor: failed to process {}", processing_path)
                 if processing_path.is_file():
@@ -136,63 +146,64 @@ class MemoryExtractor:
                     failed_name = processing_path.name.replace(".pt.processing", ".pt")
                     processing_path.rename(self.failed_dir / failed_name)
 
-        if not all_findings and not session_summaries:
-            logger.info("MemoryExtractor: Step 1 done, no findings; skipping Step 2")
-            if did_work:
-                self._add_backlinks()
-                await self._rebuild_indexes()
-                if self.store.git.is_initialized():
-                    self.store.git.auto_commit("memory: consolidate fragmented files")
-            return did_work
+        if not all_findings:
+            logger.info("MemoryExtractor: no findings from any .pt file")
+            self._move_processed(processed)
+            return False
 
-        # ── Step 2: write findings + cleanup ──
-        await self._write_cleanup_and_rebuild(all_findings, session_summaries)
+        # ── Step 2: write findings + cleanup in memory, then flush ──
+        recent_entries = await self._write_cleanup_and_rebuild(all_findings)
+
+        # ── Step 3: post-process ──
+        changed = recent_entries is not None or self._memory_dir_changed()
+
+        if await self._materialize_skills():
+            changed = True
+        if await self._consolidate_memory():
+            changed = True
+            # Ensure consolidation-created files are included in cleanup scope
+            current_state = self._snapshot_memory_dir(self.store.memory_dir)
+            for rel_path in current_state:
+                if rel_path not in self._last_modified_files:
+                    self._last_modified_files.append(rel_path)
+        if changed:
+            await self._cleanup_check(modified_files=self._last_modified_files)
+
+        if changed:
+            self._generate_memory_index(recent_entries or [])
+            self._add_backlinks()
+            await self._rebuild_indexes()
+            if self.store.git.is_initialized():
+                self.store.git.auto_commit("memory: extract and cleanup")
+
+        # ── Done: move processed .pt files ──
+        self._move_processed(processed)
         return True
 
-    # ------------------------------------------------------------------
-    #  Recent findings tracking for MEMORY.md Recent changes
-    # ------------------------------------------------------------------
-
-    _RECENT_JSON = ".recent.json"  # inside memory_dir
-
-    def _load_recent_findings(self) -> list[dict[str, Any]]:
-        """Load persisted recent findings (max 15)."""
-        p = self.store.memory_dir / self._RECENT_JSON
-        if not p.exists():
-            return []
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, OSError):
-            return []
-
-    def _append_recent_findings(self, new_entries: list[dict[str, Any]]) -> None:
-        """Append findings and persist top 15."""
-        existing = self._load_recent_findings()
-        existing.extend(new_entries)
-        existing.sort(key=lambda x: -x.get("ts", 0))
-        # Dedup by (path, text) keeping first occurrence (newest due to sort)
-        seen: set[tuple[str, str]] = set()
-        deduped: list[dict[str, Any]] = []
-        for e in existing:
-            key = (e.get("path", ""), e.get("text", ""))
-            if key not in seen:
-                seen.add(key)
-                deduped.append(e)
-        self.store.memory_dir.joinpath(self._RECENT_JSON).write_text(
-            json.dumps(deduped[:12], ensure_ascii=False), encoding="utf-8",
-        )
-
-    # ------------------------------------------------------------------
+    def _move_processed(self, processing_paths: list[Path]) -> None:
+        """Move .pt.processing files to processed/ directory."""
+        for p in processing_paths:
+            if not p.is_file():
+                continue
+            processed_name = p.name.replace(".pt.processing", ".pt")
+            p.replace(self.processed_dir / processed_name)
+        logger.info("MemoryExtractor: moved {} file(s) to processed/", len(processing_paths))
 
     async def _analysis_llm(
         self, pt_content: dict
     ) -> dict[str, Any] | None:
         """Call LLM to analyze a saved prompt, return parsed JSON."""
-        # Serialize for LLM consumption. Truncate from front if too large.
+        # Prepend saved_at so LLM knows when this conversation happened
+        saved_at = pt_content.get("saved_at", "")
         pt_text = json.dumps(pt_content, ensure_ascii=False, indent=2)
         if len(pt_text) > _ANALYSIS_MAX_CHARS:
             pt_text = "... (conversation start truncated)\n" + pt_text[-_ANALYSIS_MAX_CHARS:]
+
+        user_content = (
+            f"[Snapshot saved at: {saved_at}]\n"
+            f"[Each message may contain its own timestamp field.]\n\n"
+            f"{pt_text}"
+        )
 
         prompt = render_template("agent/extractor_analysis.md")
 
@@ -201,7 +212,7 @@ class MemoryExtractor:
                 model=self.model,
                 messages=[
                     {"role": "system", "content": prompt},
-                    {"role": "user", "content": pt_text},
+                    {"role": "user", "content": user_content},
                 ],
                 tools=None,
                 tool_choice=None,
@@ -231,6 +242,10 @@ class MemoryExtractor:
             return None
 
         if required_key != "findings":
+            key_value = result.get(required_key)
+            if key_value is not None and not isinstance(key_value, list):
+                logger.warning("MemoryExtractor: '{}' is not a list, resetting", required_key)
+                result[required_key] = []
             return result
 
         findings = result.get("findings", [])
@@ -249,12 +264,17 @@ class MemoryExtractor:
     # Step 2 — Write findings + cleanup
     # ------------------------------------------------------------------
 
-    async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]], session_summaries: list[str] | None = None) -> None:
-        """Write all findings to target files, then cleanup-check SOUL.md/USER.md, then commit and rebuild FAISS."""
-        topic_files: dict[str, list[str]] = {}  # rel_path → [content lines]
-        pinned_paragraphs: set[str] = set()  # paragraphs marked as pinned
-        recent_candidates: list[dict[str, Any]] = []  # (rel_path, content, heading) for Recent section
-        modified_for_cleanup: set[str] = set()  # rel_paths written to
+    async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+        """Build in-memory state, chain supersede, then full-file atomic rewrite.
+
+        Returns ``recent_entries`` (for MEMORY.md) if any writing was done,
+        ``None`` if nothing changed.
+        """
+        # memory_state: {rel_path → [{content, ts, pinned}]}
+        memory_state: dict[str, list[dict[str, Any]]] = {}
+        # supersedes_plan: {rel_path → {(normalized_old_text): True}}
+        # Tracks supersedes targets that need to be removed from existing file content
+        supersedes_plan: dict[str, dict[str, bool]] = {}
 
         for finding in findings:
             ftype = finding.get("type", "skip")
@@ -264,140 +284,245 @@ class MemoryExtractor:
             content = (finding.get("content") or "").strip()
             if not content:
                 continue
-            # Quality gate: reject vague Chinese advice without technical substance
-            if re.match(r"^[-*—\s]*(注意|建议|需要|应该|可以|最好|不要)[：:]\s*[^，。]*[的了]$", content):
+            # Quality gate: reject vague Chinese advice
+            if re.match(r"^[-*—\s]*(注意|建议|需要|应该|可以|最好|不要)[：:]\s*[^，。]*[的了能率性力]$", content):
+                logger.debug("MemoryExtractor: skipped vague finding: {}", content[:60])
+                continue
+            if re.match(r"^[-*—\s]*(优化|改进|提升|增强|重构|修复|完成|实现)了?\s*\w{0,8}$", content):
                 logger.debug("MemoryExtractor: skipped vague finding: {}", content[:60])
                 continue
 
+            ts_raw = finding.get("ts", "")
+            ts_num = _parse_ts(ts_raw) or time.time()
+            pinned = bool(finding.get("pinned"))
+            paragraph = self._format_finding_paragraph(ftype, content)
+            # Append ts marker
+            paragraph += f"\n<!--ts:{ts_num}-->"
+            if pinned:
+                paragraph += "\n<!--pinned-->"
+
             if ftype == "preference":
-                topic_files.setdefault("user.md", []).append(f"- {content}")
+                rel_path = "user.md"
+                memory_state.setdefault(rel_path, []).append({
+                    "content": paragraph, "ts": ts_num, "pinned": pinned,
+                })
 
             elif ftype == "skill":
                 name = (finding.get("name") or "").strip()
                 if name and content:
-                    topic_files.setdefault(
-                        "pending_skills.md", []
-                    ).append(f"- **{name}**: {content}")
+                    skill_line = f"- **{name}**: {content}\n<!--ts:{ts_num}-->"
+                    memory_state.setdefault("pending_skills.md", []).append({
+                        "content": skill_line, "ts": ts_num, "pinned": False,
+                    })
 
             elif ftype in ("knowledge", "pitfall", "pattern"):
                 topic = (finding.get("topic") or "").strip()
                 if not topic:
                     continue
+                if ftype == "pattern":
+                    name = (finding.get("name") or "").strip()
+                    if name:
+                        paragraph = self._format_finding_paragraph(ftype, f"**{name}**: {content}")
                 rel_path = self._topic_to_filepath(topic) + ".md"
-
-                paragraph = self._format_finding_paragraph(ftype, content)
 
                 supersedes = (finding.get("supersedes") or "").strip()
                 if supersedes:
-                    # Embed pinned marker directly in replacement text
-                    replacement = paragraph
-                    if finding.get("pinned") and "<!--pinned-->" not in replacement:
-                        replacement = replacement.rstrip() + "\n<!--pinned-->"
-                    applied, modified_path = self._apply_supersedes(supersedes, replacement)
-                    if applied:
-                        track_path = modified_path or rel_path
-                        logger.info(
-                            "MemoryExtractor: supersedes applied in {} for '{}'",
-                            track_path, content[:60],
-                        )
-                        modified_for_cleanup.add(track_path)
-                        continue
-                    logger.info(
-                        "MemoryExtractor: supersedes target not found for '{}', falling back to append",
-                        supersedes[:60],
+                    # Try in-memory chain first
+                    replaced = self._supersedes_in_memory(
+                        memory_state, rel_path, supersedes, paragraph, ts_num,
                     )
+                    if replaced:
+                        continue
+                    # Fallback: mark for file-level replacement at flush time
+                    supersedes_plan.setdefault(rel_path, {})[supersedes.lower()] = True
 
-                topic_files.setdefault(rel_path, []).append(paragraph)
-
-                if finding.get("pinned"):
-                    pinned_paragraphs.add(paragraph)
+                memory_state.setdefault(rel_path, []).append({
+                    "content": paragraph, "ts": ts_num, "pinned": pinned,
+                })
 
             else:
                 logger.warning("MemoryExtractor: unknown finding type '{}', dropped", ftype)
 
-        # ── Flush additions to files ──
-        changed = bool(topic_files or modified_for_cleanup)
+        if not memory_state:
+            logger.info("MemoryExtractor: no actionable findings to write")
+            return None
 
-        if topic_files:
-            for rel_path, paragraphs in topic_files.items():
-                full_path = self.store.memory_dir / rel_path
-                full_path.parent.mkdir(parents=True, exist_ok=True)
-                date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                if full_path.exists():
-                    existing = full_path.read_text(encoding="utf-8")
-                    new_paragraphs = [p for p in paragraphs if p.strip() not in existing]
-                    skipped = len(paragraphs) - len(new_paragraphs)
-                    if new_paragraphs:
-                        with open(full_path, "a", encoding="utf-8") as f:
-                            for p in new_paragraphs:
-                                f.write(f"\n\n{p}\n")
-                                if p in pinned_paragraphs:
-                                    f.write("<!--pinned-->\n")
-                        modified_for_cleanup.add(rel_path)
-                    if skipped:
-                        logger.info(
-                            "MemoryExtractor: skipped {} duplicate(s) in {}",
-                            skipped, rel_path,
-                        )
-                else:
-                    lines = [f"# {full_path.stem}\n"]
-                    for p in paragraphs:
-                        lines.append(f"\n{p}\n")
-                        if p in pinned_paragraphs:
-                            lines.append("<!--pinned-->\n")
-                    lines.append(f"\n---\n\n*创建: {date_str}*\n")
-                    full_path.write_text("".join(lines), encoding="utf-8")
-                    modified_for_cleanup.add(rel_path)
-                logger.info(
-                    "MemoryExtractor: wrote {} paragraph(s) to {}",
-                    len(paragraphs),
-                    rel_path,
-                )
+        # ── Sort each topic by ts ──
+        for entries in memory_state.values():
+            entries.sort(key=lambda e: e["ts"])
 
-        # ── Append session summaries to recent changes ──
-        if session_summaries:
-            ts = time.time()
-            for summary in session_summaries:
-                recent_candidates.append({
-                    "path": "_session_work.md",
-                    "text": summary,
-                    "ts": ts,
+        # ── Flush each topic: full file rewrite ──
+        recent_entries: list[dict[str, Any]] = []
+        for rel_path, entries in memory_state.items():
+            content_lines: list[str] = []
+            existing_paragraphs: list[dict[str, Any]] = []
+            full_path = self.store.user_file if rel_path == "user.md" else self.store.memory_dir / rel_path
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if full_path.exists():
+                text = full_path.read_text(encoding="utf-8")
+                # Parse existing paragraphs with their ts markers
+                existing_paragraphs = self._parse_file_paragraphs(text)
+
+            # Merge: remove superseded paragraphs from existing
+            plan = supersedes_plan.get(rel_path, {})
+            if plan:
+                new_max_ts = max(e["ts"] for e in entries) if entries else 0
+                kept: list[dict[str, Any]] = []
+                for ep in existing_paragraphs:
+                    ep_lower = ep["content"].lower()
+                    if any(target in ep_lower for target in plan):
+                        # Only remove if new content is actually newer
+                        if ep["ts"] is None or new_max_ts > ep["ts"]:
+                            logger.debug(
+                                "MemoryExtractor: supersedes plan removed '{}' from {}",
+                                list(plan.keys())[0][:60], rel_path,
+                            )
+                            continue
+                    kept.append(ep)
+                existing_paragraphs = kept
+
+            # Build header + footer from existing file
+            header, footer = self._parse_file_structure(text if full_path.exists() else "")
+            if not header:
+                header = f"# {Path(rel_path).stem}\n"
+            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+            # Merge all entries: existing (already filtered) + new
+            merged: list[dict[str, Any]] = list(existing_paragraphs) + [
+                {"content": e["content"], "ts": e["ts"]} for e in entries
+            ]
+
+            # Dedup by normalized content (strip ts/pinned markers)
+            # Sort newest-first so dedup keeps the latest version
+            seen: set[str] = set()
+            unique: list[dict[str, Any]] = []
+            for e in sorted(merged, key=lambda x: -x["ts"]):
+                clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").strip()
+                if clean not in seen:
+                    seen.add(clean)
+                    unique.append(e)
+            # Restore chronological order for final output
+            unique.sort(key=lambda x: x["ts"])
+
+            # Remove orphaned subheadings (## or ### with no content after them)
+            filtered: list[dict[str, Any]] = []
+            for i, e in enumerate(unique):
+                stripped = e["content"].lstrip()
+                if stripped.startswith("## ") or stripped.startswith("### "):
+                    has_content = any(
+                        not (u["content"].lstrip().startswith("## ") or u["content"].lstrip().startswith("### "))
+                        for u in unique[i + 1:]
+                    )
+                    if not has_content:
+                        logger.debug("MemoryExtractor: removed orphaned heading: {}", _trim_sentence(e["content"]))
+                        continue
+                filtered.append(e)
+            unique = filtered
+
+            content_lines.append(header)
+            content_lines.append("")
+            for e in unique:
+                content_lines.append(e["content"])
+                content_lines.append("")
+            content_lines.append(f"---\n\n*更新: {date_str}*\n")
+
+            # Atomic write via .tmp file
+            tmp_path = full_path.with_suffix(".md.tmp")
+            tmp_path.write_text("\n".join(content_lines).strip() + "\n", encoding="utf-8")
+            tmp_path.replace(full_path)
+
+            logger.info("MemoryExtractor: wrote {} paragraph(s) to {}", len(unique), rel_path)
+
+            # Collect recent entries from this topic
+            for e in unique[-5:]:  # last 5 per topic
+                clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").strip()
+                recent_entries.append({
+                    "topic": rel_path,
+                    "content": clean[:200],
+                    "ts": e["ts"],
                 })
 
-        # ── Capture written findings for Recent changes ──
-        if recent_candidates:
-            self._append_recent_findings(recent_candidates)
+        # Sort recent by ts (newest first), take top 12
+        recent_entries.sort(key=lambda x: -x["ts"])
+        self._last_modified_files = list(memory_state.keys())
+        return recent_entries[:12]
 
-        if not changed:
-            logger.info("MemoryExtractor: no actionable findings to write")
-            return
+    @staticmethod
+    def _parse_file_paragraphs(text: str) -> list[dict[str, Any]]:
+        """Split file text into paragraphs, extracting ts from markers.
 
-        # ── Step 2b: materialize skills from pending_skills.md ──
-        if "pending_skills.md" in topic_files:
-            await self._materialize_skills()
+        Only the first ``# `` line is treated as the heading and excluded.
+        A trailing footer block (``---`` separator + companion line) is excluded.
+        """
+        raw_paragraphs = re.split(r"\n\n+", text.strip())
+        result: list[dict[str, Any]] = []
+        heading_skipped = False
+        in_footer = False
+        for p in raw_paragraphs:
+            p = p.strip()
+            if not p:
+                continue
+            if not heading_skipped and p.startswith("# "):
+                heading_skipped = True
+                continue
+            # Footer starts at --- and absorbs one trailing paragraph
+            if p == "---":
+                in_footer = True
+                continue
+            if in_footer:
+                in_footer = False  # absorbed the trailing paragraph
+                continue
+            ts_match = _TS_RE.search(p)
+            ts_val = float(ts_match.group(1)) if ts_match else None
+            result.append({"content": p, "ts": ts_val})
+        return result
 
-        # ── Git commit (findings + skills, before cleanup/backlinks for safety) ──
-        if self.store.git.is_initialized():
-            utc_now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
-            msg = f"extractor: {utc_now} UTC, {len(findings)} finding(s)"
-            sha = self.store.git.auto_commit(msg)
-            if sha:
-                logger.info("MemoryExtractor: committed {}", sha)
+    @staticmethod
+    def _parse_file_structure(text: str) -> tuple[str, str]:
+        """Extract header (first # line) and footer (--- ...) from a file."""
+        header = ""
+        footer = ""
+        lines = text.strip().split("\n")
+        for i, line in enumerate(lines):
+            if line.startswith("# "):
+                header = line
+                break
+        # Find last --- separator
+        sep_idx = -1
+        for i in range(len(lines) - 1, -1, -1):
+            if lines[i].strip() == "---":
+                sep_idx = i
+                break
+        if sep_idx >= 0:
+            footer = "\n".join(lines[sep_idx:])
+        return header, footer
 
-        # ── Step 2c: cleanup check (after commit, safe to modify files) ──
-        await self._cleanup_check(list(modified_for_cleanup))
-
-        # ── Backlinks (after commit, safe to modify) ──
-        self._add_backlinks()
-
-        # ── FAISS rebuild ──
-        await self._rebuild_indexes()
-
-        # ── Commit post-processing (cleanup + backlinks) if any changes ──
-        if self.store.git.is_initialized():
-            sha = self.store.git.auto_commit("memory: cleanup and backlinks")
-            if sha:
-                logger.info("MemoryExtractor: committed post-processing {}", sha)
+    @staticmethod
+    def _supersedes_in_memory(
+        memory_state: dict[str, list[dict[str, Any]]],
+        rel_path: str,
+        old_text: str,
+        new_paragraph: str,
+        new_ts: float,
+    ) -> bool:
+        """Search memory_state for old_text and replace. Respects ts ordering."""
+        entries = memory_state.get(rel_path, [])
+        old_lower = old_text.lower()
+        for entry in entries:
+            content_clean = _TS_RE.sub("", entry["content"]).strip().lower()
+            if old_lower in content_clean:
+                if entry["ts"] is not None and new_ts <= entry["ts"]:
+                    logger.debug(
+                        "MemoryExtractor: supersedes skipped (old {:.3f} >= new {:.3f}): {}",
+                        entry["ts"], new_ts, old_text[:60],
+                    )
+                    return True  # claimed but not applied — old is newer or equal
+                entry["content"] = new_paragraph
+                entry["ts"] = new_ts
+                logger.debug("MemoryExtractor: supersedes in-memory: {} → {}", old_text[:60], new_paragraph[:60])
+                return True
+        return False
 
     # ------------------------------------------------------------------
     # Supersedes — replace old content with new content using FAISS
@@ -412,96 +537,24 @@ class MemoryExtractor:
             return f"- 💡 {content}"
         return f"- {content}"
 
-    def _apply_supersedes(self, supersedes: str, new_paragraph: str) -> tuple[bool, str | None]:
-        """Search memory files for *supersedes* text and replace with *new_paragraph*.
-
-        Uses FAISS to find the best-matching file and chunk, then does paragraph-level
-        matching within that file for precision.
-
-        Returns ``(True, modified_rel_path)`` if replacement was done,
-        ``(False, None)`` if no suitable target was found.
-        """
-        # Search FAISS for the superseded content
-        results = self.store.vector_index.search(supersedes, k=3, min_score=0.3)
-
-        if not results:
-            # Fallback: grep across all memory files
-            results = self._full_text_search(supersedes)
-
-        if not results:
-            return (False, None)
-
-        for result in results:
-            source = result.get("source", "")
-            if not source:
-                continue
-            full_path = self.store.memory_dir / source
-            if not full_path.exists():
-                continue
-            if self._replace_in_file(full_path, supersedes, new_paragraph):
-                return (True, source)
-
-        return (False, None)
-
-    @staticmethod
-    def _replace_in_file(path: Path, old_text: str, new_text: str) -> bool:
-        """Replace *old_text* with *new_text* at paragraph level in *path*.
-
-        Splits the file into blank-line-separated paragraphs and uses
-        ``difflib.SequenceMatcher`` to find the best match for *old_text*.
-        Returns True if a match was found and replaced.
-        """
-        text = path.read_text(encoding="utf-8").strip()
-        raw_paragraphs = re.split(r"\n\n+", text)
-        # Filter out empty paragraphs that arise from leading/trailing whitespace
-        paragraphs = [p for p in raw_paragraphs if p.strip()]
-
-        best_idx = -1
-        best_ratio = 0.0
-        old_lower = old_text.lower()
-
-        for i, para in enumerate(paragraphs):
-            ratio = difflib.SequenceMatcher(None, old_lower, para.lower()).ratio()
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best_idx = i
-
-        if best_ratio > 0.65 and best_idx >= 0:
-            paragraphs[best_idx] = new_text
-            path.write_text("\n\n".join(paragraphs), encoding="utf-8")
-            return True
-
-        return False
-
-    def _full_text_search(self, query: str) -> list[dict[str, Any]]:
-        """Fallback: simple substring search across all memory files."""
-        results: list[dict[str, Any]] = []
-        q = query.lower()
-        for p in self.store.memory_dir.rglob("*.md"):
-            if ".vector_index" in p.parts or p.name in ("MEMORY.md", "index.md"):
-                continue
-            try:
-                content = p.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            if q in content.lower():
-                rel = p.relative_to(self.store.memory_dir).as_posix()
-                results.append({"source": rel, "text": content[:200], "score": 0.5})
-        return results
+    # (supersedes is now handled by _supersedes_in_memory + flush-time plan)
 
     # ------------------------------------------------------------------
     # Skill creation — Phase 2: pending_skills.md → skills/<name>/SKILL.md
     # ------------------------------------------------------------------
 
-    async def _materialize_skills(self) -> None:
-        """Convert pending_skills.md entries to real skills/<name>/SKILL.md files."""
+    async def _materialize_skills(self) -> bool:
+        """Convert pending_skills.md entries to real skills/<name>/SKILL.md files.
+
+        Returns True if any skills were created (and thus pending_skills.md was modified).
+        """
         pending_path = self.store.memory_dir / "pending_skills.md"
         if not pending_path.exists():
-            return
+            return False
 
         pending_text = pending_path.read_text(encoding="utf-8").strip()
         if not pending_text:
-            return
+            return False
 
         # Scan existing skills for dedup
         skills_dir = self.store.workspace / "skills"
@@ -545,23 +598,23 @@ class MemoryExtractor:
             )
         except Exception:
             logger.exception("MemoryExtractor: skill creation LLM call failed")
-            return
+            return False
 
         raw = (response.content or "").strip()
         if not raw:
-            return
+            return False
 
         try:
             raw_clean = self._extract_json_from_llm_output(raw)
             parsed = json.loads(raw_clean)
         except json.JSONDecodeError:
             logger.warning("MemoryExtractor: failed to parse skill creator JSON output (raw[:300]={}..., cleaned={})", raw[:300], raw_clean[:800])
-            return
+            return False
 
         skills = parsed.get("skills", []) if isinstance(parsed, dict) else []
         if not skills:
             logger.info("MemoryExtractor: no skills to create (all deduped or skipped)")
-            return
+            return False
 
         created: list[str] = []
         for skill in skills:
@@ -581,18 +634,13 @@ class MemoryExtractor:
             logger.info("MemoryExtractor: created skill: {}", name)
 
         if not created:
-            return
+            return False
 
         # Remove materialized entries from pending_skills.md
         self._remove_materialized_from_pending(pending_path, created)
 
-        # Git commit for new skills
-        if self.store.git.is_initialized():
-            sha = self.store.git.auto_commit(
-                f"extractor: created {len(created)} skill(s): {', '.join(created)}"
-            )
-            if sha:
-                logger.info("MemoryExtractor: committed skill creation {}", sha)
+        # Commit is handled by run() after all phases complete
+        return True
 
     @staticmethod
     def _extract_json_from_llm_output(text: str) -> str:
@@ -614,16 +662,23 @@ class MemoryExtractor:
         if matches:
             return matches[-1].group(1).strip()
         # Step 3: try to find standalone { ... } JSON object
-        brace_start = after_think.find("{")
-        if brace_start >= 0:
+        # Look for {" or {\n to skip non-JSON { prefixes (e.g. code examples)
+        json_brace = after_think.find('{"')
+        if json_brace < 0:
+            json_brace = after_think.find('{\n')
+        if json_brace < 0:
+            json_brace = after_think.find("{'")
+        if json_brace < 0:
+            json_brace = after_think.find("{")  # fallback
+        if json_brace >= 0:
             depth = 0
-            for i in range(brace_start, len(after_think)):
+            for i in range(json_brace, len(after_think)):
                 if after_think[i] == "{":
                     depth += 1
                 elif after_think[i] == "}":
                     depth -= 1
                     if depth == 0:
-                        return after_think[brace_start : i + 1]
+                        return after_think[json_brace : i + 1]
         # Step 4: return as-is and let json.loads fail if invalid
         return after_think
 
@@ -635,7 +690,13 @@ class MemoryExtractor:
         kept: list[str] = []
         removed = 0
         for line in lines:
-            if any(f"**{name}**" in line for name in created_names):
+            stripped = line.lstrip()
+            skip = False
+            for name in created_names:
+                if stripped.startswith(f"- **{name}**:") or stripped.startswith(f"* **{name}**:"):
+                    skip = True
+                    break
+            if skip:
                 removed += 1
                 continue
             kept.append(line)
@@ -652,9 +713,10 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def _rebuild_indexes(self) -> None:
-        """Regenerate index.md, MEMORY.md, tree.json, and rebuild FAISS indexes."""
+        """Regenerate index.md, tree.json, and rebuild FAISS indexes.
+        (MEMORY.md is generated by run() which has recent_entries.)
+        """
         self._generate_index_files()
-        self._generate_memory_index()
         self._generate_tree_json()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self.store.build_vector_index)
@@ -670,35 +732,40 @@ class MemoryExtractor:
 
         Returns True if any changes were executed.
         """
-        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "pending_skills.md", "lessons.md", "self_mod.md", "system.md", "user.md"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "pending_skills.md", "lessons.md", "self_mod.md", "system.md"}
 
-        # Collect ALL topic directories and their files
-        all_topics: dict[str, list[str]] = {}  # dir → [filenames]
+        # Single pass: collect all file metadata (lines, heading) and topic structure
+        file_meta: dict[str, dict[str, Any]] = {}
+        all_topics: dict[str, list[str]] = {}
+        small_candidates: dict[str, list[tuple[str, int]]] = {}
+
         for p in self.store.memory_dir.rglob("*.md"):
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
             rel = p.relative_to(self.store.memory_dir)
+            try:
+                text = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            lines = len(text.splitlines())
+            heading = ""
+            for line in text.splitlines():
+                s = line.strip()
+                if s.startswith("## ") or s.startswith("# "):
+                    heading = s
+                    break
+
+            rel_str = str(rel)
+            file_meta[rel_str] = {"lines": lines, "heading": heading}
             parent = str(rel.parent)
             all_topics.setdefault(parent, []).append(rel.name)
+            if parent != "." and lines <= 10:
+                small_candidates.setdefault(parent, []).append((rel.name, lines))
 
         # Count topic directories (exclude root ".")
         topic_dirs = sorted(d for d in all_topics if d != ".")
         total_dirs = len(topic_dirs)
         over_limit = total_dirs >= 20
-
-        # Collect small files (≤10 lines, ≥3 per dir) for merge candidates
-        small_candidates: dict[str, list[tuple[str, int]]] = {}
-        for p in self.store.memory_dir.rglob("*.md"):
-            if ".vector_index" in p.parts or p.name in exclude_names:
-                continue
-            rel = p.relative_to(self.store.memory_dir)
-            if rel.parent.name == ".":
-                continue
-            parent = str(rel.parent)
-            text = p.read_text(encoding="utf-8")
-            lines = len(text.splitlines())
-            if lines <= 10:
-                small_candidates.setdefault(parent, []).append((rel.name, lines))
 
         has_small_clusters = any(len(v) >= 3 for v in small_candidates.values())
 
@@ -710,25 +777,15 @@ class MemoryExtractor:
         if over_limit:
             parts.append("⚠️ 超过上限，需要合并！")
 
-        # Extract first heading from each file for content-aware organization
-        def _first_heading(p: Path) -> str:
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-                for line in text.splitlines():
-                    stripped = line.strip()
-                    if stripped.startswith("## ") or stripped.startswith("# "):
-                        return stripped
-                return ""
-            except OSError:
-                return ""
 
         parts.append("\n### 当前目录")
         for d in topic_dirs:
             files = all_topics.get(d, [])
             parts.append(f"- {d}/ ({len(files)} 个文件)")
             for name in sorted(files):
-                fpath = self.store.memory_dir / d / name
-                heading = _first_heading(fpath)
+                rel_path = f"{d}/{name}" if d != "." else name
+                meta = file_meta.get(rel_path, {})
+                heading = meta.get("heading", "")
                 tag = f" ← {heading}" if heading else ""
                 parts.append(f"  - {name}{tag}")
 
@@ -839,9 +896,14 @@ class MemoryExtractor:
                     # Remove empty source dir
                     try:
                         remaining = list(src_dir.rglob("*"))
-                        if not remaining or all(
+                        remaining_dirs = [p for p in remaining if p.is_dir()]
+                        remaining_files = [p for p in remaining if p.is_file()]
+                        if not remaining_files and not remaining_dirs:
+                            import shutil
+                            shutil.rmtree(src_dir)
+                        elif remaining_files and not remaining_dirs and all(
                             p.name == "index.md" or ".vector_index" in p.parts
-                            for p in remaining
+                            for p in remaining_files
                         ):
                             import shutil
                             shutil.rmtree(src_dir)
@@ -1030,7 +1092,7 @@ class MemoryExtractor:
     # MEMORY.md + tree.json generation
     # ------------------------------------------------------------------
 
-    def _generate_memory_index(self) -> None:
+    def _generate_memory_index(self, recent_entries: list[dict[str, Any]]) -> None:
         """Scan memory/ and generate compact MEMORY.md for agent system prompt.
 
         Format: Recent changes (15 newest) + per-category summary with file count and topics.
@@ -1102,21 +1164,20 @@ class MemoryExtractor:
         for rel, _mtime, parent, stem, heading in file_meta:
             category_index.setdefault(parent, []).append((rel, stem, heading))
 
-        # Recent changes — shows actual findings from last extraction(s)
-        recent = self._load_recent_findings()
-        if recent:
+        # Recent changes — from final memory state (already ts-sorted, newest first)
+        if recent_entries:
             now_s = time.time()
             two_days = 2 * 86400
             lines.append("## Recent changes\n")
-            for r in recent:
-                if r.get("path") != "_session_work.md":
-                    continue  # only session summaries belong here
-                text = r.get("text", "")
-                ts = r.get("ts", 0)
-                age_s = now_s - ts
-                if age_s < two_days and text:
+            for r in recent_entries:
+                text = r.get("content", "")
+                ts_v = r.get("ts", 0)
+                if not text:
+                    continue
+                age_s = now_s - ts_v
+                if age_s < two_days:
                     lines.append(f"- **{_trim_sentence(text, 200)}**")
-                elif text:
+                else:
                     lines.append(f"- {_trim_sentence(text, 200)}")
             lines.append("")
 
@@ -1290,16 +1351,18 @@ class MemoryExtractor:
     async def _cleanup_check(self, modified_files: list[str] | None = None) -> None:
         """Step 2b: LLM check SOUL.md/USER.md (and optionally modified topic files)
         for contradictions, duplicates, stale content."""
-        soul = self.store.read_soul()
-        user = self.store.read_user()
+        soul_content = self.store.read_soul()
+        user_content = self.store.read_user()
 
         # Build user message from SOUL/USER and any modified topic files
         content_parts: list[str] = []
-        content_parts.append(f"## SOUL.md\n{soul or '(empty)'}")
-        content_parts.append(f"## USER.md\n{user or '(empty)'}")
+        content_parts.append(f"## SOUL.md\n{soul_content or '(empty)'}")
+        content_parts.append(f"## USER.md\n{user_content or '(empty)'}")
 
         if modified_files:
             for rel_path in modified_files:
+                if rel_path == "user.md":
+                    continue  # Already included as ## USER.md
                 full_path = self.store.memory_dir / rel_path
                 try:
                     text = full_path.read_text(encoding="utf-8")
@@ -1307,7 +1370,7 @@ class MemoryExtractor:
                 except OSError:
                     continue
 
-        if not soul and not user and not modified_files:
+        if not soul_content and not user_content and not modified_files:
             return
 
         try:
@@ -1350,12 +1413,16 @@ class MemoryExtractor:
             target = s.get("target_text", "")
             replacement = s.get("replacement")
 
-            if file_name == "SOUL.md":
+            if file_name in ("SOUL.md", "soul.md"):
                 file_path = self.store.soul_file
-            elif file_name == "USER.md":
+            elif file_name in ("USER.md", "user.md"):
                 file_path = self.store.user_file
-            elif modified_files and file_name in modified_files:
-                file_path = self.store.memory_dir / file_name
+            elif modified_files:
+                matched = next((f for f in modified_files if f == file_name or f.endswith("/" + file_name)), None)
+                if matched:
+                    file_path = self.store.memory_dir / matched
+                else:
+                    continue
             else:
                 continue
 
@@ -1400,6 +1467,7 @@ class MemoryExtractor:
         parts = topic.strip("/").split("/")
         safe_parts = [MemoryExtractor._sanitize_filename(p) for p in parts]
         safe_parts = [p for p in safe_parts if p]  # remove empties
+        safe_parts = [p for p in safe_parts if p != ".."]  # block path traversal
         return "/".join(safe_parts[:8])  # max 8 levels deep
 
     @staticmethod
@@ -1412,8 +1480,9 @@ class MemoryExtractor:
         Returns the path to the saved file.
         """
         safe_key = MemoryExtractor._sanitize_filename(session_key)
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
-        filename = f"{safe_key}-{ts}.pt"
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        ts_file = ts.replace(":", "-")  # Windows forbids colons in filenames
+        filename = f"{safe_key}-{ts_file}.pt"
         path = prompts_dir / filename
 
         payload = {
