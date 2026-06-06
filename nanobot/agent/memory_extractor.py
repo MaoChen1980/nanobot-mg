@@ -650,45 +650,33 @@ class MemoryExtractor:
         if think_end >= 0:
             after_think = text[think_end + len("</think>"):].strip()
         else:
-            # <think> unclosed or absent — try the whole text
             after_think = text.strip()
-            # strip leading <think> if present, keep rest for JSON search
             after_think = after_think.removeprefix("<think>").strip()
             if not after_think:
-                # <think> with nothing after — no JSON possible
                 return ""
-        # Step 2: find the first ```json / ``` block and the LAST ``` close fence
-        # Use first→last (not greedy regex) to handle nested ``` inside JSON string values.
+        # Step 2: narrow search region — prefer content inside ``` fences
         fence_start = after_think.find("```")
         if fence_start >= 0:
-            # skip past the fence marker line (``` or ```json)
-            content_start = after_think.find("\n", fence_start)
-            if content_start >= 0:
-                content_start += 1
-                # find the LAST ``` which is the true close fence
-                fence_end = after_think.rfind("```")
-                if fence_end > content_start:
-                    return after_think[content_start:fence_end].strip()
-        # Step 3: try to find standalone { ... } JSON object
-        # Look for {" or {\n to skip non-JSON { prefixes (e.g. code examples)
-        json_brace = after_think.find('{"')
-        if json_brace < 0:
-            json_brace = after_think.find('{\n')
-        if json_brace < 0:
-            json_brace = after_think.find("{'")
-        if json_brace < 0:
-            json_brace = after_think.find("{")  # fallback
-        if json_brace >= 0:
-            depth = 0
-            for i in range(json_brace, len(after_think)):
-                if after_think[i] == "{":
-                    depth += 1
-                elif after_think[i] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        return after_think[json_brace : i + 1]
+            nl = after_think.find("\n", fence_start)
+            search_in = after_think[nl + 1:].strip() if nl >= 0 else after_think
+        else:
+            search_in = after_think
+        # Step 3: find balanced { ... } by brace-depth counting.
+        # Using brace matching (not first→last fence) handles nested ```
+        # inside JSON string values without matching the wrong closing fence.
+        for look in ('{"', '{\n', "{'", "{"):
+            brace_start = search_in.find(look)
+            if brace_start >= 0:
+                depth = 0
+                for i in range(brace_start, len(search_in)):
+                    if search_in[i] == "{":
+                        depth += 1
+                    elif search_in[i] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            return search_in[brace_start : i + 1]
         # Step 4: return as-is and let json.loads fail if invalid
-        return after_think
+        return search_in
 
     @staticmethod
     def _remove_materialized_from_pending(pending_path: Path, created_names: list[str]) -> None:
