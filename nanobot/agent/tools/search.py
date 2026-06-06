@@ -1,4 +1,4 @@
-"""Search tools: grep and glob."""
+"""Search tools: grep_tool and glob_tool."""
 
 from __future__ import annotations
 
@@ -137,7 +137,7 @@ class GlobTool(_SearchTool):
 
     @property
     def name(self) -> str:
-        return "glob"
+        return "glob_tool"
 
     @property
     def description(self) -> str:
@@ -209,7 +209,7 @@ class GlobTool(_SearchTool):
         try:
             root = self._resolve(path or ".")
             if not root.exists():
-                return f"Error: Path not found: {path} — use glob to locate it first"
+                return f"Error: Path not found: {path} — use glob_tool to locate it first"
             if not root.is_dir():
                 return f"Error: Not a directory: {path}"
 
@@ -263,7 +263,7 @@ class GrepTool(_SearchTool):
 
     @property
     def name(self) -> str:
-        return "grep"
+        return "grep_tool"
 
     @property
     def description(self) -> str:
@@ -510,7 +510,7 @@ class GrepTool(_SearchTool):
         try:
             target = self._resolve(path or ".")
             if not target.exists():
-                return f"Error: Path not found: {path} — use glob to locate it first"
+                return f"Error: Path not found: {path} — use glob_tool to locate it first"
             if not (target.is_dir() or target.is_file()):
                 return f"Error: Unsupported path: {path}"
 

@@ -303,8 +303,8 @@ def test_agent_loop_registers_grep_and_glob(tmp_path: Path) -> None:
 
     loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
 
-    assert "grep" in loop.tools.tool_names
-    assert "glob" in loop.tools.tool_names
+    assert "grep_tool" in loop.tools.tool_names
+    assert "glob_tool" in loop.tools.tool_names
 
 
 @pytest.mark.asyncio
@@ -335,8 +335,8 @@ async def test_subagent_registers_grep_and_glob(tmp_path: Path) -> None:
     status = SubagentStatus(task_id="sub-1", label="label", task_description="search task", started_at=time.monotonic())
     await mgr._run_subagent("sub-1", "search task", "label", {"channel": "cli", "chat_id": "direct", "session_key": None}, status)
 
-    assert "grep" in captured["tool_names"]
-    assert "glob" in captured["tool_names"]
+    assert "grep_tool" in captured["tool_names"]
+    assert "glob_tool" in captured["tool_names"]
 
 
 def test_subagent_prompt_respects_disabled_skills(tmp_path: Path) -> None:

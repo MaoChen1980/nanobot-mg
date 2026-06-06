@@ -148,7 +148,7 @@ class EditFileTool(_FsTool):
         "- old_text not found → shows diff to help locate\n"
         "- old_text appears multiple times and replace_all=false → shows line numbers for each match\n"
         "- File does not exist → returns error\n\n"
-        "**Minimal Example**: edit_file(path='main.py', first_line=42, last_line=45, new_text='def bar():')\n"
+        "**Minimal Example**: edit_file_tool(path='main.py', first_line=42, last_line=45, new_text='def bar():')\n"
         "→ Replaces lines 42-45 in the file with new content"
     )
 
@@ -196,7 +196,7 @@ class EditFileTool(_FsTool):
 
             # .ipynb detection
             if path.endswith(".ipynb"):
-                return "Error: This is a Jupyter notebook. Use the notebook_edit tool instead of edit_file."
+                return "Error: This is a Jupyter notebook. Use the notebook_edit_tool instead of edit_file_tool."
 
             fp = self._resolve(path)
 
@@ -347,7 +347,7 @@ class EditFileTool(_FsTool):
         if not fp.exists():
             return self._file_not_found_msg(path, fp)
         if path.endswith(".ipynb"):
-            return "Error: This is a Jupyter notebook. Use the notebook_edit tool instead of edit_file."
+            return "Error: This is a Jupyter notebook. Use the notebook_edit_tool instead of edit_file_tool."
 
         # Staleness warning (informational -- does not block edit)
         hash_warning = file_state.check_content_hash(fp)

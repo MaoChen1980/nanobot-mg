@@ -79,7 +79,7 @@ from .runner_execution import execute_tools
 # Results from these get a [Source:] prefix so the LLM can distinguish
 # "I read this from a file" from "I inferred this."
 _SOURCE_TOOLS = frozenset({
-    "read_file_tool", "read_files_tool", "list_dir_tool", "glob", "grep",
+    "read_file_tool", "read_files_tool", "list_dir_tool", "glob_tool", "grep_tool",
     "web_search_tool", "web_fetch_tool", "show_stages_tool",
     "memory_search_tool", "conversation_search_tool", "search_text_tool", "explore_module_tool",
     "framework_search_tool", "scan_project_tool", "tool_call_log_tool", "check_subagent_tool",
@@ -90,6 +90,7 @@ _SOURCE_TOOLS = frozenset({
 # LLM output that writes tool names in text instead of making proper tool calls.
 _TOOL_NAMES_FOR_CONTENT_CHECK = frozenset({
     "exec_tool",
+    "grep_tool", "glob_tool",
     "read_file_tool", "read_files_tool", "write_file_tool", "edit_file_tool",
     "delete_file_tool", "move_file_tool", "list_dir_tool", "edit_files_tool",
     "web_search_tool", "web_fetch_tool",

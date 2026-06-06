@@ -58,7 +58,7 @@ class SpawnManyTool(Tool):
             "- Accepts an array of tasks; each task is spawned independently\n"
             "- All tasks start simultaneously with no interdependencies\n"
             "- Each task notifies its result asynchronously upon completion\n"
-            "- You can check progress with `check_subagent` or `list_subagents`\n\n"
+            "- You can check progress with `check_subagent_tool` or `list_subagents_tool`\n\n"
             "## When to Use\n\n"
             "- You have multiple independent, parallel subtasks to process\n"
             "- You need to decompose a large task into multiple independent steps\n"

@@ -42,8 +42,8 @@ class SendMessageTool(Tool):
     def description(self) -> str:
         return (
             "**Purpose**: Send a message to the Orchestrator or a Subagent (non-blocking).\n\n"
-            "- From Subagent → Orchestrator: `send_message(recipient='main', message=...)`\n"
-            "- From Orchestrator → Subagent: `send_message(recipient='subagent:<label>', message=...)`\n\n"
+            "- From Subagent → Orchestrator: `send_message_tool(recipient='main', message=...)`\n"
+            "- From Orchestrator → Subagent: `send_message_tool(recipient='subagent:<label>', message=...)`\n\n"
             "**Fire-and-forget**: execution continues immediately on both sides.\n"
             "The recipient will see your message in their next iteration.\n\n"
             "**Priority** (Subagent→Orchestrator only):\n"
@@ -63,7 +63,7 @@ class SendMessageTool(Tool):
         # Subagent → Orchestrator
         if recipient == "main":
             if self._subagent_id is None or self._subagent_label is None:
-                return "Error: send_message from 'main' is only available to Subagents."
+                return "Error: send_message_tool from 'main' is only available to Subagents."
             if priority not in ("info", "suggestion", "blocker"):
                 priority = "info"
             return await self._manager.notify_orchestrator(

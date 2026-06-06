@@ -83,11 +83,11 @@ class TestExternalLookupSignature:
 
     def test_web_search_with_query(self):
         sig = external_lookup_signature("web_search_tool", {"query": "Python 3.13"})
-        assert sig == "web_search:python 3.13"
+        assert sig == "web_search_tool:python 3.13"
 
     def test_web_search_with_search_term(self):
         sig = external_lookup_signature("web_search_tool", {"search_term": "async"})
-        assert sig == "web_search:async"
+        assert sig == "web_search_tool:async"
 
     def test_web_search_empty_query(self):
         assert external_lookup_signature("web_search_tool", {"query": ""}) is None
@@ -104,10 +104,10 @@ class TestRepeatedExternalLookupError:
         assert seen == {"web_fetch:http://example.com": 1}
 
     def test_second_call_returns_none(self):
-        seen = {"web_search:python": 1}
+        seen = {"web_search_tool:python": 1}
         result = check_repeated_external_lookup("web_search_tool", {"query": "Python"}, seen)
         assert result is None
-        assert seen["web_search:python"] == 2
+        assert seen["web_search_tool:python"] == 2
 
     def test_third_call_blocked(self):
         seen = {"web_fetch:http://example.com": 2}

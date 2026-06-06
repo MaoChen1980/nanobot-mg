@@ -32,13 +32,13 @@ _IS_WINDOWS = sys.platform == "win32"
 # merged into the same patterns — they are matched against the inner command
 # extracted from "powershell -Command \"...\"" by _extract_powershell_inner().
 _TOOL_SUGGESTIONS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r'^(?:cat|type|gc|Get-Content)\s+', re.IGNORECASE), "read_file(path=...)", "handles text, images, PDFs, and Office docs"),
-    (re.compile(r'^(?:grep|findstr|sls|Select-String)\s+', re.IGNORECASE), "grep(pattern=..., path=...)", "search file contents with regex"),
-    (re.compile(r'^(?:ls|dir|gci|Get-ChildItem)\s+', re.IGNORECASE), "list_dir(path=...)", "list directory contents"),
-    (re.compile(r'^find\s+', re.IGNORECASE), "glob(pattern=...)", "find files matching a pattern"),
-    (re.compile(r'^curl\s+', re.IGNORECASE), "web_fetch(url=...)", "fetch URL content"),
-    (re.compile(r'^wget\s+', re.IGNORECASE), "web_fetch(url=...)", "fetch URL content"),
-    (re.compile(r'^(?:Clear-Content|Set-Content|Add-Content|sc|ac)\s+', re.IGNORECASE), "write_file(path=..., content=...)", "write content to a file"),
+    (re.compile(r'^(?:cat|type|gc|Get-Content)\s+', re.IGNORECASE), "read_file_tool(path=...)", "handles text, images, PDFs, and Office docs"),
+    (re.compile(r'^(?:grep|findstr|sls|Select-String)\s+', re.IGNORECASE), "grep_tool(pattern=..., path=...)", "search file contents with regex"),
+    (re.compile(r'^(?:ls|dir|gci|Get-ChildItem)\s+', re.IGNORECASE), "list_dir_tool(path=...)", "list directory contents"),
+    (re.compile(r'^find\s+', re.IGNORECASE), "glob_tool(pattern=...)", "find files matching a pattern"),
+    (re.compile(r'^curl\s+', re.IGNORECASE), "web_fetch_tool(url=...)", "fetch URL content"),
+    (re.compile(r'^wget\s+', re.IGNORECASE), "web_fetch_tool(url=...)", "fetch URL content"),
+    (re.compile(r'^(?:Clear-Content|Set-Content|Add-Content|sc|ac)\s+', re.IGNORECASE), "write_file_tool(path=..., content=...)", "write content to a file"),
 ]
 
 
@@ -75,7 +75,7 @@ def _extract_powershell_inner(command: str) -> str | None:
         capture_file=p("string",
             "If set, write command output to this absolute file path "
             "in real-time as it runs. "
-            "You can use read_file on this path mid-execution to see partial progress "
+            "You can use read_file_tool on this path mid-execution to see partial progress "
             "before the command finishes. "
             "Useful for long commands like npm install or compilation."
         ),
@@ -193,14 +193,14 @@ class ExecTool(Tool):
         # Special case: sed -i (in-place edit)
         lower = stripped.lower()
         if lower.startswith("sed") and " -i" in lower:
-            return "Suggestion: Useedit_file(path=..., old_string=..., new_string=...)** instead of `sed -i`."
+            return "Suggestion: Useedit_file_tool(path=..., old_string=..., new_string=...)** instead of `sed -i`."
         # git log/show
         if lower.startswith("git"):
             rest = lower[3:].strip()
             if rest.startswith("log"):
-                return "Suggestion: Use `show_stages(path)` to browse stage history."
+                return "Suggestion: Use `show_stages_tool(path)` to browse stage history."
             if rest.startswith("show"):
-                return "Suggestion: Use `show_stages(path, sha=...)` to inspect a specific stage."
+                return "Suggestion: Use `show_stages_tool(path, sha=...)` to inspect a specific stage."
         return None
 
     async def execute(

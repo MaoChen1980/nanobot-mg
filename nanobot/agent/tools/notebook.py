@@ -84,7 +84,7 @@ class NotebookEditTool(_FsTool):
                 return "Error: path is required"
 
             if not path.endswith(".ipynb"):
-                return "Error: notebook_edit only works on .ipynb files. Use edit_file for other files."
+                return "Error: notebook_edit_tool only works on .ipynb files. Use edit_file_tool for other files."
 
             if edit_mode not in self._VALID_EDIT_MODES:
                 return (

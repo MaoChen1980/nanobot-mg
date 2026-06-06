@@ -59,7 +59,7 @@ class MemorySearchTool(Tool):
         "- memory_search_tool searches the knowledge base (semantic similarity match)\n\n"
         "**Note**:\n"
         "- New or modified knowledge takes up to 2 hours to appear in the index\n"
-        "- This is fuzzy semantic matching — may miss specific terms. Use grep for exact keywords.\n\n"
+        "- This is fuzzy semantic matching — may miss specific terms. Use grep_tool for exact keywords.\n\n"
         "**Query tips — match the granularity of a section heading**:\n"
         "- Good: `android build gradle configuration` → finds `## 构建工具` section\n"
         "- Good: `how to create a skill from pending entries` → finds `## Skill creation` section\n"

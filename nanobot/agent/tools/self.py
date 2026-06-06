@@ -1,4 +1,4 @@
-"""MyTool: runtime state inspection and configuration for the agent loop."""
+"""SelfTool: runtime state inspection and configuration for the agent loop."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _has_real_attr(obj: Any, key: str) -> bool:
     return False
 
 
-class MyTool(Tool):
+class SelfTool(Tool):
     """Check and set the agent loop's runtime configuration."""
 
     BLOCKED = frozenset({
@@ -87,7 +87,7 @@ class MyTool(Tool):
         self._channel = ""
         self._chat_id = ""
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> MyTool:
+    def __deepcopy__(self, memo: dict[int, Any]) -> SelfTool:
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -103,7 +103,7 @@ class MyTool(Tool):
 
     @property
     def name(self) -> str:
-        return "my"
+        return "self_tool"
 
     @property
     def description(self) -> str:
@@ -205,16 +205,16 @@ class MyTool(Tool):
     def _format_value(val: Any, key: str = "") -> str:
         if isinstance(val, SubagentStatus):
             header = f"Subagent [{val.task_id}] '{val.label}'"
-            detail = MyTool._format_status(val, "  ")
+            detail = SelfTool._format_status(val, "  ")
             return f"{header}\n  task: {val.task_description}\n{detail}"
         # SubagentManager: delegate to its _task_statuses dict
         if hasattr(val, "_task_statuses") and isinstance(val._task_statuses, dict):
-            return MyTool._format_value(val._task_statuses, key)
+            return SelfTool._format_value(val._task_statuses, key)
         if isinstance(val, dict) and val and isinstance(next(iter(val.values())), SubagentStatus):
             prefix = f"{key}: " if key else ""
             lines = [f"{prefix}{len(val)} subagent(s):"]
             for tid, st in val.items():
-                detail = MyTool._format_status(st, "    ")
+                detail = SelfTool._format_status(st, "    ")
                 lines.append(f"  [{tid}] '{st.label}'\n{detail}")
             return "\n".join(lines)
         if hasattr(val, "tool_names"):
@@ -251,7 +251,7 @@ class MyTool(Tool):
                 pairs = []
                 for f in fields:
                     fv = getattr(val, f, "?")
-                    if MyTool._is_sensitive_field_name(f):
+                    if SelfTool._is_sensitive_field_name(f):
                         continue
                     if isinstance(fv, (str, int, float, bool, type(None))):
                         pairs.append(f"{f}={fv!r}")
@@ -282,7 +282,7 @@ class MyTool(Tool):
         if action in ("inspect", "check"):
             return self._inspect(key)
         if not self._modify_allowed:
-            return "Error: set is disabled (tools.my.allow_set is false)"
+            return "Error: set is disabled (tools.self_tool.allow_set is false)"
         if action in ("modify", "set"):
             return self._modify(key, value)
         return f"Unknown action: {action}"

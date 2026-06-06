@@ -164,7 +164,7 @@ Agent: Let me check on the background tasks.
 # → 2 subagent(s):
 #   [task-1] 'Code review'
 #     phase: running, iteration: 5, elapsed: 12.3s
-#     tools: read(✓), grep(✓)
+#     tools: read(✓), grep_tool(✓)
 #     usage: {'prompt_tokens': 8000, 'completion_tokens': 1200}
 #   [task-2] 'Write tests'
 #     phase: pending, iteration: 0, elapsed: 0.2s

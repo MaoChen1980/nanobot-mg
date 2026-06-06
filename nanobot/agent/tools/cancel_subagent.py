@@ -34,7 +34,7 @@ class CancelSubagentTool(Tool):
             "- A subagent is no longer needed (task abandoned)\n"
             "- A subagent is stuck and needs to be terminated\n"
             "- You want to reassign resources to a different task\n\n"
-            "Use `list_subagents` first to see active subagent labels.\n"
+            "Use `list_subagents_tool` first to see active subagent labels.\n"
         )
 
     async def execute(self, label: str, **kwargs: Any) -> str:

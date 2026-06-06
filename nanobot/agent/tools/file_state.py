@@ -139,7 +139,7 @@ class FileStateManager:
             f"Warning: file content has changed since last read "
             f"(expected hash: {entry.content_hash[:16]}..., current hash: {current_hash[:16]}..., "
             f"size: {size} bytes). "
-            f"Use read_file to refresh content before editing."
+            f"Use read_file_tool to refresh content before editing."
         )
 
     def get_content_hash(self, path: str | Path) -> str | None:

@@ -635,7 +635,7 @@ class GatewayApplication:
                         "然后：\n"
                         "1. 识别可以改进的地方\n"
                         "2. 评估置信度 (>90% 再改)\n"
-                        "3. 有把握就自己改（edit_file/write_file）\n"
+                        "3. 有把握就自己改（edit_file_tool/write_file_tool）\n"
                         "4. 记录改动\n\n"
                         "不要只用说的，要真改。"
                         "\n\n"

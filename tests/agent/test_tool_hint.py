@@ -35,11 +35,11 @@ class TestToolHintKnownTools:
         assert "edit " in result
 
     def test_glob_shows_pattern(self):
-        result = _hint([_tc("glob", {"pattern": "**/*.py", "path": "src"})])
+        result = _hint([_tc("glob_tool", {"pattern": "**/*.py", "path": "src"})])
         assert result == 'glob "**/*.py"'
 
     def test_grep_shows_pattern(self):
-        result = _hint([_tc("grep", {"pattern": "TODO|FIXME", "path": "src"})])
+        result = _hint([_tc("grep_tool", {"pattern": "TODO|FIXME", "path": "src"})])
         assert result == 'grep "TODO|FIXME"'
 
     def test_exec_shows_command(self):
@@ -148,22 +148,22 @@ class TestToolHintFolding:
     """Test consecutive same-tool calls are folded."""
 
     def test_single_call_no_fold(self):
-        calls = [_tc("grep", {"pattern": "*.py"})]
+        calls = [_tc("grep_tool", {"pattern": "*.py"})]
         result = _hint(calls)
         assert "\u00d7" not in result
 
     def test_two_consecutive_different_args_not_folded(self):
         calls = [
-            _tc("grep", {"pattern": "*.py"}),
-            _tc("grep", {"pattern": "*.ts"}),
+            _tc("grep_tool", {"pattern": "*.py"}),
+            _tc("grep_tool", {"pattern": "*.ts"}),
         ]
         result = _hint(calls)
         assert "\u00d7" not in result
 
     def test_two_consecutive_same_args_folded(self):
         calls = [
-            _tc("grep", {"pattern": "TODO"}),
-            _tc("grep", {"pattern": "TODO"}),
+            _tc("grep_tool", {"pattern": "TODO"}),
+            _tc("grep_tool", {"pattern": "TODO"}),
         ]
         result = _hint(calls)
         assert "\u00d7 2" in result
@@ -179,7 +179,7 @@ class TestToolHintFolding:
 
     def test_different_tools_not_folded(self):
         calls = [
-            _tc("grep", {"pattern": "TODO"}),
+            _tc("grep_tool", {"pattern": "TODO"}),
             _tc("read_file_tool", {"path": "a.py"}),
         ]
         result = _hint(calls)
@@ -187,9 +187,9 @@ class TestToolHintFolding:
 
     def test_interleaved_same_tools_not_folded(self):
         calls = [
-            _tc("grep", {"pattern": "a"}),
+            _tc("grep_tool", {"pattern": "a"}),
             _tc("read_file_tool", {"path": "f.py"}),
-            _tc("grep", {"pattern": "b"}),
+            _tc("grep_tool", {"pattern": "b"}),
         ]
         result = _hint(calls)
         assert "\u00d7" not in result
@@ -200,7 +200,7 @@ class TestToolHintMultipleCalls:
 
     def test_two_different_tools(self):
         calls = [
-            _tc("grep", {"pattern": "TODO"}),
+            _tc("grep_tool", {"pattern": "TODO"}),
             _tc("read_file_tool", {"path": "main.py"}),
         ]
         result = _hint(calls)
@@ -246,8 +246,8 @@ class TestToolHintMixedFolding:
         calls = [
             _tc("read_file_tool", {"path": "a.py"}),
             _tc("read_file_tool", {"path": "b.py"}),
-            _tc("grep", {"pattern": "x"}),
-            _tc("grep", {"pattern": "y"}),
+            _tc("grep_tool", {"pattern": "x"}),
+            _tc("grep_tool", {"pattern": "y"}),
             _tc("read_file_tool", {"path": "c.py"}),
         ]
         result = _hint(calls)

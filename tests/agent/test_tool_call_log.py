@@ -44,7 +44,7 @@ class TestToolCallDB:
         )
         db.insert_tool_call(
             "s2", iteration=2, turn=1,
-            tool_name="grep",
+            tool_name="grep_tool",
             params={"path": ".", "pattern": "foo"},
             result="foo bar",
             success=True,
@@ -69,7 +69,7 @@ class TestToolCallDB:
         rows_large = db.query_tool_calls(min_result_size=5, limit=10)
         assert all(len(r["result"] or "") >= 5 for r in rows_large)
         # duration_ms
-        row_grep = next(r for r in rows if r["tool_name"] == "grep")
+        row_grep = next(r for r in rows if r["tool_name"] == "grep_tool")
         assert row_grep["duration_ms"] == 42
 
     def test_query_empty(self, db):

@@ -123,7 +123,7 @@ class SaveStageTool(Tool):
     a ``.gitignore`` inside the directory are automatically skipped.
 
     Ask the user before saving: '当前阶段已完成，要保存一版吗？'
-    Use ``show_stages`` to browse history, ``restore_stage`` to roll back.
+    Use ``show_stages_tool`` to browse history, ``restore_stage_tool`` to roll back.
     """
 
     name = "save_stage_tool"
@@ -179,7 +179,7 @@ class SaveStageTool(Tool):
             "string",
             "Directory (or a file inside it) whose saved stages to browse. "
             "The tool locates its internal storage and shows the stage history. "
-            "If no storage is found, use ``save_stage`` first.",
+            "If no storage is found, use ``save_stage_tool`` first.",
         ),
         "sha": p(
             "string",
@@ -211,7 +211,7 @@ class ShowStagesTool(Tool):
     - **Diff mode** (pass ``sha``): show the exact file changes in a
       specific stage.
 
-    Works with any directory previously saved via ``save_stage``.
+    Works with any directory previously saved via ``save_stage_tool``.
     Pure Python, no system git required.
     """
 
@@ -234,7 +234,7 @@ class ShowStagesTool(Tool):
         if not git_root:
             return (
                 "No stages found.  "
-                "Use ``save_stage(path, message)`` to record the first one."
+                "Use ``save_stage_tool(path, message)`` to record the first one."
             )
 
         try:
@@ -310,7 +310,7 @@ class ShowStagesTool(Tool):
 
         full_sha = _resolve_sha(repo, sha)
         if not full_sha:
-            return f"Stage '{sha}' not found.  Use ``show_stages`` to list them."
+            return f"Stage '{sha}' not found.  Use ``show_stages_tool`` to list them."
 
         commit = repo[full_sha]
         if commit.type_name != b"commit":
@@ -376,11 +376,11 @@ def _restore_tree(repo, tree_obj, repo_path: Path, prefix: str = "") -> list[str
         "path": p(
             "string",
             "Directory whose files should be rolled back. "
-            "Must have stages saved (use ``save_stage`` first).",
+            "Must have stages saved (use ``save_stage_tool`` first).",
         ),
         "sha": p(
             "string",
-            "Which stage to go back to.  Get the SHA from ``show_stages``.",
+            "Which stage to go back to.  Get the SHA from ``show_stages_tool``.",
         ),
     },
     required=["path", "sha"],
@@ -406,13 +406,13 @@ class RestoreStageTool(Tool):
         if not git_root:
             return (
                 "No stages found in this directory.  "
-                "Use ``save_stage(path, message)`` first."
+                "Use ``save_stage_tool(path, message)`` first."
             )
 
         with Repo(str(git_root)) as repo:
             full_sha = _resolve_sha(repo, sha)
             if not full_sha:
-                return f"Stage '{sha}' not found.  Use ``show_stages`` to list them."
+                return f"Stage '{sha}' not found.  Use ``show_stages_tool`` to list them."
 
             commit = repo[full_sha]
             if commit.type_name != b"commit":

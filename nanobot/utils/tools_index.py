@@ -49,7 +49,7 @@ When a tool errors during use, investigate and fix it:
 
 1. Run the tool with debugging flags or check the error output
 2. Read the tool's script to understand what went wrong
-3. Fix the script with `edit_file` or `write_file`
+3. Fix the script with `edit_file_tool` or `write_file_tool`
 4. If the interface (args, output format) changed, update its `readme.md`
 
 When enhancing a tool, always keep readme.md in sync:

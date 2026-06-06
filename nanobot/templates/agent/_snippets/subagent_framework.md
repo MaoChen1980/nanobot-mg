@@ -92,7 +92,7 @@ Orchestrator 可以在你执行工具期间通过 inbox 发消息。你会在下
 ```
 
 字段说明：
-- **{Source|Tool}** — info-gathering 类工具（read_file_tool、web_search_tool、grep 等）用 `Source`，其余用 `Tool`
+- **{Source|Tool}** — info-gathering 类工具（read_file_tool、web_search_tool、grep_tool 等）用 `Source`，其余用 `Tool`
 - **{时间戳}** — 格式为 `2026-05-29 12:34`，必有
 - **{success|failure}** — content 以 `Error` 开头则为 `failure`，否则 `success`
 - **{time consumed: X.Xs}** — 仅在工具执行有耗时信息时出现，位于 status 之后、result 之前
@@ -166,7 +166,7 @@ Preview:
   （3 次 LLM 调用，其实可以 1 次搞定）
 
 正例（高效）：
-- iteration 1: `web_fetch_tool(模块A)` + `web_fetch_tool(模块B)` + `read_file_tool(文件1)` + `grep(关键字)`
+- iteration 1: `web_fetch_tool(模块A)` + `web_fetch_tool(模块B)` + `read_file_tool(文件1)` + `grep_tool(关键字)`
   （1 次 LLM 调用就够了）
 
 **黄金法则：检查你的 tool_calls，如果其中任何两个不存在依赖关系，就不应该分到两次 iteration。**
@@ -205,7 +205,7 @@ Session 中有两种中断标记：
 assistant: （tool_calls 指令）
 tool:     [Source: read_file_tool | success | time consumed: 0.3s | result: 3200 chars]
           （文件内容）
-tool:     [BYPASSED] Tool 'grep' (id: call_xyz) was interrupted by orchestrator message.
+tool:     [BYPASSED] Tool 'grep_tool' (id: call_xyz) was interrupted by orchestrator message.
 user:     [Orchestrator]: 先不看代码，只看文档
 ```
 
@@ -257,7 +257,7 @@ assistant: 开始分析项目结构
 tool:     [Source: read_file_tool | success | time consumed: 0.3s | result: 3200 chars]
           (src/main.py 内容)
 tool:     [BYPASSED] Tool 'read_file_tool' (id: call_abc) was interrupted by orchestrator message.
-tool:     [BYPASSED] Tool 'grep' (id: call_xyz) was interrupted by orchestrator message.
+tool:     [BYPASSED] Tool 'grep_tool' (id: call_xyz) was interrupted by orchestrator message.
 
 user: [Orchestrator]: 先不看代码，只看文档
 
@@ -274,7 +274,7 @@ assistant: 开始并行分析
 
 tool:     [Source: read_file_tool | success | result: 3200 chars]
           (配置文件内容)
-tool:     [Source: grep | success | result: 450 chars]
+tool:     [Source: grep_tool | success | result: 450 chars]
           (3 处 import 发现)
 tool:     [Source: list_dir_tool | success | result: 200 chars]
           (目录结构)
@@ -292,7 +292,7 @@ assistant: 分析完成：项目有 3 个模块，依赖关系如下...
 
 Context = prompt 输入 + 输出文本的总量。Context window 是单次能处理的最大 context 尺寸（{{ context_window_tokens }} tokens）。
 
-这意味着你一次能"看到"的信息是有限的。大型文件可以分块读取，利用 grep/glob 精确定位，以及 read_file_tool mode=overview 快速预览。对于超出单次承载的大量信息，只能分多次读取、分批写入工作文件，再逐步拼接成完整理解。
+这意味着你一次能"看到"的信息是有限的。大型文件可以分块读取，利用 grep_tool/glob_tool 精确定位，以及 read_file_tool mode=overview 快速预览。对于超出单次承载的大量信息，只能分多次读取、分批写入工作文件，再逐步拼接成完整理解。
 
 注意：工具执行结果会进入历史，占据 context。超过 {{ max_tool_result_chars }} 字符的结果会被框架持久化到文件（详见上方 Tool Result Persistence），exec_tool 命令超过 {{ exec_timeout }} 秒会被终止。
 

@@ -14,7 +14,7 @@
 
 **不允许：**
 - Phase 1 就 `read_file_tool` 读具体实现
-- Phase 1 就 `grep` 搜具体代码
+- Phase 1 就 `grep_tool` 搜具体代码
 - Phase 1 就下结论或输出方案
 
 **完工检查：** 你能说清"这个项目有哪些模块，各自负责什么？"了。不能就继续探索。能了→结束本 phase，等下一 phase 继续。

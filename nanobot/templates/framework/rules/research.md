@@ -4,7 +4,7 @@
 
 ## Escalate Deliberately
 
-信息收集应当遵循自然的升级路径：`grep`/`glob`/`memory_search_tool`/`show_stages_tool` → `web_search_tool`。每一步都是一个过滤器：如果答案在本地存在，使用更慢的方法就是浪费时间。如果答案不在本地，本地方法才是浪费时间。
+信息收集应当遵循自然的升级路径：`grep_tool`/`glob_tool`/`memory_search_tool`/`show_stages_tool` → `web_search_tool`。每一步都是一个过滤器：如果答案在本地存在，使用更慢的方法就是浪费时间。如果答案不在本地，本地方法才是浪费时间。
 
 ## Depth Over Speed
 

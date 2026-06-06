@@ -151,7 +151,7 @@ class ContextBuilder:
             return ""
         lines = [
             "# Available Tools\n",
-            "注意：只读工具（grep/read_file/glob 等）相同参数 60s 内重复调用返回缓存结果。"
+            "注意：只读工具（exec_tool/read_file_tool/glob_tool 等）相同参数 60s 内重复调用返回缓存结果。"
             "任何工具连续返回相同内容会被去重为简短提示。\n",
         ]
         for schema in tool_definitions:
@@ -303,7 +303,7 @@ class ContextBuilder:
         return (
             "# Task Tree - workspace/tasks/TREE.md\n\n"
             "Current task tree. Tasks are managed as files under workspace/tasks/ — "
-            "use read_file/write_file/edit_file to update them.\n\n"
+            "use read_file_tool/write_file_tool/edit_file_tool to update them.\n\n"
             + self._shift_headings(content, offset=1)
         )
 
@@ -322,7 +322,7 @@ class ContextBuilder:
         return (
             "# Working Context - workspace/tasks/CURRENT.md\n\n"
             "Session-level working context. Tracks what you're doing this session. "
-            "Create and update it with write_file.\n\n"
+            "Create and update it with write_file_tool.\n\n"
             + self._shift_headings(content, offset=1)
         )
 
@@ -517,7 +517,7 @@ class ContextBuilder:
 
     def _build_workflow_routing(self) -> str:
         """Build workflow routing table from workspace/framework/workflows/ so
-        workflows are discoverable via framework_search."""
+        workflows are discoverable via framework_search_tool."""
         wf_dir = self.workspace / "framework" / "workflows"
         if not wf_dir.is_dir():
             return ""
@@ -537,10 +537,10 @@ class ContextBuilder:
                 if line and not line.startswith("#"):
                     trigger = line[:120]
                     break
-            lines.append(f"- **{f.stem}**: {trigger} — `framework_search(query=\"{f.stem}\")`")
+            lines.append(f"- **{f.stem}**: {trigger} — `framework_search_tool(query=\"{f.stem}\")`")
         if not lines:
             return ""
-        return "## Workflows\n\nSearch with framework_search when scenario matches:\n" + "\n".join(lines)
+        return "## Workflows\n\nSearch with framework_search_tool when scenario matches:\n" + "\n".join(lines)
 
     @staticmethod
     def _is_default_template_content(content: str, template_path: str) -> bool:

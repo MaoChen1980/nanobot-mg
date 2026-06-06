@@ -64,13 +64,13 @@ def test_prepare_call_read_file_rejects_non_object_params_with_actionable_hint()
 
 def test_prepare_call_other_tools_keep_generic_object_validation() -> None:
     registry = ToolRegistry()
-    registry.register(_FakeTool("grep"))
+    registry.register(_FakeTool("grep_tool"))
 
-    tool, params, error = registry.prepare_call("grep", ["TODO"])
+    tool, params, error = registry.prepare_call("grep_tool", ["TODO"])
 
     assert tool is not None
     assert params == ["TODO"]
-    assert error == "Error: Invalid parameters for tool 'grep': parameters must be an object, got list"
+    assert error == "Error: Invalid parameters for tool 'grep_tool': parameters must be an object, got list"
 
 
 def test_get_definitions_returns_cached_result() -> None:

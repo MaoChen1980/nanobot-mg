@@ -67,7 +67,7 @@ A pitfall that appeared repeatedly — knowing when to skip saves as much cost a
 - **Frontmatter**: only `name` and `description` — the description is the trigger, make it precise
 - **Keep under 2000 words** — concise and actionable
 - **Information gathering is mandatory** — every skill must describe what context to check before taking action
-- **Reference real tools**: grep, glob, read_file_tool, write_file_tool, spawn_tool, web_search_tool, etc.
+- **Reference real tools**: grep_tool, glob_tool, read_file_tool, write_file_tool, spawn_tool, web_search_tool, etc.
 - **Skills are instruction sets, not code** — no implementation code or scripts
 
 Output as JSON:

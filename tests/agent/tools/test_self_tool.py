@@ -1,4 +1,4 @@
-"""Tests for MyTool — runtime state inspection and configuration."""
+"""Tests for SelfTool — runtime state inspection and configuration."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel
 
-from nanobot.agent.tools.self import MyTool
+from nanobot.agent.tools.self import SelfTool
 
 
 # ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ from nanobot.agent.tools.self import MyTool
 # ---------------------------------------------------------------------------
 
 def _make_mock_loop(**overrides):
-    """Build a lightweight mock AgentLoop with the attributes MyTool reads."""
+    """Build a lightweight mock AgentLoop with the attributes SelfTool reads."""
     loop = MagicMock()
     loop.model = "anthropic/claude-sonnet-4-20250514"
     loop.max_iterations = 40
@@ -43,7 +43,7 @@ def _make_mock_loop(**overrides):
 
     # Tools registry mock
     loop.tools = MagicMock()
-    loop.tools.tool_names = ["read_file_tool", "write_file_tool", "exec_tool", "web_search_tool", "self"]
+    loop.tools.tool_names = ["read_file_tool", "write_file_tool", "exec_tool", "web_search_tool", "self_tool"]
     loop.tools.has.side_effect = lambda n: n in loop.tools.tool_names
     loop.tools.get.return_value = None
 
@@ -61,7 +61,7 @@ def _make_mock_loop(**overrides):
 def _make_tool(loop=None):
     if loop is None:
         loop = _make_mock_loop()
-    return MyTool(loop=loop)
+    return SelfTool(loop=loop)
 
 
 # ---------------------------------------------------------------------------
@@ -518,11 +518,11 @@ class TestModifyOpen:
 class TestValidateJsonSafe:
 
     def test_single_list_passes(self):
-        assert MyTool._validate_json_safe(list(range(500))) is None
+        assert SelfTool._validate_json_safe(list(range(500))) is None
 
     def test_deeply_nested_within_limit(self):
         value = {"level1": {"level2": {"level3": list(range(100))}}}
-        assert MyTool._validate_json_safe(value) is None
+        assert SelfTool._validate_json_safe(value) is None
 
 
 # ---------------------------------------------------------------------------
@@ -596,12 +596,12 @@ class TestSubagentStatusFormatting:
             iteration=3,
             tool_events=[
                 {"name": "read_file_tool", "status": "ok", "detail": "read app.log"},
-                {"name": "grep", "status": "ok", "detail": "searched ERROR"},
+                {"name": "grep_tool", "status": "ok", "detail": "searched ERROR"},
                 {"name": "exec_tool", "status": "error", "detail": "timeout"},
             ],
             usage={"prompt_tokens": 4500, "completion_tokens": 1200},
         )
-        result = MyTool._format_value(status)
+        result = SelfTool._format_value(status)
         assert "abc12345" in result
         assert "read logs and summarize" in result
         assert "awaiting_tools" in result
@@ -624,14 +624,14 @@ class TestSubagentStatusFormatting:
                 iteration=1,
             ),
         }
-        result = MyTool._format_value(statuses)
+        result = SelfTool._format_value(statuses)
         assert "1 subagent(s)" in result
         assert "abc12345" in result
         assert "task A" in result
 
     def test_format_empty_status_dict(self):
         """Empty dict[str, SubagentStatus] should show 'no running subagents'."""
-        result = MyTool._format_value({})
+        result = SelfTool._format_value({})
         assert "{}" in result
 
     def test_format_status_with_error(self):
@@ -646,7 +646,7 @@ class TestSubagentStatusFormatting:
             phase="error",
             error="Connection refused",
         )
-        result = MyTool._format_value(status)
+        result = SelfTool._format_value(status)
         assert "error: Connection refused" in result
 
 # ---------------------------------------------------------------------------
@@ -831,7 +831,7 @@ class TestReadOnlyMode:
 
     def _make_readonly_tool(self):
         loop = _make_mock_loop()
-        return MyTool(loop=loop, modify_allowed=False)
+        return SelfTool(loop=loop, modify_allowed=False)
 
     @pytest.mark.asyncio
     async def test_inspect_allowed_in_readonly(self):

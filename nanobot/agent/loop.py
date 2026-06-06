@@ -25,7 +25,7 @@ from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.notebook import NotebookEditTool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.search import GlobTool, GrepTool
-from nanobot.agent.tools.self import MyTool
+from nanobot.agent.tools.self import SelfTool
 from nanobot.agent.tools.shell import ExecTool
 
 from nanobot.agent.tools.edit_files import EditFilesTool
@@ -273,7 +273,7 @@ class AgentLoop:
         )
         self._register_default_tools()
         if _tc.my.enable:
-            self.tools.register(MyTool(loop=self, modify_allowed=_tc.my.allow_set))
+            self.tools.register(SelfTool(loop=self, modify_allowed=_tc.my.allow_set))
         self._runtime_vars: dict[str, Any] = {}
         self._current_iteration: int = 0
         self.commands = CommandRouter()
@@ -436,7 +436,7 @@ class AgentLoop:
             effective_key = session_key
         else:
             effective_key = f"{channel}:{chat_id}"
-        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "my"):
+        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "self_tool"):
             tool = self.tools.get(name)
             if tool is None:
                 continue
@@ -809,11 +809,11 @@ class AgentLoop:
                 "这是主动性机会，你是项目经理，请自主判断下一步行动：\n"
                 "\n"
                 "**进度跟踪**\n"
-                "• Subagent 进展如何？用 list_subagents / check_subagent 检查状态，有没卡住或完成的\n"
+                "• Subagent 进展如何？用 list_subagents_tool / check_subagent_tool 检查状态，有没卡住或完成的\n"
                 "• 读 team_board.md — subagent 可能写了发现、踩坑、阻塞，需要你关注或同步\n"
                 "• 读 TREE.md — 检查 task backlog，决定下一步调度\n"
-                "• 需要你回复或指导某个 subagent 吗？→ respond_to_subagent 处理阻塞等待的\n"
-                "• 发现信息不对称？→ send_message 主动告知，不要等 subagent 来问\n"
+                "• 需要你回复或指导某个 subagent 吗？→ respond_to_subagent_tool 处理阻塞等待的\n"
+                "• 发现信息不对称？→ send_message_tool 主动告知，不要等 subagent 来问\n"
                 "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
                 "\n"
                 "**调度决策**\n"

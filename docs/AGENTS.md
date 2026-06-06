@@ -50,7 +50,7 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 ### 系统提示（静态部分）
 
 1. **身份**（identity.md）：运行环境、工作区路径、渠道相关格式提示
-2. **可用工具列表**（按注册顺序排列——工作区工具（read_file_tool/grep 等）排在 exec_tool 之前，MCP 工具排最后）
+2. **可用工具列表**（按注册顺序排列——工作区工具（read_file_tool/grep_tool 等）排在 exec_tool 之前，MCP 工具排最后）
 3. **Bootstrap 文件**：工作区中的 AGENTS.md（本文档）、SOUL.md、USER.md、TOOLS.md（自动加载。USER.md 和 TOOLS.md 如果未自定义则跳过）
 4. **always 技能**：标记为 `always: true` 的技能内容直接注入
 5. **技能摘要**：列出可用技能给延迟加载参考

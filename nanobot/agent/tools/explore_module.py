@@ -77,9 +77,9 @@ class ExploreModuleTool(_FsTool):
     description = (
         "**Purpose**: Get a structured overview of a code file or directory (function/class definitions, signatures, line numbers).\n\n"
         "**Output format**:\n"
-        "- Function and class definitions with 1-indexed line numbers (directly usable as read_file offset param)\n"
+        "- Function and class definitions with 1-indexed line numbers (directly usable as read_file_tool offset param)\n"
         "- Python uses AST parsing (precise), other languages use regex (may be incomplete)\n"
-        "- Appends a read_file tip command ready to copy-paste\n\n"
+        "- Appends a read_file_tool tip command ready to copy-paste\n\n"
         "**When to use**:\n"
         "- When you want a quick overview of what classes and functions exist in a file or directory and where they are defined\n\n"
     )
@@ -133,7 +133,7 @@ class ExploreModuleTool(_FsTool):
 
         # Actionable hint: tell LLM how to jump to definitions
         result += (
-            f"\n\n- Tip: use `read_file(path=\"{fp.resolve().as_posix()}\", offset=<line_no>, limit=40)` "
+            f"\n\n- Tip: use `read_file_tool(path=\"{fp.resolve().as_posix()}\", offset=<line_no>, limit=40)` "
             f"to read a specific function/class body."
         )
         return result
