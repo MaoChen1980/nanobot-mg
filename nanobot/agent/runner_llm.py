@@ -31,11 +31,11 @@ async def request_model(
         _dump_messages_to_debug_dir(messages)
     timeout_s: float | None = spec.llm_timeout_s
     if timeout_s is None:
-        raw = os.environ.get("NANOBOT_LLM_TIMEOUT_S", "300").strip()
+        raw = os.environ.get("NANOBOT_LLM_TIMEOUT_S", "900").strip()
         try:
             timeout_s = float(raw)
         except (TypeError, ValueError):
-            timeout_s = 300.0
+            timeout_s = 900.0
     if timeout_s is not None and timeout_s <= 0:
         timeout_s = None
 
