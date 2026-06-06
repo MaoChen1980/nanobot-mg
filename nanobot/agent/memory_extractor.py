@@ -295,11 +295,14 @@ class MemoryExtractor:
             ts_raw = finding.get("ts", "")
             ts_num = _parse_ts(ts_raw) or time.time()
             pinned = bool(finding.get("pinned"))
+            recent = bool(finding.get("recent"))
             paragraph = self._format_finding_paragraph(ftype, content)
             # Append ts marker
             paragraph += f"\n<!--ts:{ts_num}-->"
             if pinned:
                 paragraph += "\n<!--pinned-->"
+            if recent:
+                paragraph += "\n<!--recent-->"
 
             if ftype == "preference":
                 rel_path = "user.md"
@@ -393,12 +396,12 @@ class MemoryExtractor:
                 {"content": e["content"], "ts": e["ts"]} for e in entries
             ]
 
-            # Dedup by normalized content (strip ts/pinned markers)
+            # Dedup by normalized content (strip ts/pinned/recent markers)
             # Sort newest-first so dedup keeps the latest version
             seen: set[str] = set()
             unique: list[dict[str, Any]] = []
             for e in sorted(merged, key=lambda x: -(x["ts"] or 0)):
-                clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").strip()
+                clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").replace("<!--recent-->", "").strip()
                 if clean not in seen:
                     seen.add(clean)
                     unique.append(e)
@@ -434,9 +437,11 @@ class MemoryExtractor:
 
             logger.info("MemoryExtractor: wrote {} paragraph(s) to {}", len(unique), rel_path)
 
-            # Collect recent entries from this topic
-            for e in unique[-5:]:  # last 5 per topic
-                clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").strip()
+            # Collect recent entries from this topic — only entries with <!--recent--> marker
+            for e in unique:
+                if "<!--recent-->" not in e["content"]:
+                    continue
+                clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").replace("<!--recent-->", "").strip()
                 recent_entries.append({
                     "topic": rel_path,
                     "content": clean[:200],

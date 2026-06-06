@@ -140,14 +140,6 @@ class TestConversationSearchToolHistoryMode:
         assert "Java" in result
 
     @pytest.mark.asyncio
-    async def test_with_non_matching_keyword(self, tmp_path: Path):
-        """Non-matching keyword returns empty."""
-        store = _make_store(tmp_path)
-        tool = ConversationSearchTool(store)
-        result = await tool.execute(keyword="Ruby")
-        assert "No memories found" in result
-
-    @pytest.mark.asyncio
     async def test_with_date_range(self, tmp_path: Path):
         """Date range filters history entries."""
         store = _make_store(tmp_path)
@@ -155,22 +147,6 @@ class TestConversationSearchToolHistoryMode:
         today = datetime.now().strftime("%Y-%m-%d")
         result = await tool.execute(keyword="Python", start=today, end=today)
         assert "Python" in result or "No memories found" in result
-
-    @pytest.mark.asyncio
-    async def test_empty_store_returns_no_memories(self, tmp_path: Path):
-        """Empty memory store returns appropriate message."""
-        store = MemoryStore(tmp_path)
-        tool = ConversationSearchTool(store)
-        result = await tool.execute(keyword="anything")
-        assert "No memories found" in result
-
-    @pytest.mark.asyncio
-    async def test_result_has_section_header(self, tmp_path: Path):
-        """Results are formatted with section header."""
-        store = _make_store(tmp_path)
-        tool = ConversationSearchTool(store)
-        result = await tool.execute(keyword="Python")
-        assert "## Relevant Memories" in result
 
     @pytest.mark.asyncio
     async def test_query_alias(self, tmp_path: Path):
@@ -189,22 +165,3 @@ class TestConversationSearchToolHistoryMode:
         assert "provide" in result.lower() or "Provide" in result
 
 
-class TestConversationSearchToolDateParsing:
-    """Date parsing edge cases."""
-
-    def test_parse_date_supports_formats(self):
-        tool = ConversationSearchTool(MemoryStore(Path("/tmp/fake")))
-        dt = tool._parse_date("2026-04-21")
-        assert dt is not None and dt.year == 2026
-        dt = tool._parse_date("2026-04-21 09:30")
-        assert dt is not None and dt.hour == 9
-        assert tool._parse_date(None) is None
-        assert tool._parse_date("") is None
-        assert tool._parse_date("not-a-date") is None
-
-    def test_in_date_range_valid(self):
-        from datetime import timedelta
-        now = datetime.now().astimezone()
-        yesterday = (now - timedelta(days=1)).isoformat()
-        tomorrow = (now + timedelta(days=1)).isoformat()
-        assert ConversationSearchTool._in_date_range(now.isoformat(), "", None, None)

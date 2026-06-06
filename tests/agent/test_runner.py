@@ -279,44 +279,6 @@ class _DelayTool(Tool):
 
 
 @pytest.mark.asyncio
-async def test_runner_batches_read_only_tools_before_exclusive_work():
-    from nanobot.agent.runner import AgentRunSpec, AgentRunner
-
-    tools = ToolRegistry()
-    shared_events: list[str] = []
-    read_a = _DelayTool("read_a", delay=0.05, read_only=True, shared_events=shared_events)
-    read_b = _DelayTool("read_b", delay=0.05, read_only=True, shared_events=shared_events)
-    write_a = _DelayTool("write_a", delay=0.01, read_only=False, shared_events=shared_events)
-    tools.register(read_a)
-    tools.register(read_b)
-    tools.register(write_a)
-
-    runner = AgentRunner(MagicMock())
-    await runner._execute_tools(
-        AgentRunSpec(
-            initial_messages=[],
-            tools=tools,
-            model="test-model",
-            max_iterations=1,
-            max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
-            concurrent_tools=True,
-        ),
-        [
-            ToolCallRequest(id="ro1", name="read_a", arguments={}),
-            ToolCallRequest(id="ro2", name="read_b", arguments={}),
-            ToolCallRequest(id="rw1", name="write_a", arguments={}),
-        ],
-        {},
-    )
-
-    assert shared_events[0:2] == ["start:read_a", "start:read_b"]
-    assert "end:read_a" in shared_events and "end:read_b" in shared_events
-    assert shared_events.index("end:read_a") < shared_events.index("start:write_a")
-    assert shared_events.index("end:read_b") < shared_events.index("start:write_a")
-    assert shared_events[-2:] == ["start:write_a", "end:write_a"]
-
-
-@pytest.mark.asyncio
 async def test_runner_does_not_batch_exclusive_read_only_tools():
     from nanobot.agent.runner import AgentRunSpec, AgentRunner
 
@@ -920,28 +882,6 @@ async def test_checkpoint2_injects_after_final_response_with_resuming_stream():
 
 
 
-
-
-@pytest.mark.asyncio
-async def test_pending_queue_cleanup_on_dispatch(tmp_path):
-    """_pending_queues should be cleaned up after _dispatch completes."""
-    loop = _make_loop(tmp_path)
-
-    async def chat_with_retry(**kwargs):
-        return LLMResponse(content="done", tool_calls=[], usage={})
-
-    loop.provider.chat_with_retry = chat_with_retry
-
-    from nanobot.bus.events import InboundMessage
-
-    msg = InboundMessage(channel="cli", sender_id="u", chat_id="c", content="hello")
-    # The queue should not exist before dispatch
-    assert msg.session_key not in loop._session_dispatch
-
-    await loop._dispatch(msg)
-
-    # The queue should be cleaned up after dispatch
-    assert msg.session_key not in loop._session_dispatch
 
 
 

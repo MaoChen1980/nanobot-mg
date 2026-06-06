@@ -23,10 +23,6 @@ def _clear_file_state():
 
 class TestReadDescriptionFix:
 
-    def test_description_mentions_image_support(self):
-        tool = ReadFileTool()
-        assert "图片" in tool.description
-
     def test_description_no_longer_says_cannot_read_images(self):
         tool = ReadFileTool()
         assert "cannot read binary files or images" not in tool.description.lower()

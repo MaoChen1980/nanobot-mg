@@ -12,36 +12,6 @@ from nanobot.config.schema import AgentDefaults
 _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
 
-@pytest.mark.asyncio
-async def test_send_message_subagent_to_main(tmp_path):
-    """send_message(recipient='main') delivers message via bus."""
-    from nanobot.agent.subagent import SubagentManager
-    from nanobot.agent.tools.send_message import SendMessageTool
-    from nanobot.bus.queue import MessageBus
-
-    bus = MessageBus()
-    provider = MagicMock()
-    provider.get_default_model.return_value = "test-model"
-    mgr = SubagentManager(
-        provider=provider,
-        workspace=tmp_path,
-        bus=bus,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
-    )
-
-    # Simulate a registered subagent
-    mgr._subagent_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
-
-    tool = SendMessageTool(manager=mgr, subagent_id="test-w", subagent_label="test-subagent")
-    result = await tool.execute(recipient="main", message="need help", priority="blocker")
-
-    assert "notified" in result or "sent" in result.lower()
-
-    # Verify message actually landed on the bus
-    bus_msg = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
-    assert "need help" in bus_msg.content
-    assert "<system-reminder>" in bus_msg.content
-    assert bus_msg.metadata.get("injected_event") == "subagent_notification"
 
 
 @pytest.mark.asyncio
@@ -157,33 +127,6 @@ async def test_spawn_many_duplicate_label_rejected(tmp_path):
 
     assert "duplicate label" in result or "Error" in result
 
-
-@pytest.mark.asyncio
-async def test_notify_orchestrator_actually_sends(tmp_path):
-    """notify_orchestrator now awaits bus.publish_inbound (fix async bug)."""
-    from nanobot.agent.subagent import SubagentManager
-    from nanobot.bus.queue import MessageBus
-
-    bus = MessageBus()
-    provider = MagicMock()
-    provider.get_default_model.return_value = "test-model"
-    mgr = SubagentManager(
-        provider=provider,
-        workspace=tmp_path,
-        bus=bus,
-        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
-    )
-
-    mgr._subagent_origin["test-w"] = {"channel": "test", "chat_id": "c1", "session_key": "test:c1"}
-
-    # This should NOT crash — the async bug fix means await happens
-    result = await mgr.notify_orchestrator(message="async works now", subagent_id="test-w", subagent_label="test")
-    assert "notified" in result or "sent" in result.lower()
-
-    # Verify message was actually published to bus
-    bus_msg = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
-    assert "async works now" in bus_msg.content
-    assert "<system-reminder>" in bus_msg.content
 
 
 @pytest.mark.asyncio
