@@ -474,7 +474,7 @@ class MemoryExtractor:
                 in_footer = False  # absorbed the trailing paragraph
                 continue
             ts_match = _TS_RE.search(p)
-            ts_val = float(ts_match.group(1)) if ts_match else None
+            ts_val = float(ts_match.group(1)) if ts_match else 0.0
             result.append({"content": p, "ts": ts_val})
         return result
 
@@ -657,10 +657,18 @@ class MemoryExtractor:
             if not after_think:
                 # <think> with nothing after — no JSON possible
                 return ""
-        # Step 2: find the LAST ```json or ``` code block
-        matches = list(re.finditer(r"```(?:json)?\s*\n(.*?)\n```", after_think, re.DOTALL))
-        if matches:
-            return matches[-1].group(1).strip()
+        # Step 2: find the first ```json / ``` block and the LAST ``` close fence
+        # Use first→last (not greedy regex) to handle nested ``` inside JSON string values.
+        fence_start = after_think.find("```")
+        if fence_start >= 0:
+            # skip past the fence marker line (``` or ```json)
+            content_start = after_think.find("\n", fence_start)
+            if content_start >= 0:
+                content_start += 1
+                # find the LAST ``` which is the true close fence
+                fence_end = after_think.rfind("```")
+                if fence_end > content_start:
+                    return after_think[content_start:fence_end].strip()
         # Step 3: try to find standalone { ... } JSON object
         # Look for {" or {\n to skip non-JSON { prefixes (e.g. code examples)
         json_brace = after_think.find('{"')

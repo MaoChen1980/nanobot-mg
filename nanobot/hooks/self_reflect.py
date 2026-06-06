@@ -340,9 +340,15 @@ class SelfReflectHook(AgentHook):
     @staticmethod
     def _parse_findings(raw: str) -> list[dict[str, Any]]:
         """Parse JSON findings from LLM response."""
-        match = re.search(r"```(?:json)?\s*\n(.*?)\n```", raw, re.DOTALL)
-        if match:
-            raw = match.group(1).strip()
+        # Use first ``` → last ``` to handle nested code fences inside JSON string values.
+        idx = raw.find("```")
+        if idx >= 0:
+            content_start = raw.find("\n", idx)
+            if content_start >= 0:
+                content_start += 1
+                fence_end = raw.rfind("```")
+                if fence_end > content_start:
+                    raw = raw[content_start:fence_end].strip()
 
         try:
             result = json.loads(raw)

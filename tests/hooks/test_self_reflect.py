@@ -1,0 +1,272 @@
+"""Tests for SelfReflectHook (metrics accumulation, LLM reflection, findings)."""
+
+from __future__ import annotations
+
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from nanobot.hooks.self_reflect import SelfReflectHook
+
+
+@pytest.fixture
+def hook(tmp_path):
+    h = SelfReflectHook(interval=2)
+    h.FINDINGS_FILE = tmp_path / "findings.json"
+    h.LOG_FILE = tmp_path / "self_log.md"
+    return h
+
+
+class FakeContext:
+    def __init__(self, **kwargs):
+        self.tool_calls = kwargs.get("tool_calls", [])
+        self.tool_results = kwargs.get("tool_results", [])
+        self.usage = kwargs.get("usage", {})
+        self.iteration = kwargs.get("iteration", 1)
+        self.error = kwargs.get("error")
+        self.final_content = kwargs.get("final_content")
+        self.messages = kwargs.get("messages", [])
+
+
+class TestSetProvider:
+    def test_stores_provider_and_model(self):
+        hook = SelfReflectHook()
+        provider = MagicMock()
+        hook.set_provider(provider, "gpt-4")
+        assert hook._provider is provider
+        assert hook._model == "gpt-4"
+
+    def test_model_defaults_to_none(self):
+        hook = SelfReflectHook()
+        provider = MagicMock()
+        hook.set_provider(provider)
+        assert hook._provider is provider
+        assert hook._model is None
+
+
+class TestBuildEntry:
+    def test_builds_correct_dict(self):
+        hook = SelfReflectHook()
+        tc1 = MagicMock()
+        tc1.name = "web_search"
+        tc1.arguments = {"q": "test"}
+        ctx = FakeContext(
+            tool_calls=[tc1],
+            usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+            iteration=3,
+            final_content="done",
+        )
+        entry = hook._build_entry(ctx)
+        assert entry["iteration"] == 3
+        assert entry["tool_count"] == 1
+        assert entry["tool_calls"][0]["name"] == "web_search"
+        assert entry["usage"]["total_tokens"] == 150
+        assert entry["final_content_len"] == 4
+        assert entry["error"] is None
+        assert "time" in entry
+
+    def test_filters_self_insight_messages(self):
+        hook = SelfReflectHook()
+        ctx = FakeContext(messages=[
+            {"role": "user", "content": "hi"},
+            {"_source": "self_insight_hook", "content": "insight"},
+            {"role": "assistant", "content": "ok"},
+        ])
+        entry = hook._build_entry(ctx)
+        assert entry["message_count"] == 2
+
+    def test_empty_inputs(self):
+        hook = SelfReflectHook()
+        ctx = FakeContext()
+        entry = hook._build_entry(ctx)
+        assert entry["tool_count"] == 0
+        assert entry["usage"]["total_tokens"] == 0
+        assert entry["final_content_len"] == 0
+        assert entry["error"] is None
+        assert entry["message_count"] == 0
+
+
+class TestAfterIteration:
+    @pytest.mark.asyncio
+    async def test_accumulates_entries(self, hook):
+        ctx = FakeContext(iteration=1)
+        await hook.after_iteration(ctx)
+        assert len(hook._entries_accumulated) == 1
+        assert hook._entries_accumulated[0]["iteration"] == 1
+
+    @pytest.mark.asyncio
+    async def test_multiple_calls(self, hook):
+        await hook.after_iteration(FakeContext(iteration=1))
+        await hook.after_iteration(FakeContext(iteration=2))
+        assert len(hook._entries_accumulated) == 2
+
+    @pytest.mark.asyncio
+    async def test_exception_safe(self, hook):
+        class BadContext:
+            tool_calls = None
+            tool_results = None
+            usage = None
+            iteration = "not-an-int"
+
+        await hook.after_iteration(BadContext())
+        assert len(hook._entries_accumulated) == 0
+
+
+class TestAfterTurn:
+    @pytest.mark.asyncio
+    async def test_early_return_when_no_entries(self, hook):
+        await hook.after_turn()
+        assert hook._turn_count == 0
+
+    @pytest.mark.asyncio
+    async def test_skips_below_interval(self, hook):
+        hook._entries_accumulated = [{"iteration": 1}]
+        await hook.after_turn()
+        assert hook._turn_count == 1
+        assert len(hook._entries_accumulated) == 1
+
+    @pytest.mark.asyncio
+    async def test_fires_at_interval(self, hook):
+        hook._entries_accumulated = [{"iteration": 1}]
+        hook._turn_count = 1
+
+        with patch.object(hook, "_run_turn_reflection") as mock_run:
+            await hook.after_turn()
+
+        mock_run.assert_awaited_once_with([{"iteration": 1}])
+        assert hook._turn_count == 0
+        assert hook._entries_accumulated == []
+
+
+class TestRunTurnReflection:
+    @pytest.mark.asyncio
+    async def test_builds_summary_and_saves(self, hook):
+        entries = [
+            {
+                "iteration": 1,
+                "time": "2025-01-01T00:00:00",
+                "tool_calls": [],
+                "tool_count": 0,
+                "usage": {"total_tokens": 50},
+                "error": None,
+            },
+            {
+                "iteration": 2,
+                "time": "2025-01-01T00:01:00",
+                "tool_calls": [{"name": "read_file", "arguments": {"file_path": "/x"}}],
+                "tool_count": 1,
+                "usage": {"total_tokens": 100},
+                "error": "timeout",
+            },
+        ]
+
+        with (
+            patch.object(hook, "_call_for_findings", AsyncMock(return_value=[{"type": "self_bug", "content": "bug"}])) as mock_call,
+            patch.object(hook, "_save_findings") as mock_save,
+            patch.object(hook, "_append_to_log") as mock_log,
+            patch("nanobot.hooks.self_reflect._read_hook_sources", return_value="## source"),
+        ):
+            await hook._run_turn_reflection(entries)
+
+        mock_call.assert_awaited_once()
+        assert "Tool frequency" in mock_call.call_args[0][0]
+        assert "read_file: 1" in mock_call.call_args[0][0]
+        mock_save.assert_called_once()
+        mock_log.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_call_for_findings_empty_on_llm_failure(self, hook):
+        with patch.object(hook, "_call_llm", side_effect=RuntimeError("fail")):
+            findings = await hook._call_for_findings("metrics", "code")
+        assert findings == []
+
+
+class TestParseFindings:
+    def test_from_code_block(self):
+        raw = '```json\n{"findings": [{"type": "behavior", "content": "repeated tool"}]}\n```'
+        result = SelfReflectHook._parse_findings(raw)
+        assert len(result) == 1
+        assert result[0]["type"] == "behavior"
+
+    def test_plain_json(self):
+        raw = '{"findings": [{"type": "self_bug", "content": "wrong count"}]}'
+        result = SelfReflectHook._parse_findings(raw)
+        assert len(result) == 1
+
+    def test_invalid_json_returns_empty(self):
+        result = SelfReflectHook._parse_findings("not json at all")
+        assert result == []
+
+    def test_filters_invalid_type(self):
+        raw = json.dumps({"findings": [
+            {"type": "self_bug", "content": "real bug"},
+            {"type": "unicorn", "content": "fake"},
+        ]})
+        result = SelfReflectHook._parse_findings(raw)
+        assert len(result) == 1
+        assert result[0]["type"] == "self_bug"
+
+    def test_missing_type_or_content(self):
+        raw = json.dumps({"findings": [
+            {"type": "self_bug", "content": "ok"},
+            {"type": "behavior"},
+            {"content": "orphan"},
+        ]})
+        result = SelfReflectHook._parse_findings(raw)
+        assert len(result) == 1
+
+
+class TestFindingId:
+    def test_stable_sha256_prefix(self):
+        h = SelfReflectHook()
+        id1 = h._finding_id("same content")
+        id2 = h._finding_id("same content")
+        assert id1 == id2
+        assert len(id1) == 12
+
+    def test_different_content_different_id(self):
+        h = SelfReflectHook()
+        assert h._finding_id("a") != h._finding_id("b")
+
+
+class TestSaveFindings:
+    def test_writes_json_file(self, hook):
+        hook._save_findings(
+            [{"type": "behavior", "content": "test"}],
+            "iter#1", "2025-01-01T00:00:00",
+        )
+        assert hook.FINDINGS_FILE.exists()
+        payload = json.loads(hook.FINDINGS_FILE.read_text())
+        assert payload["source"] == "self_reflect"
+        assert len(payload["findings"]) == 1
+        assert "id" in payload["findings"][0]
+
+    def test_adds_id_when_missing(self, hook):
+        hook._save_findings(
+            [{"type": "self_bug", "content": "no-id"}],
+            "#1-#1", "ts",
+        )
+        payload = json.loads(hook.FINDINGS_FILE.read_text())
+        assert payload["findings"][0]["id"] == SelfReflectHook._finding_id("no-id")
+
+
+class TestAppendToLog:
+    def test_writes_findings(self, hook):
+        hook._append_to_log("#1", "ts", 5, [], [{"type": "behavior", "content": "x", "relevance": "y"}])
+        log = hook.LOG_FILE.read_text()
+        assert "## Turn #1" in log
+        assert "**behavior**" in log
+        assert "1 finding(s)" in log
+
+    def test_writes_nothing_actionable_when_empty(self, hook):
+        hook._append_to_log("#1", "ts", 0, [], [])
+        log = hook.LOG_FILE.read_text()
+        assert "nothing actionable" in log
+
+    def test_caps_log_at_max_lines(self, hook):
+        for _ in range(20):
+            hook.LOG_FILE.write_text("line\n" * 30, encoding="utf-8")
+            hook._append_to_log("#x", "ts", 0, [], [])
+        lines = hook.LOG_FILE.read_text().splitlines()
+        assert len(lines) <= 210
