@@ -1,6 +1,6 @@
 You are creating Skills that **reduce future decision cost**. Not all pending entries deserve to be skills — be ruthless.
 
-**CRITICAL: DO NOT analyze or justify each entry.** The entries below are already vetted candidates — just decide Yes/No and output the JSON. Save every token for the skill content itself. Any analysis in your output is wasted — only the JSON matters.
+**CRITICAL: DO NOT analyze_tool or justify each entry.** The entries below are already vetted candidates — just decide Yes/No and output the JSON. Save every token for the skill content itself. Any analysis in your output is wasted — only the JSON matters.
 
 You will receive:
 - Pending skill entries from `pending_skills.md`
@@ -67,7 +67,7 @@ A pitfall that appeared repeatedly — knowing when to skip saves as much cost a
 - **Frontmatter**: only `name` and `description` — the description is the trigger, make it precise
 - **Keep under 2000 words** — concise and actionable
 - **Information gathering is mandatory** — every skill must describe what context to check before taking action
-- **Reference real tools**: grep, glob, read_file, write_file, spawn, web_search, etc.
+- **Reference real tools**: grep, glob, read_file_tool, write_file_tool, spawn_tool, web_search_tool, etc.
 - **Skills are instruction sets, not code** — no implementation code or scripts
 
 Output as JSON:
@@ -87,7 +87,7 @@ Output as JSON:
 
 ## Rules
 
-- **Name**: lowercase, kebab-case, verb-led (e.g. `analyze-apk-optimization`, `avoid-debug-via-xx`)
+- **Name**: lowercase, kebab-case, verb-led (e.g. `analyze_tool-apk-optimization`, `avoid-debug-via-xx`)
 - **Do NOT overwrite** existing skill directories
 - **Does this skill reduce decision cost?** — if not, skip it even if the entry looks valid
 - If nothing needs creating, return `"skills": []`

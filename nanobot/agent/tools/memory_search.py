@@ -42,7 +42,7 @@ class MemorySearchTool(Tool):
     def __init__(self, store: MemoryStore):
         self._store = store
 
-    name = "memory_search"
+    name = "memory_search_tool"
     read_only = True
 
     description = (
@@ -51,12 +51,12 @@ class MemorySearchTool(Tool):
         '- The user says "we encountered this before", "we learned this last time", "we did something similar"\n'
         "- You need to recall accumulated knowledge, experience, or decisions\n"
         "- You want to find historical records related to the current topic\n\n"
-        "**Difference from search_text**:\n"
-        "- search_text searches the single text snippet or file you pass in\n"
-        "- memory_search searches the entire memory/ knowledge base (FAISS vector index)\n\n"
-        "**Difference from conversation_search**:\n"
-        "- conversation_search searches conversation history (keyword match + time filter)\n"
-        "- memory_search searches the knowledge base (semantic similarity match)\n\n"
+        "**Difference from search_text_tool**:\n"
+        "- search_text_tool searches the single text snippet or file you pass in\n"
+        "- memory_search_tool searches the entire memory/ knowledge base (FAISS vector index)\n\n"
+        "**Difference from conversation_search_tool**:\n"
+        "- conversation_search_tool searches conversation history (keyword match + time filter)\n"
+        "- memory_search_tool searches the knowledge base (semantic similarity match)\n\n"
         "**Note**:\n"
         "- New or modified knowledge takes up to 2 hours to appear in the index\n"
         "- This is fuzzy semantic matching — may miss specific terms. Use grep for exact keywords.\n\n"
@@ -67,9 +67,9 @@ class MemorySearchTool(Tool):
         "- Avoid single vague words: `memory` alone returns noise\n"
         "- Avoid full-sentence questions: too much filler dilutes the embedding\n\n"
         "**Examples**:\n"
-        "  memory_search(query='memory extraction and consolidation', k=5)\n"
-        "  memory_search(query='android build gradle apk config', k=5)\n"
-        "  memory_search(query='subagent spawn orchestration lifecycle', k=5)"
+        "  memory_search_tool(query='memory extraction and consolidation', k=5)\n"
+        "  memory_search_tool(query='android build gradle apk config', k=5)\n"
+        "  memory_search_tool(query='subagent spawn orchestration lifecycle', k=5)"
     )
 
     async def execute(self, query: str, k: int = 5, **kwargs: Any) -> str:

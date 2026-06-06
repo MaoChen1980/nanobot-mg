@@ -71,7 +71,7 @@ _LANG_PATTERNS: dict[str, list[tuple[str, str]]] = {
 class ExploreModuleTool(_FsTool):
     """Get a bird's-eye view of a code module — classes, functions, their signatures and line numbers."""
 
-    name = "explore_module"
+    name = "explore_module_tool"
     read_only = True
 
     description = (

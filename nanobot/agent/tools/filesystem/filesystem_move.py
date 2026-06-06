@@ -16,7 +16,7 @@ from nanobot.agent.tools.schema import p
 class MoveFileTool(_FsTool):
     """Move or rename a file. Workspace-guarded, single-file only."""
 
-    name = "move_file"
+    name = "move_file_tool"
     description = (
         "**Purpose**: Move or rename a single file.\n\n"
         "**When to use**:\n"

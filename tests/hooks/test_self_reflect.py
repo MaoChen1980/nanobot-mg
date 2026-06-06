@@ -49,7 +49,7 @@ class TestBuildEntry:
     def test_builds_correct_dict(self):
         hook = SelfReflectHook()
         tc1 = MagicMock()
-        tc1.name = "web_search"
+        tc1.name = "web_search_tool"
         tc1.arguments = {"q": "test"}
         ctx = FakeContext(
             tool_calls=[tc1],
@@ -60,7 +60,7 @@ class TestBuildEntry:
         entry = hook._build_entry(ctx)
         assert entry["iteration"] == 3
         assert entry["tool_count"] == 1
-        assert entry["tool_calls"][0]["name"] == "web_search"
+        assert entry["tool_calls"][0]["name"] == "web_search_tool"
         assert entry["usage"]["total_tokens"] == 150
         assert entry["final_content_len"] == 4
         assert entry["error"] is None
@@ -154,7 +154,7 @@ class TestRunTurnReflection:
             {
                 "iteration": 2,
                 "time": "2025-01-01T00:01:00",
-                "tool_calls": [{"name": "read_file", "arguments": {"file_path": "/x"}}],
+                "tool_calls": [{"name": "read_file_tool", "arguments": {"file_path": "/x"}}],
                 "tool_count": 1,
                 "usage": {"total_tokens": 100},
                 "error": "timeout",
@@ -171,7 +171,7 @@ class TestRunTurnReflection:
 
         mock_call.assert_awaited_once()
         assert "Tool frequency" in mock_call.call_args[0][0]
-        assert "read_file: 1" in mock_call.call_args[0][0]
+        assert "read_file_tool: 1" in mock_call.call_args[0][0]
         mock_save.assert_called_once()
         mock_log.assert_called_once()
 

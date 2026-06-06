@@ -436,18 +436,18 @@ class AgentLoop:
             effective_key = session_key
         else:
             effective_key = f"{channel}:{chat_id}"
-        for name in ("message", "spawn", "spawn_many", "cron", "my"):
+        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "my"):
             tool = self.tools.get(name)
             if tool is None:
                 continue
             sc = getattr(tool, "set_context", None)
             if not sc:
                 continue
-            if name in ("spawn", "spawn_many"):
+            if name in ("spawn_tool", "spawn_many_tool"):
                 sc(channel, chat_id, effective_key=effective_key)
-            elif name == "cron":
+            elif name == "cron_tool":
                 sc(channel, chat_id, metadata=metadata, session_key=session_key)
-            elif name == "message":
+            elif name == "message_tool":
                 sc(channel, chat_id, message_id, metadata=metadata)
             else:
                 sc(channel, chat_id)

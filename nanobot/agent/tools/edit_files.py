@@ -136,7 +136,7 @@ class _EditsPreValidate(Validator):
 @tool_parameters(_APPLY_PATCH_SCHEMA)
 class EditFilesTool(_FsTool):
     """Apply file edits by providing structured edit instructions."""
-    name = "edit_files"
+    name = "edit_files_tool"
 
     _pre_validators = [_EditsPreValidate()]
 

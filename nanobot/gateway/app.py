@@ -354,7 +354,7 @@ class GatewayApplication:
 
             await self.bus.publish_outbound(msg)
 
-        message_tool = getattr(self.agent, "tools", {}).get("message")
+        message_tool = getattr(self.agent, "tools", {}).get("message_tool")
         if isinstance(message_tool, MessageTool):
             message_tool.set_send_callback(_deliver_to_channel)
 
@@ -377,7 +377,7 @@ class GatewayApplication:
                 return None
 
             # Check if this is a test/dry-run execution
-            is_test_mode = isinstance(getattr(self.agent.tools.get("cron"), "_test_mode", None), object)
+            is_test_mode = isinstance(getattr(self.agent.tools.get("cron_tool"), "_test_mode", None), object)
 
             reminder_note = (
                 "The scheduled time has arrived. Deliver this reminder to the user now, "
@@ -386,13 +386,13 @@ class GatewayApplication:
                 "like 'Done' or 'Reminded'.\n\n"
                 f"Reminder: {job.payload.message}\n\n"
                 "You can use `cron` tool to manage this job:\n"
-                f"- `cron action=update job_id={job.id} message=\"...\"` — update the reminder for next run\n"
-                f"- `cron action=list` — check job status\n"
-                f"- `cron action=remove job_id={job.id}` — cancel this job"
+                f"- `cron_tool action=update job_id={job.id} message=\"...\"` — update the reminder for next run\n"
+                f"- `cron_tool action=list` — check job status\n"
+                f"- `cron_tool action=remove job_id={job.id}` — cancel this job"
             )
 
 # Check if this is a test/dry-run execution
-            cron_tool = self.agent.tools.get("cron")
+            cron_tool = self.agent.tools.get("cron_tool")
             cron_token = None
             cron_job_token = None
             if isinstance(cron_tool, CronTool):

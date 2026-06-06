@@ -26,7 +26,7 @@ class NotifyOrchestratorTool(Tool):
         self._subagent_id = subagent_id
         self._subagent_label = subagent_label
 
-    name = "notify_orchestrator"
+    name = "notify_orchestrator_tool"
 
     @property
     def description(self) -> str:

@@ -38,7 +38,7 @@ def _make_mocked_app(config: Config | None = None) -> GatewayApplication:
     app.agent.close_mcp = AsyncMock()
     app.agent.stop = MagicMock()
     message_tool = MagicMock(spec=MessageTool)
-    app.agent.tools = {"message": message_tool}
+    app.agent.tools = {"message_tool": message_tool}
     app.agent.sessions = MagicMock()
     app.agent.sessions.flush_all = MagicMock(return_value=2)
     app.channels = MagicMock()
@@ -676,7 +676,7 @@ class TestOnCronJob:
         """When _sent_in_turn is True, returns early without evaluate_response."""
         app = _make_mocked_app(config)
         app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Hello!"))
-        app.agent.tools["message"]._sent_in_turn = True
+        app.agent.tools["message_tool"]._sent_in_turn = True
 
         with patch("nanobot.utils.evaluator.evaluate_response") as mock_eval:
             app._wire_callbacks()
@@ -696,7 +696,7 @@ class TestOnCronJob:
         """evaluate_response returns False -> message is NOT delivered."""
         app = _make_mocked_app(config)
         app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Routine"))
-        app.agent.tools["message"]._sent_in_turn = False
+        app.agent.tools["message_tool"]._sent_in_turn = False
 
         app._wire_callbacks()
         with patch(
@@ -724,7 +724,7 @@ class TestOnCronJob:
         cron_tool = MagicMock(spec=CronTool)
         cron_tool.set_cron_context.return_value = "ctx-token"
         cron_tool.set_current_job_id.return_value = "job-token"
-        app.agent.tools["cron"] = cron_tool
+        app.agent.tools["cron_tool"] = cron_tool
         app._wire_callbacks()
         job = CronJob(
             id="r1", name="reminder",

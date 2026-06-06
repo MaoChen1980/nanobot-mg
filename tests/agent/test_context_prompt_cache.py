@@ -104,12 +104,12 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
     prompt = builder.build_system_prompt()
     # Character traits from SOUL.md
     assert "Thorough" in prompt
-    assert "framework_search" in prompt  # rules loaded dynamically via framework_search
+    assert "framework_search_tool" in prompt  # rules loaded dynamically via framework_search_tool
     # Role definitions from SOUL.md
     assert "Principal engineer" in prompt
     assert "取舍、约束和失效模式" in prompt  # translated from "tradeoffs, constraints, and failure modes"
     # Tool reference from identity.md
-    assert "read_file" in prompt
+    assert "read_file_tool" in prompt
 
 
 def test_identity_has_no_behavioral_instructions(tmp_path) -> None:
@@ -130,8 +130,8 @@ def test_framework_search_is_registered(tmp_path) -> None:
 
     prompt = builder.build_system_prompt()
 
-    assert "framework_search" in prompt
-    assert "memory_search" in prompt
+    assert "framework_search_tool" in prompt
+    assert "memory_search_tool" in prompt
 
 
 

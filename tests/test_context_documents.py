@@ -53,7 +53,7 @@ def test_build_user_content_mixed_image_and_non_image(tmp_path: Path) -> None:
     txt = tmp_path / "report.txt"
     txt.write_text("report text", encoding="utf-8")
 
-    result = builder._build_user_content("analyze", [str(png), str(txt)])
+    result = builder._build_user_content("analyze_tool", [str(png), str(txt)])
     assert isinstance(result, list)
     assert any(b["type"] == "image_url" for b in result)
     text_parts = [b.get("text", "") for b in result if b.get("type") == "text"]

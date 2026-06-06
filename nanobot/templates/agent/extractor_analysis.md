@@ -68,14 +68,14 @@ You are analyzing a conversation snapshot. The snapshot has two parts: system pr
 
 **好（pitfall）：**
 - `⚠️ _tokenize() 用 [a-zA-Z_] 不捕获中文 — team_board 内容需保留英文关键词或额外分词处理`
-- `⚠️ read_file 在同一 session 内重复调用返回 '[File unchanged]' 而非内容 — 改用 Bash type/Get-Content 强制重读`
+- `⚠️ read_file_tool 在同一 session 内重复调用返回 '[File unchanged]' 而非内容 — 改用 Bash type/Get-Content 强制重读`
 
 **差（pitfall）：**
 - `⚠️ tokenize 中文有问题`（没说什么场景、怎么触发、怎么修）
 
 **好（pattern）：**
 - `💡 在 Windows 上用 Select-String 替代 grep：Get-ChildItem -Recurse -Filter *.py | Select-String -Pattern "keyword"`
-- `💡 CronCreate 自循环监控模式：spawn → CronCreate → fire → check → CronCreate again → done → stop`
+- `💡 CronCreate 自循环监控模式：spawn_tool → CronCreate → fire → check → CronCreate again → done → stop`
 
 **差（pattern）：**
 - `💡 可以用 Select-String 搜索`（什么时候用？怎么用？）

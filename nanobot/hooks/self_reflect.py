@@ -241,7 +241,7 @@ class SelfReflectHook(AgentHook):
         for e in entries:
             for tc in e.get("tool_calls", []):
                 tool_name_counts[tc["name"]] = tool_name_counts.get(tc["name"], 0) + 1
-                if tc["name"] in ("read_file", "edit_file", "write_file"):
+                if tc["name"] in ("read_file_tool", "edit_file_tool", "write_file_tool"):
                     path = (
                         tc.get("arguments", {}).get("file_path")
                         or tc.get("arguments", {}).get("path")

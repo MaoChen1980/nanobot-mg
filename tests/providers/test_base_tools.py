@@ -8,8 +8,8 @@ from nanobot.providers.base import GenerationSettings, LLMProvider, ToolCallRequ
 class TestToolName:
     def test_openai_style(self):
         """OpenAI-style tool schema uses 'name' key."""
-        tool = {"name": "web_search", "description": "Search the web"}
-        assert LLMProvider._tool_name(tool) == "web_search"
+        tool = {"name": "web_search_tool", "description": "Search the web"}
+        assert LLMProvider._tool_name(tool) == "web_search_tool"
 
     def test_anthropic_style(self):
         """Anthropic-style tool schema uses 'function' dict."""
@@ -27,15 +27,15 @@ class TestToolCacheMarkerIndices:
         assert LLMProvider._tool_cache_marker_indices([]) == []
 
     def test_single_tool(self):
-        tools = [{"name": "web_search"}]
+        tools = [{"name": "web_search_tool"}]
         assert LLMProvider._tool_cache_marker_indices(tools) == [0]
 
     def test_all_builtin(self):
-        tools = [{"name": "web_search"}, {"name": "read_file"}]
+        tools = [{"name": "web_search_tool"}, {"name": "read_file_tool"}]
         assert LLMProvider._tool_cache_marker_indices(tools) == [1]
 
     def test_builtin_and_mcp(self):
-        tools = [{"name": "web_search"}, {"name": "mcp_filesystem"}, {"name": "mcp_github"}]
+        tools = [{"name": "web_search_tool"}, {"name": "mcp_filesystem"}, {"name": "mcp_github"}]
         result = LLMProvider._tool_cache_marker_indices(tools)
         assert result == [0, 2]
 
@@ -45,33 +45,33 @@ class TestToolCacheMarkerIndices:
         assert result == [1]
 
     def test_dedup_when_last_builtin_equals_tail(self):
-        tools = [{"name": "web_search"}]
+        tools = [{"name": "web_search_tool"}]
         result = LLMProvider._tool_cache_marker_indices(tools)
         assert result == [0]
 
 
 class TestToolCallRequestToOpenAI:
     def test_basic(self):
-        tc = ToolCallRequest(id="call_1", name="web_search", arguments={"q": "hello"})
+        tc = ToolCallRequest(id="call_1", name="web_search_tool", arguments={"q": "hello"})
         result = tc.to_openai_tool_call()
         assert result["id"] == "call_1"
         assert result["type"] == "function"
-        assert result["function"]["name"] == "web_search"
+        assert result["function"]["name"] == "web_search_tool"
         assert "arguments" in result["function"]
 
     def test_with_extra_content(self):
-        tc = ToolCallRequest(id="call_1", name="web_search", arguments={}, extra_content={"meta": "data"})
+        tc = ToolCallRequest(id="call_1", name="web_search_tool", arguments={}, extra_content={"meta": "data"})
         result = tc.to_openai_tool_call()
         assert result["extra_content"] == {"meta": "data"}
 
     def test_with_provider_specific_fields(self):
-        tc = ToolCallRequest(id="call_1", name="web_search", arguments={},
+        tc = ToolCallRequest(id="call_1", name="web_search_tool", arguments={},
                              provider_specific_fields={"cache_control": {"type": "ephemeral"}})
         result = tc.to_openai_tool_call()
         assert result["provider_specific_fields"] == {"cache_control": {"type": "ephemeral"}}
 
     def test_with_function_provider_specific_fields(self):
-        tc = ToolCallRequest(id="call_1", name="web_search", arguments={},
+        tc = ToolCallRequest(id="call_1", name="web_search_tool", arguments={},
                              function_provider_specific_fields={"cache_control": {"type": "ephemeral"}})
         result = tc.to_openai_tool_call()
         assert result["function"]["provider_specific_fields"] == {"cache_control": {"type": "ephemeral"}}

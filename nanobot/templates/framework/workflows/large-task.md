@@ -7,13 +7,13 @@
 这一 phase 你的产出只有一个：对 task 的理解报告。不要改代码、不要写文件、不要做分析结论。
 
 **必须做：**
-1. `list_dir` 看顶层结构
-2. `explore_module` 或读入口文件（README/__init__）
-3. `memory_search` 查记忆
-4. 如果涉及外部信息 → `web_search`
+1. `list_dir_tool` 看顶层结构
+2. `explore_module_tool` 或读入口文件（README/__init__）
+3. `memory_search_tool` 查记忆
+4. 如果涉及外部信息 → `web_search_tool`
 
 **不允许：**
-- Phase 1 就 `read_file` 读具体实现
+- Phase 1 就 `read_file_tool` 读具体实现
 - Phase 1 就 `grep` 搜具体代码
 - Phase 1 就下结论或输出方案
 

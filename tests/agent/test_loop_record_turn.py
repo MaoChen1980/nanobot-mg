@@ -83,7 +83,7 @@ def test_record_turn_keeps_tool_results_under_16k() -> None:
 
     loop._append_turn_to_session(
         session,
-        [{"role": "tool", "tool_call_id": "call_1", "name": "read_file", "content": content}],
+        [{"role": "tool", "tool_call_id": "call_1", "name": "read_file_tool", "content": content}],
         skip=0,
     )
 
@@ -103,12 +103,12 @@ def test_restore_runtime_checkpoint_rehydrates_completed_and_pending_tools() -> 
                         {
                             "id": "call_done",
                             "type": "function",
-                            "function": {"name": "read_file", "arguments": "{}"},
+                            "function": {"name": "read_file_tool", "arguments": "{}"},
                         },
                         {
                             "id": "call_pending",
                             "type": "function",
-                            "function": {"name": "exec", "arguments": "{}"},
+                            "function": {"name": "exec_tool", "arguments": "{}"},
                         },
                     ],
                 },
@@ -116,7 +116,7 @@ def test_restore_runtime_checkpoint_rehydrates_completed_and_pending_tools() -> 
                     {
                         "role": "tool",
                         "tool_call_id": "call_done",
-                        "name": "read_file",
+                        "name": "read_file_tool",
                         "content": "ok",
                     }
                 ],
@@ -124,7 +124,7 @@ def test_restore_runtime_checkpoint_rehydrates_completed_and_pending_tools() -> 
                     {
                         "id": "call_pending",
                         "type": "function",
-                        "function": {"name": "exec", "arguments": "{}"},
+                        "function": {"name": "exec_tool", "arguments": "{}"},
                     }
                 ],
             }
@@ -153,19 +153,19 @@ def test_restore_runtime_checkpoint_dedupes_overlapping_tail() -> None:
                     {
                         "id": "call_done",
                         "type": "function",
-                        "function": {"name": "read_file", "arguments": "{}"},
+                        "function": {"name": "read_file_tool", "arguments": "{}"},
                     },
                     {
                         "id": "call_pending",
                         "type": "function",
-                        "function": {"name": "exec", "arguments": "{}"},
+                        "function": {"name": "exec_tool", "arguments": "{}"},
                     },
                 ],
             },
             {
                 "role": "tool",
                 "tool_call_id": "call_done",
-                "name": "read_file",
+                "name": "read_file_tool",
                 "content": "ok",
             },
         ],
@@ -178,12 +178,12 @@ def test_restore_runtime_checkpoint_dedupes_overlapping_tail() -> None:
                         {
                             "id": "call_done",
                             "type": "function",
-                            "function": {"name": "read_file", "arguments": "{}"},
+                            "function": {"name": "read_file_tool", "arguments": "{}"},
                         },
                         {
                             "id": "call_pending",
                             "type": "function",
-                            "function": {"name": "exec", "arguments": "{}"},
+                            "function": {"name": "exec_tool", "arguments": "{}"},
                         },
                     ],
                 },
@@ -191,7 +191,7 @@ def test_restore_runtime_checkpoint_dedupes_overlapping_tail() -> None:
                     {
                         "role": "tool",
                         "tool_call_id": "call_done",
-                        "name": "read_file",
+                        "name": "read_file_tool",
                         "content": "ok",
                     }
                 ],
@@ -199,7 +199,7 @@ def test_restore_runtime_checkpoint_dedupes_overlapping_tail() -> None:
                     {
                         "id": "call_pending",
                         "type": "function",
-                        "function": {"name": "exec", "arguments": "{}"},
+                        "function": {"name": "exec_tool", "arguments": "{}"},
                     }
                 ],
             }
@@ -314,7 +314,7 @@ async def test_process_message_uses_context_chat_id_for_runtime_prompt(tmp_path:
 
 def test_set_tool_context_uses_effective_key_for_spawn_tool(tmp_path: Path) -> None:
     loop = _make_full_loop(tmp_path)
-    spawn_tool = loop.tools.get("spawn")
+    spawn_tool = loop.tools.get("spawn_tool")
     assert spawn_tool is not None
 
     loop._set_tool_context(
@@ -392,12 +392,12 @@ async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -
                         {
                             "id": "call_done",
                             "type": "function",
-                            "function": {"name": "read_file", "arguments": "{}"},
+                            "function": {"name": "read_file_tool", "arguments": "{}"},
                         },
                         {
                             "id": "call_pending",
                             "type": "function",
-                            "function": {"name": "exec", "arguments": "{}"},
+                            "function": {"name": "exec_tool", "arguments": "{}"},
                         },
                     ],
                 },
@@ -405,7 +405,7 @@ async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -
                     {
                         "role": "tool",
                         "tool_call_id": "call_done",
-                        "name": "read_file",
+                        "name": "read_file_tool",
                         "content": "ok",
                     }
                 ],
@@ -413,7 +413,7 @@ async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -
                     {
                         "id": "call_pending",
                         "type": "function",
-                        "function": {"name": "exec", "arguments": "{}"},
+                        "function": {"name": "exec_tool", "arguments": "{}"},
                     }
                 ],
             },
@@ -463,10 +463,10 @@ async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -
     ]
     assert msgs[0] == {"role": "user", "content": "keep progress"}
     assert msgs[1] == {"role": "assistant", "content": "working"}
-    assert msgs[2] == {"role": "tool", "tool_call_id": "call_done", "name": "read_file", "content": "ok"}
+    assert msgs[2] == {"role": "tool", "tool_call_id": "call_done", "name": "read_file_tool", "content": "ok"}
     assert msgs[3]["role"] == "tool"
     assert msgs[3]["tool_call_id"] == "call_pending"
-    assert msgs[3]["name"] == "exec"
+    assert msgs[3]["name"] == "exec_tool"
     assert msgs[3]["content"].startswith("====== Message Time:")
     assert msgs[3]["content"].endswith("Error: Task interrupted before this tool finished.")
     assert msgs[4] == {"role": "user", "content": "continue here"}
@@ -644,7 +644,7 @@ def test_set_tool_context_passes_thread_session_key_to_spawn(tmp_path: Path) -> 
         session_key="slack:C123:1700.42",
     )
 
-    spawn_tool = loop.tools.get("spawn")
+    spawn_tool = loop.tools.get("spawn_tool")
     assert spawn_tool is not None
     assert spawn_tool._session_key.get() == "slack:C123:1700.42"
 

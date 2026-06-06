@@ -29,14 +29,14 @@ class TestToolCallDB:
     def test_insert_and_query(self, db):
         db.insert_tool_call(
             "s1", iteration=1, turn=1,
-            tool_name="read_file",
+            tool_name="read_file_tool",
             params={"path": "a.txt"},
             result="hello world",
             success=True,
         )
         db.insert_tool_call(
             "s1", iteration=1, turn=2,
-            tool_name="exec",
+            tool_name="exec_tool",
             params={"command": "ls"},
             result="Error: boom",
             success=False,
@@ -58,13 +58,13 @@ class TestToolCallDB:
         rows_s1 = db.query_tool_calls(session_key="s1", limit=10)
         assert len(rows_s1) == 2
         # query by tool_name
-        rows_exec = db.query_tool_calls(tool_name="exec", limit=10)
+        rows_exec = db.query_tool_calls(tool_name="exec_tool", limit=10)
         assert len(rows_exec) == 1
         assert rows_exec[0]["error"] == "boom"
         # query failures only
         rows_fail = db.query_tool_calls(success=False, limit=10)
         assert len(rows_fail) == 1
-        assert rows_fail[0]["tool_name"] == "exec"
+        assert rows_fail[0]["tool_name"] == "exec_tool"
         # query min_result_size
         rows_large = db.query_tool_calls(min_result_size=5, limit=10)
         assert all(len(r["result"] or "") >= 5 for r in rows_large)
@@ -88,7 +88,7 @@ class TestToolCallLogTool:
     async def test_format_success(self, db):
         db.insert_tool_call(
             "s1", iteration=3, turn=5,
-            tool_name="read_file",
+            tool_name="read_file_tool",
             params={"path": "foo.txt"},
             result="file content here",
             success=True,
@@ -105,7 +105,7 @@ class TestToolCallLogTool:
     async def test_format_failure(self, db):
         db.insert_tool_call(
             "s2", iteration=1, turn=2,
-            tool_name="exec",
+            tool_name="exec_tool",
             params={"command": "rm -rf /"},
             result="Error: Permission denied",
             success=False,

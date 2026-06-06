@@ -61,7 +61,7 @@ class TestStopPreservesContext:
                     "role": "assistant",
                     "content": "Let me search for that.",
                     "tool_calls": [{"id": "tc_1", "type": "function",
-                                    "function": {"name": "web_search", "arguments": "{}"}}],
+                                    "function": {"name": "web_search_tool", "arguments": "{}"}}],
                 },
                 "completed_tool_results": [
                     {"role": "tool", "tool_call_id": "tc_1",
@@ -124,7 +124,7 @@ async def test_dispatch_cancellation_restores_checkpoint():
                         {
                             "id": "tc_1",
                             "type": "function",
-                            "function": {"name": "web_search", "arguments": "{}"},
+                            "function": {"name": "web_search_tool", "arguments": "{}"},
                         }
                     ],
                 },

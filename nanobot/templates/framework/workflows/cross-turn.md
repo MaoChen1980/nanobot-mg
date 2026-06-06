@@ -4,7 +4,7 @@
 
 ## Independent Subtasks
 
-多个项目、多个无关模块 → 用 `spawn` 并行派子代理。每个子代理只探索一个项目，输出中间文件，最后汇总。
+多个项目、多个无关模块 → 用 `spawn_tool` 并行派子代理。每个子代理只探索一个项目，输出中间文件，最后汇总。
 
 ## Dependent Subtasks
 

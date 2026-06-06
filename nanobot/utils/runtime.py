@@ -62,11 +62,11 @@ def build_length_recovery_message() -> dict[str, str]:
 
 def external_lookup_signature(tool_name: str, arguments: dict[str, Any]) -> str | None:
     """Stable signature for repeated external lookups we want to throttle."""
-    if tool_name == "web_fetch":
+    if tool_name == "web_fetch_tool":
         url = str(arguments.get("url") or "").strip()
         if url:
             return f"web_fetch:{url.lower()}"
-    if tool_name == "web_search":
+    if tool_name == "web_search_tool":
         query = str(arguments.get("query") or arguments.get("search_term") or "").strip()
         if query:
             return f"web_search:{query.lower()}"

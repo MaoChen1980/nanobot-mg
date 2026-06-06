@@ -9,7 +9,7 @@ from nanobot.providers.base import LLMResponse, ToolCallRequest
 
 
 class _ContextRecordingTool:
-    name = "cron"
+    name = "cron_tool"
     concurrency_safe = False
 
     def __init__(self) -> None:
@@ -38,12 +38,12 @@ class _Tools:
         self.tool = tool
 
     def get(self, name: str):
-        return self.tool if name == "cron" else None
+        return self.tool if name == "cron_tool" else None
 
     def get_definitions(self) -> list:
         return []
 
     def prepare_call(self, name: str, arguments: dict):
-        return (self.tool, arguments, None) if name == "cron" else (None, arguments, None)
+        return (self.tool, arguments, None) if name == "cron_tool" else (None, arguments, None)
 
 

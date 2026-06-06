@@ -24,7 +24,7 @@ from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 class DiagnoseTool(_FsTool):
     """Diagnose errors by searching code and checking recent changes."""
 
-    name = "diagnose"
+    name = "diagnose_tool"
     read_only = True
 
     description = (

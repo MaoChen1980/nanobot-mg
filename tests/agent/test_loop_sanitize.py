@@ -77,7 +77,7 @@ class TestSanitizePersistedBlocks:
 
     def test_non_matching_blocks_passthrough(self):
         loop = _make_light_loop()
-        blocks = [{"type": "tool_use", "name": "read_file"}]
+        blocks = [{"type": "tool_use", "name": "read_file_tool"}]
         result = AgentLoop._sanitize_persisted_blocks(loop, blocks)
         assert len(result) == 1
         assert result[0]["type"] == "tool_use"

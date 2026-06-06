@@ -131,7 +131,7 @@ class EditFileTool(_FsTool):
     _MAX_EDIT_FILE_SIZE = 1024 * 1024 * 1024  # 1 GiB
     _MARKDOWN_EXTS = frozenset({".md", ".mdx", ".markdown"})
 
-    name = "edit_file"
+    name = "edit_file_tool"
 
     description = (
         "**Purpose**: Modify file content via text matching or line number ranges.\n\n"

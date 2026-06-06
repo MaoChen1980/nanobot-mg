@@ -24,7 +24,7 @@ class ScanProjectTool(Tool):
     def __init__(self, loop: AgentLoop) -> None:
         self._loop = loop
 
-    name = "scan_project"
+    name = "scan_project_tool"
 
     @property
     def description(self) -> str:

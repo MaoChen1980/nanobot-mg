@@ -16,7 +16,7 @@ class ListSubagentsTool(Tool):
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
 
-    name = "list_subagents"
+    name = "list_subagents_tool"
 
     @property
     def description(self) -> str:

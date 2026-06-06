@@ -24,7 +24,7 @@ class RespondToSubagentTool(Tool):
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
 
-    name = "respond_to_subagent"
+    name = "respond_to_subagent_tool"
 
     @property
     def description(self) -> str:

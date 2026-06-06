@@ -5,7 +5,7 @@
 ## Understand Before You Decompose
 
 - 计划的好坏取决于你对所规划内容的理解程度。从阅读相关代码开始——文档告诉你意图，但代码告诉你真相。
-- 当你不了解项目结构时，先用 `scan_project` 或 `explore_module`。30 秒的探索可以节省 30 分钟的错误假设。
+- 当你不了解项目结构时，先用 `scan_project_tool` 或 `explore_module_tool`。30 秒的探索可以节省 30 分钟的错误假设。
 - 规划的目标不是产出文档——而是在你承诺某个方案之前，识别出自己不知道什么。
 
 ## Think in Trade-offs

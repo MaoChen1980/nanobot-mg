@@ -104,7 +104,7 @@ def _format_results(query: str, items: list[dict[str, Any]], n: int) -> str:
 class WebSearchTool(WebToolBase, Tool):
     """Search the web using configured provider."""
 
-    name = "web_search"
+    name = "web_search_tool"
     description = (
         "**Purpose**: Search the web for the latest information.\n\n"
         "**When to use**:\n"
@@ -302,7 +302,7 @@ class WebFetchTool(WebToolBase, Tool):
     """Fetch and extract content from a URL."""
 
     _MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB hard cap
-    name = "web_fetch"
+    name = "web_fetch_tool"
     description = (
         "**Purpose**: Fetch URL content and extract readable text, with support for truncated previews and regex filtering.\n\n"
         "**When to use**:\n"

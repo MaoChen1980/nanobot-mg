@@ -33,7 +33,7 @@ def _fake_chat_response(content: str = "ok") -> SimpleNamespace:
 def _fake_tool_call_response() -> SimpleNamespace:
     """Build a minimal chat response that includes Gemini-style extra_content."""
     function = SimpleNamespace(
-        name="exec",
+        name="exec_tool",
         arguments='{"cmd":"ls"}',
         provider_specific_fields={"inner": "value"},
     )
@@ -692,11 +692,11 @@ def test_openai_compat_keeps_tool_calls_after_consecutive_assistant_messages() -
                 {
                     "id": "call_function_akxp3wqzn7ph_1",
                     "type": "function",
-                    "function": {"name": "exec", "arguments": "{}"},
+                    "function": {"name": "exec_tool", "arguments": "{}"},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_function_akxp3wqzn7ph_1", "name": "exec", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_function_akxp3wqzn7ph_1", "name": "exec_tool", "content": "ok"},
         {"role": "user", "content": "多少star了呢"},
     ])
 
@@ -719,11 +719,11 @@ def test_openai_compat_stringifies_dict_tool_arguments() -> None:
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "exec", "arguments": {"cmd": "ls -la"}},
+                    "function": {"name": "exec_tool", "arguments": {"cmd": "ls -la"}},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_1", "name": "exec", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_1", "name": "exec_tool", "content": "ok"},
         {"role": "user", "content": "done"},
     ])
 
@@ -743,11 +743,11 @@ def test_openai_compat_repairs_non_json_tool_arguments_string() -> None:
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "exec", "arguments": "{'cmd': 'pwd'}"},
+                    "function": {"name": "exec_tool", "arguments": "{'cmd': 'pwd'}"},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_1", "name": "exec", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_1", "name": "exec_tool", "content": "ok"},
         {"role": "user", "content": "done"},
     ])
 
@@ -767,11 +767,11 @@ def test_openai_compat_defaults_missing_tool_arguments_to_empty_object() -> None
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "exec"},
+                    "function": {"name": "exec_tool"},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_1", "name": "exec", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_1", "name": "exec_tool", "content": "ok"},
         {"role": "user", "content": "done"},
     ])
 
@@ -906,7 +906,7 @@ def test_deepseek_backfills_reasoning_content_on_legacy_tool_call_messages() -> 
     messages = [
         {"role": "user", "content": "search for news"},
         {"role": "assistant", "content": "", "tool_calls": [
-            {"id": "tc1", "type": "function", "function": {"name": "web_search", "arguments": "{}"}}
+            {"id": "tc1", "type": "function", "function": {"name": "web_search_tool", "arguments": "{}"}}
         ]},
         {"role": "tool", "tool_call_id": "tc1", "content": "result"},
         {"role": "assistant", "content": "Here are the results."},
@@ -931,7 +931,7 @@ def test_backfill_touches_messages_when_thinking_uses_default() -> None:
     messages = [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "", "tool_calls": [
-            {"id": "tc1", "type": "function", "function": {"name": "web_search", "arguments": "{}"}}
+            {"id": "tc1", "type": "function", "function": {"name": "web_search_tool", "arguments": "{}"}}
         ]},
         {"role": "tool", "tool_call_id": "tc1", "content": "result"},
         {"role": "user", "content": "thanks"},

@@ -17,20 +17,20 @@ class TestToolHintKnownTools:
     """Test registered tool types produce correct formatted output."""
 
     def test_read_file_short_path(self):
-        result = _hint([_tc("read_file", {"path": "foo.txt"})])
+        result = _hint([_tc("read_file_tool", {"path": "foo.txt"})])
         assert result == 'read foo.txt'
 
     def test_read_file_long_path(self):
-        result = _hint([_tc("read_file", {"path": "/home/user/.local/share/uv/tools/nanobot/agent/loop.py"})])
+        result = _hint([_tc("read_file_tool", {"path": "/home/user/.local/share/uv/tools/nanobot/agent/loop.py"})])
         assert "loop.py" in result
         assert "read " in result
 
     def test_write_file_shows_path_not_content(self):
-        result = _hint([_tc("write_file", {"path": "docs/api.md", "content": "# API Reference\n\nLong content..."})])
+        result = _hint([_tc("write_file_tool", {"path": "docs/api.md", "content": "# API Reference\n\nLong content..."})])
         assert result == "write docs/api.md"
 
     def test_edit_shows_path(self):
-        result = _hint([_tc("edit_file", {"file_path": "src/main.py", "old_string": "x", "new_string": "y"})])
+        result = _hint([_tc("edit_file_tool", {"file_path": "src/main.py", "old_string": "x", "new_string": "y"})])
         assert "main.py" in result
         assert "edit " in result
 
@@ -43,39 +43,39 @@ class TestToolHintKnownTools:
         assert result == 'grep "TODO|FIXME"'
 
     def test_exec_shows_command(self):
-        result = _hint([_tc("exec", {"command": "npm install typescript"})])
+        result = _hint([_tc("exec_tool", {"command": "npm install typescript"})])
         assert result == "$ npm install typescript"
 
     def test_exec_truncates_long_command(self):
         cmd = "cd /very/long/path && cat file && echo done && sleep 1 && ls -la"
-        result = _hint([_tc("exec", {"command": cmd})])
+        result = _hint([_tc("exec_tool", {"command": cmd})])
         assert result.startswith("$ ")
         assert len(result) <= 50  # reasonable limit
 
     def test_exec_abbreviates_paths_in_command(self):
         """Windows paths in exec commands should be folded, not blindly truncated."""
         cmd = "cd D:\\Documents\\GitHub\\nanobot\\.worktree\\tomain\\nanobot && git diff origin/main...pr-2706 --name-only 2>&1"
-        result = _hint([_tc("exec", {"command": cmd})])
+        result = _hint([_tc("exec_tool", {"command": cmd})])
         assert "\u2026/" in result  # path should be folded with …/
         assert "worktree" not in result  # middle segments should be collapsed
 
     def test_exec_abbreviates_linux_paths(self):
         """Unix absolute paths in exec commands should be folded."""
         cmd = "cd /home/user/projects/nanobot/.worktree/tomain && make build"
-        result = _hint([_tc("exec", {"command": cmd})])
+        result = _hint([_tc("exec_tool", {"command": cmd})])
         assert "\u2026/" in result
         assert "projects" not in result
 
     def test_exec_abbreviates_home_paths(self):
         """~/ paths in exec commands should be folded."""
         cmd = "cd ~/projects/nanobot/workspace && pytest tests/"
-        result = _hint([_tc("exec", {"command": cmd})])
+        result = _hint([_tc("exec_tool", {"command": cmd})])
         assert "\u2026/" in result
 
     def test_exec_abbreviates_quoted_linux_paths_with_spaces(self):
         """Quoted Unix paths with spaces should still be folded."""
         cmd = 'cd "/home/user/My Documents/project" && pytest tests/'
-        result = _hint([_tc("exec", {"command": cmd})])
+        result = _hint([_tc("exec_tool", {"command": cmd})])
         assert "\u2026/" in result
         assert '"/home/user/My Documents/project"' not in result
         assert '"' in result
@@ -83,28 +83,28 @@ class TestToolHintKnownTools:
     def test_exec_abbreviates_quoted_windows_paths_with_spaces(self):
         """Quoted Windows paths with spaces should still be folded."""
         cmd = 'cd "C:/Program Files/Git/project" && git status'
-        result = _hint([_tc("exec", {"command": cmd})])
+        result = _hint([_tc("exec_tool", {"command": cmd})])
         assert "\u2026/" in result
         assert '"C:/Program Files/Git/project"' not in result
         assert '"' in result
 
     def test_exec_short_command_unchanged(self):
-        result = _hint([_tc("exec", {"command": "npm install typescript"})])
+        result = _hint([_tc("exec_tool", {"command": "npm install typescript"})])
         assert result == "$ npm install typescript"
 
     def test_exec_chained_commands_truncated_not_mid_path(self):
         """Long chained commands should truncate preserving abbreviated paths."""
         cmd = "cd D:\\Documents\\GitHub\\project && npm run build && npm test"
-        result = _hint([_tc("exec", {"command": cmd})])
+        result = _hint([_tc("exec_tool", {"command": cmd})])
         assert "\u2026/" in result  # path folded
         assert "npm" in result  # chained command still visible
 
     def test_web_search(self):
-        result = _hint([_tc("web_search", {"query": "Claude 4 vs GPT-4"})])
+        result = _hint([_tc("web_search_tool", {"query": "Claude 4 vs GPT-4"})])
         assert result == 'search "Claude 4 vs GPT-4"'
 
     def test_web_fetch(self):
-        result = _hint([_tc("web_fetch", {"url": "https://example.com/page"})])
+        result = _hint([_tc("web_fetch_tool", {"url": "https://example.com/page"})])
         assert result == "fetch https://example.com/page"
 
 
@@ -170,9 +170,9 @@ class TestToolHintFolding:
 
     def test_three_consecutive_different_args_not_folded(self):
         calls = [
-            _tc("read_file", {"path": "a.py"}),
-            _tc("read_file", {"path": "b.py"}),
-            _tc("read_file", {"path": "c.py"}),
+            _tc("read_file_tool", {"path": "a.py"}),
+            _tc("read_file_tool", {"path": "b.py"}),
+            _tc("read_file_tool", {"path": "c.py"}),
         ]
         result = _hint(calls)
         assert "\u00d7" not in result
@@ -180,7 +180,7 @@ class TestToolHintFolding:
     def test_different_tools_not_folded(self):
         calls = [
             _tc("grep", {"pattern": "TODO"}),
-            _tc("read_file", {"path": "a.py"}),
+            _tc("read_file_tool", {"path": "a.py"}),
         ]
         result = _hint(calls)
         assert "\u00d7" not in result
@@ -188,7 +188,7 @@ class TestToolHintFolding:
     def test_interleaved_same_tools_not_folded(self):
         calls = [
             _tc("grep", {"pattern": "a"}),
-            _tc("read_file", {"path": "f.py"}),
+            _tc("read_file_tool", {"path": "f.py"}),
             _tc("grep", {"pattern": "b"}),
         ]
         result = _hint(calls)
@@ -201,7 +201,7 @@ class TestToolHintMultipleCalls:
     def test_two_different_tools(self):
         calls = [
             _tc("grep", {"pattern": "TODO"}),
-            _tc("read_file", {"path": "main.py"}),
+            _tc("read_file_tool", {"path": "main.py"}),
         ]
         result = _hint(calls)
         assert 'grep "TODO"' in result
@@ -214,13 +214,13 @@ class TestToolHintEdgeCases:
 
     def test_known_tool_empty_list_args(self):
         """C1/G1: Empty list arguments should not crash."""
-        result = _hint([_tc("read_file", [])])
-        assert result == "read_file"
+        result = _hint([_tc("read_file_tool", [])])
+        assert result == "read_file_tool"
 
     def test_known_tool_none_args(self):
         """G2: None arguments should not crash."""
-        result = _hint([_tc("read_file", None)])
-        assert result == "read_file"
+        result = _hint([_tc("read_file_tool", None)])
+        assert result == "read_file_tool"
 
     def test_fallback_empty_list_args(self):
         """C1: Empty list args in fallback should not crash."""
@@ -234,7 +234,7 @@ class TestToolHintEdgeCases:
 
     def test_list_dir_registered(self):
         """S2: list_dir should use 'ls' format."""
-        result = _hint([_tc("list_dir", {"path": "/tmp"})])
+        result = _hint([_tc("list_dir_tool", {"path": "/tmp"})])
         assert result == "ls /tmp"
 
 
@@ -244,11 +244,11 @@ class TestToolHintMixedFolding:
     def test_read_read_grep_grep_read(self):
         """All different args — each hint listed separately."""
         calls = [
-            _tc("read_file", {"path": "a.py"}),
-            _tc("read_file", {"path": "b.py"}),
+            _tc("read_file_tool", {"path": "a.py"}),
+            _tc("read_file_tool", {"path": "b.py"}),
             _tc("grep", {"pattern": "x"}),
             _tc("grep", {"pattern": "y"}),
-            _tc("read_file", {"path": "c.py"}),
+            _tc("read_file_tool", {"path": "c.py"}),
         ]
         result = _hint(calls)
         assert "\u00d7" not in result

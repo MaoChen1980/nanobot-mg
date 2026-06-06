@@ -451,7 +451,7 @@ Global settings that apply to all channels. Configure under the `channels` secti
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `sendProgress` | `true` | Stream agent's text progress to the channel |
-| `sendToolHints` | `false` | Stream tool-call hints (e.g. `read_file("…")`) |
+| `sendToolHints` | `false` | Stream tool-call hints (e.g. `read_file_tool("…")`) |
 | `sendMaxRetries` | `3` | Max delivery attempts per outbound message, including the initial send (0-10 configured, minimum 1 actual attempt) |
 | `transcriptionProvider` | `"groq"` | Voice transcription backend: `"groq"` (free tier, default) or `"openai"`. API key is auto-resolved from the matching provider config. |
 | `transcriptionLanguage` | `null` | Optional ISO-639-1 language hint for audio transcription, e.g. `"en"`, `"ko"`, `"ja"`. |
@@ -488,7 +488,7 @@ nanobot supports multiple web search providers. Configure in `~/.nanobot/config.
 
 By default, web tools are enabled and web search uses `duckduckgo`, so search works out of the box without an API key.
 
-If you want to disable all built-in web tools entirely, set `tools.web.enable` to `false`. This removes both `web_search` and `web_fetch` from the tool list sent to the LLM.
+If you want to disable all built-in web tools entirely, set `tools.web.enable` to `false`. This removes both `web_search_tool` and `web_fetch_tool` from the tool list sent to the LLM.
 
 If you need to allow trusted private ranges such as Tailscale / CGNAT addresses, you can explicitly exempt them from SSRF blocking with `tools.ssrfWhitelist`:
 
@@ -605,7 +605,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enable` | boolean | `true` | Enable or disable all built-in web tools (`web_search` + `web_fetch`) |
+| `enable` | boolean | `true` | Enable or disable all built-in web tools (`web_search_tool` + `web_fetch_tool`) |
 | `proxy` | string or null | `null` | Proxy for all web requests, for example `http://127.0.0.1:7890` |
 
 ### `tools.web.search`
@@ -676,14 +676,14 @@ Use `enabledTools` to register only a subset of tools from an MCP server:
       "filesystem": {
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
-        "enabledTools": ["read_file", "mcp_filesystem_write_file"]
+        "enabledTools": ["read_file_tool", "mcp_filesystem_write_file"]
       }
     }
   }
 }
 ```
 
-`enabledTools` accepts either the raw MCP tool name (for example `read_file`) or the wrapped nanobot tool name (for example `mcp_filesystem_write_file`).
+`enabledTools` accepts either the raw MCP tool name (for example `read_file_tool`) or the wrapped nanobot tool name (for example `mcp_filesystem_write_file`).
 
 - Omit `enabledTools`, or set it to `["*"]`, to register all tools.
 - Set `enabledTools` to `[]` to register no tools from that server.
@@ -704,7 +704,7 @@ MCP tools are automatically discovered and registered on startup. The LLM can us
 |--------|---------|-------------|
 | `tools.restrictToWorkspace` | `false` | When `true`, restricts **all** agent tools (shell, file read/write/edit, list) to the workspace directory. Prevents path traversal and out-of-scope access. |
 | `tools.exec.sandbox` | `""` | Sandbox backend for shell commands. Set to `"bwrap"` to wrap exec calls in a [bubblewrap](https://github.com/containers/bubblewrap) sandbox — the process can only see the workspace (read-write) and media directory (read-only); config files and API keys are hidden. Automatically enables `restrictToWorkspace` for file tools. **Linux only** — requires `bwrap` installed (`apt install bubblewrap`; pre-installed in the Docker image). Not available on macOS or Windows (bwrap depends on Linux kernel namespaces). |
-| `tools.exec.enable` | `true` | When `false`, the shell `exec` tool is not registered at all. Use this to completely disable shell command execution. |
+| `tools.exec.enable` | `true` | When `false`, the shell `exec_tool` is not registered at all. Use this to completely disable shell command execution. |
 | `tools.exec.pathAppend` | `""` | Extra directories to append to `PATH` when running shell commands (e.g. `/usr/sbin` for `ufw`). |
 | `channels.*.allowFrom` | `[]` (deny all) | Whitelist of user IDs. Empty denies all; use `["*"]` to allow everyone. |
 

@@ -144,7 +144,7 @@ class CronTool(Tool):
         dt = datetime.fromtimestamp(ms / 1000, tz=ZoneInfo(tz_name))
         return _format_datetime(dt)
 
-    name = "cron"
+    name = "cron_tool"
 
     @property
     def description(self) -> str:

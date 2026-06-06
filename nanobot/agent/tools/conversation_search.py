@@ -26,7 +26,7 @@ class ConversationSearchTool(Tool):
     def __init__(self, store: MemoryStore):
         self._store = store
 
-    name = "conversation_search"
+    name = "conversation_search_tool"
     read_only = True
 
     description = (
@@ -35,20 +35,20 @@ class ConversationSearchTool(Tool):
         '- The user says "we discussed this before", "I mentioned it last time", "we did this earlier"\n'
         "- You feel like you've seen some information before but can't recall it clearly\n"
         "- You need exact keyword matching against historical records\n\n"
-        "**Difference from memory_search**:\n"
-        "- memory_search searches the knowledge base (semantic matching)\n"
-        "- conversation_search searches conversation history (keyword substring match + time filter)\n\n"
+        "**Difference from memory_search_tool**:\n"
+        "- memory_search_tool searches the knowledge base (semantic matching)\n"
+        "- conversation_search_tool searches conversation history (keyword substring match + time filter)\n\n"
         "**Parameters**:\n"
         "- keyword — exact substring match, case-insensitive\n"
         "- start/end — filter by time range (YYYY-MM-DD format)\n"
         "- query — alias for keyword, provide this or keyword\n\n"
         "**Note**:\n"
-        "- Does not search goal/event/lesson tables (use read_file(\"tasks/TREE.md\") to check goal progress)\n"
+        "- Does not search goal/event/lesson tables (use read_file_tool(\"tasks/TREE.md\") to check goal progress)\n"
         "- Keywords use substring matching — 'deploy' will match 'deployment', 'deploying', etc.\n\n"
         "**Examples**:\n"
-        "  conversation_search(keyword='docker')\n"
-        "  conversation_search(keyword='deployment issue', start='2026-01-01')\n"
-        "  conversation_search(query='error', start='2026-03-01', end='2026-03-15')"
+        "  conversation_search_tool(keyword='docker')\n"
+        "  conversation_search_tool(keyword='deployment issue', start='2026-01-01')\n"
+        "  conversation_search_tool(query='error', start='2026-03-01', end='2026-03-15')"
     )
 
     async def execute(

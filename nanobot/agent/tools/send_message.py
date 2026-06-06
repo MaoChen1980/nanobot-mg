@@ -36,7 +36,7 @@ class SendMessageTool(Tool):
         self._subagent_id = subagent_id
         self._subagent_label = subagent_label
 
-    name = "send_message"
+    name = "send_message_tool"
 
     @property
     def description(self) -> str:

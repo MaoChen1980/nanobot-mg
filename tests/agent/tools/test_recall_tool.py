@@ -34,11 +34,11 @@ class TestMemorySearchToolBasic:
 
     def test_tool_name(self, tmp_path: Path):
         tool = MemorySearchTool(_make_store(tmp_path))
-        assert tool.name == "memory_search"
+        assert tool.name == "memory_search_tool"
 
     def test_tool_description(self, tmp_path: Path):
         tool = MemorySearchTool(_make_store(tmp_path))
-        assert "memory_search" in tool.description or "知识库" in tool.description
+        assert "memory_search_tool" in tool.description or "知识库" in tool.description
 
     def test_tool_is_read_only(self, tmp_path: Path):
         tool = MemorySearchTool(_make_store(tmp_path))
@@ -108,11 +108,11 @@ class TestConversationSearchToolBasic:
 
     def test_tool_name(self, tmp_path: Path):
         tool = ConversationSearchTool(_make_store(tmp_path))
-        assert tool.name == "conversation_search"
+        assert tool.name == "conversation_search_tool"
 
     def test_tool_description(self, tmp_path: Path):
         tool = ConversationSearchTool(_make_store(tmp_path))
-        assert "conversation_search" in tool.description or "对话" in tool.description
+        assert "conversation_search_tool" in tool.description or "对话" in tool.description
 
     def test_tool_is_read_only(self, tmp_path: Path):
         tool = ConversationSearchTool(_make_store(tmp_path))

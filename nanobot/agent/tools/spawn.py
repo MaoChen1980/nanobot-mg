@@ -42,7 +42,7 @@ class SpawnTool(Tool):
         self._origin_chat_id.set(chat_id)
         self._session_key.set(effective_key or f"{channel}:{chat_id}")
 
-    name = "spawn"
+    name = "spawn_tool"
 
     @property
     def description(self) -> str:

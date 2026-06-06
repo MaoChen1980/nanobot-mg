@@ -400,7 +400,7 @@ class HubTCPServer:
         ) -> None:
             # User-facing tools must not leak any progress notifications into
             # the chat — their output IS the response.
-            _user_tools = frozenset(["message", "ask_user"])
+            _user_tools = frozenset(["message_tool"])
 
             has_non_user_event = False
             if tool_events:

@@ -27,7 +27,7 @@ class RequestOrchestratorInputTool(Tool):
         self._subagent_id = subagent_id
         self._subagent_label = subagent_label
 
-    name = "request_orchestrator_input"
+    name = "request_orchestrator_input_tool"
 
     @property
     def description(self) -> str:

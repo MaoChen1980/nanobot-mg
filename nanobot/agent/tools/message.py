@@ -105,7 +105,7 @@ class MessageTool(Tool):
     def _sent_in_turn(self, value: bool) -> None:
         self._sent_in_turn_var.set(value)
 
-    name = "message"
+    name = "message_tool"
 
     description = (
         "**Purpose**: Send a message to the user, then continue working. "

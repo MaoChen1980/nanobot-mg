@@ -188,7 +188,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
         if call_count == 1:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id="tc1", name="read_file", arguments={"path": "a.txt"})],
+                tool_calls=[ToolCallRequest(id="tc1", name="read_file_tool", arguments={"path": "a.txt"})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         if call_count == 2:
@@ -196,7 +196,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
         if call_count == 3:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id="tc2", name="read_file", arguments={"path": "b.txt"})],
+                tool_calls=[ToolCallRequest(id="tc2", name="read_file_tool", arguments={"path": "b.txt"})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         return LLMResponse(
@@ -212,7 +212,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
         return "file content"
 
     tool_registry = MagicMock()
-    tool_registry.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file"}}]
+    tool_registry.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file_tool"}}]
     tool_registry.execute = AsyncMock(side_effect=fake_tool)
 
     runner = AgentRunner(provider)
@@ -228,7 +228,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
     assert result.stop_reason == "completed"
     # 4 calls (no verification gate)
     assert call_count == 4
-    assert "read_file" in result.tools_used
+    assert "read_file_tool" in result.tools_used
 
 
 
@@ -511,11 +511,11 @@ async def test_backfill_missing_tool_results_inserts_error():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_a", "type": "function", "function": {"name": "exec", "arguments": "{}"}},
-                {"id": "call_b", "type": "function", "function": {"name": "read_file", "arguments": "{}"}},
+                {"id": "call_a", "type": "function", "function": {"name": "exec_tool", "arguments": "{}"}},
+                {"id": "call_b", "type": "function", "function": {"name": "read_file_tool", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_a", "name": "exec", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_a", "name": "exec_tool", "content": "ok"},
     ]
     result = AgentRunner._backfill_missing_tool_results(messages)
     tool_msgs = [m for m in result if m.get("role") == "tool"]
@@ -523,7 +523,7 @@ async def test_backfill_missing_tool_results_inserts_error():
     backfilled = [m for m in tool_msgs if m.get("tool_call_id") == "call_b"]
     assert len(backfilled) == 1
     assert backfilled[0]["content"] == _BACKFILL_CONTENT
-    assert backfilled[0]["name"] == "read_file"
+    assert backfilled[0]["name"] == "read_file_tool"
 
 
 def test_drop_orphan_tool_results_removes_unmatched_tool_messages():
@@ -536,11 +536,11 @@ def test_drop_orphan_tool_results_removes_unmatched_tool_messages():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_ok", "type": "function", "function": {"name": "read_file", "arguments": "{}"}},
+                {"id": "call_ok", "type": "function", "function": {"name": "read_file_tool", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file", "content": "ok"},
-        {"role": "tool", "tool_call_id": "call_orphan", "name": "exec", "content": "stale"},
+        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file_tool", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_orphan", "name": "exec_tool", "content": "stale"},
         {"role": "assistant", "content": "after tool"},
     ]
 
@@ -553,10 +553,10 @@ def test_drop_orphan_tool_results_removes_unmatched_tool_messages():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_ok", "type": "function", "function": {"name": "read_file", "arguments": "{}"}},
+                {"id": "call_ok", "type": "function", "function": {"name": "read_file_tool", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file_tool", "content": "ok"},
         {"role": "assistant", "content": "after tool"},
     ]
 
@@ -572,10 +572,10 @@ async def test_backfill_noop_when_complete():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_x", "type": "function", "function": {"name": "exec", "arguments": "{}"}},
+                {"id": "call_x", "type": "function", "function": {"name": "exec_tool", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_x", "name": "exec", "content": "done"},
+        {"role": "tool", "tool_call_id": "call_x", "name": "exec_tool", "content": "done"},
         {"role": "assistant", "content": "all good"},
     ]
     result = AgentRunner._backfill_missing_tool_results(messages)
@@ -607,8 +607,8 @@ async def test_runner_tool_error_preserves_tool_results_in_messages():
         return LLMResponse(
             content=None,
             tool_calls=[
-                ToolCallRequest(id="tc1", name="read_file", arguments={"path": "a"}),
-                ToolCallRequest(id="tc2", name="exec", arguments={"cmd": "bad"}),
+                ToolCallRequest(id="tc1", name="read_file_tool", arguments={"path": "a"}),
+                ToolCallRequest(id="tc2", name="exec_tool", arguments={"cmd": "bad"}),
             ],
             usage={},
         )
@@ -634,17 +634,23 @@ async def test_runner_tool_error_preserves_tool_results_in_messages():
         initial_messages=[{"role": "user", "content": "do stuff"}],
         tools=tools,
         model="test-model",
-        max_iterations=1,
+        max_iterations=2,
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
         fail_on_tool_error=True,
     ))
 
-    assert result.stop_reason == "tool_error"
-    # Both tool results must be in messages even though tc2 had a fatal error.
+    # Tool error now feeds back to LLM instead of breaking — the loop
+    # continues until max_iterations since the mock LLM keeps returning
+    # the same tool calls.
+    assert result.stop_reason == "max_iterations"
+    # Both tool results from each iteration must still be in messages
+    # even though tc2 had a fatal error. 2 iterations × 2 tool calls = 4 results.
     tool_msgs = [m for m in result.messages if m.get("role") == "tool"]
-    assert len(tool_msgs) == 2
+    assert len(tool_msgs) == 4
     assert tool_msgs[0]["tool_call_id"] == "tc1"
     assert tool_msgs[1]["tool_call_id"] == "tc2"
+    assert tool_msgs[2]["tool_call_id"] == "tc1"
+    assert tool_msgs[3]["tool_call_id"] == "tc2"
     # The assistant message with tool_calls must precede the tool results.
     asst_tc_idx = next(
         i for i, m in enumerate(result.messages)
@@ -1027,6 +1033,66 @@ async def test_dispatch_republishes_leftover_queue_messages(tmp_path):
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# Tests for _detect_tool_names_in_content
+# ---------------------------------------------------------------------------
+
+
+def test_detect_no_tool_names() -> None:
+    from nanobot.agent.runner import _detect_tool_names_in_content
+    assert _detect_tool_names_in_content("Hello, how can I help you?") == []
+    assert _detect_tool_names_in_content("") == []
+    assert _detect_tool_names_in_content("Let me read the file for you.") == []
+
+
+def test_detect_single_tool_name() -> None:
+    from nanobot.agent.runner import _detect_tool_names_in_content
+    result = _detect_tool_names_in_content("I will use exec_tool to run the command")
+    assert result == ["exec_tool"]
+
+
+def test_detect_multiple_tool_names() -> None:
+    from nanobot.agent.runner import _detect_tool_names_in_content
+    result = _detect_tool_names_in_content(
+        "First read_file_tool, then exec_tool, finally write_file_tool"
+    )
+    assert set(result) == {"read_file_tool", "exec_tool", "write_file_tool"}
+
+
+def test_detect_case_insensitive() -> None:
+    from nanobot.agent.runner import _detect_tool_names_in_content
+    result = _detect_tool_names_in_content("Use EXEC_TOOL here")
+    assert result == ["exec_tool"]
+
+
+def test_detect_no_substring_false_positive() -> None:
+    """send_message_tool should match but message_tool should NOT separately match."""
+    from nanobot.agent.runner import _detect_tool_names_in_content
+    result = _detect_tool_names_in_content("I will use send_message_tool to send")
+    assert result == ["send_message_tool"]
+    assert "message_tool" not in result
+
+
+def test_detect_substring_safety_spawn() -> None:
+    """spawn_many_tool should match but spawn_tool should NOT separately match."""
+    from nanobot.agent.runner import _detect_tool_names_in_content
+    result = _detect_tool_names_in_content("Use spawn_many_tool for parallel tasks")
+    assert result == ["spawn_many_tool"]
+    assert "spawn_tool" not in result
+
+
+def test_detect_returns_sorted_by_length() -> None:
+    """Results should be sorted longest-first so longer names take priority."""
+    from nanobot.agent.runner import _detect_tool_names_in_content
+    result = _detect_tool_names_in_content(
+        "exec_tool and spawn_many_tool and send_message_tool"
+    )
+    for i in range(len(result) - 1):
+        assert len(result[i]) >= len(result[i + 1]), (
+            f"Expected descending length order, got {result}"
+        )
 
 
 # ---------------------------------------------------------------------------

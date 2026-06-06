@@ -23,7 +23,7 @@ class FrameworkSearchTool(Tool):
     def __init__(self, store: MemoryStore):
         self._store = store
 
-    name = "framework_search"
+    name = "framework_search_tool"
     read_only = True
 
     description = (

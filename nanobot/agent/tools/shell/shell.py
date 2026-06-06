@@ -144,7 +144,7 @@ class ExecTool(Tool):
         self.path_append = path_append
         self.allowed_env_keys = allowed_env_keys or []
 
-    name = "exec"
+    name = "exec_tool"
 
     _MAX_TIMEOUT = 7200
     _MAX_OUTPUT = 10_000

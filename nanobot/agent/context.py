@@ -174,6 +174,11 @@ class ContextBuilder:
                 indented_desc += "\n  " + _line if _line.strip() else "\n"
             lines.append(f"- **{name}**: {indented_desc}")
             lines.append("")  # blank line between tools
+        lines.append(
+            "**⚠️ 不要在 content 中写工具名**：上面的工具名（`exec_tool`、`read_file_tool` 等）仅用于 tool_call API。"
+            "如果需要在文本中提及工具操作，用自然语言描述（如'执行命令''读取文件'），不要写出工具名字符串。"
+            "框架会自动检测 content 中的工具名并触发重试。\n"
+        )
         return "\n".join(lines)
 
     @staticmethod

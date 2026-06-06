@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class SelfRestartTool(Tool):
     """Restart nanobot framework."""
 
-    name = "self_restart"
+    name = "self_restart_tool"
     description = "Restart the nanobot framework. No parameters."
 
     async def execute(self, **kwargs: Any) -> str:

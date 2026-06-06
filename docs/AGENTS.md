@@ -50,7 +50,7 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 ### 系统提示（静态部分）
 
 1. **身份**（identity.md）：运行环境、工作区路径、渠道相关格式提示
-2. **可用工具列表**（按注册顺序排列——工作区工具（read_file/grep 等）排在 exec 之前，MCP 工具排最后）
+2. **可用工具列表**（按注册顺序排列——工作区工具（read_file_tool/grep 等）排在 exec_tool 之前，MCP 工具排最后）
 3. **Bootstrap 文件**：工作区中的 AGENTS.md（本文档）、SOUL.md、USER.md、TOOLS.md（自动加载。USER.md 和 TOOLS.md 如果未自定义则跳过）
 4. **always 技能**：标记为 `always: true` 的技能内容直接注入
 5. **技能摘要**：列出可用技能给延迟加载参考
@@ -83,18 +83,18 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 ### 工作区交互
 | 工具 | 用途 | 注意 |
 |------|------|------|
-| `read_file` | 读文件 | 支持 extract 参数提取特定行 |
-| `read_files` | 批量读文件 | |
-| `write_file` | 写/创建文件 | |
-| `edit_file` | 精确替换编辑 | 比 sed 更安全 |
-| `list_dir` | 列出目录 | |
-| `delete_file` | 删除文件 | |
-| `move_file` | 移动/重命名 | |
+| `read_file_tool` | 读文件 | 支持 extract 参数提取特定行 |
+| `read_files_tool` | 批量读文件 | |
+| `write_file_tool` | 写/创建文件 | |
+| `edit_file_tool` | 精确替换编辑 | 比 sed 更安全 |
+| `list_dir_tool` | 列出目录 | |
+| `delete_file_tool` | 删除文件 | |
+| `move_file_tool` | 移动/重命名 | |
 | `glob` | 文件模式匹配 | |
 | `grep` | 文本搜索 | 支持正则 |
-| `search_text` | 语义文本搜索 | 嵌入搜索 |
-| `explore_module` | 探索 Python 模块 | |
-| `notebook_edit` | 编辑 Jupyter notebook | |
+| `search_text_tool` | 语义文本搜索 | 嵌入搜索 |
+| `explore_module_tool` | 探索 Python 模块 | |
+| `notebook_edit_tool` | 编辑 Jupyter notebook | |
 | `git_inspect` | Git 历史/差异 | |
 
 ### 代码分析
@@ -102,30 +102,30 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 |------|------|
 | `run_recipe` | 多步快捷操作（find_and_read、explore_source 等） |
 | `analyze_data` | 数据分析（导入/导出/调用关系树） |
-| `diagnose` | 错误诊断（grep + git blame） |
+| `diagnose_tool` | 错误诊断（grep + git blame） |
 
 ### 计算执行
 | 工具 | 用途 | 注意 |
 |------|------|------|
-| `exec` | 执行 shell 命令 | 注册在最后，工作区工具优先。有超时限制 |
+| `exec_tool` | 执行 shell 命令 | 注册在最后，工作区工具优先。有超时限制 |
 
 ### 网络
 | 工具 | 用途 |
 |------|------|
-| `web_search` | 搜索网页 |
-| `web_fetch` | 获取网页内容 |
+| `web_search_tool` | 搜索网页 |
+| `web_fetch_tool` | 获取网页内容 |
 
 ### 通信
 | 工具 | 用途 | 注意 |
 |------|------|------|
-| `message` | 向用户发送消息（含媒体） | 发送文件必须用 message 工具，不能 read_file |
+| `message_tool` | 向用户发送消息（含媒体） | 发送文件必须用 message_tool 工具，不能 read_file_tool |
 | `ask_user` | 向用户提问，等待回复 | **之后的工具调用会被丢弃**，放最后 |
 
 ### 记忆与状态
 | 工具 | 用途 |
 |------|------|
 | `recall` | 搜索历史对话（history 模式）或知识记忆（knowledge 模式） |
-| `tool_call_log` | 查询工具调用执行日志 |
+| `tool_call_log_tool` | 查询工具调用执行日志 |
 | `write_goal` | 创建/更新目标（含 priority、deadline、tags、subtasks） |
 | `list_goals` | 查看目标列表 |
 | `write_event` | 记录进度事件 |
@@ -141,14 +141,14 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 ### 子代理
 | 工具 | 用途 |
 |------|------|
-| `spawn` | 启动后台子任务（fire-and-forget） |
-| `check_subagent` | 查询子任务进度 |
-| `list_subagents` | 列出活跃子任务 |
+| `spawn_tool` | 启动后台子任务（fire-and-forget） |
+| `check_subagent_tool` | 查询子任务进度 |
+| `list_subagents_tool` | 列出活跃子任务 |
 
 ### 定时任务
 | 工具 | 用途 |
 |------|------|
-| `cron` | 创建/列出/删除定时任务 |
+| `cron_tool` | 创建/列出/删除定时任务 |
 
 ### MCP 工具
 配置的 MCP 服务器工具通过 `mcp_` 前缀注册，排在内置工具之后。
@@ -157,7 +157,7 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 
 - **只读工具缓存**：相同参数 60 秒内重复调用返回缓存结果
 - **结果去重**：连续返回相同内容会被替换为简短提示
-- **结果截断**：超过 `max_tool_result_chars`（默认 16000）的结果被截断。大输出用 `exec(capture_file=...)` 写入文件再分段读取
+- **结果截断**：超过 `max_tool_result_chars`（默认 16000）的结果被截断。大输出用 `exec_tool(capture_file=...)` 写入文件再分段读取
 - **并发执行**：独立工具可并行执行，同一文件的写操作串行化
 
 ---
@@ -257,7 +257,7 @@ requires:
 ```
 
 - `always: true`：内容直接注入系统提示的「Active Skills」段
-- `always: false`：只在技能摘要中列出，你可以用 `read_file` 延迟加载
+- `always: false`：只在技能摘要中列出，你可以用 `read_file_tool` 延迟加载
 
 ### 技能来源
 | 来源 | 位置 | 优先级 |
@@ -282,19 +282,19 @@ MemoryExtractor 从对话中检测 `reusable_pattern` 后：
 
 ### 工作机制
 ```
-你调用 spawn → 框架创建独立 AgentRunner（新 session、新上下文快照）→ 异步执行
+你调用 spawn_tool → 框架创建独立 AgentRunner（新 session、新上下文快照）→ 异步执行
   → 完成后以系统消息（sender_id="subagent"）注入回你的对话
 ```
 
-- 子代理有独立的 session，看不到 spawn 之后的对话
+- 子代理有独立的 session，看不到 spawn_tool 之后的对话
 - 完成结果以宣布格式注入到后续 turn
-- 可用 `check_subagent(task_id=...)` 主动查询进度
+- 可用 `check_subagent_tool(task_id=...)` 主动查询进度
 
 ### 子代理工具集
-子代理可使用：文件系统、Web、exec — **但不能**嵌套 spawn、cron、ask_user
+子代理可使用：文件系统、Web、exec_tool — **但不能**嵌套 spawn_tool、cron_tool、ask_user
 
 ### 何时用 vs 自己做
-| 用 spawn | 自己做 |
+| 用 spawn_tool | 自己做 |
 |----------|--------|
 | 独立可并行的任务（搜索、批量处理、调研） | 后续步骤依赖结果 |
 | 可能耗时不想让用户等 | 需要中间决策 |
@@ -326,7 +326,7 @@ Result:
 - **Cron 任务在独立 session 执行**（`cron:{job_id}`）——没有对话历史，打包所有上下文到 message
 - **不能在 cron 任务内创建新 cron 任务**——被框架阻止。update/remove 可以（jod_id 自动注入）
 - **系统任务**（如 MemoryExtractor）可见但不能删除/修改
-- 用 `cron(action="test", job_id="...")` 测试任务
+- 用 `cron_tool(action="test", job_id="...")` 测试任务
 
 ---
 
@@ -387,7 +387,7 @@ Heartbeat 消息示例：
 
 ### 不能做的事
 - 不能在 cron 任务中创建新 cron 任务
-- 子代理不能嵌套 spawn
+- 子代理不能嵌套 spawn_tool
 - ask_user 之后的工具调用不执行
 - Heartbeat 消息不持久化
 
@@ -407,15 +407,15 @@ Heartbeat 消息示例：
 
 ### 高效使用
 - **持久化关键信息**：跨 turn/session 需要保留的内容，用 `write_goal`/`write_event`/写文件保存
-- **大输出写文件**：工具结果有截断，大输出用 `exec(capture_file=...)` 写文件再分段读取
+- **大输出写文件**：工具结果有截断，大输出用 `exec_tool(capture_file=...)` 写文件再分段读取
 - **ask_user 放最后**：之后的所有工具调用不执行
-- **先工作区工具再 exec**：read_file/grep/glob 比 shell 命令更高效
+- **先工作区工具再 exec_tool**：read_file_tool/grep/glob 比 shell 命令更高效
 - **利用技能自动生成**：多做几次结构化的复杂操作，MemoryExtractor 可能提取 pattern 生成技能
 - **主动管理目标**：设立 goal → 记录里程碑 → 标记完成
 
 ### 避免的陷阱
 - 不要依赖早期对话细节——它们会被截断或归档
-- spawn 是 fire-and-forget——需要同步结果就自己做
+- spawn_tool 是 fire-and-forget——需要同步结果就自己做
 - cron 任务无上下文——pack 所有需要的信息到 message 中
 - 空输出会被视为异常——总是输出有意义的回复
 

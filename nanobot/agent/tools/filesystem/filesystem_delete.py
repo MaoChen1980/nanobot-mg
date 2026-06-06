@@ -15,7 +15,7 @@ from nanobot.agent.tools.schema import p
 class DeleteFileTool(_FsTool):
     """Delete a single file. Absolute path only."""
 
-    name = "delete_file"
+    name = "delete_file_tool"
     description = (
         "**Purpose**: Delete a single file.\n\n"
         "**When to use**:\n"

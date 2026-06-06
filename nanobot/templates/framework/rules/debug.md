@@ -10,7 +10,7 @@
 
 ## Learn From History
 
-- 每一次 commit 都有它的故事。在修改别人写的代码之前，用 `show_stages` 查看相关历史。这行代码是一个修复？一个 workaround？一个有意的权衡？理解它为什么存在，比重新发现同样的教训更快。
+- 每一次 commit 都有它的故事。在修改别人写的代码之前，用 `show_stages_tool` 查看相关历史。这行代码是一个修复？一个 workaround？一个有意的权衡？理解它为什么存在，比重新发现同样的教训更快。
 - 如果你即将修改一个明显是 workaround 的代码：很好——你可能找到了修复根本原因的正确位置。但首先理解这个 workaround 在绕过什么。
 
 ## Escalate Deliberately

@@ -33,7 +33,7 @@ _MAX_TEXT_BYTES = 5 * 1024 * 1024  # 5 MB
 class SearchTextTool(Tool):
     """Search a block of text semantically."""
 
-    name = "search_text"
+    name = "search_text_tool"
     read_only = True
 
     def __init__(
@@ -52,11 +52,11 @@ class SearchTextTool(Tool):
         "- 比如长文档里找「和安全性相关的部分」，安全可能写成了防护、鉴权、加密\n\n"
         "**When NOT to use**:\n"
         "- 已经知道具体关键词 → 用 grep\n"
-        "- 想从头到尾读文件 → 用 read_file\n\n"
+        "- 想从头到尾读文件 → 用 read_file_tool\n\n"
         "**Query examples**:\n"
-        "  search_text(query='error handling timeout logic', path='/src/main.py')\n"
-        "  search_text(query='authentication encryption security', text='...')\n"
-        "  search_text(query='configuration setup initialization', path='/app/config.py')\n\n"
+        "  search_text_tool(query='error handling timeout logic', path='/src/main.py')\n"
+        "  search_text_tool(query='authentication encryption security', text='...')\n"
+        "  search_text_tool(query='configuration setup initialization', path='/app/config.py')\n\n"
     )
 
     async def execute(

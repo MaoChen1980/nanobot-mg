@@ -23,7 +23,7 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 class AnalyzeTool(_FsTool):
     """Read data (from text or file) and return structured analysis."""
 
-    name = "analyze"
+    name = "analyze_tool"
     read_only = True
 
     description = (

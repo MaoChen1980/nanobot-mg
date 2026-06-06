@@ -682,7 +682,7 @@ def agent(
         # Wire cron handler for interactive mode
         async def _cli_cron_handler(job: Any) -> str | None:
             from nanobot.agent.tools.cron import CronTool
-            cron_tool = agent_loop.tools.get("cron")
+            cron_tool = agent_loop.tools.get("cron_tool")
             cron_token = None
             cron_job_token = None
             if isinstance(cron_tool, CronTool):

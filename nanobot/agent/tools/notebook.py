@@ -61,7 +61,7 @@ class NotebookEditTool(_FsTool):
     _VALID_CELL_TYPES = frozenset({"code", "markdown"})
     _VALID_EDIT_MODES = frozenset({"replace", "insert", "delete"})
 
-    name = "notebook_edit"
+    name = "notebook_edit_tool"
 
     description = (
         "**Purpose**: Edit Jupyter notebook (.ipynb) cells.\n\n"

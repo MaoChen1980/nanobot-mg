@@ -39,7 +39,7 @@ class ReadFileTool(_FsTool):
     _DEFAULT_LIMIT = 2000
     _MAX_PDF_PAGES = 20
 
-    name = "read_file"
+    name = "read_file_tool"
 
     description = (
         "**Purpose**: Read file contents (text/images/PDF/Office). Supports mode selection, regex filtering, and line-based pagination.\n\n"

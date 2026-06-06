@@ -18,7 +18,7 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
             "'Session: <key>' in the system prompt). "
             "Without a session_key filter, returns calls from all sessions."
         ),
-        tool_name=p("string", "Filter by tool name (e.g. 'exec', 'read_file', 'grep')"),
+        tool_name=p("string", "Filter by tool name (e.g. 'exec_tool', 'read_file_tool', 'grep')"),
         success=p("boolean", "Filter by success (1=success, 0=failed). Omit to return all."),
         min_result_size=p("integer", "Filter to results larger than N characters"),
         limit=p("integer", "Maximum number of records to return (default 20, max 100)"),
@@ -30,7 +30,7 @@ class ToolCallLogTool(Tool):
     def __init__(self, db: NanobotDB):
         self._db = db
 
-    name = "tool_call_log"
+    name = "tool_call_log_tool"
 
     description = (
             "**Purpose**: Query tool call execution logs for debugging failed calls or tracking results.\n\n"

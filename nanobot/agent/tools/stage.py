@@ -126,7 +126,7 @@ class SaveStageTool(Tool):
     Use ``show_stages`` to browse history, ``restore_stage`` to roll back.
     """
 
-    name = "save_stage"
+    name = "save_stage_tool"
     read_only = False
 
     async def execute(self, path: str, message: str = "", **kwargs: Any) -> str:
@@ -215,7 +215,7 @@ class ShowStagesTool(Tool):
     Pure Python, no system git required.
     """
 
-    name = "show_stages"
+    name = "show_stages_tool"
     read_only = True
 
     async def execute(
@@ -395,7 +395,7 @@ class RestoreStageTool(Tool):
     That way no work is lost even after a rollback.
     """
 
-    name = "restore_stage"
+    name = "restore_stage_tool"
     read_only = False
 
     async def execute(self, path: str, sha: str, **kwargs: Any) -> str:

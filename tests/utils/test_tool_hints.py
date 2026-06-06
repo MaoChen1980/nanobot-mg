@@ -78,20 +78,20 @@ class TestExtractArg:
 
 class TestFmtKnown:
     def test_read_file_abbreviates_path(self):
-        tc = _FakeTC("read_file", {"path": "/very/long/path/that/exceeds/the/default/abbreviation/limit/file.py"})
+        tc = _FakeTC("read_file_tool", {"path": "/very/long/path/that/exceeds/the/default/abbreviation/limit/file.py"})
         result = _fmt_known(tc, (["path", "file_path"], "read {}", True, False))
         assert result.startswith("read ")
         assert "…" in result
 
     def test_exec_formats_command(self):
-        tc = _FakeTC("exec", {"command": "ls -la /tmp"})
+        tc = _FakeTC("exec_tool", {"command": "ls -la /tmp"})
         result = _fmt_known(tc, (["command"], "$ {}", False, True))
         assert result == "$ ls -la /tmp"
 
     def test_no_arg_falls_back_to_tool_name(self):
-        tc = _FakeTC("read_file", {})
+        tc = _FakeTC("read_file_tool", {})
         result = _fmt_known(tc, (["path", "file_path"], "read {}", True, False))
-        assert result == "read_file"
+        assert result == "read_file_tool"
 
 
 # ---------------------------------------------------------------------------
@@ -187,13 +187,13 @@ class TestFormatToolHints:
         assert format_tool_hints([]) == ""
 
     def test_known_read_file(self):
-        tc = _FakeTC("read_file", {"path": "/tmp/test.py"})
+        tc = _FakeTC("read_file_tool", {"path": "/tmp/test.py"})
         result = format_tool_hints([tc])
         assert result.startswith("read ")
         assert "test.py" in result
 
     def test_known_exec(self):
-        tc = _FakeTC("exec", {"command": "npm test"})
+        tc = _FakeTC("exec_tool", {"command": "npm test"})
         result = format_tool_hints([tc])
         assert result == "$ npm test"
 
@@ -208,14 +208,14 @@ class TestFormatToolHints:
         assert result == 'unknown_tool("val")'
 
     def test_deduplicates_repeated_same_tool(self):
-        tc = _FakeTC("read_file", {"path": "/tmp/a.py"})
+        tc = _FakeTC("read_file_tool", {"path": "/tmp/a.py"})
         result = format_tool_hints([tc, tc])
         assert "× 2" in result
 
     def test_mixed_tool_types(self):
         hints = format_tool_hints([
-            _FakeTC("exec", {"command": "git status"}),
-            _FakeTC("read_file", {"path": "/tmp/main.py"}),
+            _FakeTC("exec_tool", {"command": "git status"}),
+            _FakeTC("read_file_tool", {"path": "/tmp/main.py"}),
         ])
         assert "$ git status" in hints
         assert "read " in hints

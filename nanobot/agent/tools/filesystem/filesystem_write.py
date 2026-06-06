@@ -36,7 +36,7 @@ from nanobot.agent.tools import file_state
 class WriteFileTool(_FsTool):
     """Write content to a file. Overwrites if it exists; creates parent dirs as needed."""
 
-    name = "write_file"
+    name = "write_file_tool"
 
     description = (
         "**Purpose**: Create a new file or fully overwrite an existing file.\n\n"

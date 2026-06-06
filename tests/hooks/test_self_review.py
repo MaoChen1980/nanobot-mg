@@ -31,9 +31,9 @@ class FakeContext:
 class TestCapture:
     def test_capture_with_tool_calls_and_results(self, hook):
         tc1 = MagicMock()
-        tc1.name = "web_search"
+        tc1.name = "web_search_tool"
         tc2 = MagicMock()
-        tc2.name = "read_file"
+        tc2.name = "read_file_tool"
         ctx = FakeContext(
             tool_calls=[tc1, tc2],
             tool_results=["result"],

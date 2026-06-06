@@ -29,7 +29,7 @@ class ListDirTool(_FsTool):
         ".ruff_cache", ".coverage", "htmlcov",
     }
 
-    name = "list_dir"
+    name = "list_dir_tool"
 
     description = (
         "**Purpose**: List directory contents. Supports recursive traversal.\n\n"

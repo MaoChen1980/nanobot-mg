@@ -33,7 +33,7 @@ List any required packages or system dependencies.
 
 - 本文件顶部的 **Installed Tools** 部分为自动生成，每轮自动刷新
 - 阅读 tool 的 `readme.md` 了解如何调用
-- 使用 `exec`（shell 执行）运行 tool 脚本
+- 使用 `exec_tool`（shell 执行）运行 tool 脚本
 - 如果 tool 有无法安装的依赖，将其添加到 readme 并请求帮助
 
 ### Maintenance — Self-Healing & Updates
@@ -42,7 +42,7 @@ List any required packages or system dependencies.
 
 1. 使用调试标志运行 tool 或检查错误输出
 2. 阅读 tool 的脚本理解出错原因
-3. 用 `edit_file` 或 `write_file` 修复脚本
+3. 用 `edit_file_tool` 或 `write_file_tool` 修复脚本
 4. 如果接口（参数、输出格式）发生变化，更新其 `readme.md`
 
 增强 tool 时，始终保持 readme.md 同步：

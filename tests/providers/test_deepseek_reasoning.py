@@ -160,10 +160,10 @@ async def test_passthrough_preserves_reasoning_content_on_assistant_messages() -
             {
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{"id": "1", "type": "function", "function": {"name": "list_dir", "arguments": "{}"}}],
+                "tool_calls": [{"id": "1", "type": "function", "function": {"name": "list_dir_tool", "arguments": "{}"}}],
                 "reasoning_content": "I need to list the files first",
             },
-            {"role": "tool", "tool_call_id": "1", "name": "list_dir", "content": "MEMORY.md\nhistory.jsonl"},
+            {"role": "tool", "tool_call_id": "1", "name": "list_dir_tool", "content": "MEMORY.md\nhistory.jsonl"},
         ]
         await provider.chat(
             messages,
