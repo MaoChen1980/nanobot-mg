@@ -707,7 +707,10 @@ class AgentLoop:
 
         async def _cb(messages: list[dict]) -> bool:
             from nanobot.agent.assess_me import assess_me, build_assessment_message
-            result = await assess_me(messages)
+            try:
+                result = await assess_me(messages)
+            except Exception:
+                return False
             if result:
                 messages.append(build_assessment_message(result))
                 return True

@@ -138,23 +138,20 @@ class TestIsAssessmentMessage:
 class TestAssessMe:
     @pytest.mark.asyncio
     async def test_success(self) -> None:
-        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value.content = "**1. What I have done:**\n- Read file x\n- Modified file y"
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = "**1. What I have done:**\n- Read file x\n- Modified file y"
 
             result = await assess_me(
                 [{"role": "user", "content": "hello"}],
             )
             assert result is not None
             assert "What I have done" in result
-            mock_chat.assert_called_once()
-            _, kwargs = mock_chat.call_args
-            assert kwargs["max_tokens"] == 10240
-            assert kwargs["temperature"] == 0.3
+            mock_fn.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_empty_response_returns_empty(self) -> None:
-        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value.content = ""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = ""
 
             result = await assess_me(
                 [{"role": "user", "content": "hello"}],
@@ -162,19 +159,19 @@ class TestAssessMe:
             assert result == ""
 
     @pytest.mark.asyncio
-    async def test_llm_exception_returns_empty(self) -> None:
-        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.side_effect = RuntimeError("LLM down")
+    async def test_llm_exception_propagates(self) -> None:
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.side_effect = RuntimeError("LLM down")
 
-            result = await assess_me(
-                [{"role": "user", "content": "hello"}],
-            )
-            assert result == ""
+            with pytest.raises(RuntimeError, match="LLM down"):
+                await assess_me(
+                    [{"role": "user", "content": "hello"}],
+                )
 
     @pytest.mark.asyncio
     async def test_passes_conversation_to_provider(self) -> None:
-        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value.content = "analysis"
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = "analysis"
 
             messages = [
                 {"role": "user", "content": "first"},
@@ -182,7 +179,7 @@ class TestAssessMe:
             ]
             await assess_me(messages)
 
-            call_args, _ = mock_chat.call_args
+            call_args, _ = mock_fn.call_args
             prompt_messages = call_args[0]
             assert len(prompt_messages) == 1
             assert prompt_messages[0]["role"] == "user"
@@ -268,7 +265,7 @@ class TestAssessMeTool:
             mock_assess.return_value = ""
             result = await tool.execute()
 
-            assert "Error: assessment LLM call failed" in result
+            assert "Error: assessment LLM returned empty response" in result
 
 
 # =========================================================================

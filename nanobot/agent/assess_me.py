@@ -6,7 +6,7 @@ from typing import Any
 
 from loguru import logger
 
-from nanobot.agent.llm_context import chat
+from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.utils.prompt_templates import render_template
 
 _MAX_TOOL_RESULT_CHARS = 300
@@ -70,22 +70,15 @@ async def assess_me(
     """Assess current cognition state from conversation history.
 
     Returns a structured analysis answering the 7 cognition questions.
-    Never returns ``None``. If the LLM call fails (exception), the error
-    is logged with full traceback — it is NOT silenced.
+    Never returns ``None``. Exceptions from the LLM call propagate to
+    the caller — each caller handles errors according to its context.
     """
     conversation = format_conversation(messages)
     prompt = render_template("agent/assess_me.md", conversation=conversation, verify=verify)
 
-    try:
-        resp = await chat(
-            [{"role": "user", "content": prompt}],
-            max_tokens=10240,
-            temperature=0.3,
-        )
-    except Exception:
-        logger.exception("assess_me LLM call failed")
-        return ""
-
+    resp = await chat_stream_with_retry(
+        [{"role": "user", "content": prompt}],
+    )
     return (resp.content or "").strip()
 
 

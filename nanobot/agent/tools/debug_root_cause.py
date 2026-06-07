@@ -11,7 +11,7 @@ from typing import Any
 
 from loguru import logger
 
-from nanobot.agent.llm_context import chat
+from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 
@@ -207,7 +207,7 @@ class DebugRootCauseTool(Tool):
         prompt = "\n".join(lines)
 
         try:
-            resp = await chat(
+            resp = await chat_stream_with_retry(
                 [{"role": "user", "content": prompt}],
             )
         except Exception as e:

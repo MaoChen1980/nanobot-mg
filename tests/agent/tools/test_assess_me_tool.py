@@ -93,7 +93,7 @@ class TestExecute:
             mock_assess.return_value = None
             result = await tool.execute()
         assert "Error" in result
-        assert "LLM call failed" in result
+        assert "empty response" in result
 
 
 # ---------------------------------------------------------------------------

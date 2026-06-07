@@ -12,7 +12,7 @@ from typing import Any
 
 from loguru import logger
 
-from nanobot.agent.llm_context import chat
+from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.session.manager import Session
 from nanobot.utils.helpers import estimate_message_tokens
 
@@ -161,7 +161,7 @@ async def summarize_turns(
         prompt = _build_prompt(current_turns, current_future, previous_summary)
 
         try:
-            resp = await chat(
+            resp = await chat_stream_with_retry(
                 [{"role": "user", "content": prompt}],
             )
         except Exception as e:

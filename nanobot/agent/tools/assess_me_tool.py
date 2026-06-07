@@ -60,9 +60,13 @@ class AssessMeTool(Tool):
 
         from nanobot.agent.assess_me import assess_me
 
-        result = await assess_me(messages, verify=verify)
+        try:
+            result = await assess_me(messages, verify=verify)
+        except Exception as e:
+            return f"Error: assessment LLM call failed — {e}"
+
         if not result:
-            return "Error: assessment LLM call failed."
+            return "Error: assessment LLM returned empty response."
 
         if focus:
             result = f"Focus: {focus}\n\n{result}"

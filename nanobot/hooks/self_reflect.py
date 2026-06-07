@@ -21,7 +21,7 @@ from typing import Any
 
 from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext
-from nanobot.agent.llm_context import chat
+from nanobot.agent.llm_context import chat_stream_with_retry
 
 
 # --- Reflection prompt -------------------------------------------------------
@@ -299,7 +299,7 @@ class SelfReflectHook(AgentHook):
 
     async def _call_llm(self, metrics_text: str, hook_code: str) -> str:
         """Make a minimal LLM call for structured findings extraction."""
-        response = await chat(
+        response = await chat_stream_with_retry(
             messages=[
                 {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},
                 {"role": "user", "content": REFLECTION_USER_TEMPLATE.format(
@@ -307,8 +307,6 @@ class SelfReflectHook(AgentHook):
                     hook_code=hook_code,
                 )},
             ],
-            max_tokens=1024,
-            temperature=0.3,
         )
         return response.content or ""
 

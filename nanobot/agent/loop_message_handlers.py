@@ -369,7 +369,12 @@ class UserMessageHandler:
         if not trigger:
             return
 
-        result = await assess_me(history)
+        try:
+            result = await assess_me(history)
+        except Exception as e:
+            logger.warning("assess_me LLM call failed: {}", e)
+            return
+
         if result:
             history.append(build_assessment_message(result))
             logger.info(
@@ -377,7 +382,7 @@ class UserMessageHandler:
                 compress_triggered, session.key, len(history),
             )
         else:
-            logger.warning("assess_me returned None — skipping injection")
+            logger.info("assess_me returned empty — LLM had no conclusion, skipping injection")
 
     async def _dispatch_command(self, msg, session, key):
         """Run command dispatch, return result if handled."""

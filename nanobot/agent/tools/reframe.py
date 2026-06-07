@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from nanobot.agent.llm_context import chat
+from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 
@@ -127,7 +127,7 @@ class ReframeTool(Tool):
         prompt = "\n".join(lines)
 
         try:
-            resp = await chat([{"role": "user", "content": prompt}])
+            resp = await chat_stream_with_retry([{"role": "user", "content": prompt}])
         except Exception as e:
             return f"Error: LLM call failed — {e}"
 
