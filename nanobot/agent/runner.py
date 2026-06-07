@@ -155,6 +155,9 @@ class AgentRunSpec:
     max_llm_retries: int = 3  # max retries for LLM errors
     max_overflow_retries: int = 3  # max retries for context window overflow
     backoff_config: Any | None = None  # BackoffConfig for retry delays
+    # AssessMe: called when retry/error thresholds are crossed
+    # Signature: async (messages: list[dict]) -> bool (True if injected)
+    assess_me_callback: Any | None = None
 
 
 @dataclass(slots=True)
@@ -471,6 +474,12 @@ class AgentRunner:
                     iteration, spec.session_key or "default", empty_content_retries,
                 )
                 await hook.on_stream_end(context, resuming=False)
+                if spec.assess_me_callback is not None:
+                    await spec.assess_me_callback(messages)
+                    messages_for_model = strip_bypassed_tool_messages(messages)
+                    messages_for_model = drop_orphan_tool_results(messages_for_model)
+                    messages_for_model = backfill_missing_tool_results(messages_for_model)
+                    messages_for_model = split_thinking_messages(messages_for_model)
                 response = await request_finalization_retry(self.provider, spec, messages_for_model)
                 retry_usage = usage_dict(response.usage)
                 accumulate_usage(usage, retry_usage)
@@ -591,6 +600,8 @@ class AgentRunner:
                     empty_content_retries = 0
                     retry_ctx.llm_request_state.record_success()
                     continue
+                if spec.assess_me_callback is not None:
+                    await spec.assess_me_callback(messages)
                 break
 
             if is_blank_text(clean):

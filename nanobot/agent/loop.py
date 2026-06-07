@@ -49,6 +49,8 @@ from nanobot.agent.tools.diagnose_tool import DiagnoseTool
 from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.agent.tools.self_restart_tool import SelfRestartTool
 from nanobot.agent.tools.reframe import ReframeTool
+from nanobot.agent.tools.assess_me_tool import AssessMeTool
+from nanobot.agent.assess_me import is_assessment_message
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.agent.context_vars import _current_debug_enabled
@@ -388,6 +390,7 @@ class AgentLoop:
         self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
         self.tools.register(ReframeTool(loop=self))
+        self.tools.register(AssessMeTool(loop=self))
         if self._db:
             from nanobot.agent.tools.tool_call_log import ToolCallLogTool
             self.tools.register(ToolCallLogTool(db=self._db))
@@ -438,7 +441,7 @@ class AgentLoop:
             effective_key = session_key
         else:
             effective_key = f"{channel}:{chat_id}"
-        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "self_tool"):
+        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "self_tool", "assess_me_tool"):
             tool = self.tools.get(name)
             if tool is None:
                 continue
@@ -449,6 +452,8 @@ class AgentLoop:
                 sc(channel, chat_id, effective_key=effective_key)
             elif name == "cron_tool":
                 sc(channel, chat_id, metadata=metadata, session_key=session_key)
+            elif name == "assess_me_tool":
+                sc(session_key=effective_key)
             elif name == "message_tool":
                 sc(channel, chat_id, message_id, metadata=metadata)
             else:
@@ -668,6 +673,7 @@ class AgentLoop:
             backoff_config=backoff_cfg,
             max_llm_retries=self.max_retries,
             max_overflow_retries=self.max_retries,
+            assess_me_callback=self._make_retry_assess_callback(session),
         ))
         # Track total retries and token usage across this turn
         self.retry_count += result.retry_count
@@ -685,6 +691,20 @@ class AgentLoop:
 
         await hook.after_turn()
         return result.final_content, result.tools_used, result.messages, result.stop_reason, result.had_injections
+
+    def _make_retry_assess_callback(self, session: Session | None):
+        """Build assess_me callback for runner retry paths."""
+        if session is None:
+            return None
+
+        async def _cb(messages: list[dict]) -> bool:
+            from nanobot.agent.assess_me import assess_me, build_assessment_message
+            result = await assess_me(messages, self.provider, self.model)
+            if result:
+                messages.append(build_assessment_message(result))
+                return True
+            return False
+        return _cb
 
     async def run(self) -> None:
         """Run the agent loop, dispatching messages as tasks to stay responsive to /stop."""
@@ -1002,6 +1022,8 @@ class AgentLoop:
             role, content = entry.get("role"), entry.get("content")
             if role == "assistant" and not entry.get("tool_calls") and not (content and content.strip() if isinstance(content, str) else content):
                 continue  # skip empty assistant messages — they poison session context
+            if is_assessment_message(entry):
+                continue  # skip ephemeral self-assessment reminders — not part of real conversation
             if role == "tool":
                 if isinstance(content, str) and len(content) > self.max_tool_result_chars:
                     entry["content"] = truncate_text_fn(content, self.max_tool_result_chars)

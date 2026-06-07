@@ -13,3 +13,8 @@ _DEFAULT_RETRY_BACKOFF_INITIAL = 1.0   # seconds
 _DEFAULT_RETRY_BACKOFF_MAX = 60.0      # seconds
 _DEFAULT_RETRY_BACKOFF_MULTIPLIER = 2.0
 _DEFAULT_RETRY_BACKOFF_JITTER = 0.1
+
+# ----------------------------------------------------------------------
+# AssessMe defaults
+# ----------------------------------------------------------------------
+_DEFAULT_ASSESS_INTERVAL = 10  # every N user messages

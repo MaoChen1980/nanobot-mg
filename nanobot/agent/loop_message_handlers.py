@@ -233,16 +233,17 @@ class UserMessageHandler:
 
         # Stage 1.5: compression check — if formatted history exceeds trigger, compress
         from nanobot.utils.helpers import estimate_message_tokens
-        trigger = self._loop._compress_trigger_tokens
-        limit = self._loop._history_token_limit
-        hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
-        if hist_tokens > trigger:
+        _compress_trigger = self._loop._compress_trigger_tokens
+        _compress_limit = self._loop._history_token_limit
+        _hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
+        _compress_happened = False
+        if _hist_tokens > _compress_trigger:
             from nanobot.agent.compress import (
                 split_history_by_budget, summarize_turns,
                 _compress_session, _prepend_summary, MIN_KEEP_TURNS,
             )
             keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
-                session.messages, history, limit=limit, min_keep_turns=MIN_KEEP_TURNS)
+                session.messages, history, limit=_compress_limit, min_keep_turns=MIN_KEEP_TURNS)
             summary = None
             if to_compress_fmt:
                 try:
@@ -260,6 +261,10 @@ class UserMessageHandler:
                 history = _prepend_summary(keeps_fmt, summary)
             else:
                 history = [m for turn in keeps_fmt for m in turn]
+            _compress_happened = True
+
+        # Stage 1.5b: assess_me triggers — interval + compression
+        await self._maybe_assess(session, history, compress_triggered=_compress_happened)
 
         # Stage 2: tool context
         self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
@@ -342,6 +347,39 @@ class UserMessageHandler:
 
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key
+
+    async def _maybe_assess(self, session, history, compress_triggered: bool = False) -> None:
+        """Check assess_me trigger conditions and inject if needed."""
+        from nanobot.agent.loop_constants import _DEFAULT_ASSESS_INTERVAL
+        from nanobot.agent.assess_me import assess_me, build_assessment_message
+
+        trigger = False
+
+        # (1) Compression auto-trigger
+        if compress_triggered:
+            trigger = True
+
+        # (2) Interval trigger
+        if not trigger:
+            user_count = sum(
+                1 for m in session.messages
+                if m.get("role") == "user"
+            )
+            if user_count > 0 and user_count % _DEFAULT_ASSESS_INTERVAL == 0:
+                trigger = True
+
+        if not trigger:
+            return
+
+        result = await assess_me(history, self._loop.provider, self._loop.model)
+        if result:
+            history.append(build_assessment_message(result))
+            logger.info(
+                "assess_me triggered (compress={}, session={}, history={} msgs)",
+                compress_triggered, session.key, len(history),
+            )
+        else:
+            logger.warning("assess_me returned None — skipping injection")
 
     async def _dispatch_command(self, msg, session, key):
         """Run command dispatch, return result if handled."""
