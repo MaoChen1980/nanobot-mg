@@ -313,7 +313,8 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 Agent Skill 按照文件夹形式组织。利用 SKILL.md 加载到 session 扩展知识，工作流和能力等等
 
 用户安装和自动生成的 Skill 存放在 `workspace/skills/`。`always: true` 的 skill 出现在每个 prompt 中；其他 skill 按需加载。
-框架会从可复用模式中自动创建 skill。
+
+**你可以创造 skill。** 从已验证的实践、可复用的模式、或发现的更优方法中提炼 skill。
 
 **创建 skill 必须走内置的 skill-manager，不要手动写 SKILL.md。**
 
