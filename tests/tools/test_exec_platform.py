@@ -27,7 +27,7 @@ class TestBuildEnvUnix:
     def test_expected_keys(self):
         with patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", False):
             env = ExecTool()._build_env()
-        expected = {"HOME", "LANG", "TERM"}
+        expected = {"HOME", "LANG", "TERM", "NANOBOT_RECURSION_GUARD"}
         assert expected <= set(env)
         if sys.platform != "win32":
             assert set(env) == expected
@@ -54,6 +54,7 @@ class TestBuildEnvWindows:
     _EXPECTED_KEYS = {
         "SYSTEMROOT", "COMSPEC", "USERPROFILE", "HOMEDRIVE",
         "HOMEPATH", "TEMP", "TMP", "PATHEXT", "PATH",
+        "NANOBOT_RECURSION_GUARD",
         *_WINDOWS_ENV_KEYS,
     }
 
@@ -112,7 +113,7 @@ class TestSpawnUnix:
 class TestSpawnWindows:
 
     @pytest.mark.asyncio
-    async def test_uses_powershell_shell(self):
+    async def test_uses_cmd_shell(self):
         env = {"COMSPEC": r"C:\Windows\system32\cmd.exe", "PATH": ""}
         with (
             patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
@@ -122,12 +123,12 @@ class TestSpawnWindows:
             await ExecTool._spawn("dir", r"C:\Users", env)
 
         args = mock_exec.call_args[0]
-        assert "powershell.exe" in args[0]
-        assert "-Command" in args
+        assert "cmd.exe" in args[0]
+        assert "/c" in args
         assert "dir" in args
 
     @pytest.mark.asyncio
-    async def test_uses_powershell(self):
+    async def test_uses_cmd(self):
         env = {"PATH": ""}
         with (
             patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
@@ -138,7 +139,7 @@ class TestSpawnWindows:
             await ExecTool._spawn("dir", r"C:\Users", env)
 
         args = mock_exec.call_args[0]
-        assert args[0] == "powershell.exe"
+        assert args[0] == "cmd.exe"
 
 
 # ---------------------------------------------------------------------------

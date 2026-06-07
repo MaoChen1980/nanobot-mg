@@ -640,8 +640,12 @@ class ExecTool(Tool):
     ) -> asyncio.subprocess.Process:
         """Launch *command* in a platform-appropriate shell."""
         if _IS_WINDOWS:
+            # Use cmd.exe instead of powershell.exe to avoid PowerShell
+            # involvement in .bat/.cmd execution chains.  PowerShell adds an
+            # extra process layer and can trigger recursive spawning when a
+            # child process (e.g. conda.exe, java.exe) re-invokes PowerShell.
             return await asyncio.create_subprocess_exec(
-                "powershell.exe", "-Command", command,
+                "cmd.exe", "/c", command,
                 stdin=stdin,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -683,7 +687,8 @@ class ExecTool(Tool):
         On Unix, only HOME/LANG/TERM are passed; ``bash -l`` sources the
         user's profile which sets PATH and other essentials.
 
-        On Windows, ``powershell.exe`` is used (no login-profile mechanism);
+        On Windows, ``cmd.exe /c`` is used.  ``COMSPEC`` still points to
+        ``powershell.exe`` for compatibility with PowerShell-aware tools;
         a curated set of system variables (including PATH) is forwarded.
         API keys and other secrets are still excluded.
         """
@@ -710,6 +715,10 @@ class ExecTool(Tool):
                 val = os.environ.get(key)
                 if val is not None:
                     env[key] = val
+            # Inject a recursion guard so any child process can detect when it
+            # is running inside a nanobot-managed process tree.  Set last so
+            # it cannot be overridden by allowed_env_keys.
+            env["NANOBOT_RECURSION_GUARD"] = "1"
             return env
         home = os.environ.get("HOME") or tempfile.gettempdir()
         env = {
@@ -721,6 +730,9 @@ class ExecTool(Tool):
             val = os.environ.get(key)
             if val is not None:
                 env[key] = val
+        # Inject a recursion guard so any child process can detect when it
+        # is running inside a nanobot-managed process tree.
+        env["NANOBOT_RECURSION_GUARD"] = "1"
         return env
 
     def _guard_command(self, command: str, cwd: str) -> str | None:
