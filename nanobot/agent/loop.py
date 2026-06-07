@@ -45,7 +45,7 @@ from nanobot.agent.tools.read_files import ReadFilesTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.stage import SaveStageTool, ShowStagesTool, RestoreStageTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
-from nanobot.agent.tools.diagnose_tool import DiagnoseTool
+from nanobot.agent.tools.diagnose_codebase_tool import DiagnoseTool
 from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.agent.tools.self_restart_tool import SelfRestartTool
 from nanobot.agent.tools.reframe import ReframeTool

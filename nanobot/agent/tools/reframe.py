@@ -18,13 +18,13 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 
 @tool_parameters(
     build_parameters_schema(
-        question=p("string", "The specific problem or question to solve — describe it clearly and precisely."),
-        goal=p("string", "The desired outcome. What should be true after this is solved."),
+        question=p("string", "What's happening? Describe the error, unexpected behavior, or situation you need to figure out."),
+        goal=p("string", "What should be true after this is solved — the working state you're aiming for."),
         attempts=p("string", "What has already been tried and what happened."),
         difficulties=p("string", "What went wrong, errors encountered, unexpected behaviour, blockers."),
         constraints=p("string", "Boundaries to respect — time, scope, compatibility, tools, dependencies, conventions."),
         resources=p("string", "Relevant information available — files, data, APIs, docs, references."),
-        focus=p("string", "Optional — narrow the response to a specific angle (e.g. 'architecture', 'debugging', 'approach comparison')."),
+        focus=p("string", "Optional — narrow the response to a specific angle (e.g. 'debugging', 'architecture', 'approach comparison')."),
         required=["question", "goal"],
     )
 )
@@ -36,28 +36,27 @@ class ReframeTool(Tool):
 
     name = "reframe_tool"
     description = (
-        "**Purpose**: Collect everything known about a problem (goal, what was tried, "
-        "what went wrong, constraints, available resources) into a clean problem statement "
-        "and send it to the model for a focused, unbiased answer.\n\n"
-        "**When to use — you are in one of these concrete situations**:\n"
-        "- A tool just returned an error or unexpected result, and retrying the same thing "
-        "probably won't help — reframe with the error details before attempting a different fix\n"
-        "- Several tools were called in a row but you are still not closer to the goal — "
-        "reframe to identify what is missing or misdirected\n"
-        "- You are about to choose between multiple approaches and want a trade-off analysis "
-        "without the noise of previous tool calls\n"
-        "- Tool results contradicted your assumptions — reframe to incorporate the new information\n"
-        "- The problem is complex with many interdependent parts — reframe to organize before "
-        "diving into implementation\n\n"
+        "**Purpose**: Strip away the noise of everything you've tried and get a clean, "
+        "focused answer from the model on what to do next. You provide the facts (what "
+        "happened, what you tried, what went wrong), the model sees only that — not the "
+        "surrounding tool call clutter — and gives you an unbiased direction.\n\n"
+        "**When to call — when you need a clean break from the noise**:\n"
+        "- Any error or unexpected result — reframe instead of retrying blindly\n"
+        "- You tried a few things and the picture is getting messy — reframe to organize "
+        "what you know\n"
+        "- You have multiple paths forward and need a trade-off analysis\n"
+        "- You keep hitting the same wall and need a fresh perspective on the same evidence\n\n"
         "**What to provide**:\n"
-        "- `question` and `goal` are required — be precise\n"
-        "- Fill `attempts`, `difficulties`, `constraints`, `resources` as needed\n\n"
-        "**How it works**: All inputs are composed into a clean standalone prompt. "
-        "The model sees only this distilled summary — not the surrounding tool noise — "
-        "giving you a clear answer.\n\n"
-        "**Analogy**: `web_search` is for finding external information; `reframe_tool` is for "
-        "organizing your own thinking about a problem. Both strip away context noise to get "
-        "a focused result.\n\n"
+        "- `question` and `goal` are required — be precise about what happened and what "
+        "you want\n"
+        "- Fill `attempts`, `difficulties`, `constraints`, `resources` as needed — more "
+        "context = better answer\n\n"
+        "**How it differs from `debug_root_cause_tool`**:\n"
+        "- `debug_root_cause_tool` recommends an investigation **methodology** "
+        "(which RCA approach to use and what to look for)\n"
+        "- `reframe_tool` strips tool noise and gets the model to **answer the question "
+        "directly** — useful when you already know what the problem is but need a "
+        "clear direction\n\n"
         "**Note**: This costs tokens. Be specific for best results."
     )
 

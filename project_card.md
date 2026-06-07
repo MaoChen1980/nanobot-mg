@@ -126,7 +126,7 @@ E:\claude\nanobot-mg/
         check_subagent.py (2KB)
         conversation_search.py (7KB)
         cron.py (20KB)
-        diagnose_tool.py (7KB)
+        diagnose_codebase_tool.py (7KB)
         edit_files.py (17KB)
         explore_module.py (19KB)
         file_state.py (7KB)

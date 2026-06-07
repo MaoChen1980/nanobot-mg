@@ -219,7 +219,6 @@ class TestAssessMeTool:
                 [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}],
                 verify="",
             )
-            assert _ASSESSMENT_PREFIX in result
             assert "All good" in result
 
     @pytest.mark.asyncio
@@ -325,7 +324,7 @@ class TestAppendTurnToSessionAssessmentFilter:
             "role": "tool",
             "tool_call_id": "call_1",
             "name": "assess_me_tool",
-            "content": "No response needed, but a reminder:\n\nsome analysis",
+            "content": "some analysis",
             "timestamp": "2025-01-01T00:00:00",
         }
 

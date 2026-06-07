@@ -184,7 +184,7 @@ class TestToolMetadata:
         assert "Purpose" in DebugRootCauseTool.description
 
     def test_description_differentiates_from_diagnose(self):
-        assert "diagnose_tool" in DebugRootCauseTool.description
+        assert "diagnose_codebase_tool" in DebugRootCauseTool.description
 
     def test_description_differentiates_from_assess_me(self):
         assert "assess_me_tool" in DebugRootCauseTool.description

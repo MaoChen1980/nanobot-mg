@@ -28,7 +28,7 @@ _TOOL_FORMATS: dict[str, tuple[list[str], str, bool, bool]] = {
     "search_text_tool":    (["query"],                          'search("{}")',     False, False),
     "ask_user":       (["question"],                       'ask("{}")',        False, False),
     "spawn_tool":          (["task"],                           'spawn("{}")',      False, False),
-    "diagnose_tool":       (["error", "target"],                'diagnose("{}")',   False, False),
+    "diagnose_codebase_tool":       (["error", "target"],                'diagnose("{}")',   False, False),
     "check_subagent_tool": (["task_id"],                        'check({})',        False, False),
 }
 

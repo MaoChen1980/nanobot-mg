@@ -84,7 +84,7 @@ _SOURCE_TOOLS = frozenset({
     "web_search_tool", "web_fetch_tool", "show_stages_tool",
     "memory_search_tool", "conversation_search_tool", "search_text_tool", "explore_module_tool",
     "framework_search_tool", "scan_project_tool", "tool_call_log_tool", "check_subagent_tool",
-    "analyze_tool", "diagnose_tool",
+    "analyze_tool", "diagnose_codebase_tool",
 })
 
 # All tool names (with _tool suffix) — used for content detection to catch
@@ -101,7 +101,7 @@ _TOOL_NAMES_FOR_CONTENT_CHECK = frozenset({
     "request_orchestrator_input_tool", "notify_orchestrator_tool",
     "search_text_tool", "memory_search_tool", "conversation_search_tool",
     "framework_search_tool", "explore_module_tool", "scan_project_tool",
-    "analyze_tool", "diagnose_tool",
+    "analyze_tool", "diagnose_codebase_tool",
     "cron_tool", "save_stage_tool", "show_stages_tool", "restore_stage_tool",
     "self_restart_tool", "tool_call_log_tool", "notebook_edit_tool",
 })

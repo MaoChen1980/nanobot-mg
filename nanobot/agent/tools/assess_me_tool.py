@@ -11,8 +11,8 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 
 @tool_parameters(
     build_parameters_schema(
-        focus=p("string", "Optional — narrow assessment to one area: 'progress' (what's done vs pending and what's blocking), 'gaps' (information I should have but haven't collected), 'assumptions' (unverified beliefs driving my reasoning), 'files' (what I've read/modified vs what I haven't touched yet). Default (empty) = full 7-question assessment."),
-        verify=p("string", "Optional — specific items for the assessor to check against conversation history. Pass each item as a clear claim or statement. The assessor will mark each as ✅ verified, ❌ not verified (contradicted), or ⚠️ insufficient evidence. E.g.: 'verify=\"The config file is at /etc/app/config.yml, The API returns JSON, Port 8080 is open\"'"),
+        focus=p("string", "Optional — narrow assessment: 'direction' (current investigation approach — is it sound?), 'gaps' (what information should I have but don't?), 'assumptions' (unverified beliefs driving my debugging), 'progress' (what's done vs pending). Default = full assessment."),
+        verify=p("string", "Optional — specific claims to check against the conversation. Pass each as clear statements. The assessor marks each as ✅ verified, ❌ not verified, or ⚠️ insufficient evidence. E.g.: verify=\"The error is in the SSE parsing, The API key is being passed correctly, I've checked the right file\""),
         required=[],
     )
 )
@@ -22,20 +22,23 @@ class AssessMeTool(Tool):
     name = "assess_me_tool"
     description = (
         "**What it does**: A separate LLM reads this entire conversation as a neutral observer "
-        "and either (a) answers 7 questions about what you know/don't know/are assuming, or "
-        "(b) verifies specific items you pass via the `verify` parameter.\n\n"
-        "**When to call — you are in one of these situations**:\n"
-        "1. You just listed premises and want them verified — "
-        "call with `verify=\"premise 1, premise 2, ...\"` to get pass/fail per item\n"
-        "2. You need to check if a claim is supported by what you've done — "
-        "call with `verify=\"claim\"` to confirm or refute\n"
-        "3. You're planning next steps and multiple paths exist — "
-        "call with `focus=\"assumptions\"` to identify unverified beliefs\n"
-        "4. The conversation is long and you lost track — "
-        "call with `focus=\"progress\"` to get a summary\n\n"
-        "**Key difference from other tools**: This doesn't fetch external information. "
-        "It re-reads everything you already have and tells you what you actually know "
-        "vs what you think you know."
+        "and tells you whether your debugging direction is sound — whether your assumptions "
+        "hold up, what you might have missed, and whether you're going in circles. It's an "
+        "objective second opinion without leaving the conversation.\n\n"
+        "**When to call — when you need a sanity check on your debugging direction**:\n"
+        "- A tool returned a confusing result and you're not sure if you misused it or "
+        "the problem is elsewhere\n"
+        "- You tried a few approaches but keep getting the same or similar errors — "
+        "call with `verify=\"my direction is right, the problem is in X\"` to get a pass/fail\n"
+        "- You feel like you're going in circles — call with `focus=\"direction\"` to get "
+        "an outside view on whether your approach makes sense\n"
+        "- You're about to try something expensive (long exec, many greps) and want to "
+        "check if your premise is solid first\n"
+        "- You have multiple competing hypotheses and want to know which one has the "
+        "most evidence behind it\n\n"
+        "**Key difference**: This doesn't search code or fetch new information. "
+        "It re-reads everything you've already done and tells you if you're on the "
+        "right track or wasting time."
     )
     read_only = True
 
@@ -71,4 +74,4 @@ class AssessMeTool(Tool):
         if focus:
             result = f"Focus: {focus}\n\n{result}"
 
-        return f"No response needed, but a reminder:\n\n{result}"
+        return result

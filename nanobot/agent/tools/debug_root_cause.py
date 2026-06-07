@@ -101,7 +101,7 @@ _RCA_METHODS = """
 
 @tool_parameters(
     build_parameters_schema(
-        problem=p("string", "The specific problem, error, or symptom to debug. Describe it clearly — what happened, what was expected, and any relevant context."),
+        problem=p("string", "What happened? Describe the error, unexpected behavior, or situation you need to figure out."),
         focus_method=p("string", "Optional — constrain analysis to one specific method: 'divide_conquer', 'comparison', 'rollback', 'hypothesis_testing', 'reverse_inference', 'trial_error', 'look_inside', 'single_variable', 'boundary_testing', 'reproduction', 'elimination', 'substitution', 'chain_tracing', 'log_injection', 'time_travel', 'wait_observe', 'layer_stripping', 'outlier_analysis', 'force_failure', 'peer_review'."),
         required=["problem"],
     )
@@ -111,16 +111,16 @@ class DebugRootCauseTool(Tool):
 
     name = "debug_root_cause_tool"
     description = (
-        "**Purpose**: You describe a problem you're stuck on, and this tool returns "
-        "a structured debug plan: recommended investigation method(s) + specific "
-        "directions to examine. It reads the full conversation for context, so your "
-        "problem description can be brief — the tool already has the background.\n\n"
-        "**When to call — you are in one of these situations**:\n"
-        "- You tried a few approaches but keep getting different errors, no clear pattern\n"
-        "- You don't know where to start investigating — the problem space feels too large\n"
-        "- A tool failed 2+ times and retrying the same thing won't help\n"
-        "- The error is intermittent or non-deterministic and you need a systematic strategy\n"
-        "- You need to step back and choose an investigation method instead of guessing\n\n"
+        "**Purpose**: When you need to figure out how to debug something — whether "
+        "you're just starting an investigation, stuck mid-way, or want to double-check "
+        "your approach — call this to get a structured methodology recommendation. "
+        "It reads the full conversation so your question can be brief.\n\n"
+        "**When to call — when anything goes wrong, this is your first instinct**:\n"
+        "- Any tool returns an error or unexpected result\n"
+        "- You see an error and need to figure out how to approach it\n"
+        "- You tried a few things but kept hitting dead ends\n"
+        "- You're about to grep/read/write/exec your way through a problem — stop first, "
+        "get a methodology\n\n"
         "**Output**: Recommended method(s) from 20 RCA approaches (divide & conquer, "
         "comparison, rollback, hypothesis testing, reverse inference, trial & error, "
         "look inside, single variable, boundary testing, reproduction, elimination, "
@@ -128,7 +128,7 @@ class DebugRootCauseTool(Tool):
         "layer stripping, outlier analysis, force failure, peer review) + concrete "
         "things to examine. You decide which tools to use for the actual investigation.\n\n"
         "**How it differs from other tools**:\n"
-        "- `diagnose_tool` searches code + git history for matching error text\n"
+        "- `diagnose_codebase_tool` searches code + git history for matching error text\n"
         "- `assess_me_tool` audits what you know vs assume (cognition audit)\n"
         "- `reframe_tool` re-states the problem cleanly for a fresh perspective\n"
         "- `debug_root_cause_tool` gives you a **systematic investigation strategy** — "

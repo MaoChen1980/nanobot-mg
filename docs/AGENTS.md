@@ -102,7 +102,7 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 |------|------|
 | `run_recipe` | 多步快捷操作（find_and_read、explore_source 等） |
 | `analyze_data` | 数据分析（导入/导出/调用关系树） |
-| `diagnose_tool` | 错误诊断（grep + git blame） |
+| `diagnose_codebase_tool` | 错误诊断（grep + git blame） |
 
 ### 计算执行
 | 工具 | 用途 | 注意 |
