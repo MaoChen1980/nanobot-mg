@@ -48,6 +48,7 @@ from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.diagnose_tool import DiagnoseTool
 from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.agent.tools.self_restart_tool import SelfRestartTool
+from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.agent.context_vars import _current_debug_enabled
@@ -386,6 +387,7 @@ class AgentLoop:
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
+        self.tools.register(ReframeTool(loop=self))
         if self._db:
             from nanobot.agent.tools.tool_call_log import ToolCallLogTool
             self.tools.register(ToolCallLogTool(db=self._db))
