@@ -65,6 +65,18 @@ class TestExecute:
         assert "Trial & Error" in msg
         assert "Look Inside" in msg
         assert "Single Variable" in msg
+        assert "Boundary Testing" in msg
+        assert "Reproduction" in msg
+        assert "Elimination" in msg
+        assert "Substitution" in msg
+        assert "Stack Trace" in msg
+        assert "Log Injection" in msg
+        assert "Time Travel" in msg
+        assert "Wait & Observe" in msg
+        assert "Layer Stripping" in msg
+        assert "Outlier Analysis" in msg
+        assert "Force Failure" in msg
+        assert "Peer Review" in msg
 
     @pytest.mark.asyncio
     async def test_includes_problem_when_provided(self):
