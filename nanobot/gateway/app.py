@@ -194,6 +194,8 @@ class GatewayApplication:
             self.provider_snapshot = None
         else:
             self.provider = self.provider_snapshot.provider
+            from nanobot.agent.llm_context import set_llm
+            set_llm(self.provider, self.provider_snapshot.model)
 
         if self.provider_snapshot is None:
             # Start in setup mode — no agent, just the WebUI

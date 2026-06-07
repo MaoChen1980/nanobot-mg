@@ -5,8 +5,6 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from loguru import logger
-
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 
@@ -60,21 +58,20 @@ class AssessMeTool(Tool):
         verify: str = "",
         **kwargs: Any,
     ) -> str:
-        loop = self._loop
         session_key = self._session_key.get()
         if not session_key:
             return "Error: no active session — cannot read conversation history."
 
-        session = loop.sessions.get_or_create(session_key)
+        session = self._loop.sessions.get_or_create(session_key)
         history = session.format_history(
-            include_timestamps=True, timezone=loop.context.timezone
+            include_timestamps=True, timezone=self._loop.context.timezone
         )
         if not history:
             return "Error: conversation history is empty."
 
         from nanobot.agent.assess_me import assess_me
 
-        result = await assess_me(history, loop.provider, loop.model, verify=verify)
+        result = await assess_me(history, verify=verify)
         if result is None:
             return "Error: assessment LLM call failed."
 

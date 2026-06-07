@@ -12,6 +12,7 @@ from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.llm_context import chat
 from nanobot.session.manager import Session
 from nanobot.utils.helpers import estimate_message_tokens
 
@@ -132,8 +133,6 @@ def split_history_by_budget(
 
 async def summarize_turns(
     turns: list[dict],
-    provider: Any,
-    model: str,
     future_context: list[dict] | None = None,
     previous_summary: str | None = None,
 ) -> str:
@@ -162,9 +161,8 @@ async def summarize_turns(
         prompt = _build_prompt(current_turns, current_future, previous_summary)
 
         try:
-            resp = await provider.chat_stream(
+            resp = await chat(
                 [{"role": "user", "content": prompt}],
-                model=model,
             )
         except Exception as e:
             logger.warning("Summary attempt {}/6 failed (network): {}", attempt + 1, e)

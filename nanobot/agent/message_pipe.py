@@ -12,6 +12,7 @@ from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.llm_context import chat_stream_with_retry, chat_with_retry
 from nanobot.session.manager import Session
 
 
@@ -47,31 +48,25 @@ class MessagePipe:
     async def complete(
         self,
         messages: list[dict],
-        model: str,
-        provider: Any,
         **kwargs: Any,
     ) -> Any:
         """非流式调用，带 overflow 处理。"""
         for attempt in range(self.MAX_RETRIES + 1):
-            response = await provider.chat_with_retry(
-                messages=messages, model=model, **kwargs
-            )
+            response = await chat_with_retry(messages=messages, **kwargs)
             if not _is_overflow(response):
                 return response
             logger.warning(
                 "Overflow detected (attempt {}/{}), compressing...",
                 attempt + 1, self.MAX_RETRIES,
             )
-            messages = await self._compress(messages, provider, model)
+            messages = await self._compress(messages)
 
         # Last attempt: send as-is (can't compress further)
-        return await provider.chat_with_retry(messages=messages, model=model, **kwargs)
+        return await chat_with_retry(messages=messages, **kwargs)
 
     async def complete_stream(
         self,
         messages: list[dict],
-        model: str,
-        provider: Any,
         *,
         on_content_delta: Any,
         on_reasoning_delta: Any,
@@ -79,8 +74,8 @@ class MessagePipe:
     ) -> Any:
         """流式调用，带 overflow 处理。"""
         for attempt in range(self.MAX_RETRIES + 1):
-            response = await provider.chat_stream_with_retry(
-                messages=messages, model=model,
+            response = await chat_stream_with_retry(
+                messages=messages,
                 on_content_delta=on_content_delta,
                 on_reasoning_delta=on_reasoning_delta,
                 **kwargs,
@@ -91,16 +86,16 @@ class MessagePipe:
                 "Overflow detected (attempt {}/{}), compressing...",
                 attempt + 1, self.MAX_RETRIES,
             )
-            messages = await self._compress(messages, provider, model)
+            messages = await self._compress(messages)
 
-        return await provider.chat_stream_with_retry(
-            messages=messages, model=model,
+        return await chat_stream_with_retry(
+            messages=messages,
             on_content_delta=on_content_delta,
             on_reasoning_delta=on_reasoning_delta,
             **kwargs,
         )
 
-    async def _compress(self, messages: list[dict], provider: Any, model: str) -> list[dict]:
+    async def _compress(self, messages: list[dict]) -> list[dict]:
         """压缩 messages 中最旧的轮次 — 异步（调 LLM 做 summary）。"""
         from nanobot.agent.loop_utils import strip_think
         from nanobot.agent.compress import summarize_turns
@@ -131,7 +126,7 @@ class MessagePipe:
         future_context = [m for turn in keep for m in turn]
 
         summary = await summarize_turns(
-            compress_flat, provider, model,
+            compress_flat,
             future_context=future_context,
         )
         summary = strip_think(summary).strip() if summary else ""

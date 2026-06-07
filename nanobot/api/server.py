@@ -96,15 +96,13 @@ async def handle_memory_search(request: Request) -> Response:
 
     if request.query_params.get("llm") == "1" and results:
         try:
-            from nanobot.providers.factory import make_provider
+            from nanobot.agent.llm_context import chat_with_retry
 
-            provider = make_provider(config)
             memory_text = "\n\n".join(
                 f"--- {r['source']} ({r['heading']}) ---\n{r['text']}"
                 for r in results
             )
-            interpretation = await provider.chat_with_retry(
-                model=config.agents.defaults.model,
+            interpretation = await chat_with_retry(
                 messages=[
                     {"role": "system", "content": (
                         "You are a memory analyst. Given a user's question and the "
@@ -561,9 +559,7 @@ async def handle_memory_chat(request: Request) -> Response:
     messages.extend(history)
     messages.append({"role": "user", "content": message})
 
-    from nanobot.providers.factory import make_provider
-
-    provider = make_provider(config)
+    from nanobot.agent.llm_context import chat_stream_with_retry
 
     async def event_stream():
         queue: asyncio.Queue[str | None] = asyncio.Queue()
@@ -573,8 +569,7 @@ async def handle_memory_chat(request: Request) -> Response:
 
         async def run_chat():
             try:
-                await provider.chat_stream_with_retry(
-                    model=model,
+                await chat_stream_with_retry(
                     messages=messages,
                     on_content_delta=on_token,
                 )

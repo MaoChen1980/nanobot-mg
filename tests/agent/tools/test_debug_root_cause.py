@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -21,9 +21,7 @@ def _make_mock_loop(**overrides):
     loop.context = MagicMock()
     loop.context.timezone = "Asia/Shanghai"
 
-    provider = MagicMock()
-    provider.chat_stream = AsyncMock(return_value=LLMResponse(content="Try the divide & conquer method"))
-    loop.provider = provider
+    loop.provider = MagicMock()
 
     # sessions mock
     session = MagicMock()
@@ -48,19 +46,6 @@ def _make_tool(loop=None):
     return DebugRootCauseTool(loop=loop)
 
 
-def _capture_chat_stream(loop):
-    """Capture the messages passed to chat_stream."""
-    captured = {}
-
-    async def capture(messages, model=None, **_):
-        captured["messages"] = messages
-        captured["model"] = model
-        return LLMResponse(content="Try divide & conquer")
-
-    loop.provider.chat_stream.side_effect = capture
-    return captured
-
-
 # ---------------------------------------------------------------------------
 # execute — basic flow
 # ---------------------------------------------------------------------------
@@ -70,10 +55,11 @@ class TestExecute:
     @pytest.mark.asyncio
     async def test_returns_advice(self):
         loop = _make_mock_loop()
-        captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
-        result = await tool.execute(problem="debug this")
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="Try divide & conquer")
+            result = await tool.execute(problem="debug this")
         assert result == "Try divide & conquer"
 
     @pytest.mark.asyncio
@@ -95,12 +81,14 @@ class TestExecute:
     @pytest.mark.asyncio
     async def test_includes_methods_in_prompt(self):
         loop = _make_mock_loop()
-        captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute(problem="debug this")
-        msg = captured["messages"][0]["content"]
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="advice")
+            await tool.execute(problem="debug this")
+
+        msg = mock_chat.call_args[0][0][0]["content"]
         assert "Divide & Conquer" in msg
         assert "Comparison" in msg
         assert "Rollback" in msg
@@ -113,45 +101,58 @@ class TestExecute:
     @pytest.mark.asyncio
     async def test_includes_problem_when_provided(self):
         loop = _make_mock_loop()
-        captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute(problem="TypeError: cannot unpack")
-        msg = captured["messages"][0]["content"]
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="advice")
+            await tool.execute(problem="TypeError: cannot unpack")
+
+        msg = mock_chat.call_args[0][0][0]["content"]
         assert "TypeError: cannot unpack" in msg
 
     @pytest.mark.asyncio
     async def test_includes_focus_method_when_provided(self):
         loop = _make_mock_loop()
-        captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute(problem="debug this", focus_method="reverse_inference")
-        msg = captured["messages"][0]["content"]
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="advice")
+            await tool.execute(problem="debug this", focus_method="reverse_inference")
+
+        msg = mock_chat.call_args[0][0][0]["content"]
         assert "reverse_inference" in msg
 
     @pytest.mark.asyncio
     async def test_includes_conversation(self):
         loop = _make_mock_loop()
-        captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute(problem="debug this")
-        msg = captured["messages"][0]["content"]
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="advice")
+            await tool.execute(problem="debug this")
+
+        msg = mock_chat.call_args[0][0][0]["content"]
         assert "TypeError" in msg
 
     @pytest.mark.asyncio
     async def test_correct_model(self):
+        """Model is auto-injected by llm_context from ContextVar — this test
+        verifies that the tool sends messages correctly."""
         loop = _make_mock_loop()
-        captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute(problem="debug this")
-        assert captured["model"] == "test-model"
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="advice")
+            await tool.execute(problem="debug this")
+
+        mock_chat.assert_called_once()
+        msgs = mock_chat.call_args[0][0]
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
 
 
 # ---------------------------------------------------------------------------
@@ -163,32 +164,36 @@ class TestExecuteErrors:
     @pytest.mark.asyncio
     async def test_chat_stream_error_returns_error_msg(self):
         loop = _make_mock_loop()
-        loop.provider.chat_stream = AsyncMock(side_effect=RuntimeError("provider down"))
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        result = await tool.execute(problem="debug this")
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.side_effect = RuntimeError("provider down")
+            result = await tool.execute(problem="debug this")
+
         assert "Error" in result
         assert "provider down" in result
 
     @pytest.mark.asyncio
     async def test_empty_response_replaced(self):
         loop = _make_mock_loop()
-        loop.provider.chat_stream = AsyncMock(return_value=LLMResponse(content=""))
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        result = await tool.execute(problem="debug this")
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="")
+            result = await tool.execute(problem="debug this")
         assert result == "(empty response)"
 
     @pytest.mark.asyncio
     async def test_none_response_replaced(self):
         loop = _make_mock_loop()
-        loop.provider.chat_stream = AsyncMock(return_value=LLMResponse(content=None))
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        result = await tool.execute(problem="debug this")
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content=None)
+            result = await tool.execute(problem="debug this")
         assert result == "(empty response)"
 
 
@@ -247,9 +252,10 @@ class TestSetContext:
     @pytest.mark.asyncio
     async def test_execute_uses_set_context(self):
         loop = _make_mock_loop()
-        _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("my-session")
 
-        await tool.execute(problem="debug this")
+        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = LLMResponse(content="advice")
+            await tool.execute(problem="debug this")
         loop.sessions.get_or_create.assert_called_with("my-session")

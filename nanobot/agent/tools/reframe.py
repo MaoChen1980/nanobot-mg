@@ -8,13 +8,12 @@ constraints, resources) and sends it to the model for a focused answer.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
+from nanobot.agent.llm_context import chat
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
-
-if TYPE_CHECKING:
-    from nanobot.agent.loop import AgentLoop
 
 
 @tool_parameters(
@@ -32,8 +31,8 @@ if TYPE_CHECKING:
 class ReframeTool(Tool):
     """Distill a problem situation for a focused model response."""
 
-    def __init__(self, loop: AgentLoop) -> None:
-        self._loop = loop
+    def __init__(self, workspace: Path | None = None) -> None:
+        self._workspace = workspace
 
     name = "reframe_tool"
     description = (
@@ -75,8 +74,6 @@ class ReframeTool(Tool):
         focus: str = "",
         **kwargs: Any,
     ) -> str:
-        loop = self._loop
-
         lines: list[str] = [
             "You are acting as an independent advisor. The agent is stuck and asking for help.",
             "",
@@ -103,7 +100,7 @@ class ReframeTool(Tool):
             lines += ["", "## Focus Area", focus]
 
         # Attach project context if available
-        project_root = getattr(loop, "workspace", None)
+        project_root = self._workspace
         if project_root:
             lines += [
                 "",
@@ -130,10 +127,7 @@ class ReframeTool(Tool):
         prompt = "\n".join(lines)
 
         try:
-            resp = await loop.provider.chat_stream(
-                [{"role": "user", "content": prompt}],
-                model=loop.model,
-            )
+            resp = await chat([{"role": "user", "content": prompt}])
         except Exception as e:
             return f"Error: LLM call failed — {e}"
 

@@ -99,7 +99,6 @@ class SystemMessageHandler:
                     prev = getattr(session, '_last_summary', None)
                     summary = await summarize_turns(
                         [m for turn in to_compress_fmt for m in turn],
-                        self._loop.provider, self._loop.model,
                         future_context=[m for turn in keeps_fmt for m in turn],
                         previous_summary=prev,
                     )
@@ -250,7 +249,6 @@ class UserMessageHandler:
                     prev = getattr(session, '_last_summary', None)
                     summary = await summarize_turns(
                         [m for turn in to_compress_fmt for m in turn],
-                        self._loop.provider, self._loop.model,
                         future_context=[m for turn in keeps_fmt for m in turn],
                         previous_summary=prev,
                     )
@@ -371,7 +369,7 @@ class UserMessageHandler:
         if not trigger:
             return
 
-        result = await assess_me(history, self._loop.provider, self._loop.model)
+        result = await assess_me(history)
         if result:
             history.append(build_assessment_message(result))
             logger.info(

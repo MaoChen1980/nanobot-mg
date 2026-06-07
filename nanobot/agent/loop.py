@@ -271,8 +271,6 @@ class AgentLoop:
         self._pt_save_interval = pt_save_interval
         self.extractor = MemoryExtractor(
             store=self.context.memory,
-            provider=provider,
-            model=self.model,
             timezone=self.context.timezone,
         )
         self._register_default_tools()
@@ -339,7 +337,8 @@ class AgentLoop:
         self.context_window_tokens = context_window_tokens
         self.runner.provider = provider
         self.subagents.set_provider(provider, model)
-        self.extractor.set_provider(provider, model)
+        from nanobot.agent.llm_context import set_llm
+        set_llm(provider, model)
         self._provider_signature = snapshot.signature
         logger.info("Runtime model switched for next turn: {} -> {}", old_model, model)
 
@@ -390,7 +389,7 @@ class AgentLoop:
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
-        self.tools.register(ReframeTool(loop=self))
+        self.tools.register(ReframeTool(workspace=self.workspace))
         self.tools.register(DebugRootCauseTool(loop=self))
         self.tools.register(AssessMeTool(loop=self))
         if self._db:
@@ -703,7 +702,7 @@ class AgentLoop:
 
         async def _cb(messages: list[dict]) -> bool:
             from nanobot.agent.assess_me import assess_me, build_assessment_message
-            result = await assess_me(messages, self.provider, self.model)
+            result = await assess_me(messages)
             if result:
                 messages.append(build_assessment_message(result))
                 return True

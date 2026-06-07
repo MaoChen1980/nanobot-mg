@@ -13,6 +13,7 @@ import pytest
 from nanobot.config.schema import AgentDefaults
 from nanobot.agent.tools.base import Tool
 from nanobot.agent.tools.registry import ToolRegistry
+from nanobot.agent.llm_context import set_llm as llm_set_llm
 from nanobot.providers.base import LLMResponse, ToolCallRequest
 from nanobot.agent.loop import _SessionDispatchState
 
@@ -36,6 +37,7 @@ def _make_loop(tmp_path):
     bus = MessageBus()
     provider = MagicMock()
     provider.get_default_model.return_value = "test-model"
+    llm_set_llm(provider, "test-model")
 
     with patch("nanobot.agent.loop.ContextBuilder"), \
          patch("nanobot.agent.loop.SessionManager"), \
@@ -65,6 +67,7 @@ async def test_runner_streaming_hook_receives_deltas_and_end_signal():
 
     provider.chat_stream_with_retry = chat_stream_with_retry
     provider.chat_with_retry = AsyncMock()
+    llm_set_llm(provider, "test-model")
     tools = MagicMock()
     tools.get_definitions.return_value = []
 
@@ -207,6 +210,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
 
     provider.chat_with_retry = chat_with_retry
     provider.chat_stream_with_retry = chat_with_retry
+    llm_set_llm(provider, "test-model")
 
     async def fake_tool(name, args, **kw):
         return "file content"
@@ -369,6 +373,7 @@ async def test_streamed_flag_not_set_on_llm_error(tmp_path):
     bus = MessageBus()
     provider = MagicMock()
     provider.get_default_model.return_value = "test-model"
+    llm_set_llm(provider, "test-model")
     loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
     error_resp = LLMResponse(
         content="503 service unavailable", finish_reason="error", tool_calls=[], usage={},
@@ -437,6 +442,7 @@ async def test_length_recovery_streaming_calls_on_stream_end_with_resuming():
         return LLMResponse(content="done", finish_reason="stop", usage={})
 
     provider.chat_stream_with_retry = chat_stream_with_retry
+    llm_set_llm(provider, "test-model")
     tools = MagicMock()
     tools.get_definitions.return_value = []
 
@@ -577,6 +583,7 @@ async def test_runner_tool_error_preserves_tool_results_in_messages():
 
     provider.chat_with_retry = chat_with_retry
     provider.chat_stream_with_retry = chat_with_retry
+    llm_set_llm(provider, "test-model")
 
     call_idx = 0
 
@@ -842,6 +849,7 @@ async def test_checkpoint2_injects_after_final_response_with_resuming_stream():
         return LLMResponse(content="second answer", tool_calls=[], usage={})
 
     provider.chat_stream_with_retry = chat_stream_with_retry
+    llm_set_llm(provider, "test-model")
     tools = MagicMock()
     tools.get_definitions.return_value = []
 

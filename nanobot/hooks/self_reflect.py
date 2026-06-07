@@ -21,7 +21,7 @@ from typing import Any
 
 from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext
-from nanobot.providers.base import LLMProvider
+from nanobot.agent.llm_context import chat
 
 
 # --- Reflection prompt -------------------------------------------------------
@@ -157,17 +157,6 @@ class SelfReflectHook(AgentHook):
         self._turn_count = 0  # user turns (for interval check)
         self._entries_accumulated = []
         self._interval = interval if interval is not None else self.DEFAULT_INTERVAL
-        # Optional provider override — if set, _call_llm uses it instead of
-        # make_provider(config). The agent loop calls set_provider() after
-        # discovery so reflection uses the same model as the main task.
-        self._provider: LLMProvider | None = None
-        self._model: str | None = None
-
-    def set_provider(self, provider: LLMProvider, model: str | None = None) -> None:
-        """Inject the provider/model the main agent is using."""
-        self._provider = provider
-        if model is not None:
-            self._model = model
 
     # -- after_iteration: accumulate metrics in memory ------------------------
 
@@ -309,21 +298,8 @@ class SelfReflectHook(AgentHook):
         return self._parse_findings(response)
 
     async def _call_llm(self, metrics_text: str, hook_code: str) -> str:
-        """Make a minimal LLM call for structured findings extraction.
-
-        Uses self._provider if set via set_provider(). Otherwise falls
-        back to make_provider(config), which yields the config-default provider.
-        """
-        if self._provider is None:
-            from nanobot.config.loader import load_config
-            from nanobot.providers.factory import make_provider
-
-            config = load_config()
-            provider = make_provider(config)
-        else:
-            provider = self._provider
-
-        response = await provider.chat_stream(
+        """Make a minimal LLM call for structured findings extraction."""
+        response = await chat(
             messages=[
                 {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},
                 {"role": "user", "content": REFLECTION_USER_TEMPLATE.format(
@@ -331,7 +307,6 @@ class SelfReflectHook(AgentHook):
                     hook_code=hook_code,
                 )},
             ],
-            tools=None,
             max_tokens=1024,
             temperature=0.3,
         )

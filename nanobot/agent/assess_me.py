@@ -6,6 +6,7 @@ from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.llm_context import chat
 from nanobot.utils.prompt_templates import render_template
 
 _MAX_TOOL_RESULT_CHARS = 300
@@ -64,8 +65,6 @@ def format_conversation(messages: list[dict]) -> str:
 
 async def assess_me(
     messages: list[dict[str, Any]],
-    provider: Any,
-    model: str,
     verify: str = "",
 ) -> str | None:
     """Assess current cognition state from conversation history.
@@ -77,9 +76,8 @@ async def assess_me(
     prompt = render_template("agent/assess_me.md", conversation=conversation, verify=verify)
 
     try:
-        resp = await provider.chat_stream(
+        resp = await chat(
             [{"role": "user", "content": prompt}],
-            model=model,
             max_tokens=1024,
             temperature=0.3,
         )

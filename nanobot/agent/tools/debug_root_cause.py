@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from nanobot.agent.llm_context import chat
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 
@@ -163,9 +164,8 @@ class DebugRootCauseTool(Tool):
         prompt = "\n".join(lines)
 
         try:
-            resp = await loop.provider.chat_stream(
+            resp = await chat(
                 [{"role": "user", "content": prompt}],
-                model=loop.model,
             )
         except Exception as e:
             logger.warning("debug_root_cause LLM call failed: {}", e)

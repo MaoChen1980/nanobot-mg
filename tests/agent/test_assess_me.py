@@ -138,63 +138,56 @@ class TestIsAssessmentMessage:
 class TestAssessMe:
     @pytest.mark.asyncio
     async def test_success(self) -> None:
-        provider = AsyncMock()
-        provider.chat_stream.return_value.content = "**1. What I have done:**\n- Read file x\n- Modified file y"
+        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value.content = "**1. What I have done:**\n- Read file x\n- Modified file y"
 
-        result = await assess_me(
-            [{"role": "user", "content": "hello"}],
-            provider=provider,
-            model="test-model",
-        )
-        assert result is not None
-        assert "What I have done" in result
-        provider.chat_stream.assert_called_once()
-        _, kwargs = provider.chat_stream.call_args
-        assert kwargs["model"] == "test-model"
-        assert kwargs["max_tokens"] == 1024
-        assert kwargs["temperature"] == 0.3
+            result = await assess_me(
+                [{"role": "user", "content": "hello"}],
+            )
+            assert result is not None
+            assert "What I have done" in result
+            mock_chat.assert_called_once()
+            _, kwargs = mock_chat.call_args
+            assert kwargs["max_tokens"] == 1024
+            assert kwargs["temperature"] == 0.3
 
     @pytest.mark.asyncio
     async def test_empty_response_returns_none(self) -> None:
-        provider = AsyncMock()
-        provider.chat_stream.return_value.content = ""
+        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value.content = ""
 
-        result = await assess_me(
-            [{"role": "user", "content": "hello"}],
-            provider=provider,
-            model="test-model",
-        )
-        assert result is None
+            result = await assess_me(
+                [{"role": "user", "content": "hello"}],
+            )
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_llm_exception_returns_none(self) -> None:
-        provider = AsyncMock()
-        provider.chat_stream.side_effect = RuntimeError("LLM down")
+        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.side_effect = RuntimeError("LLM down")
 
-        result = await assess_me(
-            [{"role": "user", "content": "hello"}],
-            provider=provider,
-            model="test-model",
-        )
-        assert result is None
+            result = await assess_me(
+                [{"role": "user", "content": "hello"}],
+            )
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_passes_conversation_to_provider(self) -> None:
-        provider = AsyncMock()
-        provider.chat_stream.return_value.content = "analysis"
+        with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value.content = "analysis"
 
-        messages = [
-            {"role": "user", "content": "first"},
-            {"role": "assistant", "content": "response"},
-        ]
-        await assess_me(messages, provider=provider, model="m")
+            messages = [
+                {"role": "user", "content": "first"},
+                {"role": "assistant", "content": "response"},
+            ]
+            await assess_me(messages)
 
-        call_args, _ = provider.chat_stream.call_args
-        prompt_messages = call_args[0]
-        assert len(prompt_messages) == 1
-        assert prompt_messages[0]["role"] == "user"
-        assert "first" in prompt_messages[0]["content"]
-        assert "response" in prompt_messages[0]["content"]
+            call_args, _ = mock_chat.call_args
+            prompt_messages = call_args[0]
+            assert len(prompt_messages) == 1
+            assert prompt_messages[0]["role"] == "user"
+            assert "first" in prompt_messages[0]["content"]
+            assert "response" in prompt_messages[0]["content"]
 
 
 # =========================================================================
@@ -251,8 +244,6 @@ class TestAssessMeTool:
 
             mock_assess.assert_called_once_with(
                 [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}],
-                loop.provider,
-                "test-model",
                 verify="",
             )
             assert _ASSESSMENT_PREFIX in result
@@ -279,8 +270,6 @@ class TestAssessMeTool:
 
             mock_assess.assert_called_once_with(
                 [{"role": "user", "content": "Check these claims"}],
-                loop.provider,
-                "test-model",
                 verify="Config at /etc/app/config.yml, Port 8080 is open",
             )
             assert "Verified" in result

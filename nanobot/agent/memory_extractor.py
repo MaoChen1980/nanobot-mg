@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.utils.helpers import ensure_dir
 from nanobot.utils.prompt_templates import render_template
 
 if TYPE_CHECKING:
-    from nanobot.providers.base import LLMProvider
     from nanobot.agent.memory_store import MemoryStore
 
 
@@ -72,22 +72,14 @@ class MemoryExtractor:
     def __init__(
         self,
         store: MemoryStore,
-        provider: LLMProvider,
-        model: str,
         timezone: str | None = None,
     ):
         self.store = store
-        self.provider = provider
-        self.model = model
         self.timezone = timezone
         self.prompts_dir = ensure_dir(store.workspace / "prompts")
         self.failed_dir = ensure_dir(self.prompts_dir / "failed")
         self.processed_dir = ensure_dir(self.prompts_dir / "processed")
         self._last_modified_files: list[str] = []
-
-    def set_provider(self, provider: LLMProvider, model: str) -> None:
-        self.provider = provider
-        self.model = model
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -208,14 +200,11 @@ class MemoryExtractor:
         prompt = render_template("agent/extractor_analysis.md")
 
         try:
-            response = await self.provider.chat_stream_with_retry(
-                model=self.model,
+            response = await chat_stream_with_retry(
                 messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": user_content},
                 ],
-                tools=None,
-                tool_choice=None,
             )
         except Exception:
             logger.exception("MemoryExtractor: analysis LLM call failed")
@@ -591,15 +580,12 @@ class MemoryExtractor:
 
         prompt = render_template("agent/extractor_skill_creator.md")
         try:
-            response = await self.provider.chat_stream_with_retry(
-                model=self.model,
+            response = await chat_stream_with_retry(
                 messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": user_content},
                 ],
                 max_tokens=16384,
-                tools=None,
-                tool_choice=None,
             )
         except Exception:
             logger.exception("MemoryExtractor: skill creation LLM call failed")
@@ -817,14 +803,11 @@ class MemoryExtractor:
         )
 
         try:
-            response = await self.provider.chat_stream_with_retry(
-                model=self.model,
+            response = await chat_stream_with_retry(
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_content},
                 ],
-                tools=None,
-                tool_choice=None,
             )
         except Exception:
             logger.exception("MemoryExtractor: consolidation LLM call failed")
@@ -1375,8 +1358,7 @@ class MemoryExtractor:
             return
 
         try:
-            response = await self.provider.chat_stream_with_retry(
-                model=self.model,
+            response = await chat_stream_with_retry(
                 messages=[
                     {
                         "role": "system",

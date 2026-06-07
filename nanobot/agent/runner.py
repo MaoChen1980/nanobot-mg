@@ -313,7 +313,7 @@ class AgentRunner:
             context = AgentHookContext(iteration=iteration, messages=messages, workspace=spec.workspace)
             await hook.before_iteration(context)
             messages_for_model = hook.before_llm_call(context, messages_for_model)
-            response = await request_model(self.provider, spec, messages_for_model, hook, context)
+            response = await request_model(spec, messages_for_model, hook, context)
             raw_usage = usage_dict(response.usage)
             context.response = response
             context.usage = dict(raw_usage)
@@ -480,7 +480,7 @@ class AgentRunner:
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
                     messages_for_model = split_thinking_messages(messages_for_model)
-                response = await request_finalization_retry(self.provider, spec, messages_for_model)
+                response = await request_finalization_retry(spec, messages_for_model)
                 retry_usage = usage_dict(response.usage)
                 accumulate_usage(usage, retry_usage)
                 raw_usage = merge_usage(raw_usage, retry_usage)
@@ -566,7 +566,6 @@ class AgentRunner:
                             boundary = sum(len(t) for t in s_turns)
                             summary = await summarize_turns(
                                 [m for t in s_turns for m in t],
-                                self.provider, spec.model,
                                 future_context=[m for t in turns[-10:] for m in t],
                             )
                             summary = strip_think(summary).strip() if summary else ""

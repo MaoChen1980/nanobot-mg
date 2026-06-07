@@ -594,6 +594,8 @@ def agent(
 
     bus = MessageBus()
     provider = _make_provider(config)
+    from nanobot.agent.llm_context import set_llm
+    set_llm(provider, config.agents.defaults.model)
 
     # Preserve existing single-workspace installs, but keep custom workspaces clean.
     if is_default_workspace(config.workspace_path):
