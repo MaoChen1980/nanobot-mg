@@ -668,8 +668,24 @@ class ExecTool(Tool):
 
     @staticmethod
     async def _kill_process(process: asyncio.subprocess.Process) -> None:
-        """Kill a subprocess and reap it to prevent zombies."""
-        process.kill()
+        """Kill a subprocess and reap it to prevent zombies.
+
+        On Windows, uses ``taskkill /T /F`` to terminate the entire
+        process tree so child processes (e.g. powershell spawned by
+        gradlew.bat) don't become orphans.
+        """
+        if _IS_WINDOWS:
+            try:
+                kill_proc = await asyncio.create_subprocess_exec(
+                    "taskkill", "/T", "/F", "/PID", str(process.pid),
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(kill_proc.wait(), timeout=3.0)
+            except (OSError, asyncio.TimeoutError):
+                pass
+        else:
+            process.kill()
         try:
             await asyncio.wait_for(process.wait(), timeout=5.0)
         except asyncio.TimeoutError:
@@ -696,7 +712,7 @@ class ExecTool(Tool):
             sr = os.environ.get("SYSTEMROOT", r"C:\Windows")
             env = {
                 "SYSTEMROOT": sr,
-                "COMSPEC": shutil.which("powershell.exe") or "powershell.exe",
+                "COMSPEC": "cmd.exe",
                 "USERPROFILE": os.environ.get("USERPROFILE", ""),
                 "HOMEDRIVE": os.environ.get("HOMEDRIVE", "C:"),
                 "HOMEPATH": os.environ.get("HOMEPATH", "\\"),
