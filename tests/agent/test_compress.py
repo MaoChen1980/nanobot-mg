@@ -432,112 +432,105 @@ class TestSummarizeTurns:
 
     @pytest.mark.asyncio
     async def test_empty_turns_returns_empty(self):
-        result = await summarize_turns([], MagicMock(), "model")
+        result = await summarize_turns([])
         assert result == ""
 
     @pytest.mark.asyncio
     async def test_successful_summary(self):
-        provider = AsyncMock()
-        provider.chat_stream.return_value = LLMResponse(
-            content="verified summary", finish_reason="stop",
-        )
-        with patch("nanobot.agent.compress._build_prompt", return_value="prompt"):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(content="verified summary", finish_reason="stop"),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"):
             result = await summarize_turns(
-                [{"role": "user", "content": "text"}], provider, "model",
+                [{"role": "user", "content": "text"}],
             )
         assert result == "verified summary"
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_provider_error(self):
-        provider = AsyncMock()
-        provider.chat_stream.side_effect = Exception("API error")
-        with patch("nanobot.agent.compress._build_prompt", return_value="prompt"):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            side_effect=Exception("API error"),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"):
             result = await summarize_turns(
-                [{"role": "user", "content": "text"}], provider, "model",
+                [{"role": "user", "content": "text"}],
             )
         assert result == ""
 
     @pytest.mark.asyncio
     async def test_retries_on_network_error_then_succeeds(self):
-        provider = AsyncMock()
-        provider.chat_stream.side_effect = [
-            Exception("timeout"),       # 1st: fail
-            LLMResponse(content="ok", finish_reason="stop"),  # 2nd: success
-        ]
-        with (
-            patch("nanobot.agent.compress._build_prompt", return_value="prompt"),
-            patch("nanobot.agent.compress.asyncio.sleep") as mock_sleep,
-        ):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            side_effect=[Exception("timeout"), LLMResponse(content="ok", finish_reason="stop")],
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"), patch(
+            "nanobot.agent.compress.asyncio.sleep",
+        ) as mock_sleep:
             result = await summarize_turns(
-                [{"role": "user", "content": "text"}], provider, "model",
+                [{"role": "user", "content": "text"}],
             )
         assert result == "ok"
         assert mock_sleep.called
 
     @pytest.mark.asyncio
     async def test_retries_on_overflow_with_half_content(self):
-        provider = AsyncMock()
-        provider.chat_stream.return_value = LLMResponse(
-            content="context length exceeded", finish_reason="error", error_kind="context_length",
-        )
-        with (
-            patch("nanobot.agent.compress._build_prompt", return_value="prompt"),
-            patch("nanobot.agent.compress.asyncio.sleep"),
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(
+                content="context length exceeded", finish_reason="error", error_kind="context_length",
+            ),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"), patch(
+            "nanobot.agent.compress.asyncio.sleep",
         ):
             result = await summarize_turns(
                 [
                     {"role": "user", "content": "abcd"},
                     {"role": "assistant", "content": "efgh"},
                 ],
-                provider, "model",
             )
         assert result == ""  # all retries exhausted
 
     @pytest.mark.asyncio
     async def test_overflow_halves_content_and_retries(self):
         """Overflow with >1 turn halves and retries (eventually succeeds)."""
-        provider = AsyncMock()
-        provider.chat_stream.side_effect = [
-            LLMResponse(content="context length exceeded", finish_reason="error", error_kind="context_length"),
-            LLMResponse(content="half summary", finish_reason="stop"),
-        ]
-        with (
-            patch("nanobot.agent.compress._build_prompt", return_value="prompt"),
-            patch("nanobot.agent.compress.asyncio.sleep"),
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            side_effect=[
+                LLMResponse(content="context length exceeded", finish_reason="error", error_kind="context_length"),
+                LLMResponse(content="half summary", finish_reason="stop"),
+            ],
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"), patch(
+            "nanobot.agent.compress.asyncio.sleep",
         ):
             result = await summarize_turns(
                 [
                     {"role": "user", "content": "abcd"},
                     {"role": "assistant", "content": "efgh"},
                 ],
-                provider, "model",
             )
         assert result == "half summary"
 
     @pytest.mark.asyncio
     async def test_prompt_contains_guidelines(self):
-        provider = AsyncMock()
-        provider.chat_stream.return_value = LLMResponse(
-            content="summary", finish_reason="stop",
-        )
-        result = await summarize_turns(
-            [{"role": "user", "content": "text"}], provider, "model",
-        )
-        assert "summary" == "summary"
-        # Also verify _build_prompt was called (indirectly via provider call)
-        assert provider.chat_stream.called
+        mock_stream = AsyncMock()
+        mock_stream.return_value = LLMResponse(content="summary", finish_reason="stop")
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry", mock_stream,
+        ):
+            result = await summarize_turns(
+                [{"role": "user", "content": "text"}],
+            )
+        assert result == "summary"
+        assert mock_stream.called
 
     @pytest.mark.asyncio
     async def test_includes_future_context_in_prompt(self):
-        provider = AsyncMock()
-        provider.chat_stream.return_value = LLMResponse(
-            content="future-aware summary", finish_reason="stop",
-        )
-        with patch("nanobot.agent.compress._build_prompt") as mock_build:
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(content="future-aware summary", finish_reason="stop"),
+        ), patch("nanobot.agent.compress._build_prompt") as mock_build:
             mock_build.return_value = "built prompt"
             result = await summarize_turns(
                 [{"role": "user", "content": "old"}],
-                provider, "model",
                 future_context=[{"role": "assistant", "content": "new"}],
             )
         assert result == "future-aware summary"
@@ -548,15 +541,15 @@ class TestSummarizeTurns:
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_all_overflow_retries_exhausted(self):
-        provider = AsyncMock()
-        provider.chat_stream.return_value = LLMResponse(
-            content="context length exceeded", finish_reason="error", error_kind="context_length",
-        )
-        with (
-            patch("nanobot.agent.compress._build_prompt", return_value="prompt"),
-            patch("nanobot.agent.compress.asyncio.sleep"),
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(
+                content="context length exceeded", finish_reason="error", error_kind="context_length",
+            ),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"), patch(
+            "nanobot.agent.compress.asyncio.sleep",
         ):
             result = await summarize_turns(
-                [{"role": "user", "content": "tiny"}], provider, "model",
+                [{"role": "user", "content": "tiny"}],
             )
         assert result == ""
