@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 @tool_parameters(
     build_parameters_schema(
         focus=p("string", "Optional — narrow assessment to one area: 'progress' (what's done vs pending and what's blocking), 'gaps' (information I should have but haven't collected), 'assumptions' (unverified beliefs driving my reasoning), 'files' (what I've read/modified vs what I haven't touched yet). Default (empty) = full 7-question assessment."),
+        verify=p("string", "Optional — specific items for the assessor to check against conversation history. Pass each item as a clear claim or statement. The assessor will mark each as ✅ verified, ❌ not verified (contradicted), or ⚠️ insufficient evidence. E.g.: 'verify=\"The config file is at /etc/app/config.yml, The API returns JSON, Port 8080 is open\"'"),
         required=[],
     )
 )
@@ -26,23 +27,20 @@ class AssessMeTool(Tool):
     name = "assess_me_tool"
     description = (
         "**What it does**: A separate LLM reads this entire conversation as a neutral observer "
-        "and answers 7 questions: what you've done, what you know, what you don't know, "
-        "what you're doing now, what you need but haven't got, what you're assuming without "
-        "verifying, and what your current goal and priority are.\n\n"
+        "and either (a) answers 7 questions about what you know/don't know/are assuming, or "
+        "(b) verifies specific items you pass via the `verify` parameter.\n\n"
         "**When to call — you are in one of these situations**:\n"
-        "1. You just read several files and are about to summarize or act — "
-        "call this to check whether you actually confirmed the structure or filled in gaps with assumptions\n"
-        "2. You got an error or unexpected tool result — "
-        "call this to separate what you know from what you guessed\n"
+        "1. You just listed premises and want them verified — "
+        "call with `verify=\"premise 1, premise 2, ...\"` to get pass/fail per item\n"
+        "2. You need to check if a claim is supported by what you've done — "
+        "call with `verify=\"claim\"` to confirm or refute\n"
         "3. You're planning next steps and multiple paths exist — "
-        "call this to identify what you're assuming and haven't verified yet\n"
-        "4. You notice yourself repeating the same pattern — "
-        "call this to find what you overlooked\n"
-        "5. The conversation is long and you lost track of what's been done — "
-        "call this to get a progress summary\n\n"
+        "call with `focus=\"assumptions\"` to identify unverified beliefs\n"
+        "4. The conversation is long and you lost track — "
+        "call with `focus=\"progress\"` to get a summary\n\n"
         "**Key difference from other tools**: This doesn't fetch external information. "
         "It re-reads everything you already have and tells you what you actually know "
-        "vs what you think you know. Call it when you need to step back and see the whole picture."
+        "vs what you think you know."
     )
     read_only = True
 
@@ -59,6 +57,7 @@ class AssessMeTool(Tool):
     async def execute(
         self,
         focus: str = "",
+        verify: str = "",
         **kwargs: Any,
     ) -> str:
         loop = self._loop
@@ -75,7 +74,7 @@ class AssessMeTool(Tool):
 
         from nanobot.agent.assess_me import assess_me
 
-        result = await assess_me(history, loop.provider, loop.model)
+        result = await assess_me(history, loop.provider, loop.model, verify=verify)
         if result is None:
             return "Error: assessment LLM call failed."
 

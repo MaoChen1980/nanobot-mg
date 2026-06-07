@@ -73,13 +73,13 @@ class TestExecute:
         captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
-        result = await tool.execute()
+        result = await tool.execute(problem="debug this")
         assert result == "Try divide & conquer"
 
     @pytest.mark.asyncio
     async def test_no_session_returns_error(self):
         tool = _make_tool()
-        result = await tool.execute()
+        result = await tool.execute(problem="debug this")
         assert "no active session" in result
 
     @pytest.mark.asyncio
@@ -89,7 +89,7 @@ class TestExecute:
         session.format_history.return_value = []
         tool = _make_tool(loop)
         tool.set_context("test-session")
-        result = await tool.execute()
+        result = await tool.execute(problem="debug this")
         assert "empty" in result
 
     @pytest.mark.asyncio
@@ -99,7 +99,7 @@ class TestExecute:
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute()
+        await tool.execute(problem="debug this")
         msg = captured["messages"][0]["content"]
         assert "Divide & Conquer" in msg
         assert "Comparison" in msg
@@ -111,13 +111,13 @@ class TestExecute:
         assert "Single Variable" in msg
 
     @pytest.mark.asyncio
-    async def test_includes_error_description_when_provided(self):
+    async def test_includes_problem_when_provided(self):
         loop = _make_mock_loop()
         captured = _capture_chat_stream(loop)
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute(error_description="TypeError: cannot unpack")
+        await tool.execute(problem="TypeError: cannot unpack")
         msg = captured["messages"][0]["content"]
         assert "TypeError: cannot unpack" in msg
 
@@ -128,7 +128,7 @@ class TestExecute:
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute(focus_method="reverse_inference")
+        await tool.execute(problem="debug this", focus_method="reverse_inference")
         msg = captured["messages"][0]["content"]
         assert "reverse_inference" in msg
 
@@ -139,7 +139,7 @@ class TestExecute:
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute()
+        await tool.execute(problem="debug this")
         msg = captured["messages"][0]["content"]
         assert "TypeError" in msg
 
@@ -150,7 +150,7 @@ class TestExecute:
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        await tool.execute()
+        await tool.execute(problem="debug this")
         assert captured["model"] == "test-model"
 
 
@@ -167,7 +167,7 @@ class TestExecuteErrors:
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        result = await tool.execute()
+        result = await tool.execute(problem="debug this")
         assert "Error" in result
         assert "provider down" in result
 
@@ -178,7 +178,7 @@ class TestExecuteErrors:
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        result = await tool.execute()
+        result = await tool.execute(problem="debug this")
         assert result == "(empty response)"
 
     @pytest.mark.asyncio
@@ -188,7 +188,7 @@ class TestExecuteErrors:
         tool = _make_tool(loop)
         tool.set_context("test-session")
 
-        result = await tool.execute()
+        result = await tool.execute(problem="debug this")
         assert result == "(empty response)"
 
 
@@ -220,13 +220,13 @@ class TestToolMetadata:
 
 class TestParameterSchema:
 
-    def test_both_params_optional(self):
+    def test_problem_is_required(self):
         required = DebugRootCauseTool._tool_parameters_schema.get("required", [])
-        assert required == []
+        assert required == ["problem"]
 
-    def test_error_description_has_description(self):
+    def test_problem_has_description(self):
         props = DebugRootCauseTool._tool_parameters_schema["properties"]
-        assert "description" in props["error_description"]
+        assert "description" in props["problem"]
 
     def test_focus_method_has_description(self):
         props = DebugRootCauseTool._tool_parameters_schema["properties"]
@@ -251,5 +251,5 @@ class TestSetContext:
         tool = _make_tool(loop)
         tool.set_context("my-session")
 
-        await tool.execute()
+        await tool.execute(problem="debug this")
         loop.sessions.get_or_create.assert_called_with("my-session")

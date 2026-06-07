@@ -253,9 +253,37 @@ class TestAssessMeTool:
                 [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}],
                 loop.provider,
                 "test-model",
+                verify="",
             )
             assert _ASSESSMENT_PREFIX in result
             assert "All good" in result
+
+    @pytest.mark.asyncio
+    async def test_verify_passed_through(self) -> None:
+        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+
+        session = MagicMock()
+        session.format_history.return_value = [
+            {"role": "user", "content": "Check these claims"},
+        ]
+        loop = MagicMock()
+        loop.model = "test-model"
+        loop.sessions.get_or_create.return_value = session
+
+        tool = AssessMeTool(loop=loop)
+        tool.set_context(session_key="test-key")
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = "✅ Verified: config exists\n❌ Not verified: port 8080"
+            result = await tool.execute(verify="Config at /etc/app/config.yml, Port 8080 is open")
+
+            mock_assess.assert_called_once_with(
+                [{"role": "user", "content": "Check these claims"}],
+                loop.provider,
+                "test-model",
+                verify="Config at /etc/app/config.yml, Port 8080 is open",
+            )
+            assert "Verified" in result
 
     @pytest.mark.asyncio
     async def test_focus_prepended_when_provided(self) -> None:

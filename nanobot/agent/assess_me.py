@@ -66,6 +66,7 @@ async def assess_me(
     messages: list[dict[str, Any]],
     provider: Any,
     model: str,
+    verify: str = "",
 ) -> str | None:
     """Assess current cognition state from conversation history.
 
@@ -73,7 +74,7 @@ async def assess_me(
     or *None* on failure.
     """
     conversation = format_conversation(messages)
-    prompt = render_template("agent/assess_me.md", conversation=conversation)
+    prompt = render_template("agent/assess_me.md", conversation=conversation, verify=verify)
 
     try:
         resp = await provider.chat_stream(

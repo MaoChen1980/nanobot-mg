@@ -50,9 +50,9 @@ _RCA_METHODS = """
 
 @tool_parameters(
     build_parameters_schema(
-        error_description=p("string", "Optional — specific error or symptom to focus the analysis on. If empty, the tool reads the full conversation to infer what matters."),
+        problem=p("string", "The specific problem, error, or symptom to debug. Describe it clearly — what happened, what was expected, and any relevant context."),
         focus_method=p("string", "Optional — constrain analysis to one specific method: 'divide_conquer', 'comparison', 'rollback', 'hypothesis_testing', 'reverse_inference', 'trial_error', 'look_inside', 'single_variable'."),
-        required=[],
+        required=["problem"],
     )
 )
 class DebugRootCauseTool(Tool):
@@ -60,25 +60,26 @@ class DebugRootCauseTool(Tool):
 
     name = "debug_root_cause_tool"
     description = (
-        "**Purpose**: When tools failed repeatedly and the error is unclear, this tool reads "
-        "the full conversation and applies 8 root-cause-analysis methods (divide & conquer, "
-        "comparison, rollback, hypothesis testing, reverse inference, trial & error, look "
-        "inside, single variable) to recommend the best investigation method + directions "
-        "to examine. The agent then decides which tools to use.\n\n"
-        "**When to call — triggered by the think-framework in these situations**:\n"
-        "- **断链 (chain break)** — any processing stage (definition, premise "
-        "verification, reasoning, validation) reached an impasse after standard "
-        "recovery\n"
-        "- **验证不通过 (validation failed)** — execution result did not match "
-        "expectations in stage 4\n"
-        "- **扩展认知 (extended cognition)** — the same tool failed 2+ times and "
-        "you need a systematic investigation direction\n\n"
-        "**How it differs from other debug tools**:\n"
+        "**Purpose**: You describe a problem you're stuck on, and this tool returns "
+        "a structured debug plan: recommended investigation method(s) + specific "
+        "directions to examine. It reads the full conversation for context, so your "
+        "problem description can be brief — the tool already has the background.\n\n"
+        "**When to call — you are in one of these situations**:\n"
+        "- You tried a few approaches but keep getting different errors, no clear pattern\n"
+        "- You don't know where to start investigating — the problem space feels too large\n"
+        "- A tool failed 2+ times and retrying the same thing won't help\n"
+        "- The error is intermittent or non-deterministic and you need a systematic strategy\n"
+        "- You need to step back and choose an investigation method instead of guessing\n\n"
+        "**Output**: Recommended method(s) from 8 RCA approaches (divide & conquer, "
+        "comparison, rollback, hypothesis testing, reverse inference, trial & error, "
+        "look inside, single variable) + concrete things to examine. You decide which "
+        "tools to use for the actual investigation.\n\n"
+        "**How it differs from other tools**:\n"
         "- `diagnose_tool` searches code + git history for matching error text\n"
-        "- `debug_root_cause_tool` reads the *full conversation* and recommends *which investigation method* + *what to examine* — the agent then chooses the right tools\n\n"
-        "**How it differs from `assess_me_tool`**:\n"
         "- `assess_me_tool` audits what you know vs assume (cognition audit)\n"
-        "- `debug_root_cause_tool` applies structured RCA methods to recommend a concrete debug direction"
+        "- `reframe_tool` re-states the problem cleanly for a fresh perspective\n"
+        "- `debug_root_cause_tool` gives you a **systematic investigation strategy** — "
+        "which method to use and what to look for"
     )
 
     read_only = True
@@ -95,7 +96,7 @@ class DebugRootCauseTool(Tool):
 
     async def execute(
         self,
-        error_description: str = "",
+        problem: str,
         focus_method: str = "",
         **kwargs: Any,
     ) -> str:
@@ -125,11 +126,13 @@ class DebugRootCauseTool(Tool):
             "## Output Format",
             "Return two sections in your response:",
             "",
-            "**Recommended method**: 1-2 methods from the list above and why they fit.",
+            "**Recommended methods**: List applicable methods ordered by recommendation priority "
+            "(most effective first). You may also suggest investigation methods beyond the 8 listed "
+            "above if they better fit the problem — describe what they are and why they apply.",
             "",
-            "**Investigation directions**: specific things to look for, comparisons to "
-            "make, hypotheses to test, or state to examine. Be concrete — what exactly "
-            "should the agent examine?",
+            "**Investigation directions**: For each recommended method, give specific things to "
+            "look for, comparisons to make, hypotheses to test, or state to examine. Be concrete — "
+            "what exactly should the agent examine?",
             "",
             "## Important",
             "- Do NOT suggest specific tool calls (grep, read, exec, etc.) — the agent "
@@ -137,11 +140,11 @@ class DebugRootCauseTool(Tool):
             "- Focus on WHAT to investigate, not HOW to investigate it",
         ]
 
-        if error_description:
+        if problem:
             lines += [
                 "",
-                "## Specific Error / Symptom",
-                error_description,
+                "## Problem to Debug",
+                problem,
             ]
 
         if focus_method:

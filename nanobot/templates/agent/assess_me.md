@@ -6,6 +6,19 @@ Read the complete conversation below, then answer the 7 questions.
 
 {{ conversation }}
 
+{% if verify %}
+## Items to Verify
+
+{{ verify }}
+
+For each item above, check it against the conversation and mark:
+- ✅ **Verified** — clearly supported by evidence in the conversation
+- ❌ **Not verified** — contradicted or proven false by evidence
+- ⚠️ **Insufficient evidence** — no clear support either way
+
+Output as a bullet list. Be factual — base each mark only on what actually appears in the conversation.
+
+{% else %}
 ## Questions
 
 Answer each question based ONLY on evidence in the conversation. Be concise and factual. If there is insufficient information for any question, say "Insufficient information."
@@ -19,3 +32,4 @@ Answer each question based ONLY on evidence in the conversation. Be concise and 
 7. **What are my core goal, priority, and strategy?** — Top-level direction of the current task.
 
 Format: Concise bullet points under each question heading. No fluff, no praise, no suggestions.
+{% endif %}
