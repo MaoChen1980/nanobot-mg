@@ -305,6 +305,9 @@ def test_agent_loop_registers_grep_and_glob(tmp_path: Path) -> None:
 
     assert "grep_tool" in loop.tools.tool_names
     assert "glob_tool" in loop.tools.tool_names
+    assert "reframe_tool" in loop.tools.tool_names
+    assert "debug_root_cause_tool" in loop.tools.tool_names
+    assert "assess_me_tool" in loop.tools.tool_names
 
 
 @pytest.mark.asyncio
@@ -337,6 +340,9 @@ async def test_subagent_registers_grep_and_glob(tmp_path: Path) -> None:
 
     assert "grep_tool" in captured["tool_names"]
     assert "glob_tool" in captured["tool_names"]
+    assert "reframe_tool" in captured["tool_names"]
+    assert "debug_root_cause_tool" in captured["tool_names"]
+    assert "assess_me_tool" in captured["tool_names"]
 
 
 def test_subagent_prompt_respects_disabled_skills(tmp_path: Path) -> None:

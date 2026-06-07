@@ -556,6 +556,42 @@ def test_set_tool_context_passes_thread_session_key_to_spawn(tmp_path: Path) -> 
     assert spawn_tool._session_key.get() == "slack:C123:1700.42"
 
 
+def test_set_tool_context_passes_messages_to_assess_me_tool(tmp_path: Path) -> None:
+    loop = _make_full_loop(tmp_path)
+
+    session = loop.sessions.get_or_create("cli:test")
+    session.add_message("user", "debug this error")
+    session.add_message("assistant", "checking logs")
+    loop.sessions.save(session)
+
+    tool = loop.tools.get("assess_me_tool")
+    assert tool is not None
+
+    loop._set_tool_context("cli", "test")
+
+    messages = tool._messages.get()
+    assert len(messages) >= 1
+    assert any("debug this error" in str(m) for m in messages)
+
+
+def test_set_tool_context_passes_messages_to_debug_root_cause_tool(tmp_path: Path) -> None:
+    loop = _make_full_loop(tmp_path)
+
+    session = loop.sessions.get_or_create("cli:test")
+    session.add_message("user", "debug this error")
+    session.add_message("assistant", "checking logs")
+    loop.sessions.save(session)
+
+    tool = loop.tools.get("debug_root_cause_tool")
+    assert tool is not None
+
+    loop._set_tool_context("cli", "test")
+
+    messages = tool._messages.get()
+    assert len(messages) >= 1
+    assert any("debug this error" in str(m) for m in messages)
+
+
 class TestRecoveryManagerContract:
     """RecoveryManager only touches session metadata — never calls sessions.save()."""
 

@@ -1,4 +1,4 @@
-"""Debug root-cause tool — read session history and suggest investigation direction.
+"""Debug root-cause tool — read conversation history and suggest investigation direction.
 
 When tools fail repeatedly, this tool reads the full conversation and applies
 8 root-cause-analysis methods (divide & conquer, comparison, rollback,
@@ -9,16 +9,13 @@ variable) to recommend the best debug approach.
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
 
 from nanobot.agent.llm_context import chat
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
-
-if TYPE_CHECKING:
-    from nanobot.agent.loop import AgentLoop
 
 
 _RCA_METHODS = """
@@ -85,15 +82,14 @@ class DebugRootCauseTool(Tool):
 
     read_only = True
 
-    def __init__(self, loop: AgentLoop) -> None:
-        self._loop = loop
-        self._session_key: ContextVar[str] = ContextVar(
-            "debug_root_cause_session_key", default=""
+    def __init__(self) -> None:
+        self._messages: ContextVar[list[dict[str, Any]]] = ContextVar(
+            "debug_root_cause_messages", default=[]
         )
 
-    def set_context(self, session_key: str) -> None:
-        """Set the session key for reading conversation history."""
-        self._session_key.set(session_key)
+    def set_context(self, messages: list[dict[str, Any]]) -> None:
+        """Set the conversation messages for analysis."""
+        self._messages.set(messages)
 
     async def execute(
         self,
@@ -101,21 +97,13 @@ class DebugRootCauseTool(Tool):
         focus_method: str = "",
         **kwargs: Any,
     ) -> str:
-        loop = self._loop
-        session_key = self._session_key.get()
-        if not session_key:
+        messages = self._messages.get()
+        if not messages:
             return "Error: no active session — cannot read conversation history."
-
-        session = loop.sessions.get_or_create(session_key)
-        history = session.format_history(
-            include_timestamps=True, timezone=loop.context.timezone
-        )
-        if not history:
-            return "Error: conversation history is empty."
 
         from nanobot.agent.assess_me import format_conversation
 
-        conversation = format_conversation(history)
+        conversation = format_conversation(messages)
 
         lines = [
             "You are a root-cause analysis expert. Your task is to read the conversation below "

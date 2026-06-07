@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
-
-if TYPE_CHECKING:
-    from nanobot.agent.loop import AgentLoop
 
 
 @tool_parameters(
@@ -42,15 +39,14 @@ class AssessMeTool(Tool):
     )
     read_only = True
 
-    def __init__(self, loop: AgentLoop) -> None:
-        self._loop = loop
-        self._session_key: ContextVar[str] = ContextVar(
-            "assess_me_session_key", default=""
+    def __init__(self) -> None:
+        self._messages: ContextVar[list[dict[str, Any]]] = ContextVar(
+            "assess_me_messages", default=[]
         )
 
-    def set_context(self, session_key: str) -> None:
-        """Set the session key for reading conversation history."""
-        self._session_key.set(session_key)
+    def set_context(self, messages: list[dict[str, Any]]) -> None:
+        """Set the conversation messages for assessment."""
+        self._messages.set(messages)
 
     async def execute(
         self,
@@ -58,20 +54,13 @@ class AssessMeTool(Tool):
         verify: str = "",
         **kwargs: Any,
     ) -> str:
-        session_key = self._session_key.get()
-        if not session_key:
+        messages = self._messages.get()
+        if not messages:
             return "Error: no active session — cannot read conversation history."
-
-        session = self._loop.sessions.get_or_create(session_key)
-        history = session.format_history(
-            include_timestamps=True, timezone=self._loop.context.timezone
-        )
-        if not history:
-            return "Error: conversation history is empty."
 
         from nanobot.agent.assess_me import assess_me
 
-        result = await assess_me(history, verify=verify)
+        result = await assess_me(messages, verify=verify)
         if result is None:
             return "Error: assessment LLM call failed."
 

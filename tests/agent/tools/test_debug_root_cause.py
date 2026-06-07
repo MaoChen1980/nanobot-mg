@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -14,75 +14,43 @@ from nanobot.providers.base import LLMResponse
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_mock_loop(**overrides):
-    loop = MagicMock()
-    loop.model = "test-model"
-    loop.workspace = None
-    loop.context = MagicMock()
-    loop.context.timezone = "Asia/Shanghai"
-
-    loop.provider = MagicMock()
-
-    # sessions mock
-    session = MagicMock()
-    session.format_history.return_value = [
-        {"role": "user", "content": "I get a TypeError"},
-        {"role": "assistant", "content": "Let me check", "tool_calls": [{"function": {"name": "read"}}]},
-        {"role": "tool", "name": "read", "content": "some result"},
-    ]
-    sessions = MagicMock()
-    sessions.get_or_create.return_value = session
-    loop.sessions = sessions
-
-    for k, v in overrides.items():
-        setattr(loop, k, v)
-
-    return loop
+_SAMPLE_MESSAGES = [
+    {"role": "user", "content": "I get a TypeError"},
+    {"role": "assistant", "content": "Let me check"},
+    {"role": "tool", "name": "read", "content": "some result"},
+]
 
 
-def _make_tool(loop=None):
-    if loop is None:
-        loop = _make_mock_loop()
-    return DebugRootCauseTool(loop=loop)
+def _make_tool():
+    return DebugRootCauseTool()
 
 
 # ---------------------------------------------------------------------------
 # execute — basic flow
 # ---------------------------------------------------------------------------
 
+
 class TestExecute:
 
     @pytest.mark.asyncio
     async def test_returns_advice(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="Try divide & conquer")
             result = await tool.execute(problem="debug this")
         assert result == "Try divide & conquer"
 
     @pytest.mark.asyncio
-    async def test_no_session_returns_error(self):
+    async def test_no_messages_returns_error(self):
         tool = _make_tool()
         result = await tool.execute(problem="debug this")
         assert "no active session" in result
 
     @pytest.mark.asyncio
-    async def test_empty_history_returns_error(self):
-        loop = _make_mock_loop()
-        session = loop.sessions.get_or_create.return_value
-        session.format_history.return_value = []
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
-        result = await tool.execute(problem="debug this")
-        assert "empty" in result
-
-    @pytest.mark.asyncio
     async def test_includes_methods_in_prompt(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
@@ -100,9 +68,8 @@ class TestExecute:
 
     @pytest.mark.asyncio
     async def test_includes_problem_when_provided(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
@@ -113,9 +80,8 @@ class TestExecute:
 
     @pytest.mark.asyncio
     async def test_includes_focus_method_when_provided(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
@@ -126,9 +92,8 @@ class TestExecute:
 
     @pytest.mark.asyncio
     async def test_includes_conversation(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
@@ -138,12 +103,9 @@ class TestExecute:
         assert "TypeError" in msg
 
     @pytest.mark.asyncio
-    async def test_correct_model(self):
-        """Model is auto-injected by llm_context from ContextVar — this test
-        verifies that the tool sends messages correctly."""
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+    async def test_sends_single_user_message(self):
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
@@ -163,9 +125,8 @@ class TestExecuteErrors:
 
     @pytest.mark.asyncio
     async def test_chat_stream_error_returns_error_msg(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = RuntimeError("provider down")
@@ -176,9 +137,8 @@ class TestExecuteErrors:
 
     @pytest.mark.asyncio
     async def test_empty_response_replaced(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="")
@@ -187,9 +147,8 @@ class TestExecuteErrors:
 
     @pytest.mark.asyncio
     async def test_none_response_replaced(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("test-session")
+        tool = _make_tool()
+        tool.set_context(messages=_SAMPLE_MESSAGES)
 
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content=None)
@@ -244,18 +203,8 @@ class TestParameterSchema:
 
 class TestSetContext:
 
-    def test_set_context_stores_session_key(self):
+    def test_set_context_stores_messages(self):
         tool = _make_tool()
-        tool.set_context("session-abc")
-        assert tool._session_key.get() == "session-abc"
-
-    @pytest.mark.asyncio
-    async def test_execute_uses_set_context(self):
-        loop = _make_mock_loop()
-        tool = _make_tool(loop)
-        tool.set_context("my-session")
-
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = LLMResponse(content="advice")
-            await tool.execute(problem="debug this")
-        loop.sessions.get_or_create.assert_called_with("my-session")
+        msgs = [{"role": "user", "content": "hello"}]
+        tool.set_context(messages=msgs)
+        assert tool._messages.get() == msgs

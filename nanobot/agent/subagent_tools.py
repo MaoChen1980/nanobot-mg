@@ -22,6 +22,9 @@ from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.stage import SaveStageTool, ShowStagesTool, RestoreStageTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.diagnose_tool import DiagnoseTool
+from nanobot.agent.tools.reframe import ReframeTool
+from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+from nanobot.agent.tools.assess_me_tool import AssessMeTool
 from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
 from nanobot.agent.tools.framework_search import FrameworkSearchTool
@@ -63,6 +66,9 @@ def build_subagent_tools(
     tools.register(RestoreStageTool())
     tools.register(AnalyzeTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(DiagnoseTool(workspace=workspace, allowed_dir=allowed_dir))
+    tools.register(ReframeTool(workspace=workspace))
+    tools.register(DebugRootCauseTool())
+    tools.register(AssessMeTool())
     tools.register(SearchTextTool(workspace=workspace, allowed_dir=allowed_dir))
 
     # --- memory / framework / conversation search ---

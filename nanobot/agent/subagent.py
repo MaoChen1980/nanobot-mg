@@ -7,7 +7,7 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -20,6 +20,9 @@ from nanobot.bus.queue import MessageBus
 from nanobot.config.schema import ExecToolConfig, WebToolsConfig
 from nanobot.providers.base import LLMProvider
 
+if TYPE_CHECKING:
+    from nanobot.agent.tools.registry import ToolRegistry
+
 from .subagent_status import SubagentStatus, SubagentResult, format_error_progress
 from .subagent_tools import build_subagent_tools
 from .subagent_prompt import build_subagent_prompt
@@ -28,9 +31,13 @@ from .subagent_prompt import build_subagent_prompt
 class _SubagentHook(AgentHook):
     """Hook for subagent execution — logs tool calls and updates status."""
 
-    def __init__(self, task_id: str, status: SubagentStatus | None = None) -> None:
+    def __init__(
+        self, task_id: str, status: SubagentStatus | None = None,
+        tools: ToolRegistry | None = None,
+    ) -> None:
         super().__init__()
         self._task_id = task_id
+        self._tools = tools
         self._status = status
 
     async def before_execute_tools(self, context: AgentHookContext) -> None:
@@ -40,6 +47,15 @@ class _SubagentHook(AgentHook):
                 "Subagent [{}] executing: {} with arguments: {}",
                 self._task_id, tool_call.name, args_str,
             )
+
+        # Inject conversation context into thinking tools that need it
+        if self._tools is not None:
+            for name in ("assess_me_tool", "debug_root_cause_tool"):
+                tool = self._tools.get(name)
+                if tool is not None:
+                    sc = getattr(tool, "set_context", None)
+                    if sc is not None:
+                        sc(messages=list(context.messages))
 
     async def after_iteration(self, context: AgentHookContext) -> None:
         if self._status is None:
@@ -231,7 +247,7 @@ class SubagentManager:
                     model=self.model,
                     max_iterations=max_iterations or 200,
                     max_tool_result_chars=self.max_tool_result_chars,
-                    hook=_SubagentHook(task_id, status),
+                    hook=_SubagentHook(task_id, tools=tools, status=status),
                     max_iterations_message="Task completed but no final response was generated.",
                     error_message=None,
                     fail_on_tool_error=False,
