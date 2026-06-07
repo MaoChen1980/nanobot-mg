@@ -148,7 +148,7 @@ class TestAssessMe:
             assert "What I have done" in result
             mock_chat.assert_called_once()
             _, kwargs = mock_chat.call_args
-            assert kwargs["max_tokens"] == 1024
+            assert kwargs["max_tokens"] == 10240
             assert kwargs["temperature"] == 0.3
 
     @pytest.mark.asyncio

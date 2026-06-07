@@ -79,7 +79,7 @@ async def assess_me(
     try:
         resp = await chat(
             [{"role": "user", "content": prompt}],
-            max_tokens=1024,
+            max_tokens=10240,
             temperature=0.3,
         )
     except Exception:
