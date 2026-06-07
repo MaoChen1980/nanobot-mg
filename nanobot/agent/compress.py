@@ -394,14 +394,15 @@ def _compress_session(
 
 
 def make_summary_pair(summary: str, timestamp: str | None = None) -> list[dict]:
-    """Create a synthetic summary pair (assistant asks, user replies with summary).
+    """Create a synthetic summary pair for compressed context.
 
-    Putting the summary in user-role gives it higher weight in LLM reasoning.
-    All compression paths should use this function for consistency.
+    Summary lives in user-role for higher LLM reasoning weight, followed by
+    a continuation directive so the LLM never treats it as something to
+    respond to.
     """
     pair = [
         {"role": "assistant", "content": "我想知道我们最近聊天的摘要", "status": "synthetic"},
-        {"role": "user", "content": summary, "status": "synthetic"},
+        {"role": "user", "content": f"{summary}\n\n---\n请继续执行我们谈好的计划和内容", "status": "synthetic"},
     ]
     if timestamp:
         for m in pair:

@@ -326,14 +326,15 @@ class TestPrependSummary:
         assert result[0]["role"] == "assistant"
         assert "我想知道我们最近聊天的摘要" in result[0]["content"]
         assert result[1]["role"] == "user"
-        assert result[1]["content"] == "my summary"
+        assert "my summary" in result[1]["content"]
+        assert "请继续执行我们谈好的计划和内容" in result[1]["content"]
         assert result[2] == "a"
 
     def test_empty_summary(self):
         keeps = [[{"role": "assistant", "content": "ok"}]]
         result = _prepend_summary(keeps, "")
         assert len(result) == 3
-        assert result[1]["content"] == ""
+        assert "请继续执行我们谈好的计划和内容" in result[1]["content"]
 
     def test_single_turn(self):
         keeps = [[{"role": "assistant", "content": "alone"}]]
@@ -571,7 +572,8 @@ class TestMakeSummaryPair:
         assert pair[0]["role"] == "assistant"
         assert "我想知道我们最近聊天的摘要" in pair[0]["content"]
         assert pair[1]["role"] == "user"
-        assert pair[1]["content"] == "my summary"
+        assert "my summary" in pair[1]["content"]
+        assert "请继续执行我们谈好的计划和内容" in pair[1]["content"]
         assert pair[0].get("status") == "synthetic"
         assert pair[1].get("status") == "synthetic"
 
@@ -606,8 +608,10 @@ class TestCompressTurns:
             )
         assert result == "verified summary"
         assert len(pair) == 2
+        assert pair[0]["role"] == "assistant"
         assert pair[1]["role"] == "user"
-        assert pair[1]["content"] == "verified summary"
+        assert "verified summary" in pair[1]["content"]
+        assert "请继续执行我们谈好的计划和内容" in pair[1]["content"]
 
     @pytest.mark.asyncio
     async def test_summarize_failure_returns_none(self):
@@ -635,7 +639,8 @@ class TestCompressTurns:
                 [],
             )
         assert result == "some text"
-        assert pair[1]["content"] == "some text"
+        assert "some text" in pair[1]["content"]
+        assert "请继续执行我们谈好的计划和内容" in pair[1]["content"]
 
     @pytest.mark.asyncio
     async def test_passes_timestamp_to_pair(self):
@@ -716,9 +721,11 @@ class TestCompressSessionHighLevel:
             result = await compress_session(
                 session, history, limit=10,
             )
-        # Has synthetic pair + kept turn
+        # Summary pair prepended + kept turns (each turn may have multiple msgs)
         assert len(result) == 4
         assert result[0]["status"] == "synthetic"
+        assert result[1]["content"] == "summarized"
+        assert result[2]["role"] == "assistant"
         assert result[3]["content"] == "keep this"
 
     @pytest.mark.asyncio
