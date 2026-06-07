@@ -49,6 +49,7 @@ from nanobot.agent.tools.diagnose_tool import DiagnoseTool
 from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.agent.tools.self_restart_tool import SelfRestartTool
 from nanobot.agent.tools.reframe import ReframeTool
+from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
 from nanobot.agent.tools.assess_me_tool import AssessMeTool
 from nanobot.agent.assess_me import is_assessment_message
 from nanobot.bus.events import InboundMessage, OutboundMessage
@@ -390,6 +391,7 @@ class AgentLoop:
         self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
         self.tools.register(ReframeTool(loop=self))
+        self.tools.register(DebugRootCauseTool(loop=self))
         self.tools.register(AssessMeTool(loop=self))
         if self._db:
             from nanobot.agent.tools.tool_call_log import ToolCallLogTool
@@ -441,7 +443,7 @@ class AgentLoop:
             effective_key = session_key
         else:
             effective_key = f"{channel}:{chat_id}"
-        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "self_tool", "assess_me_tool"):
+        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "self_tool", "assess_me_tool", "debug_root_cause_tool"):
             tool = self.tools.get(name)
             if tool is None:
                 continue
@@ -453,6 +455,8 @@ class AgentLoop:
             elif name == "cron_tool":
                 sc(channel, chat_id, metadata=metadata, session_key=session_key)
             elif name == "assess_me_tool":
+                sc(session_key=effective_key)
+            elif name == "debug_root_cause_tool":
                 sc(session_key=effective_key)
             elif name == "message_tool":
                 sc(channel, chat_id, message_id, metadata=metadata)
