@@ -56,6 +56,9 @@ class ReframeTool(Tool):
         "**How it works**: All inputs are composed into a clean standalone prompt. "
         "The model sees only this distilled summary — not the surrounding tool noise — "
         "giving you a clear answer.\n\n"
+        "**Analogy**: `web_search` is for finding external information; `reframe_tool` is for "
+        "organizing your own thinking about a problem. Both strip away context noise to get "
+        "a focused result.\n\n"
         "**Note**: This costs tokens. Be specific for best results."
     )
 
