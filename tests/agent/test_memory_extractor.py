@@ -36,8 +36,8 @@ def mock_provider() -> MagicMock:
 
 
 @pytest.fixture
-def extractor(store: MemoryStore, mock_provider: MagicMock) -> MemoryExtractor:
-    return MemoryExtractor(store, mock_provider, "test-model")
+def extractor(store: MemoryStore) -> MemoryExtractor:
+    return MemoryExtractor(store, "test-model")
 
 
 # ---------------------------------------------------------------------------
