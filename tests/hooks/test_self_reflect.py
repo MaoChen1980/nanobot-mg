@@ -162,7 +162,7 @@ class TestRunTurnReflection:
         ]
 
         with (
-            patch.object(hook, "_call_for_findings", AsyncMock(return_value=[{"type": "self_bug", "content": "bug"}])) as mock_call,
+            patch.object(hook, "_call_for_findings", AsyncMock(return_value=([{"type": "self_bug", "content": "bug"}], "ok"))) as mock_call,
             patch.object(hook, "_save_findings") as mock_save,
             patch.object(hook, "_append_to_log") as mock_log,
             patch("nanobot.hooks.self_reflect._read_hook_sources", return_value="## source"),
@@ -178,32 +178,37 @@ class TestRunTurnReflection:
     @pytest.mark.asyncio
     async def test_call_for_findings_empty_on_llm_failure(self, hook):
         with patch.object(hook, "_call_llm", side_effect=RuntimeError("fail")):
-            findings = await hook._call_for_findings("metrics", "code")
+            findings, diagnostic = await hook._call_for_findings("metrics", "code")
         assert findings == []
+        assert diagnostic == "llm_call_error"
 
 
 class TestParseFindings:
     def test_from_code_block(self):
         raw = '```json\n{"findings": [{"type": "behavior", "content": "repeated tool"}]}\n```'
-        result = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        assert diagnostic == "ok"
         assert len(result) == 1
         assert result[0]["type"] == "behavior"
 
     def test_plain_json(self):
         raw = '{"findings": [{"type": "self_bug", "content": "wrong count"}]}'
-        result = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        assert diagnostic == "ok"
         assert len(result) == 1
 
     def test_invalid_json_returns_empty(self):
-        result = SelfReflectHook._parse_findings("not json at all")
+        result, diagnostic = SelfReflectHook._parse_findings("not json at all")
         assert result == []
+        assert diagnostic == "json_decode_error"
 
     def test_filters_invalid_type(self):
         raw = json.dumps({"findings": [
             {"type": "self_bug", "content": "real bug"},
             {"type": "unicorn", "content": "fake"},
         ]})
-        result = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        assert diagnostic == "ok"
         assert len(result) == 1
         assert result[0]["type"] == "self_bug"
 
@@ -213,8 +218,15 @@ class TestParseFindings:
             {"type": "behavior"},
             {"content": "orphan"},
         ]})
-        result = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        assert diagnostic == "ok"
         assert len(result) == 1
+
+    def test_empty_findings_array(self):
+        raw = json.dumps({"findings": []})
+        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        assert result == []
+        assert diagnostic == "empty_findings"
 
 
 class TestFindingId:
@@ -253,20 +265,23 @@ class TestSaveFindings:
 
 class TestAppendToLog:
     def test_writes_findings(self, hook):
-        hook._append_to_log("#1", "ts", 5, [], [{"type": "behavior", "content": "x", "relevance": "y"}])
+        hook._append_to_log("#1", "ts", [], [{"type": "behavior", "content": "x", "relevance": "y"}], "ok")
         log = hook.LOG_FILE.read_text()
         assert "## Turn #1" in log
         assert "**behavior**" in log
         assert "1 finding(s)" in log
+        assert "diagnostic: ok" in log
 
     def test_writes_nothing_actionable_when_empty(self, hook):
-        hook._append_to_log("#1", "ts", 0, [], [])
+        hook._append_to_log("#1", "ts", [], [], "llm_empty")
         log = hook.LOG_FILE.read_text()
-        assert "nothing actionable" in log
+        assert "nothing actionable" not in log
+        assert "LLM returned empty" in log
+        assert "diagnostic: llm_empty" in log
 
     def test_caps_log_at_max_lines(self, hook):
         for _ in range(20):
             hook.LOG_FILE.write_text("line\n" * 30, encoding="utf-8")
-            hook._append_to_log("#x", "ts", 0, [], [])
+            hook._append_to_log("#x", "ts", [], [], "ok")
         lines = hook.LOG_FILE.read_text().splitlines()
         assert len(lines) <= 210

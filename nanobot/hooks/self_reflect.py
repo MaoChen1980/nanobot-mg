@@ -280,21 +280,25 @@ class SelfReflectHook(AgentHook):
         hook_code = _read_hook_sources()
 
         # Call LLM for structured findings
-        findings = await self._call_for_findings(metrics_text, hook_code)
+        findings, diagnostic = await self._call_for_findings(metrics_text, hook_code)
 
         # Save findings JSON (consumed by SelfInsightHook)
         self._save_findings(findings, iteration_range, time_str)
 
         # Also write readable log for human review
-        self._append_to_log(iteration_range, time_str, total_tool_calls, errors, findings)
+        self._append_to_log(iteration_range, time_str, errors, findings, diagnostic)
 
-    async def _call_for_findings(self, metrics_text: str, hook_code: str) -> list[dict[str, Any]]:
-        """Call LLM to extract task-relevant findings from this turn."""
+    async def _call_for_findings(self, metrics_text: str, hook_code: str) -> tuple[list[dict[str, Any]], str]:
+        """Call LLM to extract task-relevant findings from this turn.
+
+        Returns ``(findings, diagnostic)``.  *findings* is empty on failure;
+        *diagnostic* explains why.
+        """
         try:
             response = await self._call_llm(metrics_text, hook_code)
         except Exception as exc:
             logger.debug("SelfReflectHook: LLM call failed: {}", exc)
-            return []
+            return [], "llm_call_error"
         return self._parse_findings(response)
 
     async def _call_llm(self, metrics_text: str, hook_code: str) -> str:
@@ -311,8 +315,19 @@ class SelfReflectHook(AgentHook):
         return response.content or ""
 
     @staticmethod
-    def _parse_findings(raw: str) -> list[dict[str, Any]]:
-        """Parse JSON findings from LLM response."""
+    def _parse_findings(raw: str) -> tuple[list[dict[str, Any]], str]:
+        """Parse JSON findings from LLM response.
+
+        Returns (findings, diagnostic) where diagnostic is one of:
+        - ``"ok"`` — found valid findings
+        - ``"json_decode_error"`` — couldn't parse response as JSON
+        - ``"empty_findings"`` — JSON parsed but findings array was empty
+        - ``"all_filtered"`` — entries found but none passed type/content validation
+        - ``"llm_empty"`` — LLM returned empty content
+        """
+        if not raw or not raw.strip():
+            return [], "llm_empty"
+
         # Use first ``` → last ``` to handle nested code fences inside JSON string values.
         idx = raw.find("```")
         if idx >= 0:
@@ -326,11 +341,13 @@ class SelfReflectHook(AgentHook):
         try:
             result = json.loads(raw)
         except json.JSONDecodeError:
-            return []
+            return [], "json_decode_error"
 
         findings = result.get("findings", []) if isinstance(result, dict) else []
         if not isinstance(findings, list):
-            return []
+            return [], "json_decode_error"
+        if not findings:
+            return [], "empty_findings"
 
         valid = []
         for f in findings:
@@ -338,7 +355,9 @@ class SelfReflectHook(AgentHook):
                 ftype = f["type"]
                 if ftype in ("knowledge", "decision", "behavior", "correction", "self_bug"):
                     valid.append(f)
-        return valid
+        if not valid:
+            return [], "all_filtered"
+        return valid, "ok"
 
     @staticmethod
     def _finding_id(content: str) -> str:
@@ -373,15 +392,16 @@ class SelfReflectHook(AgentHook):
         self,
         iteration_range: str,
         time_str: str,
-        total_tool_calls: int,
         errors: list[dict],
         findings: list[dict[str, Any]],
+        diagnostic: str,
     ) -> None:
         """Write human-readable reflection to markdown log.
 
         Always writes to log even when findings is empty — this ensures the file
         exists for external readers (e.g., daily-evolution cron) to analyze.
-        When findings is empty, writes a 'nothing actionable' status instead.
+        When findings is empty, uses diagnostic to write a context-aware status
+        instead of a generic "nothing actionable".
         """
         self.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -396,7 +416,14 @@ class SelfReflectHook(AgentHook):
                     line += f"  \n  -> {relevance}"
                 finding_lines.append(line)
         else:
-            finding_lines = ["(nothing actionable)"]
+            diagnostic_msg = {
+                "llm_empty": "(LLM returned empty response)",
+                "json_decode_error": "(LLM output wasn't valid JSON)",
+                "empty_findings": "(LLM returned no findings despite instruction)",
+                "all_filtered": "(LLM returned findings but all were invalid format)",
+                "llm_call_error": "(LLM call failed)",
+            }.get(diagnostic, "(nothing actionable)")
+            finding_lines = [diagnostic_msg]
 
         has_error = bool(errors)
         findings_text = "\n".join(finding_lines)
@@ -404,7 +431,7 @@ class SelfReflectHook(AgentHook):
             f"## Turn {iteration_range} -- {time_str}\n"
             f"> Status: {len(findings)} finding(s) | "
             f"{'error' if has_error else 'ok'} | "
-            f"tools: {total_tool_calls}\n"
+            f"diagnostic: {diagnostic}\n"
         )
         with open(self.LOG_FILE, "a", encoding="utf-8") as f:
             f.write(header)
