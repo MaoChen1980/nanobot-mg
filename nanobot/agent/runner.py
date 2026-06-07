@@ -23,6 +23,7 @@ from nanobot.utils.helpers import (
     split_thinking_messages,
     truncate_text,
 )
+from nanobot.utils.media_decode import strip_image_blocks
 from nanobot.utils.runtime import (
     EMPTY_FINAL_RESPONSE_MESSAGE,
     build_length_recovery_message,
@@ -314,6 +315,11 @@ class AgentRunner:
             await hook.before_iteration(context)
             messages_for_model = hook.before_llm_call(context, messages_for_model)
             response = await request_model(spec, messages_for_model, hook, context)
+            # Images are only useful once — strip base64 payloads so
+            # subsequent turns don't re-send megabytes of image data.
+            # The model can re-read with read_file_tool if needed.
+            if response.finish_reason != "error":
+                strip_image_blocks(messages)
             raw_usage = usage_dict(response.usage)
             context.response = response
             context.usage = dict(raw_usage)

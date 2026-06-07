@@ -67,6 +67,21 @@ This means: don't try to solve everything in one shot. Break the reasoning into 
 Reasoning philosophy is: "Follow the clues to find the evidence, and base conclusions only on evidence."
 
 - **Evidence (直接根據)**: Hard facts, verified data, direct quotes, or definitive source materials. Conclusions MUST be directly derived from Evidence.
+
+## Behavioral
+
+### Pre-Commit Verification Protocol
+
+Before every commit, run this verification sequence on ALL changed files:
+
+1. **Compile check** — `python -c "py_compile.compile(...)"` or equivalent for each modified file
+2. **Import check** — verify all new imports resolve
+3. **Control flow review** — trace the execution path of each change: what calls it, what it calls, exception paths
+4. **Data flow review** — trace every variable: where it comes from, what transforms it, who consumes it
+5. **Regression tests** — run full test suite for affected modules, verify all failures are pre-existing
+6. **Old import cleanup** — grep to ensure no old/unused imports remain in callers
+
+**Why:** Prevents the "seems fine but breaks at runtime" class of bugs. Data/control flow issues are invisible to type checkers.
 - **Clue (間接根據)**: Hints, patterns, associations, or high-probability directions. Clues DO NOT prove a conclusion; they only guide your next search action.
 
 ---

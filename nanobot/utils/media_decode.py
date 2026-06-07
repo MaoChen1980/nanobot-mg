@@ -217,3 +217,22 @@ def build_image_content_blocks(
 def image_placeholder_text(path: str | None, *, empty: str = "[image]") -> str:
     """Build an image placeholder string."""
     return f"[image: {path}]" if path else empty
+
+
+def strip_image_blocks(messages: list[dict]) -> None:
+    """Replace image_url blocks with text placeholders in-place.
+
+    Images should only be sent to the LLM once — after the model has seen
+    them, replace the heavy base64 payload with a lightweight ``[image: path]``
+    reference so subsequent turns don't re-send multiple megabytes of data.
+    The model can always call ``read_file_tool`` again if it needs to re-examine
+    the image.
+    """
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for i, block in enumerate(content):
+            if isinstance(block, dict) and block.get("type") == "image_url":
+                path = (block.get("_meta") or {}).get("path", "")
+                content[i] = {"type": "text", "text": image_placeholder_text(path)}
