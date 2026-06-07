@@ -203,7 +203,7 @@ class TestExecuteErrors:
         with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="")
             result = await tool.execute(question="Q", goal="G")
-        assert result == "(empty response)"
+        assert result == "问题太难，目前没有结论"
 
     @pytest.mark.asyncio
     async def test_whitespace_only_response_stripped(self):
@@ -211,7 +211,7 @@ class TestExecuteErrors:
         with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="   \n  ")
             result = await tool.execute(question="Q", goal="G")
-        assert result == "(empty response)"
+        assert result == "问题太难，目前没有结论"
 
     @pytest.mark.asyncio
     async def test_none_response_replaced_with_placeholder(self):
@@ -219,7 +219,7 @@ class TestExecuteErrors:
         with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content=None)
             result = await tool.execute(question="Q", goal="G")
-        assert result == "(empty response)"
+        assert result == "问题太难，目前没有结论"
 
 
 # ---------------------------------------------------------------------------

@@ -131,4 +131,4 @@ class ReframeTool(Tool):
         except Exception as e:
             return f"Error: LLM call failed — {e}"
 
-        return (resp.content or "").strip() or "(empty response)"
+        return (resp.content or "").strip() or "问题太难，目前没有结论"

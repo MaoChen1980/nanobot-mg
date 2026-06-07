@@ -152,24 +152,24 @@ class TestAssessMe:
             assert kwargs["temperature"] == 0.3
 
     @pytest.mark.asyncio
-    async def test_empty_response_returns_none(self) -> None:
+    async def test_empty_response_returns_empty(self) -> None:
         with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value.content = ""
 
             result = await assess_me(
                 [{"role": "user", "content": "hello"}],
             )
-            assert result is None
+            assert result == ""
 
     @pytest.mark.asyncio
-    async def test_llm_exception_returns_none(self) -> None:
+    async def test_llm_exception_returns_empty(self) -> None:
         with patch("nanobot.agent.assess_me.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = RuntimeError("LLM down")
 
             result = await assess_me(
                 [{"role": "user", "content": "hello"}],
             )
-            assert result is None
+            assert result == ""
 
     @pytest.mark.asyncio
     async def test_passes_conversation_to_provider(self) -> None:
@@ -197,46 +197,22 @@ class TestAssessMe:
 
 class TestAssessMeTool:
     @pytest.mark.asyncio
-    async def test_no_session_key_returns_error(self) -> None:
+    async def test_no_messages_returns_error(self) -> None:
         from nanobot.agent.tools.assess_me_tool import AssessMeTool
 
-        loop = MagicMock()
-        tool = AssessMeTool(loop=loop)
+        tool = AssessMeTool()
         result = await tool.execute()
         assert "no active session" in result
 
     @pytest.mark.asyncio
-    async def test_empty_history_returns_error(self) -> None:
+    async def test_assess_me_called_with_messages(self) -> None:
         from nanobot.agent.tools.assess_me_tool import AssessMeTool
 
-        session = MagicMock()
-        session.format_history.return_value = []
-
-        loop = MagicMock()
-        loop.sessions.get_or_create.return_value = session
-
-        tool = AssessMeTool(loop=loop)
-        tool.set_context(session_key="test-key")
-        result = await tool.execute()
-        assert "history is empty" in result
-
-    @pytest.mark.asyncio
-    async def test_assess_me_called_with_history(self) -> None:
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
-
-        session = MagicMock()
-        session.format_history.return_value = [
+        tool = AssessMeTool()
+        tool.set_context(messages=[
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "hi"},
-        ]
-
-        loop = MagicMock()
-        loop.sessions.get_or_create.return_value = session
-        loop.provider = MagicMock()
-        loop.model = "test-model"
-
-        tool = AssessMeTool(loop=loop)
-        tool.set_context(session_key="test-key")
+        ])
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
             mock_assess.return_value = "**Analysis:** All good"
@@ -253,16 +229,10 @@ class TestAssessMeTool:
     async def test_verify_passed_through(self) -> None:
         from nanobot.agent.tools.assess_me_tool import AssessMeTool
 
-        session = MagicMock()
-        session.format_history.return_value = [
+        tool = AssessMeTool()
+        tool.set_context(messages=[
             {"role": "user", "content": "Check these claims"},
-        ]
-        loop = MagicMock()
-        loop.model = "test-model"
-        loop.sessions.get_or_create.return_value = session
-
-        tool = AssessMeTool(loop=loop)
-        tool.set_context(session_key="test-key")
+        ])
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
             mock_assess.return_value = "✅ Verified: config exists\n❌ Not verified: port 8080"
@@ -278,16 +248,8 @@ class TestAssessMeTool:
     async def test_focus_prepended_when_provided(self) -> None:
         from nanobot.agent.tools.assess_me_tool import AssessMeTool
 
-        session = MagicMock()
-        session.format_history.return_value = [{"role": "user", "content": "hi"}]
-
-        loop = MagicMock()
-        loop.sessions.get_or_create.return_value = session
-        loop.provider = MagicMock()
-        loop.model = "test-model"
-
-        tool = AssessMeTool(loop=loop)
-        tool.set_context(session_key="test-key")
+        tool = AssessMeTool()
+        tool.set_context(messages=[{"role": "user", "content": "hi"}])
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
             mock_assess.return_value = "some analysis"
@@ -299,19 +261,11 @@ class TestAssessMeTool:
     async def test_assess_me_failure_returns_error(self) -> None:
         from nanobot.agent.tools.assess_me_tool import AssessMeTool
 
-        session = MagicMock()
-        session.format_history.return_value = [{"role": "user", "content": "hi"}]
-
-        loop = MagicMock()
-        loop.sessions.get_or_create.return_value = session
-        loop.provider = MagicMock()
-        loop.model = "test-model"
-
-        tool = AssessMeTool(loop=loop)
-        tool.set_context(session_key="test-key")
+        tool = AssessMeTool()
+        tool.set_context(messages=[{"role": "user", "content": "hi"}])
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
-            mock_assess.return_value = None
+            mock_assess.return_value = ""
             result = await tool.execute()
 
             assert "Error: assessment LLM call failed" in result
@@ -440,7 +394,7 @@ class TestMakeRetryAssessCallback:
         msgs = [{"role": "user", "content": "hello"}]
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
-            mock_assess.return_value = None
+            mock_assess.return_value = ""
             result = await callback(msgs)
 
             assert result is False

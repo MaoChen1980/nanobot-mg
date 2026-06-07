@@ -155,7 +155,7 @@ class TestExecuteErrors:
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="")
             result = await tool.execute(problem="debug this")
-        assert result == "(empty response)"
+        assert result == "问题太难，目前没有结论"
 
     @pytest.mark.asyncio
     async def test_none_response_replaced(self):
@@ -165,7 +165,7 @@ class TestExecuteErrors:
         with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content=None)
             result = await tool.execute(problem="debug this")
-        assert result == "(empty response)"
+        assert result == "问题太难，目前没有结论"
 
 
 # ---------------------------------------------------------------------------

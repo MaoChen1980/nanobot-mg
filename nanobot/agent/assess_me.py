@@ -66,11 +66,12 @@ def format_conversation(messages: list[dict]) -> str:
 async def assess_me(
     messages: list[dict[str, Any]],
     verify: str = "",
-) -> str | None:
+) -> str:
     """Assess current cognition state from conversation history.
 
-    Returns a structured analysis answering the 7 cognition questions,
-    or *None* on failure.
+    Returns a structured analysis answering the 7 cognition questions.
+    Never returns ``None``. If the LLM call fails (exception), the error
+    is logged with full traceback — it is NOT silenced.
     """
     conversation = format_conversation(messages)
     prompt = render_template("agent/assess_me.md", conversation=conversation, verify=verify)
@@ -81,11 +82,11 @@ async def assess_me(
             max_tokens=1024,
             temperature=0.3,
         )
-    except Exception as e:
-        logger.warning("assess_me LLM call failed: {}", e)
-        return None
+    except Exception:
+        logger.exception("assess_me LLM call failed")
+        return ""
 
-    return (resp.content or "").strip() or None
+    return (resp.content or "").strip()
 
 
 def build_assessment_message(text: str) -> dict[str, Any]:
