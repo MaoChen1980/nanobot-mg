@@ -17,6 +17,20 @@ from loguru import logger
 from nanobot.proxy.channels.base import BaseProxyChannel
 
 
+_MSG_TYPE_LABELS = {
+    "post": "富文本消息",
+    "sticker": "表情",
+    "share_chat": "分享群",
+    "share_user": "分享联系人",
+    "doc": "分享文档",
+    "sheet": "分享表格",
+    "mindnote": "分享脑图",
+    "location": "位置",
+    "system": "系统消息",
+    "interactive": "卡片消息",
+}
+
+
 class FeishuProxyChannel(BaseProxyChannel):
     """Feishu message events forwarded to Hub via TCP."""
 
@@ -124,10 +138,16 @@ class FeishuProxyChannel(BaseProxyChannel):
             file_key = None
             try:
                 content_obj = json.loads(content)
-                text = content_obj.get("text", "") if isinstance(content_obj, dict) else str(content_obj)
                 if msg_type in ("image", "file", "audio", "video") and isinstance(content_obj, dict):
                     file_key = (content_obj.get("file_key") or content_obj.get("image_key")
                                 or content_obj.get("key") or content_obj.get("token"))
+                if msg_type == "text" and isinstance(content_obj, dict):
+                    text = content_obj.get("text", "")
+                elif isinstance(content_obj, dict) and content:
+                    label = _MSG_TYPE_LABELS.get(msg_type, msg_type)
+                    text = f"[{label}]\n{content}"  # 非 text → 带类型标签的原始 JSON
+                else:
+                    text = str(content_obj) if isinstance(content_obj, dict) else content
             except Exception:
                 text = content
 
@@ -244,10 +264,11 @@ class FeishuProxyChannel(BaseProxyChannel):
                 items = response.data.items
                 if items:
                     content_str = items[0].body.content
-                    obj = json.loads(content_str)
-                    if isinstance(obj, dict):
-                        return obj.get("text", "") or obj.get("content", "") or str(obj)
-                    return str(obj)
+                    content_obj = json.loads(content_str)
+                    if isinstance(content_obj, dict):
+                        text = content_obj.get("text", "")
+                        return text if text else content_str  # 非 text → 原始 JSON
+                    return str(content_obj)
         except Exception as e:
             logger.debug("Failed to fetch quoted message {}: {}", message_id, e)
         return ""
