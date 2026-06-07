@@ -557,26 +557,21 @@ class AgentRunner:
                     # Compress context on repeated timeout: keep last 10 turns,
                     # summarize older turns so the retry works with less context.
                     if consecutive_timeout_count >= 3:
-                        from nanobot.agent.compress import summarize_turns
-                        from nanobot.agent.loop_utils import strip_think
+                        from nanobot.agent.compress import compress_turns
 
                         turns = Session._split_turns_by_assistant(messages)
                         if len(turns) > 10:
                             s_turns = turns[:-10]
                             boundary = sum(len(t) for t in s_turns)
-                            summary = await summarize_turns(
+                            summary, pair = await compress_turns(
                                 [m for t in s_turns for m in t],
-                                future_context=[m for t in turns[-10:] for m in t],
+                                [m for t in turns[-10:] for m in t],
+                                timestamp=datetime.now(timezone.utc).isoformat(),
                             )
-                            summary = strip_think(summary).strip() if summary else ""
-                            if summary:
+                            if pair:
                                 for m in messages[:boundary]:
                                     m["status"] = "excluded"
-                                ts = datetime.now(timezone.utc).isoformat()
-                                messages[boundary:boundary] = [
-                                    {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
-                                    {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
-                                ]
+                                messages[boundary:boundary] = pair
                             logger.warning(
                                 "Summarized {} old turns {} for {} after consecutive timeouts",
                                 len(s_turns),

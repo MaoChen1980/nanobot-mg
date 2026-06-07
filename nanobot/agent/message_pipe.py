@@ -97,8 +97,7 @@ class MessagePipe:
 
     async def _compress(self, messages: list[dict]) -> list[dict]:
         """压缩 messages 中最旧的轮次 — 异步（调 LLM 做 summary）。"""
-        from nanobot.agent.loop_utils import strip_think
-        from nanobot.agent.compress import summarize_turns
+        from nanobot.agent.compress import compress_turns
 
         if len(messages) < 3:
             return messages
@@ -125,20 +124,14 @@ class MessagePipe:
         compress_flat = [m for turn in to_compress for m in turn]
         future_context = [m for turn in keep for m in turn]
 
-        summary = await summarize_turns(
-            compress_flat,
-            future_context=future_context,
+        _, synthetic_pair = await compress_turns(
+            compress_flat, future_context,
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
-        summary = strip_think(summary).strip() if summary else ""
 
         last_is_user = messages[-1].get("role") == "user"
 
-        if summary:
-            ts = datetime.now(timezone.utc).isoformat()
-            synthetic_pair = [
-                {"role": "assistant", "content": summary, "timestamp": ts, "status": "synthetic"},
-                {"role": "user", "content": "ok", "timestamp": ts, "status": "synthetic"},
-            ]
+        if synthetic_pair:
             result: list[dict] = [messages[0]] + synthetic_pair
         else:
             result = [messages[0]]

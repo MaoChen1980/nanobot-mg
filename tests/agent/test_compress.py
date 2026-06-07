@@ -15,6 +15,9 @@ from nanobot.agent.compress import (
     _compress_session,
     _format_turns,
     _prepend_summary,
+    compress_session,
+    compress_turns,
+    make_summary_pair,
     split_history_by_budget,
     summarize_turns,
 )
@@ -320,9 +323,9 @@ class TestPrependSummary:
         keeps = [["a"], ["b"]]
         result = _prepend_summary(keeps, "my summary")
         assert len(result) == 4  # 2 summary + 2 turns
-        assert result[0]["role"] == "user"
-        assert "摘要" in result[0]["content"]
-        assert result[1]["role"] == "assistant"
+        assert result[0]["role"] == "assistant"
+        assert "我想知道我们最近聊天的摘要" in result[0]["content"]
+        assert result[1]["role"] == "user"
         assert result[1]["content"] == "my summary"
         assert result[2] == "a"
 
@@ -553,3 +556,190 @@ class TestSummarizeTurns:
                 [{"role": "user", "content": "tiny"}],
             )
         assert result == ""
+
+
+# ===========================================================================
+# make_summary_pair
+# ===========================================================================
+
+class TestMakeSummaryPair:
+    """``make_summary_pair`` — pure helper."""
+
+    def test_basic_pair(self):
+        pair = make_summary_pair("my summary")
+        assert len(pair) == 2
+        assert pair[0]["role"] == "assistant"
+        assert "我想知道我们最近聊天的摘要" in pair[0]["content"]
+        assert pair[1]["role"] == "user"
+        assert pair[1]["content"] == "my summary"
+        assert pair[0].get("status") == "synthetic"
+        assert pair[1].get("status") == "synthetic"
+
+    def test_with_timestamp(self):
+        pair = make_summary_pair("summary", timestamp="2026-01-01T00:00:00")
+        assert pair[0]["timestamp"] == "2026-01-01T00:00:00"
+        assert pair[1]["timestamp"] == "2026-01-01T00:00:00"
+
+
+# ===========================================================================
+# compress_turns
+# ===========================================================================
+
+class TestCompressTurns:
+    """``compress_turns`` — async with mocked provider."""
+
+    @pytest.mark.asyncio
+    async def test_empty_input_returns_none(self):
+        result, pair = await compress_turns([], [])
+        assert result is None
+        assert pair == []
+
+    @pytest.mark.asyncio
+    async def test_successful_compress(self):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(content="verified summary", finish_reason="stop"),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"):
+            result, pair = await compress_turns(
+                [{"role": "user", "content": "text"}],
+                [],
+            )
+        assert result == "verified summary"
+        assert len(pair) == 2
+        assert pair[1]["role"] == "user"
+        assert pair[1]["content"] == "verified summary"
+
+    @pytest.mark.asyncio
+    async def test_summarize_failure_returns_none(self):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            side_effect=Exception("API error"),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"), patch(
+            "nanobot.agent.compress.asyncio.sleep",
+        ):
+            result, pair = await compress_turns(
+                [{"role": "user", "content": "text"}],
+                [],
+            )
+        assert result is None
+        assert pair == []
+
+    @pytest.mark.asyncio
+    async def test_strips_think_blocks(self):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(content="some text<think>internal thought</think>", finish_reason="stop"),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"):
+            result, pair = await compress_turns(
+                [{"role": "user", "content": "text"}],
+                [],
+            )
+        assert result == "some text"
+        assert pair[1]["content"] == "some text"
+
+    @pytest.mark.asyncio
+    async def test_passes_timestamp_to_pair(self):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(content="summary", finish_reason="stop"),
+        ), patch("nanobot.agent.compress._build_prompt", return_value="prompt"):
+            _, pair = await compress_turns(
+                [{"role": "user", "content": "text"}],
+                [],
+                timestamp="2026-06-08T00:00:00",
+            )
+        assert pair[0]["timestamp"] == "2026-06-08T00:00:00"
+        assert pair[1]["timestamp"] == "2026-06-08T00:00:00"
+
+    @pytest.mark.asyncio
+    async def test_passes_previous_summary(self):
+        with patch(
+            "nanobot.agent.compress.chat_stream_with_retry",
+            return_value=LLMResponse(content="updated summary", finish_reason="stop"),
+        ) as mock_stream, patch(
+            "nanobot.agent.compress._build_prompt", return_value="prompt",
+        ):
+            result, _ = await compress_turns(
+                [{"role": "user", "content": "text"}],
+                [],
+                previous_summary="prev summary",
+            )
+        assert result == "updated summary"
+
+
+# ===========================================================================
+# compress_session (integration-style)
+# ===========================================================================
+
+class TestCompressSessionHighLevel:
+    """``compress_session`` — orchestrates split + summarise + persist."""
+
+    def _make_session(self, messages: list[dict]) -> MagicMock:
+        session = MagicMock(spec=["messages", "key"])
+        session.messages = list(messages)
+        session.key = "test-key"
+        return session
+
+    @pytest.mark.asyncio
+    async def test_history_returned_when_no_compress_needed(self):
+        """Everything within budget → history returned as-is."""
+        session = self._make_session([
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ])
+        history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        with patch("nanobot.agent.compress.compress_turns") as mock_ct, \
+             patch("nanobot.agent.compress.estimate_message_tokens", return_value=5):
+            result = await compress_session(
+                session, history, limit=100,
+            )
+        assert len(result) == 2
+        mock_ct.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_compress_when_over_budget(self):
+        session = self._make_session([
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old resp"},
+            {"role": "user", "content": "keep this"},
+        ])
+        history = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old resp"},
+            {"role": "user", "content": "keep this"},
+        ]
+        with patch(
+            "nanobot.agent.compress.compress_turns",
+            return_value=("summarized", [{"role": "assistant", "status": "synthetic", "content": "x"},
+                                          {"role": "user", "status": "synthetic", "content": "summarized"}]),
+        ), patch("nanobot.agent.compress.estimate_message_tokens", return_value=100):
+            result = await compress_session(
+                session, history, limit=10,
+            )
+        # Has synthetic pair + kept turn
+        assert len(result) == 4
+        assert result[0]["status"] == "synthetic"
+        assert result[3]["content"] == "keep this"
+
+    @pytest.mark.asyncio
+    async def test_writes_summary_to_db(self):
+        session = self._make_session([
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "resp"},
+            {"role": "user", "content": "keep"},
+        ])
+        history = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "resp"},
+            {"role": "user", "content": "keep"},
+        ]
+        db = MagicMock()
+        with patch(
+            "nanobot.agent.compress.compress_turns",
+            return_value=("my summary", [{"role": "assistant", "status": "synthetic", "content": "q"},
+                                          {"role": "user", "status": "synthetic", "content": "my summary"}]),
+        ), patch("nanobot.agent.compress.estimate_message_tokens", return_value=100):
+            await compress_session(
+                session, history, db=db, limit=10,
+            )
+        assert db.append_history.called

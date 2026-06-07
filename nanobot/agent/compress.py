@@ -1,7 +1,23 @@
 """Shared compression logic for session history.
 
-Provides the single compression path used by both the handler layer
-(proactive compression on turn start) and MessagePipe (overflow retry).
+Public API (async, one-call):
+  ``compress_turns(to_compress, keep, ...)``
+    Summarise old turns + create synthetic pair in a single call.
+    Use when you have a flat message list and no Session object.
+
+  ``compress_session(session, history, db, ...)``
+    Full session-level compression: split → summarise → persist → return
+    updated history with synthetic pair.  Wraps ``compress_turns`` +
+    ``_compress_session`` + ``_prepend_summary``.
+
+  ``split_history_by_budget(session_messages, formatted, limit)``
+    Pure splitter — determine what to keep vs compress.
+
+Internal (still importable but should not be needed externally):
+  ``summarize_turns`` — the LLM call.
+  ``make_summary_pair`` — creates the synthetic assistant+user pair.
+  ``_compress_session`` — replaces session.messages, writes DB.
+  ``_prepend_summary`` — pair + keeps in one flat list.
 """
 
 from __future__ import annotations
@@ -13,6 +29,7 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.llm_context import chat_stream_with_retry
+from nanobot.agent.loop_utils import strip_think
 from nanobot.session.manager import Session
 from nanobot.utils.helpers import estimate_message_tokens
 
@@ -53,11 +70,12 @@ _SUMMARY_PROMPT_TEMPLATE = (
     "如果你觉得某个信息在后面还有用，不管它属于哪类，都保留。\n"
     "如果你觉得某个信息后面已经用不上了，不管它看似多重要，都丢弃。\n"
     "\n"
-    "## 必须保留（不参与判断，无条件保留）\n"
+    "## 必须原文保留（不参与判断，无条件保留，禁止改写）\n"
     "- 用户最近一次提出的核心任务需求、目标和成功标准\n"
+    "- 用户给出的明确指示、约束条件、行为规则（如「不要……」、「必须……」类的指令）\n"
     "- 系统当前正在执行的 task 描述（如果有）\n"
     "\n"
-    "*必须保留是指这类信息必须在摘要里存在，不意味着保留原文。如果后面的对话对任务目标有更正/缩小范围，取最新版本。*\n"
+    "*以上各项要求保留原文，不得改写、概括、转述。如果后面的对话对任务目标有更正/缩小范围，取最新版本原文。*\n"
     "\n"
     "关键原则：同一类信息，只保留最晚的那个版本。\n"
     "## 输出要求\n"
@@ -209,6 +227,84 @@ async def summarize_turns(
 
 
 # ---------------------------------------------------------------------------
+# Public: one-shot compress → pair (no session)
+# ---------------------------------------------------------------------------
+
+async def compress_turns(
+    to_compress: list[dict],
+    keep: list[dict],
+    previous_summary: str | None = None,
+    timestamp: str | None = None,
+) -> tuple[str | None, list[dict]]:
+    """Summarise *to_compress*, create synthetic pair — one async call.
+
+    *keep* — turns retained as future context (helps LLM judge relevance).
+    *previous_summary* — summary from the last compression round.
+    *timestamp* — optional ISO timestamp for the synthetic messages.
+
+    Returns ``(summary_text, synthetic_pair)`` where *summary_text* is
+    ``None`` when summarisation fails (empty pair in that case).
+    """
+    if not to_compress:
+        return None, []
+
+    summary = await summarize_turns(
+        to_compress, future_context=keep, previous_summary=previous_summary,
+    )
+    summary = strip_think(summary).strip() if summary else ""
+    if not summary:
+        return None, []
+    return summary, make_summary_pair(summary, timestamp)
+
+
+# ---------------------------------------------------------------------------
+# Public: full session compression (has Session, writes DB)
+# ---------------------------------------------------------------------------
+
+async def compress_session(
+    session: Session,
+    history: list[dict],
+    db: Any = None,
+    *,
+    limit: int,
+    min_keep_turns: int = MIN_KEEP_TURNS,
+) -> list[dict]:
+    """Compress session history: split, summarise, persist, return updated history.
+
+    *session* — session object (mutated in-place via ``_compress_session``).
+    *history* — formatted message list for LLM input.
+    *db* — optional DB handle for persisting compressed history.
+    *limit* — token budget for kept turns.
+    *min_keep_turns* — minimum turns to retain after compression.
+
+    Returns the updated *history* (with synthetic summary pair prepended).
+    This is the single async entry-point for session-level compression.
+    """
+    keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
+        session.messages, history, limit=limit, min_keep_turns=min_keep_turns,
+    )
+
+    summary = None
+    pair: list[dict] = []
+    if to_compress_fmt:
+        prev = getattr(session, "_last_summary", None)
+        summary, pair = await compress_turns(
+            [m for turn in to_compress_fmt for m in turn],
+            [m for turn in keeps_fmt for m in turn],
+            previous_summary=prev,
+        )
+
+    _compress_session(session, keeps_raw, db=db, summary=summary or "")
+
+    if pair:
+        result = list(pair)
+        for turn in keeps_fmt:
+            result.extend(turn)
+        return result
+    return [m for turn in keeps_fmt for m in turn]
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -297,17 +393,29 @@ def _compress_session(
     )
 
 
+def make_summary_pair(summary: str, timestamp: str | None = None) -> list[dict]:
+    """Create a synthetic summary pair (assistant asks, user replies with summary).
+
+    Putting the summary in user-role gives it higher weight in LLM reasoning.
+    All compression paths should use this function for consistency.
+    """
+    pair = [
+        {"role": "assistant", "content": "我想知道我们最近聊天的摘要", "status": "synthetic"},
+        {"role": "user", "content": summary, "status": "synthetic"},
+    ]
+    if timestamp:
+        for m in pair:
+            m["timestamp"] = timestamp
+    return pair
+
+
 def _prepend_summary(keeps_fmt: list[list[dict]], summary: str) -> list[dict]:
     """Prepend a summary pair before the kept formatted turns.
 
     Returns a flat message list suitable for LLM input.  Does **not** touch
     the session object.
     """
-    summary_pair = [
-        {"role": "user", "content": "以下是对已裁剪对话的摘要：", "status": "synthetic"},
-        {"role": "assistant", "content": summary, "status": "synthetic"},
-    ]
-    result = list(summary_pair)
+    result = make_summary_pair(summary)
     for turn in keeps_fmt:
         result.extend(turn)
     return result

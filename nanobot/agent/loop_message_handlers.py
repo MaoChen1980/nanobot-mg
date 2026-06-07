@@ -83,32 +83,15 @@ class SystemMessageHandler:
         history = session.format_history(include_timestamps=True, timezone=self._loop.context.timezone)
 
         # Compression check: trigger → compress
-        trigger = self._loop._compress_trigger_tokens
         limit = self._loop._history_token_limit
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
-        if hist_tokens > trigger:
-            from nanobot.agent.compress import (
-                split_history_by_budget, summarize_turns,
-                _compress_session, _prepend_summary, MIN_KEEP_TURNS,
+        if hist_tokens > self._loop._compress_trigger_tokens:
+            from nanobot.agent.compress import compress_session, MIN_KEEP_TURNS
+
+            history = await compress_session(
+                session, history, db=self._loop._db,
+                limit=limit, min_keep_turns=MIN_KEEP_TURNS,
             )
-            keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
-                session.messages, history, limit=limit, min_keep_turns=MIN_KEEP_TURNS)
-            summary = None
-            if to_compress_fmt:
-                try:
-                    prev = getattr(session, '_last_summary', None)
-                    summary = await summarize_turns(
-                        [m for turn in to_compress_fmt for m in turn],
-                        future_context=[m for turn in keeps_fmt for m in turn],
-                        previous_summary=prev,
-                    )
-                except Exception:
-                    logger.exception("Summary LLM call failed, skipping summary")
-            _compress_session(session, keeps_raw, db=self._loop._db, summary=summary or "")
-            if summary:
-                history = _prepend_summary(keeps_fmt, summary)
-            else:
-                history = [m for turn in keeps_fmt for m in turn]
 
         hist_tokens_after = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns_after = sum(1 for m in history if m.get("role") == "assistant")
@@ -232,33 +215,15 @@ class UserMessageHandler:
 
         # Stage 1.5: compression check — if formatted history exceeds trigger, compress
         from nanobot.utils.helpers import estimate_message_tokens
-        _compress_trigger = self._loop._compress_trigger_tokens
-        _compress_limit = self._loop._history_token_limit
         _hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         _compress_happened = False
-        if _hist_tokens > _compress_trigger:
-            from nanobot.agent.compress import (
-                split_history_by_budget, summarize_turns,
-                _compress_session, _prepend_summary, MIN_KEEP_TURNS,
+        if _hist_tokens > self._loop._compress_trigger_tokens:
+            from nanobot.agent.compress import compress_session, MIN_KEEP_TURNS
+
+            history = await compress_session(
+                session, history, db=self._loop._db,
+                limit=self._loop._history_token_limit, min_keep_turns=MIN_KEEP_TURNS,
             )
-            keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
-                session.messages, history, limit=_compress_limit, min_keep_turns=MIN_KEEP_TURNS)
-            summary = None
-            if to_compress_fmt:
-                try:
-                    prev = getattr(session, '_last_summary', None)
-                    summary = await summarize_turns(
-                        [m for turn in to_compress_fmt for m in turn],
-                        future_context=[m for turn in keeps_fmt for m in turn],
-                        previous_summary=prev,
-                    )
-                except Exception:
-                    logger.exception("Summary LLM call failed, skipping summary")
-            _compress_session(session, keeps_raw, db=self._loop._db, summary=summary or "")
-            if summary:
-                history = _prepend_summary(keeps_fmt, summary)
-            else:
-                history = [m for turn in keeps_fmt for m in turn]
             _compress_happened = True
 
         # Stage 1.5b: assess_me triggers — interval + compression
