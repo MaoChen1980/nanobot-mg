@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from nanobot.session.manager import find_legal_message_start
-
 from .runner_constants import (
     _BACKFILL_CONTENT,
 )

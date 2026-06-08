@@ -36,7 +36,7 @@ class TestExecute:
     async def test_returns_advice(self):
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="Try divide & conquer")
             result = await tool.execute(problem="debug this")
         assert result == "Try divide & conquer"
@@ -52,7 +52,7 @@ class TestExecute:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(problem="debug this")
 
@@ -83,7 +83,7 @@ class TestExecute:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(problem="TypeError: cannot unpack")
 
@@ -95,7 +95,7 @@ class TestExecute:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(problem="debug this", focus_method="reverse_inference")
 
@@ -107,7 +107,7 @@ class TestExecute:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(problem="debug this")
 
@@ -119,7 +119,7 @@ class TestExecute:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(problem="debug this")
 
@@ -140,7 +140,7 @@ class TestExecuteErrors:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = RuntimeError("provider down")
             result = await tool.execute(problem="debug this")
 
@@ -152,7 +152,7 @@ class TestExecuteErrors:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="")
             result = await tool.execute(problem="debug this")
         assert result == "问题太难，目前没有结论"
@@ -162,7 +162,7 @@ class TestExecuteErrors:
         tool = _make_tool()
         tool.set_context(messages=_SAMPLE_MESSAGES)
 
-        with patch("nanobot.agent.tools.debug_root_cause.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.debug_root_cause.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content=None)
             result = await tool.execute(problem="debug this")
         assert result == "问题太难，目前没有结论"

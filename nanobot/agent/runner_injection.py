@@ -7,7 +7,7 @@ from typing import Any
 
 from loguru import logger
 
-from .runner_constants import _MAX_INJECTIONS_PER_TURN, _MAX_INJECTION_CYCLES
+from .runner_constants import _MAX_INJECTIONS_PER_TURN
 
 
 async def drain_injections(spec: Any) -> list[dict[str, Any]]:

@@ -11,12 +11,13 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.utils.progress_events import (
     build_tool_event_finish_payloads,
     build_tool_event_start_payload,
-    process_tool_events_and_progress,
     on_progress_accepts_tool_events,
+    process_tool_events_and_progress,
 )
 
 if TYPE_CHECKING:
     from nanobot.agent.loop import AgentLoop
+    from nanobot.providers.base import ToolCallRequest
 
 class _LoopHook(AgentHook):
     """Core hook for the main loop."""

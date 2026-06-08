@@ -212,8 +212,9 @@ class ContextBuilder:
     def _get_identity(self, channel: str | None = None, include_vector_search: bool = True) -> str:
         """Get the core identity section."""
         workspace_path = self.workspace.expanduser().resolve().as_posix()
-        from nanobot.config.paths import get_data_dir
         import shutil
+
+        from nanobot.config.paths import get_data_dir
         data_dir = get_data_dir().as_posix()
         system = platform.system()
 
@@ -274,6 +275,7 @@ class ContextBuilder:
         try:
             from datetime import datetime
             from zoneinfo import ZoneInfo
+
             from nanobot.utils.helpers import _format_datetime
             dt = datetime.fromisoformat(ts)
             if dt.tzinfo is not None:
@@ -414,11 +416,10 @@ class ContextBuilder:
         ``[image_url, text]`` lists, so the runner embeds full base64 directly
         in tool message text — this is where the string-case cleanup applies.
         """
-        _BASE64_DATA_RE = re.compile(r"data:[^;]+;base64,[A-Za-z0-9+/=]{100,}")
+        _base64_data_re = re.compile(r"data:[^;]+;base64,[A-Za-z0-9+/=]{100,}")
 
         for msg in messages:
             content = msg.get("content")
-            role = msg.get("role")
 
             # ---- list content: find and replace media blocks ----
             if isinstance(content, list):
@@ -457,8 +458,8 @@ class ContextBuilder:
                 continue
 
             # ---- string content: strip embedded base64 (tool results) ----
-            if isinstance(content, str) and _BASE64_DATA_RE.search(content):
-                msg["content"] = _BASE64_DATA_RE.sub("[base64 data omitted]", content)
+            if isinstance(content, str) and _base64_data_re.search(content):
+                msg["content"] = _base64_data_re.sub("[base64 data omitted]", content)
 
     def _load_bootstrap_files(self) -> str:
         """Load all bootstrap files from workspace (cached by file mtime).
