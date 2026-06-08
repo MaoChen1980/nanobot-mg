@@ -59,12 +59,11 @@ class TestRetryContext:
         assert ctx.empty_response_state.category == "empty_response"
         assert ctx.length_recovery_state.category == "length_recovery"
         assert ctx.llm_request_state.category == "llm_request"
-        assert ctx.tool_name_content_state.category == "tool_name_content"
 
     def test_summary_empty(self) -> None:
         ctx = RetryContext()
         s = ctx.summary()
-        for cat in ("empty_response", "length_recovery", "llm_request", "tool_name_content"):
+        for cat in ("empty_response", "length_recovery", "llm_request"):
             assert s[cat]["attempts"] == 0
             assert s[cat]["success"] is False
             assert s[cat]["last_attempt"] is None
@@ -95,7 +94,6 @@ class TestRetryContext:
         assert ctx._get_state("empty_response") is ctx.empty_response_state
         assert ctx._get_state("length_recovery") is ctx.length_recovery_state
         assert ctx._get_state("llm_request") is ctx.llm_request_state
-        assert ctx._get_state("tool_name_content") is ctx.tool_name_content_state
 
     async def test_wait_with_backoff_calls_callback(self) -> None:
         ctx = RetryContext()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import re
 import secrets
@@ -30,6 +29,10 @@ from anthropic.types import (
 )
 
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
+from nanobot.providers._tool_call_parser import (
+    detect_unparsed_tool_calls,
+    extract_xml_tool_calls,
+)
 
 _ALNUM = string.ascii_letters + string.digits
 
@@ -106,7 +109,7 @@ class AnthropicProvider(LLMProvider):
                     elif lowered == "false":
                         should_retry = False
 
-            error_kind = cls._classify_error(e)
+            error_kind = LLMProvider._classify_error(e)
             error_type, error_code = LLMProvider._extract_error_type_code(body)
 
             logger.exception(
@@ -131,12 +134,8 @@ class AnthropicProvider(LLMProvider):
         return LLMResponse(
             content=f"Error calling LLM: {e}",
             finish_reason="error",
-            error_kind=cls._classify_error(e),
+            error_kind=LLMProvider._classify_error(e),
         )
-
-    @staticmethod
-    def _classify_error(e: Exception) -> str | None:
-        return LLMProvider._classify_error(e)
 
     @staticmethod
     def _strip_prefix(model: str) -> str:
@@ -169,11 +168,11 @@ class AnthropicProvider(LLMProvider):
                 if raw and raw[-1]["role"] == "user":
                     prev_c = raw[-1]["content"]
                     if isinstance(prev_c, list):
-                        prev_c.append(block)
+                        raw[-1] = {**raw[-1], "content": list(prev_c) + [block]}
                     else:
-                        raw[-1]["content"] = [
+                        raw[-1] = {**raw[-1], "content": [
                             {"type": "text", "text": prev_c or ""}, block,
-                        ]
+                        ]}
                 else:
                     raw.append({"role": "user", "content": [block]})
                 continue
@@ -618,6 +617,16 @@ class AnthropicProvider(LLMProvider):
         usage = AnthropicProvider._extract_usage(response.usage)
 
         content = "".join(content_parts) or None
+
+        # Fallback: some providers (e.g. MiniMax Anthropic endpoint) may return
+        # tool calls as XML/text in the content field instead of structured
+        # ToolUseBlock.  Parse them out so the LLM doesn't see the raw XML in
+        # history and learn to reproduce it on the next turn.
+        if not tool_calls and content and detect_unparsed_tool_calls(content):
+            extracted, cleaned = extract_xml_tool_calls(content)
+            tool_calls.extend(extracted)
+            content = cleaned
+
         sd = getattr(response, "stop_details", None)
         if isinstance(sd, RefusalStopDetails) and sd.explanation and not content:
             content = f"[Refusal: {sd.explanation}]"

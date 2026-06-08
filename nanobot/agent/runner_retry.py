@@ -65,13 +65,12 @@ class RetryState:
 
 
 class RetryContext:
-    """Collects retry state for empty-response, length-recovery, LLM errors, and tool-name content detection."""
+    """Collects retry state for empty-response, length-recovery, and LLM errors."""
 
     def __init__(self) -> None:
         self.empty_response_state = RetryState("empty_response")
         self.length_recovery_state = RetryState("length_recovery")
         self.llm_request_state = RetryState("llm_request")
-        self.tool_name_content_state = RetryState("tool_name_content")
 
     def _get_state(self, category: str) -> RetryState:
         if category == "empty_response":
@@ -80,8 +79,6 @@ class RetryContext:
             return self.length_recovery_state
         if category == "llm_request":
             return self.llm_request_state
-        if category == "tool_name_content":
-            return self.tool_name_content_state
         raise ValueError(f"Unknown retry category: {category}")
 
     async def wait_with_backoff(
@@ -121,10 +118,5 @@ class RetryContext:
                 "attempts": self.llm_request_state.attempts,
                 "success": self.llm_request_state.success,
                 "last_attempt": self.llm_request_state.last_attempt,
-            },
-            "tool_name_content": {
-                "attempts": self.tool_name_content_state.attempts,
-                "success": self.tool_name_content_state.success,
-                "last_attempt": self.tool_name_content_state.last_attempt,
             },
         }

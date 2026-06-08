@@ -984,66 +984,6 @@ async def test_dispatch_republishes_leftover_queue_messages(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Tests for _detect_tool_names_in_content
-# ---------------------------------------------------------------------------
-
-
-def test_detect_no_tool_names() -> None:
-    from nanobot.agent.runner import _detect_tool_names_in_content
-    assert _detect_tool_names_in_content("Hello, how can I help you?") == []
-    assert _detect_tool_names_in_content("") == []
-    assert _detect_tool_names_in_content("Let me read the file for you.") == []
-
-
-def test_detect_single_tool_name() -> None:
-    from nanobot.agent.runner import _detect_tool_names_in_content
-    result = _detect_tool_names_in_content("I will use exec_tool to run the command")
-    assert result == ["exec_tool"]
-
-
-def test_detect_multiple_tool_names() -> None:
-    from nanobot.agent.runner import _detect_tool_names_in_content
-    result = _detect_tool_names_in_content(
-        "First read_file_tool, then exec_tool, finally write_file_tool"
-    )
-    assert set(result) == {"read_file_tool", "exec_tool", "write_file_tool"}
-
-
-def test_detect_case_insensitive() -> None:
-    from nanobot.agent.runner import _detect_tool_names_in_content
-    result = _detect_tool_names_in_content("Use EXEC_TOOL here")
-    assert result == ["exec_tool"]
-
-
-def test_detect_no_substring_false_positive() -> None:
-    """send_message_tool should match but message_tool should NOT separately match."""
-    from nanobot.agent.runner import _detect_tool_names_in_content
-    result = _detect_tool_names_in_content("I will use send_message_tool to send")
-    assert result == ["send_message_tool"]
-    assert "message_tool" not in result
-
-
-def test_detect_substring_safety_spawn() -> None:
-    """spawn_many_tool should match but spawn_tool should NOT separately match."""
-    from nanobot.agent.runner import _detect_tool_names_in_content
-    result = _detect_tool_names_in_content("Use spawn_many_tool for parallel tasks")
-    assert result == ["spawn_many_tool"]
-    assert "spawn_tool" not in result
-
-
-def test_detect_returns_sorted_by_length() -> None:
-    """Results should be sorted longest-first so longer names take priority."""
-    from nanobot.agent.runner import _detect_tool_names_in_content
-    result = _detect_tool_names_in_content(
-        "exec_tool and spawn_many_tool and send_message_tool"
-    )
-    for i in range(len(result) - 1):
-        assert len(result[i]) >= len(result[i + 1]), (
-            f"Expected descending length order, got {result}"
-        )
-
-
-# ---------------------------------------------------------------------------
 # Regression tests for GLM-1214: _snip_history must preserve a user message
 # ---------------------------------------------------------------------------
 

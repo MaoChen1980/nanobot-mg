@@ -39,7 +39,6 @@ from .runner_constants import (
     _MAX_INJECTIONS_PER_TURN,
     _MAX_LENGTH_RECOVERIES,
     _MAX_MODEL_ERROR_RETRIES,
-    _MAX_TOOL_NAME_CONTENT_RETRIES,
     _PERSISTED_MODEL_ERROR_PLACEHOLDER,
     _SNIP_SAFETY_BUFFER,
 )
@@ -85,43 +84,6 @@ _SOURCE_TOOLS = frozenset({
     "framework_search_tool", "scan_project_tool", "tool_call_log_tool", "check_subagent_tool",
     "analyze_tool", "diagnose_codebase_tool",
 })
-
-# All tool names (with _tool suffix) — used for content detection to catch
-# LLM output that writes tool names in text instead of making proper tool calls.
-_TOOL_NAMES_FOR_CONTENT_CHECK = frozenset({
-    "exec_tool",
-    "grep_tool", "glob_tool",
-    "read_file_tool", "read_files_tool", "write_file_tool", "edit_file_tool",
-    "delete_file_tool", "move_file_tool", "list_dir_tool", "edit_files_tool",
-    "web_search_tool", "web_fetch_tool",
-    "message_tool", "send_message_tool",
-    "spawn_tool", "spawn_many_tool", "cancel_subagent_tool", "check_subagent_tool",
-    "list_subagents_tool", "respond_to_subagent_tool",
-    "request_orchestrator_input_tool", "notify_orchestrator_tool",
-    "search_text_tool", "memory_search_tool", "conversation_search_tool",
-    "framework_search_tool", "explore_module_tool", "scan_project_tool",
-    "analyze_tool", "diagnose_codebase_tool",
-    "cron_tool", "save_stage_tool", "show_stages_tool", "restore_stage_tool",
-    "self_restart_tool", "tool_call_log_tool", "notebook_edit_tool",
-})
-
-
-def _detect_tool_names_in_content(text: str) -> list[str]:
-    """Return list of tool names found in LLM text content.
-
-    Sorted by length descending to avoid substring false positives
-    (e.g. ``message_tool`` matching when only ``send_message_tool`` is present).
-    """
-    found = []
-    text_lower = text.lower()
-    for name in sorted(_TOOL_NAMES_FOR_CONTENT_CHECK, key=len, reverse=True):
-        if name in text_lower and not any(name in f for f in found):
-            found.append(name)
-    return found
-
-
-
-
 
 @dataclass(slots=True)
 class AgentRunSpec:
@@ -254,7 +216,6 @@ class AgentRunner:
         empty_content_retries = 0
         length_recovery_count = 0
         model_error_retries = 0
-        tool_name_content_retries = 0
         consecutive_timeout_count = 0
         had_injections = False
         injection_cycles = 0
@@ -678,56 +639,6 @@ class AgentRunner:
                     had_injections = True
                     continue
                 break
-
-            # Content detection: if LLM writes tool names in text instead of making tool calls, retry
-            _detected = _detect_tool_names_in_content(clean)
-            if _detected:
-                tool_name_content_retries += 1
-                total_retry_count += 1
-                if tool_name_content_retries < _MAX_TOOL_NAME_CONTENT_RETRIES:
-                    logger.warning(
-                        "Tool name(s) in content on turn {} for {} (retry {}/{}): {}",
-                        iteration, spec.session_key or "default",
-                        tool_name_content_retries, _MAX_TOOL_NAME_CONTENT_RETRIES,
-                        ", ".join(_detected),
-                    )
-                    retry_ctx.tool_name_content_state.record_attempt(
-                        f"tool names in content: {', '.join(_detected)}"
-                    )
-                    messages.append(build_assistant_message(
-                        clean,
-                        reasoning_content=response.reasoning_content,
-                        reasoning_details=response.reasoning_details,
-                        thinking_blocks=response.thinking_blocks,
-                    ))
-                    messages.append({
-                        "role": "user",
-                        "content": (
-                            "工具调用的格式是这样的。"
-                            "例如：\n\n"
-                            "```json\n"
-                            "{\n"
-                            '  "role": "assistant",\n'
-                            '  "content": "我先读取一下配置文件",\n'
-                            '  "tool_calls": [\n'
-                            "    {\n"
-                            '      "id": "call_function_example_1",\n'
-                            '      "type": "function",\n'
-                            '      "function": {\n'
-                            '        "name": "read_file_tool",\n'
-                            '        "arguments": "{\\"path\\": \\"filepath\\", \\"offset\\": 158, \\"limit\\": 45}"\n'
-                            "      }\n"
-                            "    }\n"
-                            "  ]\n"
-                            "}\n"
-                            "```"
-                        ),
-                    })
-                    await hook.after_iteration(context)
-                    continue
-                retry_ctx.tool_name_content_state.record_attempt(
-                    f"tool names exhausted: {', '.join(_detected)}"
-                )
 
             messages.append(assistant_message or build_assistant_message(
                 clean,

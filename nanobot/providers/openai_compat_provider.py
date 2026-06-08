@@ -7,9 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
-import re
-import secrets
-import string
+
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -33,6 +31,11 @@ else:
     from openai import AsyncOpenAI
 
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
+from nanobot.providers._tool_call_parser import (
+    _short_tool_id,
+    detect_unparsed_tool_calls as _detect_unparsed_tool_calls,
+    extract_xml_tool_calls as _extract_xml_tool_calls,
+)
 from nanobot.providers.openai_responses import (
     consume_sdk_stream,
     convert_messages,
@@ -47,57 +50,6 @@ _ALLOWED_MSG_KEYS = frozenset({
     "role", "content", "tool_calls", "tool_call_id", "name",
     "reasoning_content", "reasoning_details", "extra_content",
 })
-_ALNUM = string.ascii_letters + string.digits
-
-_STANDARD_TC_KEYS = frozenset({"id", "type", "index", "function"})
-_STANDARD_FN_KEYS = frozenset({"name", "arguments"})
-
-# Regex patterns to detect unparsed tool calls in LLM content (XML/ReAct, etc.)
-_UNPARSED_TOOL_PATTERNS = [
-    r"<invoke\s+name\s*=\s*[\"']([^\"']+)[\"']\s*>",
-    r"<tool>([^<]+)</tool>",
-    r"Action\s*:\s*(\w+)",
-]
-_UNPARSED_TOOL_RE = re.compile("|".join(f"(?:{p})" for p in _UNPARSED_TOOL_PATTERNS))
-
-# Safe regex for retry — only matches explicit <invoke name="..."> XML tool
-# calls (MiniMax format).  NOT the broader Action: or <tool> patterns that
-# would cause false positives in normal conversation.
-_SAFE_INVOKE_RE = re.compile(r"<invoke\s+name\s*=\s*[\"']([^\"']+)[\"']\s*>")
-
-# When content looks like it contains an unparsed tool call, this prompt is
-# appended as a user message and the API is called ONCE more so the LLM can
-# self-correct.  One retry only — if it fails again the original response
-# passes through as-is.
-_RETRY_CORRECTION_PROMPT = (
-    "你的回答中包含文本形式的工具调用（如 XML/ReAct 格式），"
-    "但框架未识别为结构化 tool_call。请重新输出，使用 tool_calls 结构化字段来调用工具。"
-)
-
-
-def _detect_unparsed_tool_calls(content: str | None) -> bool:
-    """Return True if content contains unparsed tool call patterns from the LLM.
-
-    Some providers (MiniMax, etc.) return tool calls as XML in ``content``
-    instead of the structured ``tool_calls`` field.  This logs a warning
-    so the operator knows the LLM's intent was lost.
-    """
-    if not content:
-        return False
-    m = _UNPARSED_TOOL_RE.search(content)
-    if not m:
-        return False
-    for i, g in enumerate(m.groups()):
-        if g:
-            logger.warning(
-                "LLM content contains unparsed tool call '{}' (pattern: {}). "
-                "The API did not return a structured tool_call — treating as plain text.",
-                g, _UNPARSED_TOOL_PATTERNS[i].split("(")[0].strip("\\"),
-            )
-            return True
-    return False
-
-
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Recursively deep-merge override into base. Does not mutate inputs."""
     result = dict(base)
@@ -167,12 +119,6 @@ def _float_env(name: str, default: float) -> float:
         return default
     return value
 
-
-def _short_tool_id() -> str:
-    """9-char alphanumeric ID compatible with all providers (incl. Mistral)."""
-    return "".join(secrets.choice(_ALNUM) for _ in range(9))
-
-
 def _get(obj: Any, key: str) -> Any:
     """Get a value from dict or object attribute, returning None if absent."""
     if isinstance(obj, dict):
@@ -194,6 +140,11 @@ def _coerce_dict(value: Any) -> dict[str, Any] | None:
     return None
 
 
+_STANDARD_TC_KEYS: frozenset[str] = frozenset({
+    "id", "type", "function", "index",
+})
+
+
 def _extract_tc_extras(tc: Any) -> tuple[
     dict[str, Any] | None,
     dict[str, Any] | None,
@@ -201,8 +152,9 @@ def _extract_tc_extras(tc: Any) -> tuple[
 ]:
     """Extract (extra_content, provider_specific_fields, fn_provider_specific_fields).
 
-    Works for both SDK objects and dicts.  Captures Gemini ``extra_content``
-    verbatim and any non-standard keys on the tool-call / function.
+    Captures Gemini ``extra_content`` verbatim and any non-standard keys on
+    the tool-call / function.  Expects normalized dicts (caller normalizes
+    at the boundary).
     """
     extra_content = _coerce_dict(_get(tc, "extra_content"))
 
@@ -217,11 +169,6 @@ def _extract_tc_extras(tc: Any) -> tuple[
         fn = _coerce_dict(tc_dict.get("function"))
         if fn is not None:
             fn_prov = _coerce_dict(fn.get("provider_specific_fields"))
-    else:
-        prov = _coerce_dict(_get(tc, "provider_specific_fields"))
-        fn_obj = _get(tc, "function")
-        if fn_obj is not None:
-            fn_prov = _coerce_dict(_get(fn_obj, "provider_specific_fields"))
 
     return extra_content, prov, fn_prov
 
@@ -647,7 +594,13 @@ class OpenAICompatProvider(LLMProvider):
         # the provider default is preserved otherwise.
         # The mapping is driven by ProviderSpec.thinking_style so that adding
         # a new provider never requires touching this function.
-        if spec and spec.thinking_style and reasoning_effort is not None:
+        #
+        # For reasoning_split providers (MiniMax): always set reasoning_split
+        # when tools are present, so tool calls use the standard structured
+        # format instead of raw XML in content.
+        if spec and spec.thinking_style == "reasoning_split" and tools:
+            kwargs.setdefault("extra_body", {}).update({"reasoning_split": True})
+        elif spec and spec.thinking_style and reasoning_effort is not None:
             thinking_enabled = semantic_effort != "minimal"
             extra = _THINKING_STYLE_MAP.get(spec.thinking_style, lambda _: None)(thinking_enabled)
             if extra:
@@ -696,25 +649,26 @@ class OpenAICompatProvider(LLMProvider):
             # reasoning_split providers (MiniMax) don't accept reasoning_content
             # in request messages — they use extra_body reasoning_split instead.
             skip_rc_backfill = bool(spec and spec.thinking_style == "reasoning_split")
-            for i, msg in enumerate(kwargs["messages"]):
+            new_msgs = []
+            for msg in kwargs["messages"]:
                 if msg.get("role") == "assistant":
-                    before_rc = msg.get("reasoning_content")
-                    before_content = msg.get("content")
-                    has_tc = bool(msg.get("tool_calls"))
                     if skip_rc_backfill:
                         # Remove reasoning_content entirely — MiniMax doesn't
                         # recognize this field in request messages.
-                        if "reasoning_content" in msg:
-                            del msg["reasoning_content"]
-                    else:
+                        new_msgs.append({k: v for k, v in msg.items() if k != "reasoning_content"})
+                    elif not msg.get("reasoning_content"):
                         # reasoning_content backfill for ALL assistant messages
                         # (including tool-call ones). Some providers reject thinking-mode
                         # requests with assistant messages missing reasoning_content.
-                        if not msg.get("reasoning_content"):
-                            msg["reasoning_content"] = " "
+                        new_msgs.append({**msg, "reasoning_content": " "})
+                    else:
+                        new_msgs.append(msg)
+                else:
+                    new_msgs.append(msg)
+            kwargs["messages"] = new_msgs
 
         # MiniMax: _sanitize_messages unconditionally sets content=None on ALL
-        # assistant tool-call messages (line 434).  MiniMax reverses the usual
+        # assistant tool-call messages.  MiniMax reverses the usual
         # convention and rejects content=null — even when thinking mode is not
         # active.  Run this fix unconditionally so that non-thinking requests
         # also get non-null content on historical tool-call messages.
@@ -1115,9 +1069,6 @@ class OpenAICompatProvider(LLMProvider):
                 function_provider_specific_fields=fn_prov,
             ))
 
-        if not tool_calls:
-            _detect_unparsed_tool_calls(content)
-
         return LLMResponse(
             content=content,
             tool_calls=tool_calls,
@@ -1374,23 +1325,20 @@ class OpenAICompatProvider(LLMProvider):
             )
             result = self._parse(await self._client.chat.completions.create(**kwargs))
 
-            # Retry once when content looks like an unparsed tool call
-            # (XML in text instead of structured tool_calls).
-            # Only matches the safe <invoke name="..."> pattern (MiniMax).
-            if not result.tool_calls and result.content and _SAFE_INVOKE_RE.search(result.content):
-                retry_msgs = [
-                    *messages,
-                    {"role": "assistant", "content": result.content or ""},
-                    {"role": "user", "content": _RETRY_CORRECTION_PROMPT},
-                ]
-                retry_kwargs = self._build_kwargs(
-                    retry_msgs, tools, model, max_tokens, temperature,
-                    reasoning_effort, tool_choice,
-                )
-                try:
-                    result = self._parse(await self._client.chat.completions.create(**retry_kwargs))
-                except Exception:
-                    logger.warning("Retry after unparsed tool call also failed — using original response")
+            # Some providers (MiniMax) return tool calls as XML text in ``content``
+            # instead of structured ``tool_calls``.  Parse in-place instead of
+            # retrying — prompt-based correction is unreliable.
+            if not result.tool_calls and result.content and _detect_unparsed_tool_calls(result.content):
+                tool_calls, cleaned = _extract_xml_tool_calls(result.content)
+                if tool_calls:
+                    result = LLMResponse(
+                        content=cleaned,
+                        tool_calls=tool_calls,
+                        finish_reason="tool_calls",
+                        usage=result.usage,
+                        reasoning_content=result.reasoning_content,
+                        reasoning_details=result.reasoning_details,
+                    )
 
             return result
         except Exception as e:
@@ -1482,7 +1430,21 @@ class OpenAICompatProvider(LLMProvider):
                         reasoning = delta.get("reasoning_content")
                         if reasoning and on_reasoning_delta:
                             await on_reasoning_delta(reasoning)
-            return self._parse_chunks(chunks)
+            result = self._parse_chunks(chunks)
+            # Same in-place XML parsing as chat() — handles MiniMax plain-text
+            # tool calls even in streaming responses.
+            if not result.tool_calls and result.content and _detect_unparsed_tool_calls(result.content):
+                tool_calls, cleaned = _extract_xml_tool_calls(result.content)
+                if tool_calls:
+                    result = LLMResponse(
+                        content=cleaned,
+                        tool_calls=tool_calls,
+                        finish_reason="tool_calls",
+                        usage=result.usage,
+                        reasoning_content=result.reasoning_content,
+                        reasoning_details=result.reasoning_details,
+                    )
+            return result
         except asyncio.TimeoutError:
             logger.warning("OpenAI-compat stream timed out after {}s", idle_timeout_s)
             return LLMResponse(
