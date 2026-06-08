@@ -8,7 +8,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -611,8 +611,30 @@ class LLMProvider(ABC):
             on_retry_wait=on_retry_wait,
         )
 
+    _RESETS_AT_RE = re.compile(
+        r"resets at\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})",
+        re.IGNORECASE,
+    )
+
     @classmethod
-    def _extract_retry_after(cls, content: str | None) -> float | None:
+    def _extract_retry_after(cls, content: str | None, *, only_resets_at: bool = False) -> float | None:
+        # Parse "resets at <ISO datetime>" — quota exhaustion with a known
+        # reset time (e.g. MiniMax 5-hour token plan).  Return seconds until
+        # reset so the retry happens when quota recovers.
+        if content:
+            m = cls._RESETS_AT_RE.search(content)
+            if m:
+                try:
+                    reset_at = datetime.fromisoformat(m.group(1))
+                    remaining = (reset_at - datetime.now(reset_at.tzinfo)).total_seconds()
+                    if remaining > 10:
+                        return remaining + 5  # small buffer past reset
+                except ValueError:
+                    pass
+
+        if only_resets_at:
+            return None
+
         text = (content or "").lower()
         patterns = (
             r"retry after\s+(\d+(?:\.\d+)?)\s*(ms|milliseconds|s|sec|secs|seconds|m|min|minutes)?",
@@ -687,8 +709,13 @@ class LLMProvider(ABC):
         if response.retry_after is not None and response.retry_after > 0:
             return response.retry_after
 
-        # 429 + rate_limit without server-provided retry_after → default
+        # 429 + rate_limit without server-provided retry_after → default.
+        # Prefer explicit "resets at" timestamp (quota exhaustion) over
+        # the hardcoded fallback of 120 s for burst rate limits.
         if response.error_status_code == 429:
+            delay = cls._extract_retry_after(response.content)
+            if delay is not None:
+                return delay
             type_token = cls._normalize_error_token(response.error_type)
             code_token = cls._normalize_error_token(response.error_code)
             content = (response.content or "").lower()
@@ -708,12 +735,24 @@ class LLMProvider(ABC):
         on_retry_wait: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         remaining = max(0.0, delay)
+        # Long delay (>5 min) = quota exhaustion with scheduled reset, not a
+        # burst rate limit.  Send one message and sleep through — no point
+        # heartbeating every 30 s.
+        if delay > 300 and on_retry_wait:
+            reset_at = datetime.now(tz=timezone.utc).astimezone() + timedelta(seconds=delay)
+            await on_retry_wait(
+                f"API quota exhausted, auto-retrying after reset at "
+                f"{reset_at.strftime('%H:%M')}. "
+                f"Send /stop to cancel current task, or wait — it will continue automatically."
+            )
+            await asyncio.sleep(delay)
+            return
+
         while remaining > 0:
             if on_retry_wait:
-                kind = "persistent retry" if persistent else "retry"
                 await on_retry_wait(
-                    f"Model request failed, {kind} in {max(1, int(round(remaining)))}s "
-                    f"(attempt {attempt})."
+                    f"Rate limit reached, retrying in {max(1, int(round(remaining)))}s. "
+                    f"Send /stop to cancel, or wait."
                 )
             chunk = min(remaining, self._RETRY_HEARTBEAT_CHUNK)
             await asyncio.sleep(chunk)
@@ -791,8 +830,16 @@ class LLMProvider(ABC):
 
             base_delay = delays[min(attempt - 1, len(delays) - 1)]
             delay = self._extract_retry_after_from_response(response) or base_delay
+            # Only cap non-definitive delays in persistent mode.
+            # "resets at" is definitive (quota exhaustion with known reset time)
+            # so it always bypasses the persistent cap — the LLM won't recover
+            # until the quota window resets.
             if persistent:
-                delay = min(delay, self._PERSISTENT_MAX_DELAY)
+                resets_at = self._extract_retry_after(
+                    response.content, only_resets_at=True,
+                )
+                if resets_at is None:
+                    delay = min(delay, self._PERSISTENT_MAX_DELAY)
 
             logger.warning(
                 "LLM transient error (attempt {}{}), retrying in {}s: {}",

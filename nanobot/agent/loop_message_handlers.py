@@ -239,7 +239,7 @@ class UserMessageHandler:
 
         # Stage 4: callbacks
         on_progress_final = on_progress or self._make_bus_progress_callback(msg)
-        on_retry_wait = self._make_retry_wait_callback(msg)
+        on_retry_wait = self._make_retry_wait_callback(msg, on_progress_final)
 
         # Stage 5: persist user message before loop runs
         user_persisted_early = False
@@ -400,11 +400,20 @@ class UserMessageHandler:
             await self._loop.bus.publish_outbound(OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content, metadata=meta))
         return _bus_progress
 
-    def _make_retry_wait_callback(self, msg):
+    def _make_retry_wait_callback(self, msg, on_progress=None):
         async def _on_retry_wait(content):
+            # Route through on_progress when available so the message
+            # actually reaches the user (hub → deliver_to_proxy, CLI →
+            # progress line).  Fall back to bus for other consumers.
+            if on_progress:
+                await on_progress(content, tool_events=None)
+                return
             meta = dict(msg.metadata or {})
             meta["_retry_wait"] = True
-            await self._loop.bus.publish_outbound(OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content, metadata=meta))
+            await self._loop.bus.publish_outbound(OutboundMessage(
+                channel=msg.channel, chat_id=msg.chat_id,
+                content=content, metadata=meta,
+            ))
         return _on_retry_wait
 
     def _persist_user_message_early(self, session, msg, pending_ask_id):

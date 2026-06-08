@@ -767,7 +767,7 @@ def agent(
                                 )
                             continue
 
-                        if msg.metadata.get("_progress"):
+                        if msg.metadata.get("_progress") or msg.metadata.get("_retry_wait"):
                             is_tool_hint = msg.metadata.get("_tool_hint", False)
                             ch = agent_loop.channels_config
                             if ch and is_tool_hint and not ch.send_tool_hints:
