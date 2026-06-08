@@ -732,7 +732,7 @@ class AgentRunner:
         messages.append(build_assistant_message(_PERSISTED_MODEL_ERROR_PLACEHOLDER))
 
     @staticmethod
-    def _fmt_tool_metadata(tool_name: str, result: str | list, timestamp: str = "", duration_ms: int | None = None) -> str:
+    def _fmt_tool_metadata(tool_name: str, result: str | list, timestamp: str, duration_ms: int | None = None) -> str:
         """Prefix tool result with metadata: name, time, status, duration, size.
 
         Info-gathering tools get a ``[Source: ...]`` label so the LLM can
@@ -746,13 +746,10 @@ class AgentRunner:
             size = len(result)
             status = "failure" if result.startswith("Error") else "success"
             result_str = result
-        ts = timestamp[:16].replace("T", " ") if timestamp else ""
+        ts = timestamp[:16].replace("T", " ")
         duration_str = f"time consumed: {duration_ms / 1000:.1f}s" if duration_ms is not None else ""
         prefix = "Source" if tool_name in _SOURCE_TOOLS else "Tool"
-        parts = [f"[{prefix}: {tool_name}"]
-        if ts:
-            parts.append(ts)
-        parts.append(status)
+        parts = [f"[{prefix}: {tool_name}", ts, status]
         if duration_str:
             parts.append(duration_str)
         parts.append(f"result: {size} chars]")
