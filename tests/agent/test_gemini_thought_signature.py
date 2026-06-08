@@ -5,7 +5,6 @@ field: ``{"google": {"thought_signature": "..."}}``.  This MUST survive the
 parse → serialize round-trip so the model can continue reasoning.
 """
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from nanobot.providers.base import ToolCallRequest
@@ -55,44 +54,7 @@ def test_tool_call_request_omits_absent_extras() -> None:
     assert "provider_specific_fields" not in payload["function"]
 
 
-# ── _parse: SDK-object branch ──────────────────────────────────────────
-
-def _make_sdk_response_with_extra_content():
-    """Simulate a Gemini response via the OpenAI SDK (SimpleNamespace)."""
-    fn = SimpleNamespace(name="get_weather", arguments='{"city":"Tokyo"}')
-    tc = SimpleNamespace(
-        id="call_1",
-        index=0,
-        type="function",
-        function=fn,
-        extra_content=GEMINI_EXTRA,
-    )
-    msg = SimpleNamespace(
-        content=None,
-        tool_calls=[tc],
-        reasoning_content=None,
-    )
-    choice = SimpleNamespace(message=msg, finish_reason="tool_calls")
-    usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15)
-    return SimpleNamespace(choices=[choice], usage=usage)
-
-
-def test_parse_sdk_object_preserves_extra_content() -> None:
-    with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
-        provider = OpenAICompatProvider()
-
-    result = provider._parse(_make_sdk_response_with_extra_content())
-
-    assert len(result.tool_calls) == 1
-    tc = result.tool_calls[0]
-    assert tc.name == "get_weather"
-    assert tc.extra_content == GEMINI_EXTRA
-
-    payload = tc.to_openai_tool_call()
-    assert payload["extra_content"] == GEMINI_EXTRA
-
-
-# ── _parse: dict/mapping branch ───────────────────────────────────────
+# ── _parse: unified (dict-normalized) branch ──────────────────────────
 
 def test_parse_dict_preserves_extra_content() -> None:
     with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
@@ -126,28 +88,6 @@ def test_parse_dict_preserves_extra_content() -> None:
 
 
 # ── _parse_chunks: streaming round-trip ───────────────────────────────
-
-def test_parse_chunks_sdk_preserves_extra_content() -> None:
-    fn_delta = SimpleNamespace(name="get_weather", arguments='{"city":"Tokyo"}')
-    tc_delta = SimpleNamespace(
-        id="call_1",
-        index=0,
-        function=fn_delta,
-        extra_content=GEMINI_EXTRA,
-    )
-    delta = SimpleNamespace(content=None, tool_calls=[tc_delta])
-    choice = SimpleNamespace(finish_reason="tool_calls", delta=delta)
-    chunk = SimpleNamespace(choices=[choice], usage=None)
-
-    result = OpenAICompatProvider._parse_chunks([chunk])
-
-    assert len(result.tool_calls) == 1
-    tc = result.tool_calls[0]
-    assert tc.extra_content == GEMINI_EXTRA
-
-    payload = tc.to_openai_tool_call()
-    assert payload["extra_content"] == GEMINI_EXTRA
-
 
 def test_parse_chunks_dict_preserves_extra_content() -> None:
     chunk = {

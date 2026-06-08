@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from anthropic.types import Message, TextBlock, Usage
+
 from nanobot.providers.openai_compat_provider import OpenAICompatProvider
 
 
-class FakeUsage:
-    """Mimics an OpenAI SDK usage object (has attributes, not dict keys)."""
+class _Obj:
+    """Minimal attr-based object for OpenAI compat test responses."""
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -120,13 +122,13 @@ def test_extract_usage_openai_cached_zero_dict():
 def test_extract_usage_openai_cached_tokens_obj():
     """prompt_tokens_details.cached_tokens from an SDK object response."""
     p = _provider()
-    usage_obj = FakeUsage(
+    usage_obj = _Obj(
         prompt_tokens=2000,
         completion_tokens=300,
         total_tokens=2300,
-        prompt_tokens_details=FakePromptDetails(cached_tokens=1200),
+        prompt_tokens_details=_Obj(cached_tokens=1200),
     )
-    response = FakeUsage(choices=[_FakeChoice()], usage=usage_obj)
+    response = _Obj(choices=[_FakeChoice()], usage=usage_obj)
     result = p._parse(response)
     assert result.usage["cached_tokens"] == 1200
 
@@ -134,13 +136,13 @@ def test_extract_usage_openai_cached_tokens_obj():
 def test_extract_usage_deepseek_cached_tokens_obj():
     """prompt_cache_hit_tokens from a DeepSeek SDK object response."""
     p = _provider()
-    usage_obj = FakeUsage(
+    usage_obj = _Obj(
         prompt_tokens=1500,
         completion_tokens=200,
         total_tokens=1700,
         prompt_cache_hit_tokens=1200,
     )
-    response = FakeUsage(choices=[_FakeChoice()], usage=usage_obj)
+    response = _Obj(choices=[_FakeChoice()], usage=usage_obj)
     result = p._parse(response)
     assert result.usage["cached_tokens"] == 1200
 
@@ -164,13 +166,13 @@ def test_extract_usage_stepfun_top_level_cached_tokens_dict():
 def test_extract_usage_stepfun_top_level_cached_tokens_obj():
     """StepFun/Moonshot: usage.cached_tokens as SDK object attribute."""
     p = _provider()
-    usage_obj = FakeUsage(
+    usage_obj = _Obj(
         prompt_tokens=591,
         completion_tokens=120,
         total_tokens=711,
         cached_tokens=512,
     )
-    response = FakeUsage(choices=[_FakeChoice()], usage=usage_obj)
+    response = _Obj(choices=[_FakeChoice()], usage=usage_obj)
     result = p._parse(response)
     assert result.usage["cached_tokens"] == 512
 
@@ -196,18 +198,20 @@ def test_anthropic_maps_cache_fields_to_cached_tokens():
     """Anthropic's cache_read_input_tokens should map to cached_tokens."""
     from nanobot.providers.anthropic_provider import AnthropicProvider
 
-    usage_obj = FakeUsage(
+    usage_obj = Usage(
         input_tokens=800,
         output_tokens=200,
         cache_creation_input_tokens=300,
         cache_read_input_tokens=1200,
     )
-    content_block = FakeUsage(type="text", text="hello")
-    response = FakeUsage(
+    content_block = TextBlock(type="text", text="hello")
+    response = Message(
         id="msg_1",
         type="message",
-        stop_reason="end_turn",
         content=[content_block],
+        model="claude-sonnet-4-6",
+        role="assistant",
+        stop_reason="end_turn",
         usage=usage_obj,
     )
     result = AnthropicProvider._parse_response(response)
@@ -221,13 +225,15 @@ def test_anthropic_no_cache_fields():
     """Anthropic response without cache fields should not have cached_tokens."""
     from nanobot.providers.anthropic_provider import AnthropicProvider
 
-    usage_obj = FakeUsage(input_tokens=800, output_tokens=200)
-    content_block = FakeUsage(type="text", text="hello")
-    response = FakeUsage(
+    usage_obj = Usage(input_tokens=800, output_tokens=200)
+    content_block = TextBlock(type="text", text="hello")
+    response = Message(
         id="msg_1",
         type="message",
-        stop_reason="end_turn",
         content=[content_block],
+        model="claude-sonnet-4-6",
+        role="assistant",
+        stop_reason="end_turn",
         usage=usage_obj,
     )
     result = AnthropicProvider._parse_response(response)

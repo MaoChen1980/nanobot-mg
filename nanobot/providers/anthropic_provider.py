@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import secrets
@@ -12,6 +13,22 @@ from typing import Any
 
 import json_repair
 from loguru import logger
+
+from anthropic import APIStatusError
+from anthropic.lib.streaming._messages import (
+    ParsedContentBlockStopEvent,
+    ParsedMessageStopEvent,
+    TextEvent,
+    ThinkingEvent,
+)
+from anthropic.types import (
+    RedactedThinkingBlock,
+    RefusalStopDetails,
+    ServerToolUseBlock,
+    TextBlock,
+    ThinkingBlock,
+    ToolUseBlock,
+)
 
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
 
@@ -28,8 +45,6 @@ class AnthropicProvider(LLMProvider):
     Handles message format conversion (OpenAI → Anthropic Messages API),
     prompt caching, extended thinking, tool calls, and streaming.
     """
-
-    _ACCUMULATE_PATCHED: bool = False
 
     def __init__(
         self,
@@ -55,99 +70,79 @@ class AnthropicProvider(LLMProvider):
         client_kw["max_retries"] = 0
         self._client = AsyncAnthropic(**client_kw)
 
-        # Monkey-patch the SDK's event accumulator once so that content block
-        # delta events referencing non-existent indices (e.g. signature_delta
-        # before content_block_start — seen on MiniMax's anthropic-compatible
-        # endpoint) are silently skipped instead of crashing with IndexError.
-        AnthropicProvider._patch_accumulate_event()
-
-    @classmethod
-    def _patch_accumulate_event(cls) -> None:
-        if cls._ACCUMULATE_PATCHED:
-            return
-        try:
-            from anthropic.lib.streaming._messages import (
-                accumulate_event as _original_fn,
-            )
-        except ImportError:
-            logger.warning("Could not import accumulate_event to apply SDK patch")
-            return
-
-        def _safe_accumulate(current_snapshot, event, **kwargs):
-            try:
-                return _original_fn(current_snapshot=current_snapshot, event=event, **kwargs)
-            except (IndexError, KeyError):
-                logger.debug(
-                    "Skipping content block delta event at index {} — "
-                    "content block not yet started (provider SDK compat).",
-                    getattr(event, "index", "?"),
-                )
-                return current_snapshot
-
-        import anthropic.lib.streaming._messages as _msg_mod
-        _msg_mod.accumulate_event = _safe_accumulate
-        cls._ACCUMULATE_PATCHED = True
-
     @classmethod
     def _handle_error(cls, e: Exception) -> LLMResponse:
-        response = getattr(e, "response", None)
-        headers = getattr(response, "headers", None)
-        payload = (
-            getattr(e, "body", None)
-            or getattr(e, "doc", None)
-            or getattr(response, "text", None)
-        )
-        if payload is None and response is not None:
-            response_json = getattr(response, "json", None)
-            if callable(response_json):
-                try:
-                    payload = response_json()
-                except Exception:
-                    payload = None
-        payload_text = payload if isinstance(payload, str) else str(payload) if payload is not None else ""
-        msg = f"Error: {payload_text.strip()[:500]}" if payload_text.strip() else f"Error calling LLM: {e}"
-        retry_after = cls._extract_retry_after_from_headers(headers)
-        if retry_after is None:
-            retry_after = LLMProvider._extract_retry_after(msg)
+        # Primary path: SDK APIStatusError with structured fields
+        if isinstance(e, APIStatusError):
+            status_code = e.status_code
+            body = e.body
+            headers = e.response.headers if e.response else None
 
-        status_code = getattr(e, "status_code", None)
-        if status_code is None and response is not None:
-            status_code = getattr(response, "status_code", None)
+            payload_text = ""
+            if isinstance(body, dict):
+                error_obj = body.get("error", {})
+                if isinstance(error_obj, dict):
+                    payload_text = error_obj.get("message", "") or ""
+                if not payload_text:
+                    payload_text = body.get("message") or ""
+            elif isinstance(body, str):
+                payload_text = body
+            msg = (
+                f"Error: {payload_text.strip()[:500]}"
+                if payload_text.strip()
+                else f"Error calling LLM: {e}"
+            )
 
-        should_retry: bool | None = None
-        if headers is not None:
-            raw = headers.get("x-should-retry")
-            if isinstance(raw, str):
-                lowered = raw.strip().lower()
-                if lowered == "true":
-                    should_retry = True
-                elif lowered == "false":
-                    should_retry = False
+            retry_after = cls._extract_retry_after_from_headers(headers)
+            if retry_after is None:
+                retry_after = LLMProvider._extract_retry_after(msg)
 
-        error_kind: str | None = None
-        error_name = e.__class__.__name__.lower()
-        if "timeout" in error_name:
-            error_kind = "timeout"
-        elif "connection" in error_name:
-            error_kind = "connection"
-        error_type, error_code = LLMProvider._extract_error_type_code(payload)
+            should_retry: bool | None = None
+            if headers is not None:
+                raw = headers.get("x-should-retry")
+                if isinstance(raw, str):
+                    lowered = raw.strip().lower()
+                    if lowered == "true":
+                        should_retry = True
+                    elif lowered == "false":
+                        should_retry = False
 
-        logger.exception(
-            "Anthropic API error: status={}, type={}, code={}, msg={}",
-            status_code, error_type, error_code, msg[:200],
-        )
+            error_kind = cls._classify_error(e)
+            error_type, error_code = LLMProvider._extract_error_type_code(body)
 
+            logger.exception(
+                "Anthropic API error: status={}, type={}, code={}, msg={}",
+                status_code, error_type, error_code, msg[:200],
+            )
+
+            return LLMResponse(
+                content=msg,
+                finish_reason="error",
+                retry_after=retry_after,
+                error_status_code=status_code,
+                error_kind=error_kind,
+                error_type=error_type,
+                error_code=error_code,
+                error_retry_after_s=retry_after,
+                error_should_retry=should_retry,
+            )
+
+        # Fallback for non-APIStatusError exceptions (connection, timeout, etc.)
+        logger.exception("Anthropic API error (non-APIStatusError): {}", e)
         return LLMResponse(
-            content=msg,
+            content=f"Error calling LLM: {e}",
             finish_reason="error",
-            retry_after=retry_after,
-            error_status_code=int(status_code) if status_code is not None else None,
-            error_kind=error_kind,
-            error_type=error_type,
-            error_code=error_code,
-            error_retry_after_s=retry_after,
-            error_should_retry=should_retry,
+            error_kind=cls._classify_error(e),
         )
+
+    @staticmethod
+    def _classify_error(e: Exception) -> str | None:
+        name = e.__class__.__name__.lower()
+        if "timeout" in name:
+            return "timeout"
+        if "connection" in name:
+            return "connection"
+        return None
 
     @staticmethod
     def _strip_prefix(model: str) -> str:
@@ -465,6 +460,10 @@ class AnthropicProvider(LLMProvider):
         reasoning_effort: str | None,
         tool_choice: str | dict[str, Any] | None,
         supports_caching: bool = True,
+        output_format: dict[str, Any] | None = None,
+        service_tier: str | None = None,
+        stop_sequences: list[str] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         model_name = self._strip_prefix(model or self.default_model)
         system, anthropic_msgs = self._convert_messages(self._sanitize_empty_content(messages))
@@ -517,11 +516,63 @@ class AnthropicProvider(LLMProvider):
         if self.extra_headers:
             kwargs["extra_headers"] = self.extra_headers
 
+        if output_format is not None:
+            kwargs["output_format"] = output_format
+        if service_tier is not None:
+            kwargs["service_tier"] = service_tier
+        if stop_sequences is not None:
+            kwargs["stop_sequences"] = stop_sequences
+        if extra_body is not None:
+            kwargs["extra_body"] = extra_body
+
         return kwargs
 
     # ------------------------------------------------------------------
     # Response parsing
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_usage(u: Any) -> dict[str, int]:
+        """Extract usage dict from a ``Message.usage`` object or similar."""
+        usage: dict[str, int] = {}
+        if not u:
+            return usage
+
+        input_tokens = u.input_tokens
+        cache_creation = u.cache_creation_input_tokens or 0
+        cache_read = u.cache_read_input_tokens or 0
+        total_prompt_tokens = input_tokens + cache_creation + cache_read
+        usage = {
+            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": u.output_tokens,
+            "total_tokens": total_prompt_tokens + u.output_tokens,
+        }
+        for attr in ("cache_creation_input_tokens", "cache_read_input_tokens"):
+            val = getattr(u, attr, 0)
+            if val:
+                usage[attr] = val
+        if cache_read:
+            usage["cached_tokens"] = cache_read
+
+        ot = getattr(u, "output_tokens_details", None)
+        if ot and getattr(ot, "thinking_tokens", 0):
+            usage["thinking_tokens"] = ot.thinking_tokens
+
+        cc = getattr(u, "cache_creation", None)
+        if cc:
+            for attr in ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"):
+                val = getattr(cc, attr, 0) or 0
+                if val:
+                    usage[attr] = val
+
+        stu = getattr(u, "server_tool_use", None)
+        if stu:
+            for attr in ("web_search_requests", "web_fetch_requests"):
+                val = getattr(stu, attr, 0) or 0
+                if val:
+                    usage[attr] = val
+
+        return usage
 
     @staticmethod
     def _parse_response(response: Any) -> LLMResponse:
@@ -531,31 +582,28 @@ class AnthropicProvider(LLMProvider):
         redacted_count = 0
 
         for block in response.content:
-            if block.type == "text":
+            if isinstance(block, TextBlock):
                 content_parts.append(block.text)
-            elif block.type == "tool_use":
+            elif isinstance(block, ToolUseBlock):
                 tool_calls.append(ToolCallRequest(
                     id=block.id,
                     name=block.name,
                     arguments=block.input if isinstance(block.input, dict) else {},
                 ))
-            elif block.type == "thinking":
+            elif isinstance(block, ThinkingBlock):
                 thinking_blocks.append({
                     "type": "thinking",
                     "thinking": block.thinking,
-                    "signature": getattr(block, "signature", ""),
+                    "signature": block.signature,
                 })
-            elif block.type == "redacted_thinking":
+            elif isinstance(block, RedactedThinkingBlock):
                 redacted_count += 1
-            elif block.type == "server_tool_use":
+            elif isinstance(block, ServerToolUseBlock):
                 tool_calls.append(ToolCallRequest(
                     id=block.id,
                     name=block.name,
                     arguments=block.input if isinstance(block.input, dict) else {},
                 ))
-            # Other block types (web_search_tool_result, container_upload, etc.)
-            # are server-tool responses — not expected in assistant turns, but
-            # silently ignore rather than crash.
 
         if redacted_count:
             thinking_blocks.append({
@@ -573,50 +621,12 @@ class AnthropicProvider(LLMProvider):
         }
         finish_reason = stop_map.get(response.stop_reason or "") or "stop"
 
-        usage: dict[str, int] = {}
-        if response.usage:
-            input_tokens = response.usage.input_tokens
-            cache_creation = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
-            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
-            total_prompt_tokens = input_tokens + cache_creation + cache_read
-            usage = {
-                "prompt_tokens": total_prompt_tokens,
-                "completion_tokens": response.usage.output_tokens,
-                "total_tokens": total_prompt_tokens + response.usage.output_tokens,
-            }
-            for attr in ("cache_creation_input_tokens", "cache_read_input_tokens"):
-                val = getattr(response.usage, attr, 0)
-                if val:
-                    usage[attr] = val
-            if cache_read:
-                usage["cached_tokens"] = cache_read
+        usage = AnthropicProvider._extract_usage(response.usage)
 
-            # Extended usage fields from SDK v0.105+
-            ot = getattr(response.usage, "output_tokens_details", None)
-            if ot:
-                tt = getattr(ot, "thinking_tokens", 0) or 0
-                if tt:
-                    usage["thinking_tokens"] = tt
-            cc = getattr(response.usage, "cache_creation", None)
-            if cc:
-                for attr in ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"):
-                    val = getattr(cc, attr, 0) or 0
-                    if val:
-                        usage[attr] = val
-            stu = getattr(response.usage, "server_tool_use", None)
-            if stu:
-                for attr in ("web_search_requests", "web_fetch_requests"):
-                    val = getattr(stu, attr, 0) or 0
-                    if val:
-                        usage[attr] = val
-
-        # Surface refusal information from stop_details (SDK v0.105+)
         content = "".join(content_parts) or None
         sd = getattr(response, "stop_details", None)
-        if sd and getattr(sd, "type", None) == "refusal":
-            explanation = getattr(sd, "explanation", None)
-            if explanation and not content:
-                content = f"[Refusal: {explanation}]"
+        if isinstance(sd, RefusalStopDetails) and sd.explanation and not content:
+            content = f"[Refusal: {sd.explanation}]"
 
         return LLMResponse(
             content=content,
@@ -630,6 +640,16 @@ class AnthropicProvider(LLMProvider):
     # Public API
     # ------------------------------------------------------------------
 
+    @staticmethod
+    async def _iter_with_timeout(stream: Any, timeout: float) -> Any:
+        """Wrap ``AsyncMessageStream.__aiter__`` with per-event timeout."""
+        stream_iter = stream.__aiter__()
+        while True:
+            try:
+                yield await asyncio.wait_for(stream_iter.__anext__(), timeout=timeout)
+            except StopAsyncIteration:
+                return
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -639,14 +659,20 @@ class AnthropicProvider(LLMProvider):
         temperature: float = 0.7,
         reasoning_effort: str | None = None,
         tool_choice: str | dict[str, Any] | None = None,
+        output_format: dict[str, Any] | None = None,
+        service_tier: str | None = None,
+        stop_sequences: list[str] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> LLMResponse:
         kwargs = self._build_kwargs(
             messages, tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,
+            output_format=output_format,
+            service_tier=service_tier,
+            stop_sequences=stop_sequences,
+            extra_body=extra_body,
         )
         try:
-            # Use streaming internally to avoid SDK's non-streaming timeout
-            # restriction (ValueError for requests >10 min in SDK >=0.49).
             async with self._client.messages.stream(**kwargs) as stream:
                 response = await stream.get_final_message()
             return self._parse_response(response)
@@ -664,44 +690,86 @@ class AnthropicProvider(LLMProvider):
         tool_choice: str | dict[str, Any] | None = None,
         on_content_delta: Callable[[str], Awaitable[None]] | None = None,
         on_reasoning_delta: Callable[[str], Awaitable[None]] | None = None,
+        output_format: dict[str, Any] | None = None,
+        service_tier: str | None = None,
+        stop_sequences: list[str] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> LLMResponse:
         kwargs = self._build_kwargs(
             messages, tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,
+            output_format=output_format,
+            service_tier=service_tier,
+            stop_sequences=stop_sequences,
+            extra_body=extra_body,
         )
         idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "900"))
         try:
             async with self._client.messages.stream(**kwargs) as stream:
-                if on_content_delta:
-                    stream_iter = stream.text_stream.__aiter__()
-                    while True:
-                        try:
-                            text = await asyncio.wait_for(
-                                stream_iter.__anext__(),
-                                timeout=idle_timeout_s,
-                            )
-                        except StopAsyncIteration:
-                            break
-                        await on_content_delta(text)
-                response = await asyncio.wait_for(
-                    stream.get_final_message(),
-                    timeout=idle_timeout_s,
+                content_parts: list[str] = []
+                thinking_blocks: list[dict[str, Any]] = []
+                redacted_count = 0
+                final_message = None
+
+                async for event in self._iter_with_timeout(stream, idle_timeout_s):
+                    if isinstance(event, TextEvent):
+                        content_parts.append(event.text)
+                        if on_content_delta:
+                            await on_content_delta(event.text)
+                    elif isinstance(event, ThinkingEvent):
+                        if on_reasoning_delta:
+                            await on_reasoning_delta(event.thinking)
+                    elif isinstance(event, ParsedContentBlockStopEvent):
+                        cb = event.content_block
+                        if isinstance(cb, ThinkingBlock):
+                            thinking_blocks.append({
+                                "type": "thinking",
+                                "thinking": cb.thinking,
+                                "signature": cb.signature,
+                            })
+                        elif isinstance(cb, RedactedThinkingBlock):
+                            redacted_count += 1
+                    elif isinstance(event, ParsedMessageStopEvent):
+                        final_message = event.message
+
+                if final_message is None:
+                    return LLMResponse(
+                        content="Error: stream ended without message_stop event",
+                        finish_reason="error",
+                    )
+
+                if redacted_count:
+                    thinking_blocks.append({
+                        "type": "thinking",
+                        "thinking": f"[{redacted_count} redacted thinking block(s)]",
+                    })
+
+                usage = self._extract_usage(final_message.usage)
+                stop_map = {
+                    "end_turn": "stop",
+                    "max_tokens": "length",
+                    "stop_sequence": "stop",
+                    "tool_use": "tool_calls",
+                    "pause_turn": "pause",
+                    "refusal": "refusal",
+                }
+                finish_reason = stop_map.get(final_message.stop_reason or "") or "stop"
+
+                content = "".join(content_parts) or None
+                sd = getattr(final_message, "stop_details", None)
+                if isinstance(sd, RefusalStopDetails) and sd.explanation and not content:
+                    content = f"[Refusal: {sd.explanation}]"
+
+                return LLMResponse(
+                    content=content,
+                    finish_reason=finish_reason,
+                    usage=usage,
+                    thinking_blocks=thinking_blocks or None,
                 )
-            parsed = self._parse_response(response)
-            if on_reasoning_delta and parsed.thinking_blocks:
-                for tb in parsed.thinking_blocks:
-                    if isinstance(tb, dict) and tb.get("type") == "thinking":
-                        thinking_text = tb.get("thinking", "")
-                        if thinking_text:
-                            await on_reasoning_delta(thinking_text)
-            return parsed
         except asyncio.TimeoutError:
             logger.warning("Anthropic stream timed out after {}s", idle_timeout_s)
             return LLMResponse(
-                content=(
-                    f"Error calling LLM: stream stalled for more than "
-                    f"{idle_timeout_s} seconds"
-                ),
+                content=f"Error calling LLM: stream stalled for more than {idle_timeout_s} seconds",
                 finish_reason="error",
                 error_kind="timeout",
             )

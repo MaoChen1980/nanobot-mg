@@ -1,4 +1,7 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+from anthropic import APIStatusError
 
 from nanobot.providers.anthropic_provider import AnthropicProvider
 from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
@@ -32,10 +35,10 @@ def test_azure_openai_error_captures_retry_after_from_headers() -> None:
 
 
 def test_anthropic_error_captures_retry_after_from_headers() -> None:
-    err = Exception("boom")
-    err.response = SimpleNamespace(
-        headers={"Retry-After": "20"},
-    )
+    err = MagicMock(spec=APIStatusError)
+    err.status_code = 429
+    err.body = {"error": {"message": "Rate limit exceeded"}}
+    err.response = MagicMock(headers={"Retry-After": "20"})
 
     response = AnthropicProvider._handle_error(err)
 
