@@ -52,7 +52,7 @@ class MemoryVectorIndex:
 
                 self._model = SentenceTransformer(self._MODEL_NAME)
                 return True
-            except ImportError:
+            except Exception:
                 return False
 
     # --------------------------------------------------------------------------
