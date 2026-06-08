@@ -1355,7 +1355,7 @@ class OpenAICompatProvider(LLMProvider):
             if "rate_limit" in error_type or "rate_limit" in msg:
                 retry_after = LLMProvider._RATE_LIMIT_RETRY_SECONDS
 
-        logger.error(
+        logger.exception(
             "OpenAI-compat API error: status={}, type={}, code={}, msg={}",
             error_meta.get("error_status_code"),
             error_meta.get("error_type"),

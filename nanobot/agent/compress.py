@@ -183,7 +183,7 @@ async def summarize_turns(
                 [{"role": "user", "content": prompt}],
             )
         except Exception as e:
-            logger.warning("Summary attempt {}/6 failed (network): {}", attempt + 1, e)
+            logger.exception("Summary attempt {}/6 failed (network): {}", attempt + 1, e)
             if attempt < 5:
                 await asyncio.sleep(10)
                 continue

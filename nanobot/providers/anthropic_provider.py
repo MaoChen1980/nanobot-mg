@@ -97,7 +97,7 @@ class AnthropicProvider(LLMProvider):
             error_kind = "connection"
         error_type, error_code = LLMProvider._extract_error_type_code(payload)
 
-        logger.error(
+        logger.exception(
             "Anthropic API error: status={}, type={}, code={}, msg={}",
             status_code, error_type, error_code, msg[:200],
         )
