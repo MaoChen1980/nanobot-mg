@@ -73,9 +73,9 @@ class AnthropicProvider(LLMProvider):
             logger.warning("Could not import accumulate_event to apply SDK patch")
             return
 
-        def _safe_accumulate(current_snapshot, event):
+        def _safe_accumulate(current_snapshot, event, **kwargs):
             try:
-                return _original_fn(current_snapshot, event)
+                return _original_fn(current_snapshot, event, **kwargs)
             except (IndexError, KeyError):
                 logger.debug(
                     "Skipping content block delta event at index {} — "
