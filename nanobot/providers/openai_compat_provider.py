@@ -898,35 +898,7 @@ class OpenAICompatProvider(LLMProvider):
         other ``__dict__``-backed objects are all flattened to plain dicts.
         Call once at the boundary so downstream code only handles dicts.
         """
-        if value is None:
-            return None
-        if isinstance(value, dict):
-            return value
-        # Pydantic model_dump() — already deep
-        model_dump = getattr(value, "model_dump", None)
-        if callable(model_dump):
-            dumped = model_dump()
-            if isinstance(dumped, dict):
-                return dumped
-        # Arbitrary object with __dict__: deep-convert via vars()
-        if not isinstance(value, (str, bytes, int, float, bool)):
-            d = vars(value) if hasattr(value, "__dict__") else None
-            if d is not None:
-                result: dict[str, Any] = {}
-                for k, v in d.items():
-                    if isinstance(v, dict):
-                        result[k] = v
-                    elif isinstance(v, list):
-                        items: list[Any] = []
-                        for item in v:
-                            nd = OpenAICompatProvider._normalize(item)
-                            items.append(nd if nd is not None else item)
-                        result[k] = items
-                    else:
-                        nd = OpenAICompatProvider._normalize(v)
-                        result[k] = nd if nd is not None else v
-                return result
-        return None
+        return LLMProvider._normalize(value)
 
     @classmethod
     def _extract_text_content(cls, value: Any) -> str | None:
@@ -1156,38 +1128,18 @@ class OpenAICompatProvider(LLMProvider):
         )
 
     @classmethod
-    def _parse_chunks(cls, chunks: list[Any]) -> LLMResponse:
+    def _accumulate_stream(cls, chunks: list[Any]) -> dict[str, Any]:
+        """Accumulate streaming chunks into a consolidated result dict.
+
+        Accepts pre-normalized dicts (Phase 1) or raw SDK objects.  Returns a
+        dict with keys: ``content_parts``, ``reasoning_parts``, ``tc_bufs``,
+        ``finish_reason``, ``usage``.
+        """
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
         tc_bufs: dict[int, dict[str, Any]] = {}
         finish_reason = "stop"
         usage: dict[str, int] = {}
-
-        def _accum_tc(tc: Any, idx_hint: int) -> None:
-            """Accumulate one streaming tool-call delta into *tc_bufs*."""
-            tc_index: int = _get(tc, "index") if _get(tc, "index") is not None else idx_hint
-            buf = tc_bufs.setdefault(tc_index, {
-                "id": "", "name": "", "arguments": "",
-                "extra_content": None, "prov": None, "fn_prov": None,
-            })
-            tc_id = _get(tc, "id")
-            if tc_id:
-                buf["id"] = str(tc_id)
-            fn = _get(tc, "function")
-            if fn is not None:
-                fn_name = _get(fn, "name")
-                if fn_name:
-                    buf["name"] = str(fn_name)
-                fn_args = _get(fn, "arguments")
-                if fn_args:
-                    buf["arguments"] += str(fn_args)
-            ec, prov, fn_prov = _extract_tc_extras(tc)
-            if ec:
-                buf["extra_content"] = ec
-            if prov:
-                buf["prov"] = prov
-            if fn_prov:
-                buf["fn_prov"] = fn_prov
 
         for chunk in chunks:
             if isinstance(chunk, str):
@@ -1226,12 +1178,47 @@ class OpenAICompatProvider(LLMProvider):
                 reasoning_parts.append(text)
 
             for idx, tc in enumerate(delta.get("tool_calls") or []):
-                _accum_tc(tc, idx)
+                tc_index: int = tc.get("index") if tc.get("index") is not None else idx
+                buf = tc_bufs.setdefault(tc_index, {
+                    "id": "", "name": "", "arguments": "",
+                    "extra_content": None, "prov": None, "fn_prov": None,
+                })
+                tc_id = tc.get("id")
+                if tc_id:
+                    buf["id"] = str(tc_id)
+                fn = tc.get("function")
+                if fn is not None:
+                    fn_name = fn.get("name")
+                    if fn_name:
+                        buf["name"] = str(fn_name)
+                    fn_args = fn.get("arguments")
+                    if fn_args:
+                        buf["arguments"] += str(fn_args)
+                ec, prov, fn_prov = _extract_tc_extras(tc)
+                if ec:
+                    buf["extra_content"] = ec
+                if prov:
+                    buf["prov"] = prov
+                if fn_prov:
+                    buf["fn_prov"] = fn_prov
 
             usage = cls._extract_usage(chunk_map) or usage
 
+        return {
+            "content_parts": content_parts,
+            "reasoning_parts": reasoning_parts,
+            "tc_bufs": tc_bufs,
+            "finish_reason": finish_reason,
+            "usage": usage,
+        }
+
+    @classmethod
+    def _parse_chunks(cls, chunks: list[Any]) -> LLMResponse:
+        acc = cls._accumulate_stream(chunks)
+        content = "".join(acc["content_parts"]) or None
+        reasoning = "".join(acc["reasoning_parts"]) or None
         return LLMResponse(
-            content="".join(content_parts) or None,
+            content=content,
             tool_calls=[
                 ToolCallRequest(
                     id=b["id"] or _short_tool_id(),
@@ -1241,11 +1228,11 @@ class OpenAICompatProvider(LLMProvider):
                     provider_specific_fields=b.get("prov"),
                     function_provider_specific_fields=b.get("fn_prov"),
                 )
-                for b in tc_bufs.values()
+                for b in acc["tc_bufs"].values()
             ],
-            finish_reason=finish_reason,
-            usage=usage,
-            reasoning_content="".join(reasoning_parts) or None,
+            finish_reason=acc["finish_reason"],
+            usage=acc["usage"],
+            reasoning_content=reasoning,
         )
 
     @classmethod
@@ -1483,15 +1470,18 @@ class OpenAICompatProvider(LLMProvider):
                     )
                 except StopAsyncIteration:
                     break
-                chunks.append(chunk)
-                if on_content_delta and chunk.choices:
-                    text = getattr(chunk.choices[0].delta, "content", None)
-                    if text:
-                        await on_content_delta(text)
-                if on_reasoning_delta and chunk.choices:
-                    reasoning = getattr(chunk.choices[0].delta, "reasoning_content", None)
-                    if reasoning:
-                        await on_reasoning_delta(reasoning)
+                chunk_map = self._normalize(chunk) or chunk
+                chunks.append(chunk_map)
+                if isinstance(chunk_map, dict):
+                    choices = chunk_map.get("choices")
+                    if choices:
+                        delta = choices[0].get("delta") or {}
+                        text = delta.get("content")
+                        if text and on_content_delta:
+                            await on_content_delta(text)
+                        reasoning = delta.get("reasoning_content")
+                        if reasoning and on_reasoning_delta:
+                            await on_reasoning_delta(reasoning)
             return self._parse_chunks(chunks)
         except asyncio.TimeoutError:
             logger.warning("OpenAI-compat stream timed out after {}s", idle_timeout_s)

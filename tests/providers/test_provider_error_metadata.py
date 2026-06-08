@@ -1,4 +1,7 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+from anthropic import APIStatusError
 
 from nanobot.providers.anthropic_provider import AnthropicProvider
 from nanobot.providers.openai_compat_provider import OpenAICompatProvider

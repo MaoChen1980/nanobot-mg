@@ -16,7 +16,6 @@ from loguru import logger
 
 from anthropic import APIStatusError
 from anthropic.lib.streaming._messages import (
-    ParsedContentBlockStopEvent,
     ParsedMessageStopEvent,
     TextEvent,
     ThinkingEvent,
@@ -137,12 +136,7 @@ class AnthropicProvider(LLMProvider):
 
     @staticmethod
     def _classify_error(e: Exception) -> str | None:
-        name = e.__class__.__name__.lower()
-        if "timeout" in name:
-            return "timeout"
-        if "connection" in name:
-            return "connection"
-        return None
+        return LLMProvider._classify_error(e)
 
     @staticmethod
     def _strip_prefix(model: str) -> str:
@@ -706,29 +700,14 @@ class AnthropicProvider(LLMProvider):
         idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "900"))
         try:
             async with self._client.messages.stream(**kwargs) as stream:
-                content_parts: list[str] = []
-                thinking_blocks: list[dict[str, Any]] = []
-                redacted_count = 0
                 final_message = None
-
                 async for event in self._iter_with_timeout(stream, idle_timeout_s):
                     if isinstance(event, TextEvent):
-                        content_parts.append(event.text)
                         if on_content_delta:
                             await on_content_delta(event.text)
                     elif isinstance(event, ThinkingEvent):
                         if on_reasoning_delta:
                             await on_reasoning_delta(event.thinking)
-                    elif isinstance(event, ParsedContentBlockStopEvent):
-                        cb = event.content_block
-                        if isinstance(cb, ThinkingBlock):
-                            thinking_blocks.append({
-                                "type": "thinking",
-                                "thinking": cb.thinking,
-                                "signature": cb.signature,
-                            })
-                        elif isinstance(cb, RedactedThinkingBlock):
-                            redacted_count += 1
                     elif isinstance(event, ParsedMessageStopEvent):
                         final_message = event.message
 
@@ -738,34 +717,7 @@ class AnthropicProvider(LLMProvider):
                         finish_reason="error",
                     )
 
-                if redacted_count:
-                    thinking_blocks.append({
-                        "type": "thinking",
-                        "thinking": f"[{redacted_count} redacted thinking block(s)]",
-                    })
-
-                usage = self._extract_usage(final_message.usage)
-                stop_map = {
-                    "end_turn": "stop",
-                    "max_tokens": "length",
-                    "stop_sequence": "stop",
-                    "tool_use": "tool_calls",
-                    "pause_turn": "pause",
-                    "refusal": "refusal",
-                }
-                finish_reason = stop_map.get(final_message.stop_reason or "") or "stop"
-
-                content = "".join(content_parts) or None
-                sd = getattr(final_message, "stop_details", None)
-                if isinstance(sd, RefusalStopDetails) and sd.explanation and not content:
-                    content = f"[Refusal: {sd.explanation}]"
-
-                return LLMResponse(
-                    content=content,
-                    finish_reason=finish_reason,
-                    usage=usage,
-                    thinking_blocks=thinking_blocks or None,
-                )
+                return self._parse_response(final_message)
         except asyncio.TimeoutError:
             logger.warning("Anthropic stream timed out after {}s", idle_timeout_s)
             return LLMResponse(

@@ -810,6 +810,56 @@ class LLMProvider(ABC):
 
         return last_response if last_response is not None else await call(**kw)
 
+    @staticmethod
+    def _normalize(value: Any) -> dict[str, Any] | None:
+        """Normalize SDK object to dict, or pass through dict as-is.
+
+        Deep-recursive: Pydantic ``model_dump()``, ``__dict__``-backed objects
+        (SimpleNamespace, mocks), and nested lists/dicts are all flattened to
+        plain dicts.  Call at the API boundary so downstream code handles dicts
+        uniformly regardless of whether the SDK returned a Pydantic object or
+        a raw API dict.
+        """
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            return value
+        # Pydantic model_dump() — already deep
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        # Arbitrary object with __dict__: deep-convert via vars()
+        if not isinstance(value, (str, bytes, int, float, bool)):
+            d = vars(value) if hasattr(value, "__dict__") else None
+            if d is not None:
+                result: dict[str, Any] = {}
+                for k, v in d.items():
+                    if isinstance(v, dict):
+                        result[k] = v
+                    elif isinstance(v, list):
+                        items: list[Any] = []
+                        for item in v:
+                            nd = LLMProvider._normalize(item)
+                            items.append(nd if nd is not None else item)
+                        result[k] = items
+                    else:
+                        nd = LLMProvider._normalize(v)
+                        result[k] = nd if nd is not None else v
+                return result
+        return None
+
+    @staticmethod
+    def _classify_error(e: Exception) -> str | None:
+        """Classify an exception as ``"timeout"``, ``"connection"``, or ``None``."""
+        name = e.__class__.__name__.lower()
+        if "timeout" in name:
+            return "timeout"
+        if "connection" in name:
+            return "connection"
+        return None
+
     @abstractmethod
     def get_default_model(self) -> str:
         """Get the default model for this provider."""
