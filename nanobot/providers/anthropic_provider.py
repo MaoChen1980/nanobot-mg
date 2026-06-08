@@ -29,6 +29,8 @@ class AnthropicProvider(LLMProvider):
     prompt caching, extended thinking, tool calls, and streaming.
     """
 
+    _ACCUMULATE_PATCHED: bool = False
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -52,6 +54,39 @@ class AnthropicProvider(LLMProvider):
         # Keep retries centralized in LLMProvider._run_with_retry to avoid retry amplification.
         client_kw["max_retries"] = 0
         self._client = AsyncAnthropic(**client_kw)
+
+        # Monkey-patch the SDK's event accumulator once so that content block
+        # delta events referencing non-existent indices (e.g. signature_delta
+        # before content_block_start — seen on MiniMax's anthropic-compatible
+        # endpoint) are silently skipped instead of crashing with IndexError.
+        AnthropicProvider._patch_accumulate_event()
+
+    @classmethod
+    def _patch_accumulate_event(cls) -> None:
+        if cls._ACCUMULATE_PATCHED:
+            return
+        try:
+            from anthropic.lib.streaming._messages import (
+                accumulate_event as _original_fn,
+            )
+        except ImportError:
+            logger.warning("Could not import accumulate_event to apply SDK patch")
+            return
+
+        def _safe_accumulate(current_snapshot, event):
+            try:
+                return _original_fn(current_snapshot, event)
+            except (IndexError, KeyError):
+                logger.debug(
+                    "Skipping content block delta event at index {} — "
+                    "content block not yet started (provider SDK compat).",
+                    getattr(event, "index", "?"),
+                )
+                return current_snapshot
+
+        import anthropic.lib.streaming._messages as _msg_mod
+        _msg_mod.accumulate_event = _safe_accumulate
+        cls._ACCUMULATE_PATCHED = True
 
     @classmethod
     def _handle_error(cls, e: Exception) -> LLMResponse:
@@ -559,7 +594,10 @@ class AnthropicProvider(LLMProvider):
             reasoning_effort, tool_choice,
         )
         try:
-            response = await self._client.messages.create(**kwargs)
+            # Use streaming internally to avoid SDK's non-streaming timeout
+            # restriction (ValueError for requests >10 min in SDK >=0.49).
+            async with self._client.messages.stream(**kwargs) as stream:
+                response = await stream.get_final_message()
             return self._parse_response(response)
         except Exception as e:
             return self._handle_error(e)
