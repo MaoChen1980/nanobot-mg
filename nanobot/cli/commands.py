@@ -499,6 +499,7 @@ def _warn_deprecated_config_keys(config_path: Path | None) -> None:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        logger.debug("Failed to read config at {}", path, exc_info=True)
         return
     if "memoryWindow" in raw.get("agents", {}).get("defaults", {}):
         console.print(
@@ -1127,7 +1128,7 @@ def _login_openai_codex() -> None:
         try:
             token = get_token()
         except Exception:
-            logger.warning("Failed to retrieve saved OAuth token")
+            logger.exception("Failed to retrieve saved OAuth token")
         if not (token and token.access):
             console.print("[cyan]Starting interactive OAuth login...[/cyan]\n")
             token = login_oauth_interactive(

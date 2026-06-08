@@ -247,7 +247,7 @@ class ProxyManager:
                     proxy_output.write(line)
                     logger.info("[proxy {}] {}".format(channel, line.decode().rstrip()))
             except Exception:
-                logger.warning("Error capturing proxy {} output", channel)
+                logger.exception("Error capturing proxy {} output", channel)
 
         threading.Thread(target=capture_output, daemon=True).start()
         return process, proxy_output
@@ -599,7 +599,7 @@ class ProxyManager:
             logger.debug("Config file not found at {}", self._config_path)
             return {}
         except Exception:
-            logger.warning("Failed to read config from {}", self._config_path)
+            logger.exception("Failed to read config from {}", self._config_path)
             return {}
 
     @property
