@@ -528,6 +528,7 @@ class AnthropicProvider(LLMProvider):
         content_parts: list[str] = []
         tool_calls: list[ToolCallRequest] = []
         thinking_blocks: list[dict[str, Any]] = []
+        redacted_count = 0
 
         for block in response.content:
             if block.type == "text":
@@ -544,9 +545,33 @@ class AnthropicProvider(LLMProvider):
                     "thinking": block.thinking,
                     "signature": getattr(block, "signature", ""),
                 })
+            elif block.type == "redacted_thinking":
+                redacted_count += 1
+            elif block.type == "server_tool_use":
+                tool_calls.append(ToolCallRequest(
+                    id=block.id,
+                    name=block.name,
+                    arguments=block.input if isinstance(block.input, dict) else {},
+                ))
+            # Other block types (web_search_tool_result, container_upload, etc.)
+            # are server-tool responses — not expected in assistant turns, but
+            # silently ignore rather than crash.
 
-        stop_map = {"tool_use": "tool_calls", "end_turn": "stop", "max_tokens": "length"}
-        finish_reason = stop_map.get(response.stop_reason or "", response.stop_reason or "stop")
+        if redacted_count:
+            thinking_blocks.append({
+                "type": "thinking",
+                "thinking": f"[{redacted_count} redacted thinking block(s)]",
+            })
+
+        stop_map = {
+            "end_turn": "stop",
+            "max_tokens": "length",
+            "stop_sequence": "stop",
+            "tool_use": "tool_calls",
+            "pause_turn": "pause",
+            "refusal": "refusal",
+        }
+        finish_reason = stop_map.get(response.stop_reason or "") or "stop"
 
         usage: dict[str, int] = {}
         if response.usage:
@@ -563,12 +588,38 @@ class AnthropicProvider(LLMProvider):
                 val = getattr(response.usage, attr, 0)
                 if val:
                     usage[attr] = val
-            # Normalize to cached_tokens for downstream consistency.
             if cache_read:
                 usage["cached_tokens"] = cache_read
 
+            # Extended usage fields from SDK v0.105+
+            ot = getattr(response.usage, "output_tokens_details", None)
+            if ot:
+                tt = getattr(ot, "thinking_tokens", 0) or 0
+                if tt:
+                    usage["thinking_tokens"] = tt
+            cc = getattr(response.usage, "cache_creation", None)
+            if cc:
+                for attr in ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"):
+                    val = getattr(cc, attr, 0) or 0
+                    if val:
+                        usage[attr] = val
+            stu = getattr(response.usage, "server_tool_use", None)
+            if stu:
+                for attr in ("web_search_requests", "web_fetch_requests"):
+                    val = getattr(stu, attr, 0) or 0
+                    if val:
+                        usage[attr] = val
+
+        # Surface refusal information from stop_details (SDK v0.105+)
+        content = "".join(content_parts) or None
+        sd = getattr(response, "stop_details", None)
+        if sd and getattr(sd, "type", None) == "refusal":
+            explanation = getattr(sd, "explanation", None)
+            if explanation and not content:
+                content = f"[Refusal: {explanation}]"
+
         return LLMResponse(
-            content="".join(content_parts) or None,
+            content=content,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             usage=usage,
