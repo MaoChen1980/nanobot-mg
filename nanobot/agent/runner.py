@@ -703,11 +703,24 @@ class AgentRunner:
                     messages.append({
                         "role": "user",
                         "content": (
-                            "⚠️ 你的回复中包含了工具名（"
-                            + "、".join(_detected)
-                            + "）。需要使用工具时请发起真实的 tool_call，"
-                            '不要在文本中写出工具名。描述工具操作时用自然语言（如"执行命令"、"读取文件"），'
-                            '而非工具名。请重试。'
+                            "工具调用的格式是这样的。"
+                            "例如：\n\n"
+                            "```json\n"
+                            "{\n"
+                            '  "role": "assistant",\n'
+                            '  "content": "我先读取一下配置文件",\n'
+                            '  "tool_calls": [\n'
+                            "    {\n"
+                            '      "id": "call_function_example_1",\n'
+                            '      "type": "function",\n'
+                            '      "function": {\n'
+                            '        "name": "read_file_tool",\n'
+                            '        "arguments": "{\\"path\\": \\"filepath\\", \\"offset\\": 158, \\"limit\\": 45}"\n'
+                            "      }\n"
+                            "    }\n"
+                            "  ]\n"
+                            "}\n"
+                            "```"
                         ),
                     })
                     await hook.after_iteration(context)
