@@ -322,33 +322,30 @@ class TestPrependSummary:
     def test_summary_prepended(self):
         keeps = [["a"], ["b"]]
         result = _prepend_summary(keeps, "my summary")
-        assert len(result) == 4  # 2 summary + 2 turns
-        assert result[0]["role"] == "assistant"
-        assert "我想知道我们最近聊天的摘要" in result[0]["content"]
-        assert result[1]["role"] == "user"
-        assert "my summary" in result[1]["content"]
-        assert "请继续执行我们谈好的计划和内容" in result[1]["content"]
-        assert result[2] == "a"
+        assert len(result) == 3  # 1 summary + 2 turns
+        assert result[0]["role"] == "user"
+        assert "my summary" in result[0]["content"]
+        assert "请继续执行我们谈好的计划和内容" in result[0]["content"]
+        assert result[1] == "a"
 
     def test_empty_summary(self):
         keeps = [[{"role": "assistant", "content": "ok"}]]
         result = _prepend_summary(keeps, "")
-        assert len(result) == 3
-        assert "请继续执行我们谈好的计划和内容" in result[1]["content"]
+        assert len(result) == 2
+        assert "请继续执行我们谈好的计划和内容" in result[0]["content"]
 
     def test_single_turn(self):
         keeps = [[{"role": "assistant", "content": "alone"}]]
         result = _prepend_summary(keeps, "sum")
-        assert len(result) == 3
-        assert result[2]["content"] == "alone"
+        assert len(result) == 2
+        assert result[1]["content"] == "alone"
 
     def test_synthetic_status(self):
         keeps = [[{"role": "user", "content": "hi"}]]
         result = _prepend_summary(keeps, "s")
         assert result[0].get("status") == "synthetic"
-        assert result[1].get("status") == "synthetic"
         # original turns should NOT have synthetic status
-        assert result[2].get("status") is None
+        assert result[1].get("status") is None
 
 
 # ===========================================================================
@@ -568,19 +565,15 @@ class TestMakeSummaryPair:
 
     def test_basic_pair(self):
         pair = make_summary_pair("my summary")
-        assert len(pair) == 2
-        assert pair[0]["role"] == "assistant"
-        assert "我想知道我们最近聊天的摘要" in pair[0]["content"]
-        assert pair[1]["role"] == "user"
-        assert "my summary" in pair[1]["content"]
-        assert "请继续执行我们谈好的计划和内容" in pair[1]["content"]
+        assert len(pair) == 1
+        assert pair[0]["role"] == "user"
+        assert "my summary" in pair[0]["content"]
+        assert "请继续执行我们谈好的计划和内容" in pair[0]["content"]
         assert pair[0].get("status") == "synthetic"
-        assert pair[1].get("status") == "synthetic"
 
     def test_with_timestamp(self):
         pair = make_summary_pair("summary", timestamp="2026-01-01T00:00:00")
         assert pair[0]["timestamp"] == "2026-01-01T00:00:00"
-        assert pair[1]["timestamp"] == "2026-01-01T00:00:00"
 
 
 # ===========================================================================
@@ -607,11 +600,10 @@ class TestCompressTurns:
                 [],
             )
         assert result == "verified summary"
-        assert len(pair) == 2
-        assert pair[0]["role"] == "assistant"
-        assert pair[1]["role"] == "user"
-        assert "verified summary" in pair[1]["content"]
-        assert "请继续执行我们谈好的计划和内容" in pair[1]["content"]
+        assert len(pair) == 1
+        assert pair[0]["role"] == "user"
+        assert "verified summary" in pair[0]["content"]
+        assert "请继续执行我们谈好的计划和内容" in pair[0]["content"]
 
     @pytest.mark.asyncio
     async def test_summarize_failure_returns_none(self):
@@ -639,8 +631,8 @@ class TestCompressTurns:
                 [],
             )
         assert result == "some text"
-        assert "some text" in pair[1]["content"]
-        assert "请继续执行我们谈好的计划和内容" in pair[1]["content"]
+        assert "some text" in pair[0]["content"]
+        assert "请继续执行我们谈好的计划和内容" in pair[0]["content"]
 
     @pytest.mark.asyncio
     async def test_passes_timestamp_to_pair(self):
@@ -654,7 +646,6 @@ class TestCompressTurns:
                 timestamp="2026-06-08T00:00:00",
             )
         assert pair[0]["timestamp"] == "2026-06-08T00:00:00"
-        assert pair[1]["timestamp"] == "2026-06-08T00:00:00"
 
     @pytest.mark.asyncio
     async def test_passes_previous_summary(self):

@@ -15,7 +15,7 @@ Public API (async, one-call):
 
 Internal (still importable but should not be needed externally):
   ``summarize_turns`` — the LLM call.
-  ``make_summary_pair`` — creates the synthetic assistant+user pair.
+  ``make_summary_pair`` — creates the synthetic summary message.
   ``_compress_session`` — replaces session.messages, writes DB.
   ``_prepend_summary`` — pair + keeps in one flat list.
 """
@@ -394,24 +394,23 @@ def _compress_session(
 
 
 def make_summary_pair(summary: str, timestamp: str | None = None) -> list[dict]:
-    """Create a synthetic summary pair for compressed context.
+    """Create a synthetic user message carrying the compressed summary.
 
-    Summary lives in user-role for higher LLM reasoning weight, followed by
-    a continuation directive so the LLM never treats it as something to
-    respond to.
+    A single user message ensures the conversation always starts with user
+    (``user → assistant → user → assistant → …``).
     """
-    pair = [
-        {"role": "assistant", "content": "我想知道我们最近聊天的摘要", "status": "synthetic"},
-        {"role": "user", "content": f"{summary}\n\n---\n请继续执行我们谈好的计划和内容", "status": "synthetic"},
-    ]
+    msg = {
+        "role": "user",
+        "content": f"{summary}\n\n---\n请继续执行我们谈好的计划和内容",
+        "status": "synthetic",
+    }
     if timestamp:
-        for m in pair:
-            m["timestamp"] = timestamp
-    return pair
+        msg["timestamp"] = timestamp
+    return [msg]
 
 
 def _prepend_summary(keeps_fmt: list[list[dict]], summary: str) -> list[dict]:
-    """Prepend a summary pair before the kept formatted turns.
+    """Prepend a synthetic summary message before the kept formatted turns.
 
     Returns a flat message list suitable for LLM input.  Does **not** touch
     the session object.
