@@ -174,24 +174,32 @@ def _parse_invoke_block(
     """Parse ``<invoke>`` / ``{tool =>}`` XML block with ``<parameter>`` tags.
 
     Returns the position *after* the ``</invoke>`` closing tag, or ``None``
-    if the closing tag cannot be found (caller should fall back to plain text).
+    if the tool name cannot be determined.
+
+    If ``</invoke>`` is absent (common in real MiniMax output), searches
+    for the next ``{tool`` or end of content as the block boundary.
     """
     tool_name = next((g for g in m.groups() if g is not None), None)
     if not tool_name:
         return None
 
     close = content.find("</invoke>", m.end())
-    if close == -1:
-        return None
+    if close != -1:
+        inner = content[m.end():close]
+        end_pos = close + len("</invoke>")
+    else:
+        rest = content[m.end():]
+        next_tool = re.search(r"\{tool\s", rest)
+        end_pos = m.end() + (next_tool.start() if next_tool else len(rest))
+        inner = content[m.end():end_pos]
 
-    inner = content[m.end():close]
     args = dict(param_re.findall(inner))
     result.append(ToolCallRequest(
         id=_short_tool_id(),
         name=tool_name,
         arguments=args,
     ))
-    return close + len("</invoke>")
+    return end_pos
 
 
 def _parse_tc_multi(
@@ -310,6 +318,15 @@ def detect_unparsed_tool_calls(content: str | None) -> bool:
                 g, _UNPARSED_TOOL_PATTERNS[i].split("(")[0].strip("\\"),
             )
             return True
+    # Patterns without capture groups (e.g. ``[TOOL_CALL]`` at index 3) still
+    # indicate unparsed tool calls — return True when the regex matched.
+    if m.group():
+        logger.warning(
+            "LLM content contains unparsed tool call marker '{}'. "
+            "The API did not return a structured tool_call — treating as plain text.",
+            m.group()[:80],
+        )
+        return True
     return False
 
 
@@ -336,7 +353,10 @@ def extract_xml_tool_calls(content: str) -> tuple[list[ToolCallRequest], str | N
     result: list[ToolCallRequest] = []
     cleaned: list[str] = []
     pos = 0
-    param_re = re.compile(r"<parameter\s+name\s*=\s*\"([^\"]+)\"\s*>([^<]*)</parameter>")
+    # Tolerate malformed ``name="command>`` (missing closing ``"`` before ``>``)
+    # seen in some LLM outputs.  The capture group stops at ``"`` or ``>`` so the
+    # optional ``"`` after it is safe.
+    param_re = re.compile(r"<parameter\s+name\s*=\s*\"([^\">]+)\"?\s*>([^<]*)</parameter>")
 
     while pos < len(content):
         invoke_m = _SAFE_INVOKE_RE.search(content, pos)
@@ -348,13 +368,15 @@ def extract_xml_tool_calls(content: str) -> tuple[list[ToolCallRequest], str | N
             break
 
         tc_span = None
+        tc_open = None
         if invoke_m and invoke_m.group() == "[TOOL_CALL]":
             tc_span = _find_tc_span(content, invoke_m.start())
+            tc_open = invoke_m.start()
 
         candidates: list[tuple[int, str]] = []
         if tc_span:
-            candidates.append((tc_span[0], "tc"))
-        if invoke_m:
+            candidates.append((tc_open, "tc"))
+        if invoke_m and invoke_m.group() != "[TOOL_CALL]":
             candidates.append((invoke_m.start(), "invoke"))
         if dict_m:
             candidates.append((dict_m.start(), "dict"))
@@ -393,4 +415,14 @@ def extract_xml_tool_calls(content: str) -> tuple[list[ToolCallRequest], str | N
             pos = end_pos
 
     cleaned_text = _MINIMAX_WRAPPER_RE.sub("", "".join(cleaned)).strip()
+
+    # Normalize malformed ``<parameter name="command>`` (missing ``"``) back to
+    # ``<parameter name="command">`` so that any XML surviving in the cleaned
+    # content doesn't teach the LLM to keep using the wrong format.
+    cleaned_text = re.sub(
+        r'<parameter\s+name\s*=\s*"([^">]+)(?:">|>)',
+        r'<parameter name="\1">',
+        cleaned_text,
+    )
+
     return result, cleaned_text or None
