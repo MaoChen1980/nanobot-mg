@@ -414,7 +414,8 @@ def extract_xml_tool_calls(content: str) -> tuple[list[ToolCallRequest], str | N
                 continue
             pos = end_pos
 
-    cleaned_text = _MINIMAX_WRAPPER_RE.sub("", "".join(cleaned)).strip()
+    cleaned_text = _MINIMAX_WRAPPER_RE.sub("", "".join(cleaned))
+    cleaned_text = _TC_CLOSE_RE.sub("", cleaned_text).strip()
 
     # Normalize malformed ``<parameter name="command>`` (missing ``"``) back to
     # ``<parameter name="command">`` so that any XML surviving in the cleaned

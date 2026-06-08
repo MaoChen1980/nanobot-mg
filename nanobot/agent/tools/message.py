@@ -190,8 +190,7 @@ class MessageTool(Tool):
                 self._sent_in_turn = True
             media_info = f" with {len(media)} attachments" if media else ""
             button_info = f" with {sum(len(row) for row in buttons)} button(s)" if buttons else ""
-            content_preview = content[:200] + "..." if len(content) > 200 else content
-            return f"Message sent to {channel}:{chat_id}: {content_preview}{media_info}{button_info}"
+            return f"Message sent to {channel}:{chat_id}{media_info}{button_info}"
         except Exception as e:
             logger.exception("Failed to send message")
             return f"Error sending message: {str(e)}"

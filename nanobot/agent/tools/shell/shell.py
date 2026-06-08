@@ -345,10 +345,12 @@ class ExecTool(Tool):
                 if stderr_text.strip():
                     output_parts.append(f"STDERR:\n{stderr_text}")
 
-            output_parts.append(f"Exit code: {process.returncode}")
+            exit_code = process.returncode
+            status_line = f"Exit: {exit_code}  |  cwd: {cwd.replace('\\', '/')}  |  shell: {'pwsh' if _IS_WINDOWS else 'sh'}"
 
-            shell_info = f"[cwd: {cwd.replace('\\', '/')}, shell: {'pwsh' if _IS_WINDOWS else 'sh'}]"
-            result = shell_info + "\n" + ("\n".join(output_parts) if output_parts else "(no output)")
+            body = "\n".join(output_parts) if output_parts else "(no output)"
+            SEP = "─" * 56
+            result = f"{status_line}\n{SEP}\n{body}"
 
             max_len = self._MAX_OUTPUT
             if len(result) > max_len:
@@ -379,7 +381,7 @@ class ExecTool(Tool):
                 )) + verification
 
             # Default: append cache path to result
-            result += f"\n[Full output cached: {cache_path}]"
+            result += f"\n{SEP}\n[Full output cached: {cache_path}]"
             return suggestion + result + verification
 
         except Exception as e:
@@ -451,9 +453,9 @@ class ExecTool(Tool):
         tail = lines[-tail_lines:] if len(lines) > tail_lines else lines
         tail_text = "\n".join(tail)
 
-        result = f"[Loaded from cache: {cache_path}]\nExit code: {exit_code}"
+        result = f"Exit: {exit_code}  |  [Loaded from cache: {cache_path}]"
         if tail_text:
-            result += f"\n\nLast {len(tail)} lines:\n{tail_text}"
+            result += f"\n{'─'*56}\nLast {len(tail)} lines:\n{tail_text}"
         return result
 
     # ------------------------------------------------------------------
