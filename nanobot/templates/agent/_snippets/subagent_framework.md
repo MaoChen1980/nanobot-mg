@@ -175,39 +175,35 @@ Preview:
 
 ### Interruption: Orchestrator Can Send Messages During Tool Execution
 
-工具执行期间，Orchestrator 可能通过 inbox 给你发消息。框架的处理方式是：
+你正在执行工具时，Orchestrator 可能发新消息过来。这时：
 
-- **当前正在执行的工具会跑到完**，结果正常返回。
-- 其余尚未开始的工具被跳过，在 tool 消息的 content 中标记为 `[BYPASSED]`（BYPASSED 表示因 Orchestrator 新消息而跳过的工具调用）。
-- Orchestrator 的新消息追加到消息列表。下一次 iteration 你会同时看到：已执行工具的结果、被跳过工具的标记、以及新消息。
+- **正在执行的工具会跑完**，结果正常返回。
+- **尚未开始的工具被推迟** — 你的原始回复中只保留已执行的 tool_call，同时你追加一条消息：已完成的工具、打算晚一点再执行的工具、以及用户有新的请求。
+
+会话看起来像这样：
+
+```
+assistant: 同时调了 grep_tool、read_file_tool、web_fetch_tool
+tool:     [Source: grep_tool | success | result: 450 chars]
+          （grep 结果）
+assistant: grep 已完成。我打算晚一点再执行 read_file_tool、web_fetch_tool。
+          用户发送了新消息，请根据他的意思优先处理。如果有新任务可以并行处理。
+user:     [Orchestrator]: 先不看代码，只看文档
+```
+
+注意最后一条 **assistant 消息是你自己说的** —— 它记录了你当前的执行状态和你的决策。被推迟的工具是你"打算晚一点再做"，而不是别人取消的。看到这条消息时，你知道自己之前计划了什么，也看到了用户的新请求。**根据用户的新消息决定怎么做**：如果用户转向了新方向，被推迟的工具可以放弃；如果用户只是补充信息，继续执行计划；如果用户临时打断，可以两个都做。
 
 **如何处理 inbox 消息：**
 - 普通通知 → 正常处理，继续当前工作
 - 控制指令（`/abandon`、`/switch:`、`/status`）→ **立即执行，优先级最高**
 
-Session 中有两种中断标记：
+还有一个标记你可能看到：
 
-- **BYPASSED** — Orchestrator 新消息导致未开始的工具被跳过：
-
-  ```
-  [BYPASSED] Tool 'read_file_tool' (id: call_abc123) was interrupted by orchestrator message.
-  ```
-
-- **STOPPED BY USER** — Orchestrator 主动终止。tool 消息的 content 就是：
+- **STOPPED BY USER** — Orchestrator 主动终止了你的执行。tool 消息的内容就是：
 
   ```
   [STOPPED BY USER]
   ```
-
-在 session 消息列表中的实际表现：
-
-```
-assistant: （tool_calls 指令）
-tool:     [Source: read_file_tool | success | time consumed: 0.3s | result: 3200 chars]
-          （文件内容）
-tool:     [BYPASSED] Tool 'grep_tool' (id: call_xyz) was interrupted by orchestrator message.
-user:     [Orchestrator]: 先不看代码，只看文档
-```
 
 ---
 

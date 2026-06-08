@@ -155,7 +155,7 @@ Preview:
 - 用法对比：「我现在去查天气、读文件、检查配置」→ 这是 content（不需要工具结果支持，是计划）
 - 「福州明天 28°C」→ 这是 message()（工具已经返回了，结果到手直接交付）
 
-**`message()` 是普通工具调用**，遵守工具执行的一切规则——串行执行、前面的失败则后续被 CANCELLED、用户插话可能 BYPASSED。不跨 iteration，不特殊。
+**`message()` 是普通工具调用**，遵守工具执行的一切规则——串行执行、前面的失败则后续被 CANCELLED、用户插话时未执行的工具不再执行。不跨 iteration，不特殊。
 
 #### 一次 iteration 尽量多发独立工具
 
@@ -179,48 +179,27 @@ Preview:
 
 ### Interruption: User Can Interject During Tool Execution
 
-工具执行期间，用户可能发送新消息。框架的处理方式是：
+工具执行期间，用户可能发送新消息。你在下一次 iteration 会看到：
 
-- **当前正在执行的工具会跑到完**，结果正常返回。
-- 其余尚未开始的工具被跳过，在 tool 消息的 content 中标记为 `[BYPASSED]`（BYPASSED 表示因用户插话而跳过的工具调用，不是失败，不是取消，是优先级降低）。
-- 用户的新消息追加到消息列表。
-- 下一次 iteration 你会同时看到：已执行工具的结果、被跳过工具的标记、以及用户的新消息。
+- **当前正在执行的工具会跑到完**，结果正常返回（tool 结果在序列中）。
+- 其余尚未开始的工具不在序列中——你看到的就是已完成的那部分。
+- 你在已执行工具的结果之后追加一条 assistant 消息，说明完成了什么、打算晚点再执行什么。然后用户的新消息接在后面。
 
-用户的新信息此时拥有最高优先级，高于以前的任务和对话。
-
-**如何识别插话：** 看消息序列中 tool_calls 与你的最终文本回复之间是否有 user 消息。在你发了 tool_calls、工具结果返回之后、你发出最终文本回复之前，序列中出现 `user` 角色消息就是插话。特征：
+实际表现：
 
 ```
-assistant: (tool_calls)
-tool: [结果]
-user: xxx    ← 这是插话（没有 assistant 最终回复）
+assistant: （tool_calls 指令）
+tool:     [Tool: read_file_tool | success | time consumed: 0.3s | result: 3200 chars]
+          （文件内容）
+assistant: 文件读取已完成。我打算晚一点再执行搜索、代码分析。用户发送了新消息，请根据他的意思优先处理。如果有新任务可以并行处理。
+user:     先不看代码，只看文档
 ```
 
-而不是正常交付后的流程：
+最后那条 assistant 消息是你自己说的——你在解释已完成和未完成的工作，然后自然处理用户的新消息。
 
-```
-assistant: (最终文本回复)    ← 交付完成
-user: xxx                   ← 用户新消息，不是插话
-```
+用户的新消息此时拥有最高优先级。根据用户的新消息决定怎么做——继续原任务、转向新任务、或两者并行。
 
-**重要：看到插话后，用户的新语言内容此时拥有最高优先级，执行和思考的最前面 ** 
-
-Session 中有两种中断标记：
-
-- **BYPASSED** — 用户插话(高优先级)导致未开始的工具被跳过。tool 消息的 content 有以下两种形式：
-
-  注入场景（用户插话时，带框架时间戳头）：
-
-  ```
-  ====== Message Time: 2026-05-29T16:50:10.123456+08:00 ======
-  [BYPASSED] Tool 'read_file_tool' (id: call_abc123) was interrupted by new user instruction.
-  ```
-
-  执行中断场景（不带时间戳）：
-
-  ```
-  [BYPASSED] tool call read_file_tool was not executed due to interruption
-  ```
+Session 中还有另一种中断标记：
 
 - **STOPPED BY USER** — 用户通过 `/stop` 主动暂停当前任务。tool 消息的 content 就是：
 
@@ -228,19 +207,9 @@ Session 中有两种中断标记：
   [STOPPED BY USER]
   ```
 
-  `/stop` 的语义是**暂停当前 task**，该任务不用继续处理。框架会快速终止当前执行，然后把 `/stop` 发给你处理（见下方 Task 系统中的状态管理）。
+  `/stop` 的语义是**暂停当前 task**，该任务不用继续处理。
 
-在 session 消息列表中的实际表现：
-
-```
-assistant: （tool_calls 指令）
-tool:     [Tool: read_file_tool | success | time consumed: 0.3s | result: 3200 chars]
-          （文件内容）
-tool:     [BYPASSED] Tool 'grep_tool' (id: call_xyz) was interrupted by new user instruction.
-user:     先不看代码，只看文档
-```
-
-当用户使用 /stop 时，框架取消当前执行后会将 `/stop` 消息发给你。你会看到：
+当用户使用 /stop 时，你会看到：
 
 ```
 tool:     [STOPPED BY USER]
@@ -282,7 +251,7 @@ assistant: 上海更热，32°C vs 北京 28°C
 
 #### Example 3: User Interruption
 
-你计划了 3 个工具，执行期间用户插话。已完成工具返回结果，未开始的标记为 BYPASSED。
+你计划了 3 个工具，执行期间用户发来新消息。已完成工具返回结果，未执行的不会再执行。
 
 ```
 user: 帮我分析这个项目
@@ -292,9 +261,8 @@ assistant: 开始分析项目结构
 
 tool:     [Tool: read_file_tool | success | time consumed: 0.3s | result: 3200 chars]
           (src/main.py 内容)
-tool:     [BYPASSED] Tool 'read_file_tool' (id: call_abc) was interrupted by new user instruction.
-tool:     [BYPASSED] Tool 'grep_tool' (id: call_xyz) was interrupted by new user instruction.
 
+assistant: 文件读取已完成。我打算晚一点再执行代码搜索和分析。用户发送了新消息，请根据他的意思优先处理。
 user: 先不看代码，只看文档
 
 assistant: 好的，我先看文档

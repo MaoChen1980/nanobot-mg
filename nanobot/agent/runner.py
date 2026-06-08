@@ -370,32 +370,73 @@ class AgentRunner:
 
                 if was_interrupted:
                     completed_tool_results: list[dict[str, Any]] = []
-                    is_tool_failure = isinstance(fatal_error, RuntimeError)
-                    failed_name = tool_calls[executed_count - 1].name if is_tool_failure and executed_count else ""
-                    for i, tc in enumerate(tool_calls):
-                        if i < executed_count:
-                            res = results[i]
-                            content = _normalize(spec, tc.id, tc.name, res)
-                            ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
-                            ev = new_events[i] if i < len(new_events) else {}
-                            content = self._fmt_tool_metadata(tc.name, content, ts, ev.get("duration_ms"))
-                        elif is_tool_failure:
-                            content = f"[CANCELLED] Tool '{tc.name}' was not executed because '{failed_name}' failed"
-                            ts = ""
-                        else:
-                            content = f"[BYPASSED] tool call {tc.name} was not executed due to interruption"
-                            ts = ""
+                    executed_count = min(executed_count, len(tool_calls))
+
+                    # 1. Append tool results for executed tools
+                    for i in range(executed_count):
+                        tc = tool_calls[i]
+                        res = results[i]
+                        content = _normalize(spec, tc.id, tc.name, res)
+                        ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
+                        ev = new_events[i] if i < len(new_events) else {}
+                        content = self._fmt_tool_metadata(tc.name, content, ts, ev.get("duration_ms"))
                         tool_message = {
                             "role": "tool", "tool_call_id": tc.id, "name": tc.name,
                             "content": content, "timestamp": ts,
                         }
                         messages.append(tool_message)
                         completed_tool_results.append(tool_message)
-                    append_injected_messages(messages, saved_injections, None)
-                    logger.info(
-                        "Injected {} saved follow-up message(s) after tool results ({}/{})",
-                        len(saved_injections), injection_cycles, _MAX_INJECTION_CYCLES,
-                    )
+
+                    # 2. Build closing assistant — facts only, no intent guidance
+                    pending_names = [tc.name for tc in tool_calls[executed_count:]]
+                    parts = []
+                    is_tool_failure = isinstance(fatal_error, RuntimeError) and executed_count > 0
+                    if is_tool_failure:
+                        failed_name = tool_calls[executed_count - 1].name
+                        success_names = [tc.name for tc in tool_calls[:executed_count - 1]]
+                        if success_names:
+                            parts.append("、".join(success_names) + " 已完成")
+                        parts.append(f"{failed_name} 失败")
+                    elif executed_count > 0:
+                        parts.append("、".join(tc.name for tc in tool_calls[:executed_count]) + " 已完成")
+                    if pending_names:
+                        parts.append("我打算晚一点再执行 " + "、".join(pending_names))
+                    if saved_injections:
+                        parts.append("用户发送了新消息，请根据他的意思优先处理。如果有新任务可以并行处理。")
+                    closing_text = "。".join(parts)
+
+                    # Preserve original assistant text content (Scenario 2)
+                    orig_content = assistant_message.get("content", "") or ""
+                    if orig_content.strip():
+                        closing_text = orig_content + "\n\n" + closing_text
+
+                    # 3. Strip unexecuted tool_calls from original assistant (1b/1c)
+                    #    Create a NEW dict to avoid mutating session.messages references
+                    if executed_count < len(tool_calls):
+                        if executed_count == 0:
+                            messages.pop()  # Remove original assistant entirely
+                        else:
+                            new_msg = dict(assistant_message)
+                            new_msg["tool_calls"] = [
+                                tc.to_openai_tool_call() for tc in tool_calls[:executed_count]
+                            ]
+                            # Assistant was appended before tool results;
+                            # find its position relative to the end
+                            asst_idx = len(messages) - 1 - executed_count
+                            messages[asst_idx] = new_msg
+                            assistant_message = new_msg
+
+                    # 4. Append closing assistant → legal ... → assistant → user
+                    messages.append(build_assistant_message(closing_text))
+
+                    # 5. Append saved user injections after the closing assistant
+                    if saved_injections:
+                        messages.extend(saved_injections)
+                        logger.info(
+                            "Injected {} saved follow-up message(s) after interruption ({}/{})",
+                            len(saved_injections), injection_cycles, _MAX_INJECTION_CYCLES,
+                        )
+
                     empty_content_retries = 0
                     length_recovery_count = 0
                     had_injections = True
