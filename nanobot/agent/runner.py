@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-from datetime import datetime, timezone
 from dataclasses import field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from nanobot.agent.context_vars import _current_messages_for_subagent
 
+from nanobot.agent.context_vars import _current_messages_for_subagent
 from nanobot.agent.hook import AgentHook, AgentHookContext
-from nanobot.providers.base import LLMProvider
 from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.session.manager import Session, find_legal_message_start
+from nanobot.providers.base import LLMProvider
+from nanobot.session.manager import Session
 from nanobot.utils.compat import dataclass
 from nanobot.utils.helpers import (
     build_assistant_message,
@@ -62,19 +61,19 @@ __all__ = [
     "BackoffConfig", "BackoffStrategy", "RetryContext", "RetryState",
 ]
 from .runner_context import (
-    drop_orphan_tool_results,
     backfill_missing_tool_results,
+    drop_orphan_tool_results,
     strip_bypassed_tool_messages,
 )
-from .runner_injection import drain_injections, append_injected_messages
+from .runner_execution import execute_tools
+from .runner_injection import append_injected_messages, drain_injections
 from .runner_llm import (
-    request_model,
-    request_finalization_retry,
-    usage_dict,
     accumulate_usage,
     merge_usage,
+    request_finalization_retry,
+    request_model,
+    usage_dict,
 )
-from .runner_execution import execute_tools
 
 # Tools that fetch external information (vs. computation/action).
 # Results from these get a [Source:] prefix so the LLM can distinguish
@@ -602,7 +601,25 @@ class AgentRunner:
                     continue
                 if spec.assess_me_callback is not None:
                     await spec.assess_me_callback(messages)
-                break
+                    messages_for_model = strip_bypassed_tool_messages(messages)
+                    messages_for_model = drop_orphan_tool_results(messages_for_model)
+                    messages_for_model = backfill_missing_tool_results(messages_for_model)
+                    messages_for_model = split_thinking_messages(messages_for_model)
+                    response = await request_finalization_retry(spec, messages_for_model)
+                    retry_usage = usage_dict(response.usage)
+                    accumulate_usage(usage, retry_usage)
+                    raw_usage = merge_usage(raw_usage, retry_usage)
+                    context.response = response
+                    context.usage = dict(raw_usage)
+                    context.tool_calls = list(response.tool_calls)
+                    clean = hook.finalize_content(context, response.content)
+                    if response.finish_reason != "error":
+                        stop_reason = "completed"
+                        error = None
+                    else:
+                        break
+                else:
+                    break
 
             if is_blank_text(clean):
                 final_content = EMPTY_FINAL_RESPONSE_MESSAGE
