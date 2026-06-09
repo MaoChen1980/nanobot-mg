@@ -710,15 +710,23 @@ class AnthropicProvider(LLMProvider):
         try:
             async with self._client.messages.stream(**kwargs) as stream:
                 final_message = None
-                async for event in self._iter_with_timeout(stream, idle_timeout_s):
-                    if isinstance(event, TextEvent):
-                        if on_content_delta:
-                            await on_content_delta(event.text)
-                    elif isinstance(event, ThinkingEvent):
-                        if on_reasoning_delta:
-                            await on_reasoning_delta(event.thinking)
-                    elif isinstance(event, ParsedMessageStopEvent):
-                        final_message = event.message
+                try:
+                    async for event in self._iter_with_timeout(stream, idle_timeout_s):
+                        if isinstance(event, TextEvent):
+                            if on_content_delta:
+                                await on_content_delta(event.text)
+                        elif isinstance(event, ThinkingEvent):
+                            if on_reasoning_delta:
+                                await on_reasoning_delta(event.thinking)
+                        elif isinstance(event, ParsedMessageStopEvent):
+                            final_message = event.message
+                except IndexError:
+                    logger.warning(
+                        "Anthropic stream IndexError (likely thinking block "
+                        "signature_delta at wrong index); "
+                        "falling back to accumulated snapshot"
+                    )
+                    final_message = stream.current_message_snapshot
 
                 if final_message is None:
                     return LLMResponse(
