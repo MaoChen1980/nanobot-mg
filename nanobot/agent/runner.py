@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -253,6 +254,10 @@ class AgentRunner:
             return content
 
         for iteration in range(spec.max_iterations):
+            logger.debug(
+                "Runner iteration {} t={:.1f}s model={} task={}",
+                iteration, time.monotonic(), spec.model, spec.session_key or "?",
+            )
             try:
                 messages_for_model = strip_bypassed_tool_messages(messages)
                 messages_for_model = drop_orphan_tool_results(messages_for_model)

@@ -251,6 +251,7 @@ class SubagentManager:
                     max_iterations_message="Task completed but no final response was generated.",
                     error_message=None,
                     fail_on_tool_error=False,
+                    concurrent_tools=True,
                     checkpoint_callback=_on_checkpoint,
                     injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,

@@ -1,4 +1,4 @@
-"""Tests for SelfReflectHook (metrics accumulation, LLM reflection, findings)."""
+"""Tests for SelfDetectHook (metrics accumulation, LLM reflection, findings)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nanobot.hooks.self_reflect import SelfReflectHook
+from nanobot.hooks.self_detect_hook import SelfDetectHook
 
 
 @pytest.fixture
 def hook(tmp_path):
-    h = SelfReflectHook(interval=2)
+    h = SelfDetectHook(interval=2)
     h.FINDINGS_FILE = tmp_path / "findings.json"
     h.LOG_FILE = tmp_path / "self_log.md"
     return h
@@ -29,25 +29,9 @@ class FakeContext:
         self.messages = kwargs.get("messages", [])
 
 
-class TestSetProvider:
-    def test_stores_provider_and_model(self):
-        hook = SelfReflectHook()
-        provider = MagicMock()
-        hook.set_provider(provider, "gpt-4")
-        assert hook._provider is provider
-        assert hook._model == "gpt-4"
-
-    def test_model_defaults_to_none(self):
-        hook = SelfReflectHook()
-        provider = MagicMock()
-        hook.set_provider(provider)
-        assert hook._provider is provider
-        assert hook._model is None
-
-
 class TestBuildEntry:
     def test_builds_correct_dict(self):
-        hook = SelfReflectHook()
+        hook = SelfDetectHook()
         tc1 = MagicMock()
         tc1.name = "web_search_tool"
         tc1.arguments = {"q": "test"}
@@ -67,17 +51,17 @@ class TestBuildEntry:
         assert "time" in entry
 
     def test_filters_self_insight_messages(self):
-        hook = SelfReflectHook()
+        hook = SelfDetectHook()
         ctx = FakeContext(messages=[
             {"role": "user", "content": "hi"},
-            {"_source": "self_insight_hook", "content": "insight"},
+            {"_source": "self_fix_hook", "content": "insight"},
             {"role": "assistant", "content": "ok"},
         ])
         entry = hook._build_entry(ctx)
         assert entry["message_count"] == 2
 
     def test_empty_inputs(self):
-        hook = SelfReflectHook()
+        hook = SelfDetectHook()
         ctx = FakeContext()
         entry = hook._build_entry(ctx)
         assert entry["tool_count"] == 0
@@ -165,7 +149,7 @@ class TestRunTurnReflection:
             patch.object(hook, "_call_for_findings", AsyncMock(return_value=([{"type": "self_bug", "content": "bug"}], "ok"))) as mock_call,
             patch.object(hook, "_save_findings") as mock_save,
             patch.object(hook, "_append_to_log") as mock_log,
-            patch("nanobot.hooks.self_reflect._read_hook_sources", return_value="## source"),
+            patch("nanobot.hooks.self_detect_hook._read_hook_sources", return_value="## source"),
         ):
             await hook._run_turn_reflection(entries)
 
@@ -186,19 +170,19 @@ class TestRunTurnReflection:
 class TestParseFindings:
     def test_from_code_block(self):
         raw = '```json\n{"findings": [{"type": "behavior", "content": "repeated tool"}]}\n```'
-        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfDetectHook._parse_findings(raw)
         assert diagnostic == "ok"
         assert len(result) == 1
         assert result[0]["type"] == "behavior"
 
     def test_plain_json(self):
         raw = '{"findings": [{"type": "self_bug", "content": "wrong count"}]}'
-        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfDetectHook._parse_findings(raw)
         assert diagnostic == "ok"
         assert len(result) == 1
 
     def test_invalid_json_returns_empty(self):
-        result, diagnostic = SelfReflectHook._parse_findings("not json at all")
+        result, diagnostic = SelfDetectHook._parse_findings("not json at all")
         assert result == []
         assert diagnostic == "json_decode_error"
 
@@ -207,7 +191,7 @@ class TestParseFindings:
             {"type": "self_bug", "content": "real bug"},
             {"type": "unicorn", "content": "fake"},
         ]})
-        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfDetectHook._parse_findings(raw)
         assert diagnostic == "ok"
         assert len(result) == 1
         assert result[0]["type"] == "self_bug"
@@ -218,27 +202,27 @@ class TestParseFindings:
             {"type": "behavior"},
             {"content": "orphan"},
         ]})
-        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfDetectHook._parse_findings(raw)
         assert diagnostic == "ok"
         assert len(result) == 1
 
     def test_empty_findings_array(self):
         raw = json.dumps({"findings": []})
-        result, diagnostic = SelfReflectHook._parse_findings(raw)
+        result, diagnostic = SelfDetectHook._parse_findings(raw)
         assert result == []
         assert diagnostic == "empty_findings"
 
 
 class TestFindingId:
     def test_stable_sha256_prefix(self):
-        h = SelfReflectHook()
+        h = SelfDetectHook()
         id1 = h._finding_id("same content")
         id2 = h._finding_id("same content")
         assert id1 == id2
         assert len(id1) == 12
 
     def test_different_content_different_id(self):
-        h = SelfReflectHook()
+        h = SelfDetectHook()
         assert h._finding_id("a") != h._finding_id("b")
 
 
@@ -250,7 +234,7 @@ class TestSaveFindings:
         )
         assert hook.FINDINGS_FILE.exists()
         payload = json.loads(hook.FINDINGS_FILE.read_text())
-        assert payload["source"] == "self_reflect"
+        assert payload["source"] == "self_detect"
         assert len(payload["findings"]) == 1
         assert "id" in payload["findings"][0]
 
@@ -260,7 +244,7 @@ class TestSaveFindings:
             "#1-#1", "ts",
         )
         payload = json.loads(hook.FINDINGS_FILE.read_text())
-        assert payload["findings"][0]["id"] == SelfReflectHook._finding_id("no-id")
+        assert payload["findings"][0]["id"] == SelfDetectHook._finding_id("no-id")
 
 
 class TestAppendToLog:

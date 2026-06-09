@@ -1,12 +1,12 @@
 """
-SelfReviewHook: lightweight per-iteration self-review.
+SelfLogHook: lightweight per-iteration metrics logger.
 
 Phase 1: minimal data capture — logs metrics to self_review_log.jsonl.
-Phase 2 (SelfReflectHook) adds LLM self-reflection.
-Phase 3 (SelfInsightHook) injects insights back into agent context.
+Phase 2 (SelfDetectHook) adds LLM suspect detection.
+Phase 3 (SelfFixHook) injects findings back into agent context.
 
 Together they form the self-evolution feedback loop:
-  SelfReviewHook (capture) → SelfReflectHook (reflect) → SelfInsightHook (inject)
+  SelfLogHook (log) → SelfDetectHook (detect) → SelfFixHook (fix)
 
 Log file: ~/.nanobot/self_improve/self_review_log.jsonl
 """
@@ -21,12 +21,12 @@ from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext
 
 
-class SelfReviewHook(AgentHook):
-    """Lightweight self-review that runs after each iteration.
+class SelfLogHook(AgentHook):
+    """Lightweight metrics logger that runs after each iteration.
 
     Captures: tool call counts, errors, empty results, usage stats.
     No LLM calls — all captured from hook context.
-    Phase 2 (SelfReflectHook) and Phase 3 (SelfInsightHook) complete the loop.
+    Phase 2 (SelfDetectHook) and Phase 3 (SelfFixHook) complete the loop.
     """
 
     LOG_FILE = Path.home() / ".nanobot" / "self_improve" / "self_review_log.jsonl"
@@ -47,7 +47,7 @@ class SelfReviewHook(AgentHook):
         try:
             self._capture(context)
         except Exception:
-            logger.debug("SelfReviewHook.after_iteration failed silently")
+            logger.debug("SelfLogHook.after_iteration failed silently")
 
     def _capture(self, context: AgentHookContext) -> None:
         # Build basic metrics from context
@@ -129,8 +129,3 @@ class SelfReviewHook(AgentHook):
         with open(self.LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    # def _count_tool_call(self, context: AgentHookContext, name: str) -> int:
-    #     """Count how many times a specific tool was called this iteration."""
-    #     if not context.tool_calls:
-    #         return 0
-    #     return sum(1 for tc in context.tool_calls if tc.name == name)

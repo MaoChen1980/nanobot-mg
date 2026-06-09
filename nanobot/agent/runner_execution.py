@@ -1,8 +1,8 @@
-"""Tool execution for AgentRunner — sequential only."""
+"""Tool execution for AgentRunner — sequential and parallel."""
 
 from __future__ import annotations
 
-from asyncio import CancelledError
+import asyncio
 import time
 from typing import Any
 
@@ -13,11 +13,44 @@ from nanobot.agent.runner_constants import _MAX_INJECTION_CYCLES
 from nanobot.utils.runtime import check_repeated_external_lookup
 
 
+def _get_tool(spec: Any, name: str) -> Any | None:
+    """Look up a tool by name from spec.tools, returning None if not found."""
+    try:
+        if spec is not None and hasattr(spec, "tools"):
+            registry = spec.tools
+            if hasattr(registry, "get"):
+                return registry.get(name)
+    except Exception:
+        logger.exception("Tool lookup failed for '{}'", name)
+    return None
+
+
 def partition_tool_batches(
     spec: Any,
     tool_calls: list,
 ) -> list[list]:
-    """Each tool call executes as its own batch — sequential only."""
+    """Split tool calls into execution batches.
+
+    Sequential mode (default): each tool gets its own batch → one at a time.
+    Concurrent mode: consecutive non-exclusive tools are grouped into a single
+    batch for parallel execution; exclusive tools get solo batches.
+    """
+    concurrent = getattr(spec, "concurrent_tools", False) if spec is not None else False
+    if isinstance(concurrent, bool) and concurrent:
+        batches: list[list] = []
+        current: list = []
+        for tc in tool_calls:
+            tool = _get_tool(spec, tc.name)
+            if tool is not None and getattr(tool, "exclusive", False):
+                if current:
+                    batches.append(current)
+                    current = []
+                batches.append([tc])
+            else:
+                current.append(tc)
+        if current:
+            batches.append(current)
+        return batches
     return [[tool_call] for tool_call in tool_calls]
 
 
@@ -43,19 +76,36 @@ async def execute_tools(
 
     for batch in batches:
         batch_results = []
-        for tool_call in batch:
-            result = await _run_tool(
-                self_ref, spec, tool_call, external_lookup_counts, iteration, turn
-            )
-            turn += 1
-            tool_results.append(result)
-            batch_results.append(result)
-            if isinstance(result[2], RuntimeError):
+        if len(batch) > 1 and spec.concurrent_tools:
+            # Parallel execution
+            turns = list(range(turn, turn + len(batch)))
+            coros = [
+                _run_tool(self_ref, spec, tc, external_lookup_counts, iteration, t)
+                for tc, t in zip(batch, turns)
+            ]
+            results = await asyncio.gather(*coros)
+            turn += len(batch)
+            for r in results:
+                tool_results.append(r)
+                batch_results.append(r)
+            if any(isinstance(r[2], RuntimeError) for r in results):
                 interrupted = True
                 break
-        if any(isinstance(error, RuntimeError) for _, _, error in batch_results):
-            interrupted = True
-            break
+        else:
+            # Sequential execution
+            for tool_call in batch:
+                result = await _run_tool(
+                    self_ref, spec, tool_call, external_lookup_counts, iteration, turn
+                )
+                turn += 1
+                tool_results.append(result)
+                batch_results.append(result)
+                if isinstance(result[2], RuntimeError):
+                    interrupted = True
+                    break
+            if any(isinstance(error, RuntimeError) for _, _, error in batch_results):
+                interrupted = True
+                break
 
         if tool_results and injection_cycles < _MAX_INJECTION_CYCLES:
             pending = await drain_injections(spec)
@@ -127,7 +177,7 @@ async def _run_tool(
         else:
             result = await spec.tools.execute(tool_call.name, params)
         duration_ms = int((time.monotonic() - start) * 1000)
-    except CancelledError:
+    except asyncio.CancelledError:
         raise
     except BaseException as exc:
         duration_ms = int((time.monotonic() - start) * 1000)

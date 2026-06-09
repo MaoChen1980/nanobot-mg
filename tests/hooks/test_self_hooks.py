@@ -1,4 +1,4 @@
-"""Tests for nanobot.hooks self-review / self-reflect / self-insight hooks."""
+"""Tests for nanobot.hooks self-log / self-detect / self-fix hooks."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ import pytest
 from unittest.mock import MagicMock
 
 from nanobot.agent.hook import AgentHookContext
-from nanobot.hooks.self_review import SelfReviewHook
-from nanobot.hooks.self_insight_hook import SelfInsightHook
+from nanobot.hooks.self_log_hook import SelfLogHook
+from nanobot.hooks.self_fix_hook import SelfFixHook
 
 
 class _FakeContext:
@@ -40,14 +40,14 @@ class _FakeContext:
 
 
 # ---------------------------------------------------------------------------
-# SelfReviewHook — discomfort signal detection
+# SelfLogHook — discomfort signal detection
 # ---------------------------------------------------------------------------
 
-class TestSelfReviewHookDetectDiscomfort:
+class TestSelfLogHookDetectDiscomfort:
     """Tests for discomfort signal detection in tool results."""
 
     def _detect(self, result: dict) -> str | None:
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         return hook._detect_discomfort(result)
 
     def test_error_signal(self):
@@ -71,7 +71,7 @@ class TestSelfReviewHookDetectDiscomfort:
         assert self._detect({"result": "ok"}) is None
 
     def test_error_result_true(self):
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         assert hook._is_error_result({"error": "something failed"})
         assert hook._is_error_result({"error": "ERROR: connection refused"})
         assert not hook._is_error_result({"result": "ok"})
@@ -79,7 +79,7 @@ class TestSelfReviewHookDetectDiscomfort:
 
     def test_empty_result_true(self):
         # Pass raw string/None to _is_empty_result (as the hook receives from context)
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         assert hook._is_empty_result("")
         assert hook._is_empty_result(None)
         assert hook._is_empty_result("[]")
@@ -90,11 +90,11 @@ class TestSelfReviewHookDetectDiscomfort:
         assert not hook._is_empty_result({"result": ""})
 
 
-class TestSelfReviewHookCapture:
-    """Tests for metric capture in SelfReviewHook._capture."""
+class TestSelfLogHookCapture:
+    """Tests for metric capture in SelfLogHook._capture."""
 
     def _capture(self, tool_results: list[dict], tool_calls: list | None = None) -> dict:
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         ctx = _FakeContext(
             tool_results=tool_results,
             tool_calls=tool_calls or [],
@@ -130,7 +130,7 @@ class TestSelfReviewHookCapture:
                 self.name = name
 
         captured: list = []
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         orig = hook._append_log
         hook._append_log = lambda e: captured.append(e)
         ctx = _FakeContext(
@@ -142,4 +142,3 @@ class TestSelfReviewHookCapture:
         assert len(captured) == 1
         assert captured[0]["tool_count"] == 2
         assert captured[0]["tool_names"] == ["read_file_tool", "grep_tool"]
-

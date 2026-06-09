@@ -1,9 +1,9 @@
 """
-self_insight_hook.py -- Inject self-reflection findings into agent context.
+self_fix_hook.py -- Inject self-detection findings into agent context.
 
-Phase 3: close the feedback loop. After SelfReflectHook produces findings
+Phase 3: close the feedback loop. After SelfDetectHook produces findings
 (self_bug, correction, behavior, etc.), this hook reads them and injects
-unreported, unresolved findings as [Self-Insight] user messages.
+unreported, unresolved findings as [Self-Fix] user messages.
 
 Triggered by: before_iteration.
 
@@ -44,8 +44,8 @@ def _read_resolved_ids(max_ids: int = 200) -> set[str]:
     return ids
 
 
-class SelfInsightHook(AgentHook):
-    """Inject self-reflection findings into context for LLM to act on.
+class SelfFixHook(AgentHook):
+    """Inject detection findings into context for LLM to act on.
 
     Only reminds — the LLM decides whether to fix, resolve, or ignore.
     Dedup: same finding is only injected once per session.
@@ -69,7 +69,7 @@ class SelfInsightHook(AgentHook):
             self._inject_insight(context, finding_insight)
             self._last_injected = finding_insight
         except Exception:
-            logger.debug("SelfInsightHook.before_iteration failed")
+            logger.debug("SelfFixHook.before_iteration failed")
 
     # -- Reflection findings from JSON file -----------------------------------
 
@@ -124,7 +124,7 @@ class SelfInsightHook(AgentHook):
         # All findings are suspects — agent loop has the context to judge
         result += (
             "\n\n[Note] 以上全部是可疑点——按 system prompt 的 Situational Awareness"
-            "四维感知（人/环境/数据/行为）来判断哪些值得改、哪些是刻意的、怎么改。"
+            "六维感知（人/资源/结构特征/风险评估/依赖关系/约束条件）来判断哪些值得改、哪些是刻意的、怎么改。"
             "修复后标记已解决: echo '<id>' >> ~/.nanobot/self_improve/resolved_findings.jsonl"
         )
         if len(result) > MAX_INSIGHT_CHARS:
@@ -136,18 +136,18 @@ class SelfInsightHook(AgentHook):
 
     def _inject_insight(self, context: AgentHookContext, insight: str) -> None:
         """Prepend a system reminder to the message list."""
-        # Remove stale SelfInsightHook entries from previous turns
+        # Remove stale SelfFixHook entries from previous turns
         context.messages[:] = [
             m for m in context.messages
-            if m.get("_source") != "self_insight_hook"
+            if m.get("_source") != "self_fix_hook"
         ]
         reminder = {
             "role": "user",
             "content": (
-                f"[Self-Insight from your history]\n{insight}\n"
+                f"[Self-Fix from your history]\n{insight}\n"
                 "-- This is a reminder from your self-review system."
             ),
-            "_source": "self_insight_hook",
+            "_source": "self_fix_hook",
             "_iteration": context.iteration,
             "status": "excluded",
         }

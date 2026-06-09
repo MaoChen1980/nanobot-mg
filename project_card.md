@@ -1,27 +1,35 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-05-31T01:29:24+0800
+Last scanned: 2026-06-09T08:55:39+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
 
-- **Languages**: Python
+- **Languages**: Python (primary), Shell
 - **Build System**: pip (pyproject.toml)
 - **Test Framework**: pytest
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~66,916
+- **Approx LOC**: ~77,093
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 306 | ~66,916 |
+| Python | 339 | ~76,805 |
+| Shell | 5 | ~288 |
 
 ## Directory Structure
 
 E:\claude\nanobot-mg/
+  __tmpcache__/
+    claude/
+      nanobot-mg/
+        nanobot/
+    Users/
+      savyc/
+        miniconda3/
   bridge/
     src/
       index.ts (1KB)
@@ -121,24 +129,26 @@ E:\claude\nanobot-mg/
         _section_utils.py (9KB)
         _semantic_base.py (15KB)
         analyze_tool.py (8KB)
-        ask.py (5KB)
+        assess_me_tool.py (4KB)
         base.py (16KB)
+        cancel_subagent.py (1KB)
         check_subagent.py (2KB)
-        conversation_search.py (7KB)
+        conversation_search.py (5KB)
         cron.py (20KB)
+        debug_root_cause.py (11KB)
         diagnose_codebase_tool.py (7KB)
         edit_files.py (17KB)
         explore_module.py (19KB)
         file_state.py (7KB)
         framework_search.py (3KB)
-        git_inspect.py (9KB)
         list_subagents.py (1KB)
-        memory_search.py (5KB)
-        message.py (7KB)
+        memory_search.py (6KB)
+        message.py (8KB)
         notebook.py (6KB)
         notify_orchestrator.py (2KB)
         output_cache.py (3KB)
         read_files.py (7KB)
+        reframe.py (6KB)
         registry.py (8KB)
         request_input.py (2KB)
         respond_to_subagent.py (2KB)
@@ -147,42 +157,47 @@ E:\claude\nanobot-mg/
         schema.py (2KB)
         search.py (27KB)
         self.py (20KB)
-        self_restart_tool.py (1KB)
-        semantic_search.py (4KB)
-        send_message.py (3KB)
+        self_restart_tool.py (2KB)
+        semantic_search.py (5KB)
+        send_message.py (4KB)
         shell_validators.py (5KB)
         spawn.py (8KB)
-        spawn_many.py (5KB)
+        spawn_many.py (6KB)
+        stage.py (14KB)
         tool_call_log.py (3KB)
         web.py (23KB)
-      verify/
       __init__.py (584B)
-      context.py (26KB)
+      assess_me.py (3KB)
+      compress.py (16KB)
+      context.py (33KB)
       context_vars.py (981B)
-      db.py (16KB)
+      db.py (17KB)
       hook.py (6KB)
-      loop.py (58KB)
+      llm_context.py (2KB)
+      loop.py (60KB)
       loop_checkpoint.py (6KB)
-      loop_constants.py (199B)
+      loop_constants.py (773B)
       loop_dispatch.py (7KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (24KB)
+      loop_message_handlers.py (23KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (23KB)
+      memory_extractor.py (63KB)
       memory_store.py (10KB)
-      memory_vector.py (11KB)
+      memory_vector.py (25KB)
+      message_pipe.py (5KB)
       project_scanner.py (21KB)
-      runner.py (27KB)
-      runner_constants.py (610B)
+      runner.py (35KB)
+      runner_constants.py (582B)
       runner_context.py (6KB)
-      runner_execution.py (7KB)
+      runner_execution.py (6KB)
       runner_injection.py (5KB)
-      runner_llm.py (5KB)
+      runner_llm.py (6KB)
+      runner_retry.py (4KB)
       skills.py (12KB)
-      subagent.py (22KB)
-      subagent_prompt.py (8KB)
+      subagent.py (24KB)
+      subagent_prompt.py (13KB)
       subagent_status.py (2KB)
       subagent_tools.py (4KB)
     api/
@@ -203,9 +218,9 @@ E:\claude\nanobot-mg/
     session/
     skills/
     templates/
-    tools/
     utils/
     web/
+    workspace/
     __init__.py (1KB)
     __main__.py (147B)
     _commit.py (56B)
@@ -213,17 +228,20 @@ E:\claude\nanobot-mg/
   tasks/
   tests/
   webui/
+  workspace/
   CONTRIBUTING.md (4KB)
   docker-compose.yml (1KB)
   Dockerfile (2KB)
   entrypoint.sh (443B)
   LICENSE (1KB)
   project_card.md (13KB)
-  pyproject.toml (4KB)
-  README.md (6KB)
-  README_en.md (4KB)
-  restart_gateway.py (700B)
+  pyproject.toml (5KB)
+  README.md (7KB)
+  README_en.md (5KB)
   SECURITY.md (8KB)
+  setup.bat (39B)
+  setup.py (4KB)
+  setup.sh (634B)
   THIRD_PARTY_NOTICES.md (6KB)
 
 ## Key Configuration
@@ -271,7 +289,7 @@ dependencies = [
     "ddgs>=9.10.0,<10.0.0; python_version >= '3.10'",
     "ddgs>=9.5.5,<9.10.0; python_version < '3.10'",
     "oauth-cli-kit>=0.1.3,<1.0.0; python_version >= '3.11'",
-... (137 more lines)
+... (147 more lines)
 ```
 
 ### .editorconfig
@@ -298,47 +316,47 @@ trim_trailing_whitespace = false
 ### .gitignore
 
 ```text
+
+!.env.example
+# Build & packaging
 # Build-time generated files
-nanobot/_commit.py
-
+# Editors & IDEs (local workspace / user settings)
+# Environment & secrets (keep examples tracked if needed)
+# Jupyter
+# Linux
+# Lock files (project policy)
+# Logs & temp
 # Project-specific
-.worktrees/
-.assets
-.docs
-.env
-.web
-.orion
-
-# webui (monorepo frontend)
-webui/node_modules/
-webui/dist/
-webui/coverage/
-webui/.vite/
-*.tsbuildinfo
-
 # Python bytecode & caches
+# Test & coverage
+# Windows
+# macOS
+# webui (monorepo frontend)
+*.code-workspace
+*.cover
+*.egg
+*.egg-info/
+*.log
+*.manifest
 *.pyc
-*.pyo
 *.pyd
+*.pyo
 *.pyw
 *.pyz
-__pycache__/
-*.egg-info/
-*.egg
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.pytype/
-.dmypy.json
-dmypy.json
-.tox/
-.nox/
-.hypothesis/
-
-# Build & packaging
-... (58 more lines)
+*.spec
+*.sublime-project
+*.sublime-workspace
+*.swo
+*.swp
+*.tmp
+*.tsbuildinfo
+*~
+.AppleDouble
+.DS_Store
+.LSOverride
+.assets
+.coverage
+... (47 more lines)
 ```
 
 ### Dockerfile

@@ -1,12 +1,12 @@
 """
-SelfReflectHook: metrics accumulator + LLM suspect extraction.
+SelfDetectHook: metrics accumulator + LLM suspect extraction.
 
 Phase 2 of the self-evolution feedback loop. Accumulates metrics across turns,
 then calls LLM (no tools, no context) to flag **suspects** in:
 - Hook source code (self_bug)
 - LLM behavior patterns (behavior / correction / knowledge / decision)
 
-Output: structured suspects for SelfInsightHook to inject into the agent loop.
+Output: structured suspects for SelfFixHook to inject into the agent loop.
 The agent loop has the context and tools to judge whether each suspect is real.
 """
 
@@ -89,10 +89,38 @@ REFLECTION_USER_TEMPLATE = """\
 # --- Hook files for self-review ------------------------------------------------
 
 _HOOKS_DIR = Path(__file__).resolve().parent
-_HOOK_FILES = ["self_review.py", "self_reflect.py", "self_insight_hook.py"]
+_HOOK_FILES = ["self_log_hook.py", "self_detect_hook.py", "self_fix_hook.py"]
 
 
 RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
+
+
+def _fmt_args(args: dict) -> str:
+    """Compact argument preview for reflection LLM.
+
+    Shows file_path and key parameters; truncates long values.
+    """
+    MAX_VAL = 60
+    MAX_ARGS = 4
+    parts = []
+    for k, v in args.items():
+        if len(parts) >= MAX_ARGS:
+            parts.append("...")
+            break
+        if isinstance(v, str):
+            if len(v) > MAX_VAL:
+                v = v[:MAX_VAL] + "..."
+            parts.append(f"{k}={v}")
+        elif isinstance(v, (int, float, bool)):
+            parts.append(f"{k}={v}")
+        elif v is None:
+            parts.append(f"{k}=null")
+        else:
+            s = str(v)
+            if len(s) > MAX_VAL:
+                s = s[:MAX_VAL] + "..."
+            parts.append(f"{k}={s}")
+    return ", ".join(parts)
 
 
 def _read_resolved_ids(max_ids: int = 200) -> set[str]:
@@ -123,24 +151,9 @@ def _read_hook_sources() -> str:
     return "\n\n".join(parts)
 
 
-SELF_AWARENESS_PROMPT = """
-## Self-Awareness
-
-在整个对话过程中保持自我觉察。在每次工具调用之前，快速审视：
-- 我正在调用哪个工具？这是第几次？
-- 我的行为模式看起来像什么？（进步、卡住、转圈？）
-- 如果从外部观察，我会怎么评价自己当前的行动？
-
-特别警惕以下模式：
-- **重复编辑同一个文件**：如果你连续两次修改同一文件，停下来思考之前的修改为什么没解决问题
-- **重复执行同一工具**：如果同一个工具被反复调用且结果相似，可能是方法不对，换一种方式
-- **忽视工具错误信息**：工具返回的错误不是让你重试，而是告诉你当前的思路有问题
-"""
-
-
 # --- Hook ---------------------------------------------------------------------
 
-class SelfReflectHook(AgentHook):
+class SelfDetectHook(AgentHook):
     """Accumulate per-iteration metrics and fire one LLM reflection every N turns.
 
     Instead of one reflection per turn, batch across multiple turns to:
@@ -164,7 +177,7 @@ class SelfReflectHook(AgentHook):
         try:
             self._entries_accumulated.append(self._build_entry(context))
         except Exception:
-            logger.debug("SelfReflectHook.after_iteration failed silently")
+            logger.debug("SelfDetectHook.after_iteration failed silently")
 
     def _build_entry(self, context: AgentHookContext) -> dict:
         tool_calls_data = [
@@ -174,7 +187,7 @@ class SelfReflectHook(AgentHook):
         usage = context.usage or {}
         real_messages = [
             m for m in (context.messages or [])
-            if m.get("_source") != "self_insight_hook"
+            if m.get("_source") != "self_fix_hook"
         ]
         return {
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -214,7 +227,7 @@ class SelfReflectHook(AgentHook):
         try:
             await self._run_turn_reflection(entries)
         except Exception:
-            logger.debug("SelfReflectHook.after_turn failed")
+            logger.debug("SelfDetectHook.after_turn failed")
 
     async def _run_turn_reflection(self, entries: list[dict]) -> None:
         """Build a summary from all iterations, fire LLM, save results."""
@@ -255,12 +268,21 @@ class SelfReflectHook(AgentHook):
                 file_focus_lines.append(f"    {key} x{cnt}")
         file_summary = "\n".join(file_focus_lines)
 
-        # Per-iteration tool sequence for pattern detection
+        # Per-iteration tool sequence with key arguments
         seq_lines = ["  Tool call sequence:"]
         for e in entries:
-            names = [tc["name"] for tc in e.get("tool_calls", [])]
-            if names:
-                seq_lines.append(f"    iter#{e['iteration']}: {' → '.join(names)}")
+            calls = e.get("tool_calls", [])
+            if calls:
+                parts = []
+                for tc in calls:
+                    args = tc.get("arguments") or {}
+                    # Compact arg summary: file_path + key values, truncated
+                    arg_preview = _fmt_args(args)
+                    if arg_preview:
+                        parts.append(f"{tc['name']}({arg_preview})")
+                    else:
+                        parts.append(tc["name"])
+                seq_lines.append(f"    iter#{e['iteration']}: {' → '.join(parts)}")
             else:
                 seq_lines.append(f"    iter#{e['iteration']}: (no tools)")
         seq_summary = "\n".join(seq_lines)
@@ -282,7 +304,7 @@ class SelfReflectHook(AgentHook):
         # Call LLM for structured findings
         findings, diagnostic = await self._call_for_findings(metrics_text, hook_code)
 
-        # Save findings JSON (consumed by SelfInsightHook)
+        # Save findings JSON (consumed by SelfFixHook)
         self._save_findings(findings, iteration_range, time_str)
 
         # Also write readable log for human review
@@ -297,7 +319,7 @@ class SelfReflectHook(AgentHook):
         try:
             response = await self._call_llm(metrics_text, hook_code)
         except Exception as exc:
-            logger.debug("SelfReflectHook: LLM call failed: {}", exc)
+            logger.debug("SelfDetectHook: LLM call failed: {}", exc)
             return [], "llm_call_error"
         return self._parse_findings(response)
 
@@ -367,7 +389,7 @@ class SelfReflectHook(AgentHook):
     def _save_findings(
         self, findings: list[dict[str, Any]], iteration_range: str, time_str: str
     ) -> None:
-        """Write structured findings to JSON file for SelfInsightHook."""
+        """Write structured findings to JSON file for SelfFixHook."""
         self.FINDINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
         for f in findings:
             if "id" not in f and f.get("content"):
@@ -379,7 +401,7 @@ class SelfReflectHook(AgentHook):
         payload = {
             "saved_at": time_str,
             "iteration_range": iteration_range,
-            "source": "self_reflect",
+            "source": "self_detect",
             "findings": findings,
             "resolved_ids": list(resolved_ids),
         }

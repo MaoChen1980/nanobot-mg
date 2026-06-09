@@ -1,4 +1,4 @@
-"""Tests for SelfReviewHook (per-iteration metrics capture)."""
+"""Tests for SelfLogHook (per-iteration metrics capture)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.hooks.self_review import SelfReviewHook
+from nanobot.hooks.self_log_hook import SelfLogHook
 
 
 @pytest.fixture
 def hook(tmp_path):
-    h = SelfReviewHook()
+    h = SelfLogHook()
     h.LOG_FILE = tmp_path / "self_review_log.jsonl"
     return h
 
@@ -70,12 +70,12 @@ class TestCapture:
 
 class TestPredicates:
     def test_is_error_result(self):
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         assert hook._is_error_result("Error: connection failed")
         assert not hook._is_error_result("success")
 
     def test_is_empty_result(self):
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         assert hook._is_empty_result(None)
         assert hook._is_empty_result("")
         assert hook._is_empty_result("None")
@@ -83,7 +83,7 @@ class TestPredicates:
         assert not hook._is_empty_result("data")
 
     def test_detect_discomfort(self):
-        hook = SelfReviewHook()
+        hook = SelfLogHook()
         assert hook._detect_discomfort("not found")
         assert hook._detect_discomfort("permission denied")
         assert hook._detect_discomfort("timeout")
