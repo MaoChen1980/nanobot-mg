@@ -133,8 +133,9 @@ class AnthropicProvider(LLMProvider):
 
         # Fallback for non-APIStatusError exceptions (connection, timeout, etc.)
         logger.exception("Anthropic API error (non-APIStatusError): {}", e)
+        err_str = str(e).strip()
         return LLMResponse(
-            content=f"Error calling LLM: {e}",
+            content=f"Error calling LLM: {err_str}" if err_str else "Error calling LLM: connection error (no detail)",
             finish_reason="error",
             error_kind=LLMProvider._classify_error(e),
         )

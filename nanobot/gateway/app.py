@@ -330,9 +330,19 @@ class GatewayApplication:
                 proxy_key = f"proxy:{msg.channel}"
 
             if proxy_key:
+                # Handle both bare chat_id (oc_...) and prefixed formats
+                # (feishu:feishu1:oc_... or proxy:feishu:feishu1:oc_...).
+                _prefix1 = f"{proxy_key}:"
+                _prefix2 = f"proxy:{proxy_key}:"
+                if msg.chat_id.startswith(_prefix2):
+                    bare_chat_id = msg.chat_id[len(_prefix2):]
+                elif msg.chat_id.startswith(_prefix1):
+                    bare_chat_id = msg.chat_id[len(_prefix1):]
+                else:
+                    bare_chat_id = msg.chat_id
                 deliver_msg: dict[str, Any] = {
                     "type": "deliver",
-                    "chat_id": msg.chat_id,
+                    "chat_id": bare_chat_id,
                     "content": msg.content,
                 }
                 if msg.reply_to:
@@ -790,14 +800,10 @@ class GatewayApplication:
             ts = entry.get("t", "")[-8:]  # HH:MM:SS
             src = entry.get("f", "?")
             msg = entry.get("m", "")
-            trace = entry.get("_traceback")
-            if trace:
-                tb_compact = "\n".join(
-                    ln[:120] for ln in trace[-3:]  # last 3 lines of traceback
-                )
-                parts.append(f"  [{ts}] {src} - {msg[:200]}\n    {tb_compact}")
-            else:
-                parts.append(f"  [{ts}] {src} - {msg[:200]}")
+            # Omit traceback in the alert — traceback stays in log file for
+            # debugging. The Feishu message should be concise and not show
+            # implementation detail to end users.
+            parts.append(f"  [{ts}] {src} - {msg[:200]}")
         if len(new_errors) > MAX_SHOWN:
             parts.append(f"  ... and {len(new_errors) - MAX_SHOWN} more")
 
@@ -954,9 +960,20 @@ class GatewayApplication:
                 if not self.proxy_manager.has_proxy(proxy_key):
                     continue
 
+                # Strip channel:bot prefix from chat_id if present.
+                # Handles both "feishu:feishu1:oc_..." and "proxy:feishu:feishu1:oc_...".
+                _prefix1 = f"{proxy_key}:"
+                _prefix2 = f"proxy:{proxy_key}:"
+                if msg.chat_id.startswith(_prefix2):
+                    bare_chat_id = msg.chat_id[len(_prefix2):]
+                elif msg.chat_id.startswith(_prefix1):
+                    bare_chat_id = msg.chat_id[len(_prefix1):]
+                else:
+                    bare_chat_id = msg.chat_id
+
                 deliver_msg: dict[str, Any] = {
                     "type": "deliver",
-                    "chat_id": msg.chat_id,
+                    "chat_id": bare_chat_id,
                     "content": msg.content,
                 }
                 if msg.media:

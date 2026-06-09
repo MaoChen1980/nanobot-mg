@@ -1247,7 +1247,14 @@ class OpenAICompatProvider(LLMProvider):
             or getattr(getattr(e, "response", None), "text", None)
         )
         body_text = body if isinstance(body, str) else str(body) if body is not None else ""
-        msg = f"Error: {body_text.strip()[:500]}" if body_text.strip() else f"Error calling LLM: {e}"
+        err_str = str(e).strip()
+        if body_text.strip():
+            msg = f"Error: {body_text.strip()[:500]}"
+        elif err_str:
+            msg = f"Error calling LLM: {err_str}"
+        else:
+            # e.g. httpx.ReadTimeout with empty str() representation
+            msg = "Error calling LLM: connection error (no detail)"
 
         text = f"{body_text} {e}".lower()
         if spec and spec.is_local and ("502" in text or "connection" in text or "refused" in text):

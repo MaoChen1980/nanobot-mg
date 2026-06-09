@@ -559,7 +559,16 @@ async def handle_memory_chat(request: Request) -> Response:
     messages.extend(history)
     messages.append({"role": "user", "content": message})
 
-    from nanobot.agent.llm_context import chat_stream_with_retry
+    from nanobot.agent.llm_context import chat_stream_with_retry, set_llm
+    from nanobot.providers.factory import build_provider_snapshot
+
+    # Lazy init: build provider once if not already set by gateway startup
+    try:
+        from nanobot.agent.llm_context import _llm_provider
+        _llm_provider.get()
+    except LookupError:
+        snapshot = build_provider_snapshot(config)
+        set_llm(snapshot.provider, snapshot.model)
 
     async def event_stream():
         queue: asyncio.Queue[str | None] = asyncio.Queue()
