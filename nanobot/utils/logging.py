@@ -97,8 +97,8 @@ class LoggerConfig:
                 sink=err_path,
                 level="ERROR",
                 format=_FORMAT,
-                rotation="10 MB",
-                retention="30 days",
+                rotation="5 MB",
+                retention="5 days",
                 compression="zip",
             )
 
