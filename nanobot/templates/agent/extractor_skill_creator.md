@@ -14,9 +14,11 @@ Skill is a form of memory. Memory has storage and retrieval costs. A skill is wo
    
    *Counter-example*: "1+1=2" — so obvious no one needs to memorize it. Similarly, trivial workflows that any capable agent would reproduce correctly every time do not need a skill.
 
-2. **Clear context dependency** — Skills only work in specific information contexts. If you can't describe what context is needed before the shortcut/avoidance applies, the skill is too vague.
+2. **Clear external trigger** — The trigger must come from an external signal: user keywords, message type, tool result, cron cycle, page structure. If the trigger requires the LLM to spontaneously "remember" to use it during idle reflection, it is NOT a valid trigger — skip.
 
-3. **Not duplicative** — If an existing skill already covers the same workflow, skip.
+3. **Clear context dependency** — Skills only work in specific information contexts. If you can't describe what context is needed before the shortcut/avoidance applies, the skill is too vague.
+
+4. **Not duplicative** — If an existing skill already covers the same workflow, skip.
 
 ## Two Types of Skill
 

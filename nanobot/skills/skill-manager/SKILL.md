@@ -58,11 +58,12 @@ version: 0.1.0
 
 ### Create a skill
 1. **检查重复**：扫描 `skills_summary`（始终在你的 prompt 中）——如果已有 skill 覆盖此功能，则跳过。
-2. **创建目录**：`mkdir -p workspace/skills/<name>/`
-3. **写入 SKILL.md** 使用 `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`。在你创建的每个 SKILL.md 末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
-4. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description——这是最后的机会。创建后，description 和 trigger 将被冻结，由 skill-manager 所有。
-5. **验证**：`exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)`
-6. 修复任何验证错误
+2. **检查 trigger**：确认有明确的触发信号（用户关键词、消息类型、工具返回、cron 周期）。没有外部 trigger 的 skill 不应创建。
+3. **创建目录**：`mkdir -p workspace/skills/<name>/`
+4. **写入 SKILL.md** 使用 `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`。在你创建的每个 SKILL.md 末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
+5. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description——这是最后的机会。创建后，description 和 trigger 将被冻结，由 skill-manager 所有。
+6. **验证**：`exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)`
+7. 修复任何验证错误
 
 ### Patch a skill (targeted fix)
 当 skill 的指令有误时：
@@ -115,6 +116,19 @@ always: false
 ```
 
 **关键**：`description` 字段是用来决定何时使用该 skill 的依据。使其足够具体。
+
+### 核心原则：Skill 必须有 Trigger → Action 映射
+
+**没有触发条件的 skill 不应该被创建。**
+
+每个 skill 必须满足：
+1. **有明确触发信号** — 什么场景下应该用？用户说了什么？系统状态是什么？
+2. **映射到具体行动** — 触发后做什么？步骤是什么？
+3. **不依赖 LLM 主动想起来** — 触发信号应当来自外部（用户消息、工具结果、cron、hook），而不是"LLM 反省时自动触发"
+
+判断是否该创建 skill 的检验标准：
+- 这个 skill 的触发条件可以被自动检测（用户关键词、消息类型、工具返回）？
+- 还是需要 LLM 在空闲时"回想起来"？→ 后者说明没有真正的 trigger，不适合做 skill
 
 ### Good Skill Structure
 
