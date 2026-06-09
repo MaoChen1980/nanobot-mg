@@ -163,7 +163,9 @@ class MessageTool(Tool):
                 if p.startswith(("http://", "https://")):
                     resolved.append(p)
                 else:
-                    fp = Path(p) if os.path.isabs(p) else self._workspace / p
+                    if not os.path.isabs(p):
+                        return f"Error: media path must be absolute, got: {p}"
+                    fp = Path(p)
                     if not fp.exists():
                         return f"Error: media file not found: {fp.as_posix()}"
                     resolved.append(str(fp))

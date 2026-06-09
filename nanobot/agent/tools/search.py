@@ -164,7 +164,7 @@ class GlobTool(_SearchTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to a directory to search in (default: workspace root).",
+                    "description": "Absolute path to a directory to search in. **Required.**",
                 },
                 "max_results": {
                     "type": "integer",
@@ -193,13 +193,13 @@ class GlobTool(_SearchTool):
                     "description": "Whether to match files, directories, or both (default files)",
                 },
             },
-            "required": ["pattern"],
+            "required": ["pattern", "path"],
         }
 
     async def execute(
         self,
         pattern: str,
-        path: str = ".",
+        path: str = "",
         max_results: int | None = None,
         head_limit: int | None = None,
         offset: int = 0,
@@ -207,7 +207,7 @@ class GlobTool(_SearchTool):
         **kwargs: Any,
     ) -> str:
         try:
-            root = self._resolve(path or ".")
+            root = self._resolve(path)
             if not root.exists():
                 return f"Error: Path not found: {path} — use glob_tool to locate it first"
             if not root.is_dir():
@@ -295,7 +295,7 @@ class GrepTool(_SearchTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "Absolute path to a file or directory to search in (default: workspace root).",
+                    "description": "Absolute path to a file or directory to search in. **Required.**",
                 },
                 "glob": {
                     "type": "string",
@@ -369,7 +369,7 @@ class GrepTool(_SearchTool):
                     "maximum": 100000,
                 },
             },
-            "required": ["pattern"],
+            "required": ["pattern", "path"],
         }
 
     @staticmethod
@@ -490,7 +490,7 @@ class GrepTool(_SearchTool):
     async def execute(
         self,
         pattern: str,
-        path: str = ".",
+        path: str = "",
         glob: str | None = None,
         file_type: str | None = None,
         case_insensitive: bool = False,
@@ -507,8 +507,10 @@ class GrepTool(_SearchTool):
         # Backwards compat: legacy alias "type"
         if file_type is None and kwargs.get("type"):
             file_type = kwargs["type"]
+        if not path:
+            return "Error: `path` is required — provide an absolute path."
         try:
-            target = self._resolve(path or ".")
+            target = self._resolve(path)
             if not target.exists():
                 return f"Error: Path not found: {path} — use glob_tool to locate it first"
             if not (target.is_dir() or target.is_file()):

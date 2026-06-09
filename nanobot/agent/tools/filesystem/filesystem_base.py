@@ -30,10 +30,14 @@ def _resolve_path(
     allowed_dir: Path | None = None,
     extra_allowed_dirs: list[Path] | None = None,
 ) -> Path:
-    """Resolve path against workspace (if relative) and enforce directory restriction."""
+    """Resolve an absolute path and enforce directory restriction.
+
+    Raises ValueError if path is not absolute — relative paths are rejected
+    unconditionally; the caller must always supply an absolute path.
+    """
     p = Path(path).expanduser()
-    if not p.is_absolute() and workspace:
-        p = workspace / p
+    if not p.is_absolute():
+        raise ValueError(f"Path must be absolute, got: {path}")
     resolved = p.resolve()
     if allowed_dir:
         from nanobot.agent.tools import filesystem as _fs_mod

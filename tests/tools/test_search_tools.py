@@ -27,7 +27,7 @@ async def test_glob_matches_recursively_and_skips_noise_dirs(tmp_path: Path) -> 
     (tmp_path / "node_modules" / "skip.py").write_text("print('skip')\n", encoding="utf-8")
 
     tool = GlobTool(workspace=tmp_path, allowed_dir=tmp_path)
-    result = await tool.execute(pattern="*.py", path=".")
+    result = await tool.execute(pattern="*.py", path=tmp_path.as_posix())
 
     assert (tmp_path / "src" / "app.py").resolve().as_posix() in result
     assert (tmp_path / "nested" / "util.py").resolve().as_posix() in result
@@ -43,7 +43,7 @@ async def test_glob_can_return_directories_only(tmp_path: Path) -> None:
     tool = GlobTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="api",
-        path="src",
+        path=(tmp_path / "src").as_posix(),
         entry_type="dirs",
     )
 
@@ -62,7 +62,7 @@ async def test_grep_respects_glob_filter_and_context(tmp_path: Path) -> None:
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="match_here",
-        path=".",
+        path=tmp_path.as_posix(),
         glob="*.py",
         output_mode="content",
         context_before=1,
@@ -84,7 +84,7 @@ async def test_grep_defaults_to_files_with_matches(tmp_path: Path) -> None:
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="match_here",
-        path="src",
+        path=(tmp_path / "src").as_posix(),
     )
 
     assert result.splitlines() == [(tmp_path / "src" / "main.py").resolve().as_posix()]
@@ -102,7 +102,7 @@ async def test_grep_supports_case_insensitive_search(tmp_path: Path) -> None:
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="oauth",
-        path="memory/HISTORY.md",
+        path=(tmp_path / "memory" / "HISTORY.md").as_posix(),
         case_insensitive=True,
         output_mode="content",
     )
@@ -120,7 +120,7 @@ async def test_grep_type_filter_limits_files(tmp_path: Path) -> None:
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="needle",
-        path="src",
+        path=(tmp_path / "src").as_posix(),
         type="py",
     )
 
@@ -138,7 +138,7 @@ async def test_grep_fixed_strings_treats_regex_chars_literally(tmp_path: Path) -
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="[2026-04-02 10:00]",
-        path="memory/HISTORY.md",
+        path=(tmp_path / "memory" / "HISTORY.md").as_posix(),
         fixed_strings=True,
         output_mode="content",
     )
@@ -160,7 +160,7 @@ async def test_grep_files_with_matches_mode_returns_unique_paths(tmp_path: Path)
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="needle",
-        path="src",
+        path=(tmp_path / "src").as_posix(),
         output_mode="files_with_matches",
     )
 
@@ -179,7 +179,7 @@ async def test_grep_files_with_matches_supports_head_limit_and_offset(tmp_path: 
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="needle",
-        path="src",
+        path=(tmp_path / "src").as_posix(),
         head_limit=1,
         offset=1,
     )
@@ -203,7 +203,7 @@ async def test_grep_count_mode_reports_counts_per_file(tmp_path: Path) -> None:
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="warn",
-        path="logs",
+        path=(tmp_path / "logs").as_posix(),
         output_mode="count",
     )
 
@@ -225,7 +225,7 @@ async def test_grep_files_with_matches_mode_respects_max_results(tmp_path: Path)
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="needle",
-        path="src",
+        path=(tmp_path / "src").as_posix(),
         output_mode="files_with_matches",
         max_results=2,
     )
@@ -254,7 +254,7 @@ async def test_glob_supports_head_limit_offset_and_recent_first(tmp_path: Path) 
     tool = GlobTool(workspace=tmp_path, allowed_dir=tmp_path)
     result = await tool.execute(
         pattern="*.py",
-        path="src",
+        path=(tmp_path / "src").as_posix(),
         head_limit=1,
         offset=1,
     )
@@ -274,7 +274,7 @@ async def test_grep_reports_skipped_binary_and_large_files(
 
     monkeypatch.setattr(GrepTool, "_MAX_FILE_BYTES", 10)
     tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
-    result = await tool.execute(pattern="needle", path=".")
+    result = await tool.execute(pattern="needle", path=tmp_path.as_posix())
 
     assert "No matches found" in result
     assert "skipped 1 binary/unreadable files" in result

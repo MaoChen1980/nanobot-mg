@@ -273,6 +273,15 @@ class ExecTool(Tool):
             # so piped/inlined invocations like `curl -s url | grep ...`
             # don't block waiting for interactive Uri parameter input.
             command = re.sub(r'^(\s*)curl(?=\s|$)', r'\1curl.exe', command, count=1)
+            # `$null` after a redirection operator is valid PowerShell but creates
+            # a literal file named `$null` in cmd.exe.  Replace with `NUL` (the
+            # Windows device that discards output) so the LLM's idiomatic
+            # "suppress output" pattern works correctly.
+            command = re.sub(
+                r'(>>?|2>>?|>&1)\s*\$null\b',
+                r'\1 NUL',
+                command,
+            )
 
         if self.path_append:
             if _IS_WINDOWS:

@@ -15,7 +15,7 @@ from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 @tool_parameters(
     build_parameters_schema(
         error=p("string", "Error message, keyword, or code to investigate"),
-        path=p("string", "Optional absolute path to a file or directory to narrow the search scope."),
+        path=p("string", "Absolute path to a file or directory to narrow the search scope. Required for code search — omit to get git history only."),
         max_results=p("integer", "Max grep results to show (default 20)", minimum=1, maximum=50, default=20),
         days=p("integer", "Days of git history to check (default 7)", minimum=1, maximum=90, default=7),
     ),
@@ -43,7 +43,7 @@ class DiagnoseTool(_FsTool):
         **kwargs: Any,
     ) -> str:
         try:
-            workspace = self._resolve(".")
+            workspace = self._workspace or Path.cwd().resolve()
             git_dir = self._find_git_root(workspace)
         except PermissionError:
             git_dir = None
@@ -56,9 +56,12 @@ class DiagnoseTool(_FsTool):
             parts.append(f"## Code matches ({len(hits)} lines)")
             parts.append("")
             parts.extend(hits[:max_results])
-        else:
+        elif path:
             parts.append("## Code matches")
             parts.append("(No direct code matches found)")
+        else:
+            parts.append("## Code matches")
+            parts.append("(No path specified — pass `path` to search code)")
         parts.append("")
 
         if git_dir:
@@ -93,9 +96,14 @@ class DiagnoseTool(_FsTool):
     def _search_code(self, terms: list[str], path: str | None, max_results: int) -> list[str]:
         if not terms:
             return []
+        if not path:
+            return []
         seen: set[str] = set()
         hits: list[str] = []
-        search_root = self._resolve(path or ".")
+        try:
+            search_root = self._resolve(path)
+        except ValueError:
+            return []
         term = terms[0]
 
         try:
