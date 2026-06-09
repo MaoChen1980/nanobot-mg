@@ -90,7 +90,7 @@ REFLECTION_USER_TEMPLATE = """\
 # --- Hook files for self-review ------------------------------------------------
 
 _HOOKS_DIR = Path(__file__).resolve().parent
-_HOOK_FILES = ["self_log_hook.py", "self_detect_hook.py", "self_fix_hook.py"]
+_HOOK_FILES = ["self_log_hook.py", "self_detect_hook.py"]
 
 
 RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
