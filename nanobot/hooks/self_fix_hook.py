@@ -141,18 +141,31 @@ class SelfFixHook(AgentHook):
             m for m in context.messages
             if m.get("_source") != "self_fix_hook"
         ]
-        reminder = {
-            "role": "user",
-            "content": (
-                f"[Self-Fix from your history]\n{insight}\n"
-                "-- This is a reminder from your self-review system."
-            ),
-            "_source": "self_fix_hook",
-            "_iteration": context.iteration,
-            "status": "excluded",
-        }
-        # Inject as second message (after any existing system message)
+        reminders = [
+            {
+                "role": "user",
+                "content": (
+                    f"[Self-Fix from your history]\n{insight}\n"
+                    "-- These are items flagged by your self-review system."
+                ),
+                "_source": "self_fix_hook",
+                "_iteration": context.iteration,
+                "status": "excluded",
+            },
+            {
+                "role": "assistant",
+                "content": (
+                    f"[Self-Fix acknowledged] Got it. I'll keep these in mind "
+                    f"and address them when there's an opportunity, or when "
+                    f"they become relevant to the work at hand."
+                ),
+                "_source": "self_fix_hook",
+                "_iteration": context.iteration,
+                "status": "excluded",
+            },
+        ]
+        # Inject as second and third messages (after any existing system message)
         if context.messages and context.messages[0].get("role") == "system":
-            context.messages.insert(1, reminder)
+            context.messages[1:1] = reminders
         else:
-            context.messages.insert(0, reminder)
+            context.messages[0:0] = reminders

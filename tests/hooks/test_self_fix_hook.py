@@ -139,9 +139,13 @@ class TestInjectInsight:
             {"role": "user", "content": "hi"},
         ])
         hook._inject_insight(ctx, "test insight")
-        assert len(ctx.messages) == 3
+        assert len(ctx.messages) == 4  # sys + user reminder + assistant ack + original hi
         assert ctx.messages[1]["_source"] == "self_fix_hook"
-        assert ctx.messages[1]["content"].startswith("[Self-Fix")
+        assert ctx.messages[1]["role"] == "user"
+        assert "[Self-Fix from your history]" in ctx.messages[1]["content"]
+        assert ctx.messages[2]["_source"] == "self_fix_hook"
+        assert ctx.messages[2]["role"] == "assistant"
+        assert "[Self-Fix acknowledged]" in ctx.messages[2]["content"]
 
     def test_inserts_at_zero_when_no_system(self):
         hook = SelfFixHook()
@@ -150,6 +154,9 @@ class TestInjectInsight:
         ])
         hook._inject_insight(ctx, "test")
         assert ctx.messages[0]["_source"] == "self_fix_hook"
+        assert ctx.messages[0]["role"] == "user"
+        assert ctx.messages[1]["_source"] == "self_fix_hook"
+        assert ctx.messages[1]["role"] == "assistant"
 
     def test_removes_stale_entries_first(self):
         hook = SelfFixHook()
@@ -160,7 +167,7 @@ class TestInjectInsight:
         ])
         hook._inject_insight(ctx, "new insight")
         sources = [m.get("_source") for m in ctx.messages]
-        assert sources.count("self_fix_hook") == 1
+        assert sources.count("self_fix_hook") == 2  # user + assistant pair
 
 
 class TestBeforeIteration:
@@ -185,8 +192,9 @@ class TestBeforeIteration:
         with patch.object(hook, "_build_finding_insight", return_value="new insight"):
             await hook.before_iteration(ctx)
             assert hook._last_injected == "new insight"
-            assert len(ctx.messages) == 3
+            assert len(ctx.messages) == 4  # sys + user + assistant + original hi
             assert ctx.messages[1]["_source"] == "self_fix_hook"
+            assert ctx.messages[2]["_source"] == "self_fix_hook"
 
     @pytest.mark.asyncio
     async def test_exception_safe(self, hook):
