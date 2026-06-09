@@ -226,12 +226,18 @@ class NanobotDB:
         """Batch-insert messages (no commit — caller owns the transaction)."""
         for msg in messages:
             extra = {k: v for k, v in msg.items() if k not in ("role", "content", "timestamp")}
+            content = msg["content"]
+            if content is None:
+                content = ""
+            elif isinstance(content, (list, dict)):
+                extra["_content_is_json"] = True
+                content = json.dumps(content, ensure_ascii=False)
             self._conn.execute(
                 "INSERT INTO messages (session_key, role, content, timestamp, extra) VALUES (?, ?, ?, ?, ?)",
                 (
                     session_key,
                     msg["role"],
-                    msg["content"],
+                    content,
                     msg["timestamp"],
                     json.dumps(extra) if extra else None,
                 ),
@@ -257,7 +263,10 @@ class NanobotDB:
         for role, content, timestamp, extra in msg_rows:
             msg: dict[str, Any] = {"role": role, "content": content, "timestamp": timestamp}
             if extra:
-                msg.update(json.loads(extra))
+                parsed_extra = json.loads(extra)
+                if parsed_extra.pop("_content_is_json", False):
+                    msg["content"] = json.loads(content)
+                msg.update(parsed_extra)
             messages.append(msg)
         return Session(
             key=key,
@@ -341,7 +350,7 @@ class NanobotDB:
                     pass
 
         # Build query for messages
-        query = "SELECT session_key, role, content, timestamp FROM messages WHERE 1=1"
+        query = "SELECT session_key, role, content, timestamp, extra FROM messages WHERE 1=1"
         args: list[Any] = []
 
         if keyword:
@@ -361,7 +370,11 @@ class NanobotDB:
 
         rows = self._conn.execute(query, args).fetchall()
 
-        for session_key, role, content, timestamp in rows:
+        for session_key, role, content, timestamp, extra in rows:
+            if extra:
+                parsed_extra = json.loads(extra)
+                if parsed_extra.pop("_content_is_json", False):
+                    content = json.loads(content)
             results.append({
                 "session_key": session_key,
                 "role": role,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from nanobot.agent.memory_store import MemoryStore
@@ -83,12 +84,15 @@ class ConversationSearchTool(Tool):
                 limit=50,
             )
             for r in session_results:
+                content = r.get("content", "")
+                if isinstance(content, (list, dict)):
+                    content = json.dumps(content, ensure_ascii=False)
                 results.append({
                     "source": "session",
                     "session_key": r.get("session_key", ""),
                     "role": r.get("role", ""),
                     "timestamp": r.get("timestamp", ""),
-                    "content": r.get("content", ""),
+                    "content": content,
                 })
 
         if not results:

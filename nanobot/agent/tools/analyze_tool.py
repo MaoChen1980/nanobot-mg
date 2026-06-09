@@ -103,8 +103,8 @@ class AnalyzeTool(_FsTool):
                     return f"Error: File too large ({fp.stat().st_size:,} bytes)"
                 raw = fp.read_bytes()
                 return raw.decode("utf-8")[:self.MAX_TEXT_SIZE]
-            except UnicodeDecodeError:
-                return f"Error: Cannot read binary file: {path}"
+            except (UnicodeDecodeError, ValueError, PermissionError) as e:
+                return f"Error: {e}"
             except OSError as e:
                 return f"Error: {e}"
         return None

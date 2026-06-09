@@ -102,7 +102,7 @@ class DiagnoseTool(_FsTool):
         hits: list[str] = []
         try:
             search_root = self._resolve(path)
-        except ValueError:
+        except (ValueError, PermissionError):
             return []
         term = terms[0]
 
