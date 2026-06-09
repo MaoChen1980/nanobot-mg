@@ -31,6 +31,8 @@ _UNPARSED_TOOL_PATTERNS = [
     r"\[TOOL_CALL\]",                                       # iOS agent: [TOOL_CALL] wrapper
     r"<tool>([^<]+)</tool>",
     r"Action\s*:\s*(\w+)",
+    r"\[Tool:\s*\w+\s*\|",                                 # nanobot Tool metadata prefix
+    r"\[Source:\s*\w+\s*\|",                               # nanobot Source metadata prefix
 ]
 _UNPARSED_TOOL_RE = re.compile("|".join(f"(?:{p})" for p in _UNPARSED_TOOL_PATTERNS))
 
@@ -46,6 +48,11 @@ _SAFE_INVOKE_RE = re.compile(
 
 # Strips wrapping <minimax:tool_call> / </minimax:tool_call> from cleaned content.
 _MINIMAX_WRAPPER_RE = re.compile(r"</?minimax:[^>]*>")
+
+# Strips nanobot internal metadata lines: [Tool: name | ...] and [Source: name | ...].
+# The LLM sometimes hallucinates these display-format prefixes from system prompt
+# examples (framework_core.md) after context compression.
+_METADATA_LINE_RE = re.compile(r"\[(?:Tool|Source):\s*\w+\s*\|[^\]]*\]\s*")
 
 # Matches MiniMax dict-format tool calls: {tool => "name", args => { --key "value" }}
 _TOOL_CALL_OBJ_RE = re.compile(
@@ -349,6 +356,11 @@ def extract_xml_tool_calls(content: str) -> tuple[list[ToolCallRequest], str | N
     """
     if not content:
         return [], content
+
+    # Strip nanobot internal metadata lines ([Tool: ...], [Source: ...]) that
+    # the LLM sometimes hallucinates from system prompt examples.  These are
+    # not parseable tool calls — just remove them from the output.
+    content = _METADATA_LINE_RE.sub("", content)
 
     result: list[ToolCallRequest] = []
     cleaned: list[str] = []
