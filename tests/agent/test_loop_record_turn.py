@@ -467,8 +467,7 @@ async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -
     assert msgs[3]["role"] == "tool"
     assert msgs[3]["tool_call_id"] == "call_pending"
     assert msgs[3]["name"] == "exec_tool"
-    assert msgs[3]["content"].startswith("====== Message Time:")
-    assert msgs[3]["content"].endswith("Error: Task interrupted before this tool finished.")
+    assert msgs[3]["content"] == "Error: Task interrupted before this tool finished."
     assert msgs[4] == {"role": "user", "content": "continue here"}
     assert msgs[5] == {"role": "assistant", "content": "next answer"}
     assert AgentLoop._PENDING_USER_TURN_KEY not in session.metadata

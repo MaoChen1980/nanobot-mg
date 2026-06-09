@@ -129,12 +129,6 @@ class SystemMessageHandler:
             self._loop.sessions.save(session)
         self._loop._append_turn_to_session(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
         self._loop.lifecycle.finalize(session)
-        if final_content:
-            final_content = re.sub(
-                r'^(?:\[Message Time: [^\]]*\]|====== Message Time: [^=]+ ======)\s*\n?',
-                '',
-                final_content,
-            )
         content = final_content or "Background task completed."
         buttons: list = []
         outbound_metadata: dict[str, Any] = {}
@@ -445,12 +439,6 @@ class UserMessageHandler:
                 return None
         if final_content is None:
             final_content = ""
-        # Strip [Message Time: ...] / ====== Message Time: ... ====== prefix that the LLM may have mimicked from history context
-        final_content = re.sub(
-            r'^(?:\[Message Time: [^\]]*\]|====== Message Time: [^=]+ ======)\s*\n?',
-            '',
-            final_content,
-        )
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
         meta = dict(msg.metadata or {})

@@ -75,17 +75,6 @@ from .runner_llm import (
     usage_dict,
 )
 
-# Tools that fetch external information (vs. computation/action).
-# Results from these get a [Source:] prefix so the LLM can distinguish
-# "I read this from a file" from "I inferred this."
-_SOURCE_TOOLS = frozenset({
-    "read_file_tool", "read_files_tool", "list_dir_tool", "glob_tool", "grep_tool",
-    "web_search_tool", "web_fetch_tool", "show_stages_tool",
-    "memory_search_tool", "conversation_search_tool", "search_text_tool", "explore_module_tool",
-    "framework_search_tool", "scan_project_tool", "tool_call_log_tool", "check_subagent_tool",
-    "analyze_tool", "diagnose_codebase_tool",
-})
-
 @dataclass(slots=True)
 class AgentRunSpec:
     """Configuration for a single agent execution."""
@@ -344,8 +333,6 @@ class AgentRunner:
                         res = results[i]
                         content = _normalize(spec, tc.id, tc.name, res)
                         ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
-                        ev = new_events[i] if i < len(new_events) else {}
-                        content = self._fmt_tool_metadata(tc.name, content, ts, ev.get("duration_ms"))
                         tool_message = {
                             "role": "tool", "tool_call_id": tc.id, "name": tc.name,
                             "content": content, "timestamp": ts,
@@ -413,7 +400,6 @@ class AgentRunner:
                 for tool_call, result, ev in zip(tool_calls, results, new_events):
                     content = _normalize(spec, tool_call.id, tool_call.name, result)
                     ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else datetime.now(timezone.utc).isoformat()
-                    content = self._fmt_tool_metadata(tool_call.name, content, ts, ev.get("duration_ms"))
                     tool_message = {
                         "role": "tool", "tool_call_id": tool_call.id, "name": tool_call.name,
                         "content": content, "timestamp": ts,
@@ -735,31 +721,6 @@ class AgentRunner:
         if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
             return
         messages.append(build_assistant_message(_PERSISTED_MODEL_ERROR_PLACEHOLDER))
-
-    @staticmethod
-    def _fmt_tool_metadata(tool_name: str, result: str | list, timestamp: str, duration_ms: int | None = None) -> str:
-        """Prefix tool result with metadata: name, time, status, duration, size.
-
-        Info-gathering tools get a ``[Source: ...]`` label so the LLM can
-        distinguish external facts from its own inferences.
-        """
-        if isinstance(result, list):
-            size = sum(len(str(item)) for item in result)
-            status = "success"
-            result_str = str(result)
-        else:
-            size = len(result)
-            status = "failure" if result.startswith("Error") else "success"
-            result_str = result
-        ts = timestamp[:16].replace("T", " ")
-        duration_str = f"time consumed: {duration_ms / 1000:.1f}s" if duration_ms is not None else ""
-        prefix = "Source" if tool_name in _SOURCE_TOOLS else "Tool"
-        parts = [f"[{prefix}: {tool_name}", ts, status]
-        if duration_str:
-            parts.append(duration_str)
-        parts.append(f"result: {size} chars]")
-        meta = " | ".join(parts)
-        return f"{meta}\n{result_str}"
 
     # Backward compatibility — delegate to module functions
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)

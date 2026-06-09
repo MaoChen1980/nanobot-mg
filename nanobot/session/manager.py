@@ -79,9 +79,8 @@ class Session:
         :func:`nanobot.agent.compress`).
 
         When *timezone* (e.g. ``"Asia/Shanghai"``) is given together with
-        ``include_timestamps=True``, the ``[Message Time]`` annotations are
-        converted to that timezone so they stay consistent with the runtime
-        context's ``Current Time``.
+        ``include_timestamps=True``, timestamps are converted to that timezone
+        so they stay consistent with the runtime context's ``Current Time``.
         """
         unconsolidated = [m for m in self.messages if m.get("status") != "excluded"]
 

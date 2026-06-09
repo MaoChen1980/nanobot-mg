@@ -35,11 +35,6 @@ def timestamp() -> str:
     """Current ISO timestamp with timezone."""
     return datetime.now().astimezone().isoformat()
 
-
-def format_message_header() -> str:
-    return f"====== Message Time: {datetime.now().astimezone().isoformat()} ======"
-
-
 def current_time_str(timezone: str | None = None) -> str:
     """Return the current time in LLM-friendly format."""
     from zoneinfo import ZoneInfo

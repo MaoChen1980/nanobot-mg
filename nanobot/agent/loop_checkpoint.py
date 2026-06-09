@@ -62,8 +62,7 @@ def restore_and_clear_checkpoint(
     completed_tool_results = checkpoint.get("completed_tool_results") or []
     pending_tool_calls = checkpoint.get("pending_tool_calls") or []
 
-    from nanobot.utils.helpers import format_message_header
-    default_pending = f"{format_message_header()}\nError: Task interrupted before this tool finished."
+    default_pending = "Error: Task interrupted before this tool finished."
 
     restored_messages: list[dict[str, Any]] = []
     if isinstance(assistant_message, dict):

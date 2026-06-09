@@ -274,7 +274,7 @@ def build_subagent_prompt(
     )
 
     # Runtime context (always last — dynamic content for KV cache preservation)
-    from nanobot.utils.helpers import current_time_str, format_message_header
-    parts.append(f"# Runtime Context\n\n{format_message_header()}\nCurrent Time: {current_time_str(timezone)}")
+    from nanobot.utils.helpers import current_time_str
+    parts.append(f"# Runtime Context\n\nCurrent Time: {current_time_str(timezone)}")
 
     return "\n\n".join(parts)

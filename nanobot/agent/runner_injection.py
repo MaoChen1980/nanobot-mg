@@ -84,17 +84,15 @@ def build_unfinished_tool_status_messages(
                 completed_ids.add(str(tool_id))
 
     tool_messages = []
-    from nanobot.utils.helpers import format_message_header
-    _header = format_message_header()
     for tc in last_assistant.get("tool_calls", []):
         tid = tc.get("id")
         if not tid or str(tid) in completed_ids:
             continue
         name = tc.get("function", {}).get("name", "unknown")
         content = (
-            f"{_header}\n[BYPASSED] Tool '{name}' (id: {tid}) was interrupted by new user instruction."
+            f"[BYPASSED] Tool '{name}' (id: {tid}) was interrupted by new user instruction."
             if has_new_injections else
-            f"{_header}\n[PENDING] Tool '{name}' (id: {tid}) is still in progress, waiting for result."
+            f"[PENDING] Tool '{name}' (id: {tid}) is still in progress, waiting for result."
         )
         tool_messages.append({
             "role": "tool",

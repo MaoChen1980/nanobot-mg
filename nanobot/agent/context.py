@@ -18,7 +18,7 @@ from loguru import logger
 
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
-from nanobot.utils.helpers import build_assistant_message, current_time_str, format_message_header
+from nanobot.utils.helpers import build_assistant_message, current_time_str
 from nanobot.utils.helpers import split_thinking_messages as _split_thinking_messages
 from nanobot.utils.media_decode import compress_image, detect_image_mime, image_placeholder_text
 from nanobot.utils.prompt_templates import render_template
@@ -628,23 +628,6 @@ class ContextBuilder:
             messages[-1] = last
         else:
             messages.append({"role": current_role, "content": user_content})
-
-        # Inject Message Time into non-last user messages
-        header = format_message_header()
-        for i in range(len(messages) - 1):
-            role = messages[i].get("role")
-            if role != "user":
-                continue
-            content = messages[i].get("content", "")
-            if not content:
-                continue
-            if isinstance(content, str):
-                # Skip if already stamped (e.g. re-injected message)
-                if content.startswith("====== Message Time:"):
-                    continue
-                messages[i]["content"] = f"{header}\n{content}"
-            elif isinstance(content, list):
-                messages[i]["content"] = [{"type": "text", "text": header}] + list(content)
 
         return self._split_thinking_messages(messages)
 
