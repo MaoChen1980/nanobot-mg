@@ -76,6 +76,14 @@ class TestFormatConversation:
         assert "[tool:read_file] file contents" in result
         assert "[assistant] here it is" in result
 
+    def test_user_content_truncated(self) -> None:
+        """Long user content is truncated like tool results."""
+        long = "x" * 500
+        msgs = [{"role": "user", "content": long}]
+        result = format_conversation(msgs)
+        assert len(result) < 450
+        assert "(truncated, 500 chars)" in result
+
 
 # =========================================================================
 # build_assessment_message
@@ -265,6 +273,19 @@ class TestAssessMeTool:
             result = await tool.execute()
 
             assert "Error: assessment LLM returned empty response" in result
+
+    @pytest.mark.asyncio
+    async def test_assess_me_exception_returns_error(self) -> None:
+        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+
+        tool = AssessMeTool()
+        tool.set_context(messages=[{"role": "user", "content": "hi"}])
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.side_effect = RuntimeError("LLM down")
+            result = await tool.execute()
+
+            assert "Error: assessment LLM call failed" in result
 
 
 # =========================================================================
