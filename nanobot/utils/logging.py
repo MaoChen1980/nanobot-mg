@@ -83,8 +83,8 @@ class LoggerConfig:
                 sink=log_path,
                 level=log_config.level,
                 format=_JSON_FORMAT,
-                rotation="50 MB",
-                retention="7 days",
+                rotation="5 MB",
+                retention="3 days",
                 compression="zip",
             )
 
