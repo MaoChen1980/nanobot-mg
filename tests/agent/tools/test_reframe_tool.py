@@ -28,7 +28,7 @@ class TestExecutePromptStructure:
     @pytest.mark.asyncio
     async def test_required_fields_only(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice from model")
             result = await tool.execute(
                 question="How to fix the flaky test?",
@@ -58,7 +58,7 @@ class TestExecutePromptStructure:
     @pytest.mark.asyncio
     async def test_all_fields_filled(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(
                 question="How to fix the flaky test?",
@@ -85,7 +85,7 @@ class TestExecutePromptStructure:
     @pytest.mark.asyncio
     async def test_prompt_starts_with_advisor_context(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")
             msg = mock_chat.call_args[0][0][0]["content"]
@@ -94,7 +94,7 @@ class TestExecutePromptStructure:
     @pytest.mark.asyncio
     async def test_sections_in_correct_order(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(
                 question="Q", goal="G",
@@ -117,7 +117,7 @@ class TestExecutePromptStructure:
     @pytest.mark.asyncio
     async def test_chat_receives_single_user_message(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")
             msgs = mock_chat.call_args[0][0]
@@ -134,7 +134,7 @@ class TestExecuteProjectContext:
     @pytest.mark.asyncio
     async def test_workspace_included_when_available(self):
         tool = _make_tool(workspace=Path("/some/project"))
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")
             msg = mock_chat.call_args[0][0][0]["content"]
@@ -144,7 +144,7 @@ class TestExecuteProjectContext:
     @pytest.mark.asyncio
     async def test_workspace_omitted_when_not_available(self):
         tool = _make_tool()  # workspace=None
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")
             msg = mock_chat.call_args[0][0][0]["content"]
@@ -154,7 +154,7 @@ class TestExecuteProjectContext:
     async def test_project_card_loaded_when_exists(self, tmp_path):
         tool = _make_tool(workspace=tmp_path)
         (tmp_path / "project_card.md").write_text("Project: My App\nGoal: Ship v2")
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")
             msg = mock_chat.call_args[0][0][0]["content"]
@@ -165,7 +165,7 @@ class TestExecuteProjectContext:
     async def test_project_card_omitted_when_missing(self, tmp_path):
         tool = _make_tool(workspace=tmp_path)
         # no project_card.md
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")
             msg = mock_chat.call_args[0][0][0]["content"]
@@ -177,7 +177,7 @@ class TestExecuteProjectContext:
         tool = _make_tool(workspace=tmp_path)
         # Create a project_card that can't be read (e.g. a directory)
         (tmp_path / "project_card.md").mkdir()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")  # should not raise
 
@@ -191,7 +191,7 @@ class TestExecuteErrors:
     @pytest.mark.asyncio
     async def test_chat_error_returns_error_message(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = ValueError("connection lost")
             result = await tool.execute(question="Q", goal="G")
         assert "Error" in result
@@ -200,7 +200,7 @@ class TestExecuteErrors:
     @pytest.mark.asyncio
     async def test_empty_response_replaced_with_placeholder(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="")
             result = await tool.execute(question="Q", goal="G")
         assert result == "问题太难，目前没有结论"
@@ -208,7 +208,7 @@ class TestExecuteErrors:
     @pytest.mark.asyncio
     async def test_whitespace_only_response_stripped(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="   \n  ")
             result = await tool.execute(question="Q", goal="G")
         assert result == "问题太难，目前没有结论"
@@ -216,7 +216,7 @@ class TestExecuteErrors:
     @pytest.mark.asyncio
     async def test_none_response_replaced_with_placeholder(self):
         tool = _make_tool()
-        with patch("nanobot.agent.tools.reframe.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content=None)
             result = await tool.execute(question="Q", goal="G")
         assert result == "问题太难，目前没有结论"
@@ -238,7 +238,7 @@ class TestToolMetadata:
         assert "Purpose" in ReframeTool.description
 
     def test_description_includes_when_to_use(self):
-        assert "When to use" in ReframeTool.description
+        assert "When to call" in ReframeTool.description
 
     def test_description_includes_what_to_provide(self):
         assert "What to provide" in ReframeTool.description

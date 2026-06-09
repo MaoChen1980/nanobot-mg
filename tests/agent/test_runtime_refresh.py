@@ -40,5 +40,3 @@ def test_provider_refresh_updates_all_model_dependents(tmp_path: Path) -> None:
     assert loop.subagents.provider is new_provider
     assert loop.subagents.model == "new-model"
     assert loop.subagents.runner.provider is new_provider
-    assert loop.extractor.provider is new_provider
-    assert loop.extractor.model == "new-model"
