@@ -37,7 +37,9 @@ def get_logs_dir() -> Path:
 def get_workspace_path(workspace: str | None = None) -> Path:
     """Resolve and ensure the agent workspace path."""
     path = Path(workspace).expanduser() if workspace else Path.home() / ".nanobot" / "workspace"
-    return ensure_dir(path)
+    path = ensure_dir(path)
+    ensure_dir(path / "tmp")
+    return path
 
 
 def is_default_workspace(workspace: str | Path | None) -> bool:

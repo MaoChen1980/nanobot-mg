@@ -79,7 +79,7 @@ description: Decompose any large task into subagent-friendly units — assess co
 
 ## 输出格式
 
-分解完成后，写入 `workspace/tasks/<id>.md`：
+分解完成后，写入 `tasks/<id>.md`：
 
 ```markdown
 # 任务分解 — <task name>

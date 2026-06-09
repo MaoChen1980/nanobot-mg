@@ -303,8 +303,8 @@ class ContextBuilder:
         if not content:
             return ""
         return (
-            "# Task Tree - workspace/tasks/TREE.md\n\n"
-            "Current task tree. Tasks are managed as files under workspace/tasks/ — "
+            "# Task Tree - tasks/TREE.md\n\n"
+            "Current task tree. Tasks are managed as files under tasks/ — "
             "use read_file_tool/write_file_tool/edit_file_tool to update them.\n\n"
             + self._shift_headings(content, offset=1)
         )
@@ -322,7 +322,7 @@ class ContextBuilder:
         if not content:
             return ""
         return (
-            "# Working Context - workspace/tasks/CURRENT.md\n\n"
+            "# Working Context - tasks/CURRENT.md\n\n"
             "Session-level working context. Tracks what you're doing this session. "
             "Create and update it with write_file_tool.\n\n"
             + self._shift_headings(content, offset=1)

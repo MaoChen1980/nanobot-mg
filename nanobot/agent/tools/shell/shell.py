@@ -67,7 +67,7 @@ def _extract_powershell_inner(command: str) -> str | None:
 @tool_parameters(
     build_parameters_schema(
         command=p("string", "The shell command to execute. Not needed when from_cache is set."),
-        working_dir=p("string", "Absolute path to the working directory (default: workspace root)."),
+        working_dir=p("string", "Absolute path to the working directory. **Required.**"),
         timeout=p("integer",
             "Timeout in seconds. Increase for long-running commands like compilation or installation.",
             minimum=1, maximum=600, default=60,
@@ -118,7 +118,7 @@ def _extract_powershell_inner(command: str) -> str | None:
             "  check=\"python -c \\\"import sys; data=open('{cache}').read(); sys.exit(0 if 'PASS' in data else 1)\\\"\"\n"
             "  check=\"test -f dist/app.exe\""
         ),
-        required=[],
+        required=["working_dir"],
     )
 )
 class ExecTool(Tool):
@@ -227,7 +227,11 @@ class ExecTool(Tool):
         if not command:
             return "Error: command is required (or use from_cache to re-examine cached output)."
 
-        cwd = working_dir or self.working_dir or os.getcwd()
+        cwd = working_dir or self.working_dir
+        if not cwd:
+            return "Error: working_dir is required."
+        if not os.path.isabs(cwd):
+            return "Error: working_dir must be an absolute path."
 
         # Prevent an LLM-supplied working_dir from escaping the configured
         # workspace when restrict_to_workspace is enabled (#2826). Without

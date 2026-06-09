@@ -26,7 +26,7 @@ description: Orchestrate any parallel subagent work — decompose task into batc
 
 在 spawn 之前：
 
-1. **任务已分解** — 写入 `workspace/tasks/<id>.md`，每批不超过 5 items
+1. **任务已分解** — 写入 `tasks/<id>.md`，每批不超过 5 items
 2. **参考文件已读**（如果是代码类）— subagent 需要知道代码模式
 3. **Pivot 规则已明确** — 失败阈值 / 迭代上限 / 停下信号
 
@@ -40,7 +40,7 @@ description: Orchestrate any parallel subagent work — decompose task into batc
 
 ## 交付物
 1. **<交付类型>** — <具体文件/结果路径>
-2. **工作报告** — 写到 workspace/tasks/<id>.md，包含：
+2. **工作报告** — 写到 tasks/<id>.md，包含：
    - 做了什么
    - 结果如何
    - 文件列表
@@ -62,7 +62,7 @@ description: Orchestrate any parallel subagent work — decompose task into batc
 ## 退出检查
 - 所有文件/结果已落盘
 - <验证条件>（BUILD SUCCESSFUL / 验证通过 / 等等）
-- 工作报告已写入 workspace/tasks/<id>.md
+- 工作报告已写入 tasks/<id>.md
 - final response 包含工作总结（说清楚结果，不只是"已完成"）
 ```
 
