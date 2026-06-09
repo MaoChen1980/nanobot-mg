@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -192,7 +193,10 @@ class MemoryStore:
                 continue
 
             parts: list[str] = []
-            user_text = (user_msg.get("content") or "").strip()
+            raw_content = user_msg.get("content") or ""
+            if isinstance(raw_content, (list, dict)):
+                raw_content = json.dumps(raw_content, ensure_ascii=False)
+            user_text = raw_content.strip()
             if user_text:
                 parts.append(f"User: {user_text}")
 
@@ -213,7 +217,10 @@ class MemoryStore:
                         name = tc.get("function", {}).get("name", "")
                         if name and name not in tool_names:
                             tool_names.append(name)
-                c = (msg.get("content") or "").strip()
+                raw_content = msg.get("content") or ""
+                if isinstance(raw_content, (list, dict)):
+                    raw_content = json.dumps(raw_content, ensure_ascii=False)
+                c = raw_content.strip()
                 if c:
                     final_response = c
 
