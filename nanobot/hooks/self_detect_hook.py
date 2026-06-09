@@ -74,14 +74,15 @@ REFLECTION_USER_TEMPLATE = """\
 
 ## 可疑点
 
-你只有以上信息——metrics + hook 代码。逐一检查：
+你只有以上信息——metrics + hook 结构。逐一检查：
 
-1. **代码** (→ type: `self_bug`): 哪里看着不对就标出来。多一次计数、
-   少一个判断、异常没处理、变量名写错……
-
-2. **模式** (→ type: `behavior` / `correction` / `knowledge` / `decision`):
+1. **模式** (→ type: `behavior` / `correction` / `knowledge` / `decision`):
    从 execution log 看，有没有什么重复模式看起来不太对劲？
    比如总在调用同一个工具、读同一个文件、走同样的弯路。
+
+2. **代码结构** (→ type: `self_bug`): 从 hook 的类和方法的签名看，
+   有没有结构上不合理的地方？比如方法职责太多、命名歧义、缺少预期的入口点。
+   注意：你看不到完整源码，只能看结构。
 
 你不在 agent loop，无法验证——没关系，全部当成 suspect 输出就行。
 """
@@ -145,7 +146,6 @@ def _detect_user_signals(messages: list[dict]) -> dict[str, int]:
         for signal, keywords in _USER_NEGATIVE_PATTERNS.items():
             if any(kw in content for kw in keywords):
                 counts[signal] = counts.get(signal, 0) + 1
-                break
     return counts
 
 
