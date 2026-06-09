@@ -1,79 +1,75 @@
 ---
 name: summarize
-description: Summarizes web pages, local files, and YouTube videos. Extracts key content and produces transcripts via the summarize CLI. Use when the user asks to summarize, transcribe, or get key points from content.
+description: Trigger when the user asks to summarize a URL, web page, or local file; transcribe a YouTube video; or extract key points from content. Also use for "what's this link about?" or similar requests.
 version: 0.1.0
 ---
 
-# Summarize, tools from system
+# Summarize Skill
 
-快速 CLI，用于总结 URL、本地文件和 YouTube 链接。
+Fast CLI for summarizing URLs, local files, and YouTube links.
 
-## Install
+## When to Use
 
-```bash
-brew install steipete/tap/summarize
-```
+- The user says "use summarize.sh" or "summarize this"
+- The user asks "what's this link/video about?"
+- The user says "summarize this URL/article"
+- The user says "transcribe this YouTube/video" (extracts captions from the URL directly; no `yt-dlp` needed)
 
-## When to use (trigger phrases)
+## Steps
 
-当用户提出以下任何请求时，立即使用此 skill：
-- "use summarize.sh"
-- "what's this link/video about?"
-- "summarize this URL/article"
-- "transcribe this YouTube/video"（尽力提取字幕；无需 `yt-dlp`）
+1. **Install the CLI** if not present:
+   ```bash
+   brew install steipete/tap/summarize
+   ```
 
-## Quick start
+2. **Pick a model** — default is `google/gemini-3-flash-preview` when no API key is set. Supported providers:
+   - OpenAI (`OPENAI_API_KEY`)
+   - Anthropic (`ANTHROPIC_API_KEY`)
+   - xAI (`XAI_API_KEY`)
+   - Google (`GEMINI_API_KEY`, alias: `GOOGLE_GENERATIVE_AI_API_KEY`, `GOOGLE_API_KEY`)
 
-```bash
-summarize "https://example.com" --model google/gemini-3-flash-preview
-summarize "/path/to/file.pdf" --model google/gemini-3-flash-preview
-summarize "https://youtu.be/dQw4w9WgXcQ" --youtube auto
-```
+3. **Set the API key** for your chosen provider as an environment variable.
 
-## YouTube: summary vs transcript
+4. **Run summarize** with the content source:
+   ```bash
+   summarize "https://example.com" --model google/gemini-3-flash-preview
+   summarize "/path/to/file.pdf" --model google/gemini-3-flash-preview
+   summarize "https://youtu.be/dQw4w9WgXcQ" --youtube auto
+   ```
 
-尽力提取字幕（仅 URL）：
+5. **Handle YouTube content** — extract transcript vs. summarize:
+   ```bash
+   # Extract transcript only (no summary)
+   summarize "https://youtu.be/dQw4w9WgXcQ" --youtube auto --extract-only
+   ```
+   If the transcript content is too large, return a condensed summary first, then ask which part or time range the user wants expanded.
 
-```bash
-summarize "https://youtu.be/dQw4w9WgXcQ" --youtube auto --extract-only
-```
+6. **Useful flags** for controlling output:
+   - `--length short|medium|long|xl|xxl|<chars>` — control summary length
+   - `--max-output-tokens <count>` — limit token output
+   - `--extract-only` — return raw content without summarization (URL sources only)
+   - `--json` — machine-readable JSON output
+   - `--firecrawl auto|off|always` — fallback extraction for blocked sites
+   - `--youtube auto` — uses Apify as fallback if `APIFY_API_TOKEN` is set
 
-如果用户要求字幕但内容太大，先返回精炼摘要，然后询问展开哪个部分/时间范围。
+7. **Optional configuration file** at `~/.summarize/config.json`:
+   ```json
+   { "model": "openai/gpt-5.2" }
+   ```
 
-## Model + keys
+## Verification
 
-为所选提供商设置 API 密钥：
-- OpenAI: `OPENAI_API_KEY`
-- Anthropic: `ANTHROPIC_API_KEY`
-- xAI: `XAI_API_KEY`
-- Google: `GEMINI_API_KEY`（别名：`GOOGLE_GENERATIVE_AI_API_KEY`、`GOOGLE_API_KEY`）
+- The command exits with code 0 and prints a summary or transcript to stdout
+- For YouTube URLs, output contains either a transcript or a summarization of the video
+- For URLs with `--extract-only`, output contains the full extracted text content
+- When using `--json`, output is valid JSON
 
-未设置时默认模型为 `google/gemini-3-flash-preview`。
+## Pitfalls
 
-## Useful flags
+- **API key required**: Each provider requires its own API key set as an environment variable. If no key is set, the default model `google/gemini-3-flash-preview` is used (Google's free tier has rate limits)
+- **Large content**: Very long pages or video transcripts may exceed token limits. Use `--length` or `--max-output-tokens` to control output size, or use `--extract-only` to get raw content for chunked processing
+- **Firecrawl fallback**: For sites that block scraping, set `FIRECRAWL_API_KEY` and use `--firecrawl auto` or `--firecrawl always`
+- **Apify for YouTube**: If YouTube caption extraction fails, the tool falls back to Apify when `APIFY_API_TOKEN` is set. Without it, YouTube extraction may return limited results
+- **brew-only install**: The `summarize` CLI is only available via Homebrew. On Linux, install Homebrew first or use an alternative tool
 
-- `--length short|medium|long|xl|xxl|<chars>`
-- `--max-output-tokens <count>`
-- `--extract-only`（仅 URL）
-- `--json`（机器可读）
-- `--firecrawl auto|off|always`（回退提取）
-- `--youtube auto`（如设置 `APIFY_API_TOKEN` 则使用 Apify 回退）
-
-## Config
-
-可选配置文件：`~/.summarize/config.json`
-
-```json
-{ "model": "openai/gpt-5.2" }
-```
-
-可选服务：
-- `FIRECRAWL_API_KEY` 用于被屏蔽站点
-- `APIFY_API_TOKEN` 用于 YouTube 回退
-
----
-
-**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

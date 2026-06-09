@@ -1,55 +1,80 @@
 ---
 name: weather
-description: Checks current weather and forecasts for any city or location. Uses free APIs (wttr.in, Open-Meteo) — no API key required. Use when the user asks about temperature, rain, forecast, or climate.
+description: Trigger when user asks about weather conditions — temperature, rain, snow, wind, humidity, UV index, air quality, or forecast (today/tonight/weekly) for any city, region, or coordinates. Use for plain-English queries like "what's the weather in Tokyo" or "will it rain tomorrow".
 version: 0.1.0
 ---
 
-# Weather, tools from system
+# Weather — current conditions and forecasts
 
-两个免费服务，无需 API 密钥。
+Two free services, no API keys required.
 
-## wttr.in (primary)
+## When to Use
 
-快速一行命令：
-```bash
-curl -s "wttr.in/London?format=3"
-# Output: London: ⛅️ +8°C
-```
+- User asks "what's the weather in ..." or "temperature in ..."
+- User asks for a forecast or "will it rain today?"
+- User asks about climate or weather conditions
+- wttr.in is unreachable (fall back to Open-Meteo)
 
-紧凑格式：
-```bash
-curl -s "wttr.in/London?format=%l:+%c+%t+%h+%w"
-# Output: London: ⛅️ +8°C 71% ↙5km/h
-```
+## Steps
 
-完整预报：
-```bash
-curl -s "wttr.in/London?T"
-```
+### Method 1: wttr.in (primary)
 
-格式代码：`%c` 天气状况 · `%t` 温度 · `%h` 湿度 · `%w` 风速 · `%l` 地点 · `%m` 月相
+1. **Quick one-liner** for current conditions:
+   ```bash
+   curl -s "wttr.in/London?format=3"
+   # Output: London: ⛅️ +8°C
+   ```
 
-提示：
-- URL 编码空格：`wttr.in/New+York`
-- 机场代码：`wttr.in/JFK`
-- 单位：`?m`（公制）`?u`（美制）
-- 仅今日：`?1` · 仅当前：`?0`
-- PNG：`curl -s "wttr.in/Berlin.png" -o /tmp/weather.png`
+2. **Compact format** with humidity and wind:
+   ```bash
+   curl -s "wttr.in/London?format=%l:+%c+%t+%h+%w"
+   # Output: London: ⛅️ +8°C 71% ↙5km/h
+   ```
 
-## Open-Meteo (fallback, JSON)
+3. **Full forecast**:
+   ```bash
+   curl -s "wttr.in/London?T"
+   ```
 
-免费，无需密钥，适合程序化使用：
-```bash
-curl -s "https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.12&current_weather=true"
-```
+4. **Format codes** for custom layouts:
+   - `%c` — weather condition
+   - `%t` — temperature
+   - `%h` — humidity
+   - `%w` — wind speed
+   - `%l` — location
+   - `%m` — moon phase
 
-查找城市坐标后进行查询。返回包含温度、风速、天气代码的 JSON。
+5. **Useful flags**:
+   - URL-encode spaces as `+`: `wttr.in/New+York`
+   - Airport codes work: `wttr.in/JFK`
+   - Units: `?m` (metric), `?u` (US units)
+   - Today only: `?1` · Current only: `?0`
+   - PNG output: `curl -s "wttr.in/Berlin.png" -o /tmp/weather.png`
 
-文档：https://open-meteo.com/en/docs
+### Method 2: Open-Meteo (fallback, JSON)
+
+1. **Find coordinates** for the location, then query:
+   ```bash
+   curl -s "https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.12&current_weather=true"
+   ```
+
+2. Parse the JSON response for temperature, wind speed, and weather code.
+
+## Verification
+
+- wttr.in: confirm output contains location name and temperature (non-empty response)
+- Open-Meteo: confirm JSON contains `current_weather` object with `temperature`, `windspeed`, `weathercode`
+- If wttr.in returns an error or empty result, retry with Open-Meteo
+- For forecasts, confirm the output spans the expected time range
+
+## Pitfalls
+
+- wttr.in requires spaces to be encoded as `+` in URLs
+- Open-Meteo needs latitude/longitude — geocode the city name first
+- Airport codes only work with wttr.in, not Open-Meteo
+- wttr.in may be rate-limited or blocked in some regions — fall back to Open-Meteo
+- Open-Meteo documentation: https://open-meteo.com/en/docs
 
 ---
 
-**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

@@ -1,146 +1,136 @@
 ---
 name: task-decompose
-description: Decompose any large task into subagent-friendly units — assess complexity, identify dependencies, group into batches, design exit criteria. Use before any multi-subagent orchestration.
+description: Trigger before multi-subagent orchestration when task is large, boundaries are unclear, or work items exceed 5. Use to decompose into dependency-analyzed, complexity-scored batches with clear exit criteria. Applies when a task needs 2+ subagents or 10+ tool calls.
 ---
 
 # Task Decomposition — Universal
 
 ## When to Use
 
-- 收到任何大型任务（需要 2+ subagent 或 10+ tool calls）
-- 不确定该拆成几个 subagent、每个多少工作
-- 任务边界不清晰，需要先理清再动手
-- 第一次处理某类任务，需要设计工作流
+- You receive a large task (needs 2+ subagents or 10+ tool calls)
+- You are unsure how many subagents are needed or how much work each should have
+- Task boundaries are unclear and need clarification before execution
+- You are tackling a task type for the first time and need a workflow design
 
-**不问任务是什么类型** — 任何任务都可以分解。
+**Does not matter what type of task** — any task can be decomposed.
 
-## Core Principle
+## Steps
 
-**分解的目标**：让每个 subagent 拿到的工作单元是 **Specific / Actionable / Verifiable** 的。
+### 1. List all work units
 
-| 属性 | 含义 |
-|---|---|
-| Specific | 范围清晰，不会做多也不会做少 |
-| Actionable | subagent 有工具可以完成，不需要等别人 |
-| Verifiable | 完成标准明确，orchestrator 可以检查 |
-
-## 分解流程
-
-### Step 1: 列出所有工作单元
-
-用 `read_file_tool` / `glob_tool` / `grep_tool` 等工具收集信息，列出所有需要处理的工作项。
+Use `read_file_tool` / `glob_tool` / `grep_tool` to gather information. List every item that needs processing:
 
 ```
-工作单元 = [
+work_units = [
     {"id": "A", "desc": "...", "dep": null},
-    {"id": "B", "desc": "...", "dep": "A"},  # B 依赖 A
+    {"id": "B", "desc": "...", "dep": "A"},  # B depends on A
     ...
 ]
 ```
 
-### Step 2: 分析依赖关系
+### 2. Analyze dependencies
 
-| 依赖类型 | 处理方式 |
+| Dependency type | Handling |
 |---|---|
-| **无依赖** | 可以并行 |
-| **单向依赖** | 先做被依赖的，再做依赖别人的 |
-| **循环依赖** | 先做依赖最小的部分，再处理剩余依赖；无法拆分则合并到同一个 subagent |
-| **共享资源依赖** | 同一资源的所有操作放同一个 subagent |
+| **No dependency** | Can be parallelized |
+| **One-way dependency** | Do the depended-on item first, then the dependent one |
+| **Circular dependency** | Start with the least-dependent part, then handle the rest; if unsplittable, merge into one subagent |
+| **Shared resource dependency** | All operations on the same resource go to the same subagent |
 
-### Step 3: 按批次分组
+### 3. Group into batches
 
 ```
-批次 = [
+batches = [
     {"batch": 1, "items": ["A", "B"], "can_parallel": true},
     {"batch": 2, "items": ["C"], "dep": ["A"], "can_parallel": false},
     {"batch": 3, "items": ["D", "E"], "dep": ["B", "C"], "can_parallel": true},
 ]
 ```
 
-**分组规则**：
-- 同一批次内的 items 是否可以并行
-- 批次之间是否有依赖（后续批次是否需要等前面完成）
-- 每批 items 数不超过 5 个
-- 同一 subagent 任务不超过 15 个 items（避免超时）
+**Grouping rules**:
+- Items in the same batch may or may not be parallelizable (annotate `can_parallel`)
+- Batches may depend on earlier batches (subsequent batches wait for predecessors)
+- Max 5 items per batch
+- Max 15 items per subagent (avoid timeout)
 
-### Step 4: 估算复杂度
+### 4. Estimate complexity
 
-| 维度 | 简单（1） | 中等（2） | 复杂（3） |
+Rate each item across 5 dimensions:
+
+| Dimension | Simple (1) | Medium (2) | Complex (3) |
 |---|---|---|---|
-| 工作项数量 | 1-5 | 6-15 | 16+ |
-| 依赖复杂度 | 无依赖 | 单向链 | 循环/多向 |
-| 所需工具多样性 | 1 种工具 | 2-3 种工具 | 4+ 种工具 |
-| 结果可预期性 | 高 | 部分不确定 | 高不确定 |
-| 错误恢复难度 | 容易定位 | 需要几步调试 | 错误隐蔽 |
+| Item count | 1-5 | 6-15 | 16+ |
+| Dependency complexity | None | One-way chain | Circular / multi-directional |
+| Tool diversity needed | 1 tool | 2-3 tools | 4+ tools |
+| Result predictability | High | Partially uncertain | Highly uncertain |
+| Error recovery difficulty | Easy to locate | Needs several debug steps | Errors are hard to detect |
 
-**总分 5-7**：简单 → 可大胆并行
-**总分 8-11**：中等 → 每批 3-4 项，准备 pivot
-**总分 12-15**：复杂 → 每批 2-3 项，明确 pivot 规则
+**Total score 5-7**: Simple -> can parallelize aggressively; batch size 5
+**Total score 8-11**: Medium -> 3-4 items per batch, prepare pivot rules
+**Total score 12-15**: Complex -> 2-3 items per batch, define explicit pivot rules
 
-## 输出格式
+### 5. Write decomposition to file
 
-分解完成后，写入 `tasks/<id>.md`：
+Output to `tasks/<id>.md`:
 
 ```markdown
 # 任务分解 — <task name>
 
 ## 任务概述
-<一句话描述：最终目标是什么>
+<One-line description of the end goal>
 
 ## 工作单元
 
-| # | 工作项 | 描述 | 批次 | 依赖 | 复杂度 |
+| # | Work item | Description | Batch | Depends on | Complexity |
 |---|---|---|---|---|---|
-| 1 | ... | ... | 1 | - | 中 |
-| 2 | ... | ... | 1 | - | 低 |
-| 3 | ... | ... | 2 | 1 | 高 |
+| 1 | ... | ... | 1 | - | Medium |
+| 2 | ... | ... | 1 | - | Low |
+| 3 | ... | ... | 2 | 1 | High |
 
 ## 委派计划
 
-### Batch 1（可并行，N 个 subagent）
-- items：D, E
-- 依赖：无
+### Batch 1 (parallel, N subagents)
+- items: D, E
+- Dependencies: none
 
-### Batch 2（串行，需等 Batch 1）
-- items：F
-- 依赖：Batch 1
+### Batch 2 (serial, waits for Batch 1)
+- items: F
+- Dependencies: Batch 1
 
-## Pivot 规则
-- 失败阈值：同一 item 修复 3 次仍失败
-- 迭代上限：5 次/批次
-- 停下信号：<具体什么情况应该停下>
+## Pivot Rules
+- Failure threshold: same item fails 3 times
+- Iteration limit: 5 per batch
+- Stop signal: <specific conditions to stop>
 
 ## 验证点
-- [ ] 每批次完成后的验证标准
-- [ ] 所有 items 已完成
-- [ ] 最终交付物确认
+- [ ] Verification criteria after each batch
+- [ ] All items completed
+- [ ] Final deliverable confirmed
 ```
 
-## 分解检查清单
+## Verification
 
-在提交委派前确认：
+Before submitting the decomposition for delegation:
 
-- [ ] 所有工作单元已列出，无遗漏
-- [ ] 依赖关系已分析，无循环依赖（除非明确要合并处理）
-- [ ] 每批 items 数不超过 5 个
-- [ ] 每批有明确的完成验证标准
-- [ ] 已知哪些 items 是高风险（标记为"复杂"）
-- [ ] 有 fallback 计划（某批完全失败怎么办）
+- [ ] All work units are listed with no omissions
+- [ ] Dependencies are analyzed, no circular dependencies (unless explicitly merged into one subagent)
+- [ ] Each batch has ≤ 5 items
+- [ ] Each batch has clear completion verification criteria
+- [ ] High-risk items are identified and marked "complex"
+- [ ] Fallback plan exists for each batch's failure case ("if this batch fails completely, what do we do?")
+- [ ] Total items assigned to a single subagent does not exceed 15
 
-## 何时不该分批
+**Decomposition quality check**: Each work unit should be **Specific** (clear scope, no ambiguity), **Actionable** (subagent has tools to complete it without waiting for others), **Verifiable** (completion criteria are objectively checkable by the orchestrator).
 
-| 情况 | 做法 |
-|---|---|
-| 任务只有 1-2 个 items | 直接自己做，不委派 |
-| 任务简单且确定 | 直接做，不过度设计 |
-| 依赖关系极复杂 | 先做依赖最小的部分，不要试图一次性分解全部 |
+## Pitfalls
 
-## 边界
-
-- 不适合 1-2 个 items 的简单任务（应直接执行无需分解）
-- 不适合边界已清晰且只需一个 subagent 的任务
-- 不适合紧急修复场景（分解耗时 > 直接修复耗时）
+- **Over-decomposition**: Tasks with only 1-2 items do not need splitting. Execute directly instead of designing a workflow.
+- **Analysis paralysis with complex dependencies**: Do not try to decompose everything at once. Start with the least-dependent parts, work iteratively.
+- **Decomposition costs exceed direct execution time**: For urgent fixes or trivial tasks, skip decomposition and execute directly.
+- **Ignoring shared resource dependencies**: All operations touching the same file, database, or service should go to the same subagent to avoid conflicts.
+- **Batching items that cannot be verified independently**: If a work unit produces no observable output, merge it with a sibling that does, or add an explicit verification step.
+- **Wrong for emergency fixes**: Time spent decomposing could be spent fixing. Use judgment: if the fix takes < 5 minutes, just do it.
 
 ---
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

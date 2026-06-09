@@ -1,59 +1,58 @@
 ---
 name: clawhub
-description: Searches, installs, and updates community skills from the public registry. Uses npx to run the clawhub CLI — requires Node.js. Use when the user asks to find a skill, install something, or update skills.
+description: Trigger when user wants to discover, search, install, list, or update community skills from the public ClawHub registry. Use when asked "find me a skill for X", "install skill Y", "search for skills", "list available skills", or "update/upgrade skills".
 version: 0.1.0
 ---
 
-# ClawHub, resources from system
+# ClawHub — community skill registry
 
-AI agent 的公共 skill 注册中心。通过自然语言搜索（向量搜索）。
+Public skill registry for AI agents. Search via natural language (vector search).
 
-## When to use
+## When to Use
 
-当用户提出以下任何请求时，使用此 skill：
-- "find a skill for …"
-- "search for skills"
-- "install a skill"
-- "what skills are available?"
-- "update my skills"
+- User asks "find a skill for ..." or "search for skills"
+- User asks "install a skill" or "what skills are available?"
+- User asks "update my skills"
+- User asks to list installed skills
 
-## Search
+## Steps
 
-```bash
-npx --yes clawhub@latest search "web scraping" --limit 5
-```
+1. **Search** for available skills:
+   ```bash
+   npx --yes clawhub@latest search "web scraping" --limit 5
+   ```
 
-## Install
+2. **Install** a skill by slug from search results:
+   ```bash
+   npx --yes clawhub@latest install <slug> --workdir ~/.nanobot/workspace
+   ```
+   Always include `--workdir` to install into `~/.nanobot/workspace/skills/` — the nanobot workspace loading directory.
 
-```bash
-npx --yes clawhub@latest install <slug> --workdir ~/.nanobot/workspace
-```
+3. **Update** all installed skills:
+   ```bash
+   npx --yes clawhub@latest update --all --workdir ~/.nanobot/workspace
+   ```
 
-将 `<slug>` 替换为搜索结果中的 skill 名称。这将把 skill 放入 `~/.nanobot/workspace/skills/` 目录，nanobot 从此处加载 workspace skills。始终包含 `--workdir`。
+4. **List** installed skills:
+   ```bash
+   npx --yes clawhub@latest list --workdir ~/.nanobot/workspace
+   ```
 
-## Update
+## Verification
 
-```bash
-npx --yes clawhub@latest update --all --workdir ~/.nanobot/workspace
-```
+- After search: confirm results contain relevant skill names and descriptions
+- After install: verify the skill appears in `ls ~/.nanobot/workspace/skills/`
+- After update: run the list command to confirm updated versions are shown
+- Remind user to start a new session to load a newly installed skill
 
-## List installed
+## Pitfalls
 
-```bash
-npx --yes clawhub@latest list --workdir ~/.nanobot/workspace
-```
-
-## Notes
-
-- 需要 Node.js（`npx` 随附）。
-- 搜索和安装无需 API 密钥。
-- 登录（`npx --yes clawhub@latest login`）仅在发布时需要。
-- `--workdir ~/.nanobot/workspace` 至关重要——不加此参数，skill 会安装到当前目录而不是 nanobot workspace。
-- 安装后，提醒用户启动新 session 以加载 skill。
+- Requires Node.js (npx ships with Node.js)
+- No API key needed for search and install
+- Login (`npx --yes clawhub@latest login`) is only needed for publishing skills
+- `--workdir ~/.nanobot/workspace` is critical — without it, the skill installs to the current directory instead of the nanobot workspace
+- After installation, the user must start a new session to load the skill
 
 ---
 
-**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

@@ -1,80 +1,88 @@
 ---
 name: my
-description: Inspects and modifies agent runtime state — model, iteration limit, context window, and settings. Operates in-memory only; changes reset on restart. Use when diagnosing issues, checking capabilities, or adjusting configuration.
+description: Trigger when diagnosing agent behavior issues, checking capabilities (model, iteration limit, context window), or adjusting in-memory runtime configuration. Use before complex tasks to check budget, or after unexpected behavior to inspect state. Do NOT load for permanent config changes or workspace settings.
 version: 0.1.0
 ---
 
-# Self-Awareness, tools from system
+# Self-Awareness Skill
 
-## How to use
+## When to Use
 
-1. **识别场景** 从下方类别中找出对应场景
-2. **调用 my 工具** 传入合适的 action
-3. **如果是设置操作**，在更改有影响的配置前警告用户（model, iterations）
-4. **查看详细示例**，阅读 `{baseDir}/references/examples.md`
-
-## When to check
+- Diagnosing why the agent behaves unexpectedly
+- Checking current capability limits before starting a complex task
+- Adjusting model, iteration limit, or context window temporarily
+- Reading or writing to scratchpad for cross-turn memory
+- Verifying current settings before reporting a problem
 
 <rule>
-**先诊断再解释。** 遇到问题时，先检查你的状态。
+**Diagnose before explaining.** When something goes wrong, check your state first.
 </rule>
 
 <rule>
-**复杂任务前检查预算。** 在承诺前了解你的限制。
+**Check budget before complex tasks.** Understand your limits before committing.
 </rule>
 
 <rule>
-**跨轮次记忆。** 将偏好存储在 scratchpad 中，稍后读回。
+**Cross-turn memory.** Store preferences in scratchpad and read back later.
 </rule>
 
-## When to set
+## Steps
+
+1. **Identify Scenario** — Match your situation to one of the categories in the table below under "When to Set".
+
+2. **Call `my` tool** — Pass the appropriate action:
+   - To check state: `my(action="get")` or `my(action="get", key="...")`
+   - To modify state: `my(action="set", key="...", value=...)`
+   - To store data: `my(action="set", key="scratchpad", value=...)`
+
+3. **Warn Before Destructive Changes** — When changing model or iterations, warn the user first.
+
+4. **Review Examples** — Read `{baseDir}/references/examples.md` for detailed usage patterns.
+
+## When to Set
 
 <rule>
-**仅在收益明确且用户知情时设置。** 更改 model 前发出警告。
+**Only set when the benefit is clear and the user is informed.** Warn before changing model.
 </rule>
 
-| 场景 | 命令 |
-|-----------|---------|
-| 大型代码库分析 | `my(action="set", key="context_window_tokens", value=131072)` |
-| 重复性简单任务 | `my(action="set", key="model", value="<fast-model>")` |
-| 长流程多步骤任务 | `my(action="set", key="max_iterations", value=80)` |
-| 启用 thinking 模式（Anthropic/MiniMax） | `my(action="set", key="reasoning_effort", value="max")` |
+| Scenario | Command |
+|----------|---------|
+| Large codebase analysis | `my(action="set", key="context_window_tokens", value=131072)` |
+| Repetitive simple tasks | `my(action="set", key="model", value="<fast-model>")` |
+| Long multi-step task | `my(action="set", key="max_iterations", value=80)` |
+| Enable thinking mode (Anthropic/MiniMax) | `my(action="set", key="reasoning_effort", value="max")` |
 
-**权衡：** 倾向于稳定。仅在默认值确实不足时设置。
+**Tradeoff:** Favor stability. Only set when defaults are truly insufficient.
 
-## Anti-patterns
+## Verification
 
-<rule>
-**不要每轮都检查。** 消耗一次 tool call。在需要信息时使用，不要成为习惯性操作。
-</rule>
+- Did the state change as expected? (Check via `my(action="get")` before and after)
+- For destructive changes (model, iterations): was the user warned before applying?
+- Did you confirm the new value is within allowed bounds? (e.g., max_iterations 1-100, context_window_tokens 4096-1M)
+- Is the change appropriate for the scenario, not just a habitual check?
 
-<rule>
-**不要存储敏感数据。** scratchpad 中不要存放 API 密钥、密码或令牌。
-</rule>
+## Pitfalls
 
-<rule>
-**不要设置 workspace。** 不会更新 file tool 边界——无效。
-</rule>
+- **Do not check every turn**: consumes a tool call. Use only when information is needed, not as a habit
+- **Do not store sensitive data**: no API keys, passwords, or tokens in scratchpad
+- **Do not set workspace**: does not update file tool boundaries — ineffective
+- **Excessive modification**: avoid setting multiple values unnecessarily; each change carries risk
+- **Forgetting changes are ephemeral**: all modifications are in-memory only and reset on restart
 
 ## Constraints
 
-- 所有修改仅在内存中——重启后全部重置
-- 受保护参数有类型/范围校验：`max_iterations` (1–100)，`context_window_tokens` (4096–1M)，`model`（非空字符串）
-- 如果 `tools.my.allow_set` 为 false，则只能检查
+- All modifications are in-memory only — reset on restart
+- Protected parameters have type/range validation: `max_iterations` (1-100), `context_window_tokens` (4096-1M), `model` (non-empty string)
+- If `tools.my.allow_set` is false, only inspection is possible
 
-## Related tools
+## Related Tools
 
-| 需求 | 使用 | 持久？ |
-|------|-----|-----------|
-| 单次 session 临时状态 | `my(action="set", key="...", value=...)` | 否 |
-| 长期事实 | Memory skill（`MEMORY.md`、`USER.md`） | 是 |
-| 永久配置更改 | 编辑配置文件 | 是 |
+| Need | Use | Persistent? |
+|------|-----|-------------|
+| Single-session temporary state | `my(action="set", key="...", value=...)` | No |
+| Long-term facts | Memory skill (`MEMORY.md`, `USER.md`) | Yes |
+| Permanent configuration | Edit config files directly | Yes |
 
-**经验法则：** 明天还用？用 Memory。仅本轮？用 My。
+**Rule of thumb:** Still needed tomorrow? Use Memory. Only this turn? Use My.
 
----
-
-**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

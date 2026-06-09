@@ -1,131 +1,128 @@
 ---
 name: subagent-task
-description: Orchestrate any parallel subagent work — decompose task into batches, enforce verification per batch, pivot on failure. Use when spawning 2+ subagents for parallel work.
+description: Trigger when orchestrating 2+ subagents for parallel work — use for batch spawning with unified verification template, per-batch pivot on failure, cross-agent conflict detection, and result consolidation. Apply when work items are independent and can be parallelized.
 ---
 
 # Subagent Task Orchestration — Universal
 
 ## When to Use
 
-- 需要委派 2+ 个 subagent 并行处理独立工作项
-- 工作项数量大（5+ items），需要分批验证
-- 需要防止 subagent 产出有误却继续执行
-- 任何类型的任务：代码 / 研究 / 写作 / 分析 / 调试
+- You need to delegate 2+ subagents to handle independent work items in parallel
+- There are 5+ work items that need batched verification
+- You need to prevent subagent errors from propagating blindly
+- Any task type: code / research / writing / analysis / debugging
 
-**不问任务是什么类型** — 任何任务都可以用这个框架委派。
+**Does not matter what type of task** — any task can be delegated with this framework.
 
-## Core Principle
+## Steps
 
-**小批次 + 验证 + pivot**：
-- 不是等 subagent 全部完成再验证
-- 每个批次完成立即验证
-- 通过 → 继续下一批
-- 失败 → 停下 or 修复，不盲目推进
+### 1. Pre-spawn checks
 
-## 委派前检查
+Before spawning any subagent:
 
-在 spawn 之前：
+1. **Task has been decomposed** — written to `tasks/<id>.md`, each batch no more than 5 items
+2. **Reference files have been read** (for code tasks) — subagents need to know the codebase patterns
+3. **Pivot rules are defined** — failure threshold, iteration limit, stop signal
 
-1. **任务已分解** — 写入 `tasks/<id>.md`，每批不超过 5 items
-2. **参考文件已读**（如果是代码类）— subagent 需要知道代码模式
-3. **Pivot 规则已明确** — 失败阈值 / 迭代上限 / 停下信号
+Core principle: **small batch + verify + pivot**. Do not wait for all subagents to finish before verifying. Verify after each batch:
+- Pass -> continue to next batch
+- Fail -> stop or fix, do not push blindly
 
-## Task 模板（通用）
+### 2. Create subagent task template
 
-每个 subagent 的 task 必须包含：
+Each subagent task must include these sections:
 
 ```markdown
 ## 任务
-<具体要做什么，清晰描述目标和范围>
+<Specific goal and scope>
 
 ## 交付物
-1. **<交付类型>** — <具体文件/结果路径>
-2. **工作报告** — 写到 tasks/<id>.md，包含：
-   - 做了什么
-   - 结果如何
-   - 文件列表
-   - 关键决策和理由
+1. **<deliverable type>** — <specific file/result path>
+2. **Work report** — written to tasks/<id>.md, including:
+   - What was done
+   - Results
+   - File list
+   - Key decisions and rationale
 
 ## 边界
-- **不做**：<明确列出不做哪些>
-- **上报条件**：<什么情况应该停下来问，而不是继续>
+- **Not doing**: <explicit list of out-of-scope items>
+- **Escalation conditions**: <when to stop and ask, not continue>
 
 ## 强制规则
-1. **先执行 <第一条验证命令>** — 如果失败立即 report
-2. **Pivot 规则**：
-   - <验证条件> → 继续
-   - <验证未通过> → 修复后重建，最多 3 次/项
-   - **同一 item 修复 3 次仍失败** → 停下 report
-   - **批次累计迭代达到 5 次** → 停下 report（整批停下）
-3. **不确定时停下来问** — 不要猜测决策，等 orchestrator 回复
+1. **Run <first verification command> first** — if it fails, report immediately
+2. **Pivot rules**:
+   - <verification passes> -> continue
+   - <verification fails> -> fix and rebuild, max 3 attempts per item
+   - **Same item fails 3 times** -> stop and report
+   - **Batch accumulates 5 iterations** -> stop and report (entire batch stops)
+3. **Stop and ask when uncertain** — do not guess decisions, wait for orchestrator reply
 
 ## 退出检查
-- 所有文件/结果已落盘
-- <验证条件>（BUILD SUCCESSFUL / 验证通过 / 等等）
-- 工作报告已写入 tasks/<id>.md
-- final response 包含工作总结（说清楚结果，不只是"已完成"）
+- All files/results delivered to disk
+- <verification condition> (BUILD SUCCESSFUL / 验证通过 / etc.)
+- Work report written to tasks/<id>.md
+- Final response includes work summary (not just "已完成")
 ```
 
-## 验证流程（Orchestrator 侧）
+### 3. Spawn and verify per batch
 
-每次批次完成：
+**Parallelism strategy**:
 
-1. **检查 subagent report** — 文件是否落盘，内容是否完整
-2. **执行验证** — BUILD / 读取结果 / 运行检查脚本
-3. **Pivot 决策**：
-   - ✅ 通过 → 继续下一批
-   - 🔧 可修复 → 发消息给 subagent 修复
-   - 🛑 停下 → cancel subagent，写 report，问用户
-
-## 并行策略
-
-| 场景 | 策略 |
+| Scenario | Strategy |
 |---|---|
-| 2 个 subagent，无依赖 | **并行** spawn（同时启动） |
-| 多个 subagent，有依赖 | **串行** — 前一个完成 → 验证 → 下一个启动 |
-| 同一批次 3+ items | **并行** 写（subagent 内部），分批验证 |
-| 某个 subagent 产出有误 | **cancel** + 修复 prompt + 重 spawn |
-| 某个 subagent 需要等待用户决策 | **停下**，向用户 report，等回复再继续 |
+| 2 subagents, no dependencies | **Parallel** spawn (launch simultaneously) |
+| Multiple subagents, with dependencies | **Serial** — first completes -> verify -> next launches |
+| Same batch has 3+ items | **Parallel** within subagent, verify per batch |
+| A subagent's output has errors | **Cancel** + fix prompt + re-spawn |
+| A subagent needs user decision | **Stop**, report to user, wait for reply |
 
-## 冲突检测
+**Verification flow (Orchestrator side)** after each batch:
 
-多个 subagent 并行时检查：
+1. **Check subagent report** — files delivered to disk? Content complete?
+2. **Execute verification** — BUILD / read results / run check script
+3. **Pivot decision**:
+   - Pass -> continue to next batch
+   - Repairable -> message subagent to fix
+   - Stop -> cancel subagent, write report, ask user
 
-- 是否改了同一个文件 → diff 检查，有则先修复冲突
-- 是否用了同一个资源 → 有则合并或排队
+### 4. Handle conflicts and issues
 
-## 常见问题处理
+When multiple subagents run in parallel, check for:
+- **Same file modified** -> diff check, resolve conflicts before continuing
+- **Same resource used** -> merge or queue
 
-| 问题 | 处理方式 |
+**Common issue resolution**:
+
+| Issue | Resolution |
 |---|---|
-| subagent 报告"已完成"但没有文件 | 检查 report 是否为空 → cancel + 重分配 |
-| subagent 超时（100 iterations） | 检查进度，cancel + 重新分配更小批次 |
-| subagent 发现需要用户决策 | **停下**，向用户 report，等回复 |
-| subagent 方向走偏 | **cancel**，调整 prompt，重新 spawn |
-| 多个 subagent 改了同一文件 | 合并 diff，优先解决冲突再继续 |
-| 验证失败但 subagent 认为是小问题 | 坚持验证标准，不放过任何失败 |
+| Subagent reports "done" but no files | Check report content -> cancel + reassign |
+| Subagent timeout (100 iterations) | Check progress, cancel + reassign smaller batch |
+| Subagent needs user decision | **Stop**, report to user, wait for reply |
+| Subagent goes off track | **Cancel**, adjust prompt, re-spawn |
+| Multiple subagents modified same file | Merge diffs, resolve conflicts first, then continue |
+| Verification fails but subagent says minor | Uphold verification standard, do not skip failures |
 
-## Report 格式
+### 5. Finalize
 
-### 停下报告
+**Stop report** (when a batch fails irrecoverably):
 ```markdown
 ## 停下报告
 
 **已完成**：
-- item A ✅
-- item B ✅
+- item A
+- item B
 
 **遇到问题**：
-- item C ❌ — <描述错误>
-- <尝试的修复>
-- <为什么失败>
+- item C — <error description>
+- <fix attempted>
+- <why it failed>
 
 **建议**：
-- <下一步建议>
-- <是否需要用户决策>
+- <next steps>
+- <whether user decision is needed>
 ```
 
-### 完成报告
+**Completion report** (when all batches succeed):
 ```markdown
 ## 完成报告
 
@@ -134,26 +131,39 @@ description: Orchestrate any parallel subagent work — decompose task into batc
 **未完成 items**：无
 
 **验证**：
-- [x] <验证条件 1>
-- [x] <验证条件 2>
-- [x] 所有文件已落盘
-- [x] 工作报告已写
+- [x] <verification condition 1>
+- [x] <verification condition 2>
+- [x] All files delivered to disk
+- [x] Work report written
 ```
 
-## 关键原则
+## Verification
 
-1. **subagent 的 final text response 是唯一交付物** — 文件落盘不算完成，必须有 report
-2. **Pivot 是正常行为，不是失败** — 及时停下比盲目推进好
-3. **不确定就问** — 等待用户决策比猜测决策好
-4. **验证标准要提前定好** — 不要在验证时才临时决定标准
-5. **每个批次完成后立即验证** — 不要等到全部完成才发现问题
+For each batch, verify the following before proceeding:
 
-## 边界
+- [ ] Subagent files are delivered to disk at expected paths
+- [ ] Verification command passes (BUILD SUCCESSFUL / test pass / check script OK / etc.)
+- [ ] Work report written to `tasks/<id>.md` with: what was done, results, file list, key decisions
+- [ ] No unresolved file conflicts between parallel subagents
+- [ ] Final response includes a work summary (not just "已完成")
+- [ ] If batch failed: stop report written with clear error description and suggested next steps
 
-- 不适合 1 个 subagent 就能完成的任务
-- 不适合无需 subagent 的任务（应直接执行）
-- 不适合实时交互场景（subagent 运行时间较长）
+**Key verification principles**:
+- Verify immediately after each batch, not at the end
+- Set verification criteria before spawning, not during verification
+- Pivot is normal behavior, not failure — stopping in time is better than pushing blindly
+- The subagent's final text response is the only delivery artifact — file delivery alone is not completion
+
+## Pitfalls
+
+- **Subagent reports "done" with no files**: The report content may be empty or the subagent hallucinated delivery. Check report, cancel, and reassign with a more explicit output requirement.
+- **Subagent exceeds 100 tool call limit**: The batch may be too large or the task too complex. Cancel and re-split into smaller batches (2-3 items max).
+- **Parallel subagents modify same file**: Diff conflicts can stall progress. Check for shared file targets before spawning parallel agents; if found, serialize or assign to a single subagent.
+- **Verification fails but subagent claims it is minor**: Always uphold verification standards. A skipped verification today becomes a hidden bug tomorrow.
+- **Subagent stops to ask for user decision**: Do not guess. Report to user and wait. Guessing produces wrong results silently.
+- **Wrong for single subagent tasks**: If 1 subagent suffices, do not use this framework — just do it directly.
+- **Wrong for real-time interaction**: Subagent spawn-and-wait cycles take time. Not suitable for interactive/hotfix scenarios.
 
 ---
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

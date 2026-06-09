@@ -1,53 +1,63 @@
 ---
 name: multi-question-answering
-description: Answers multiple-choice and A/B questions directly with numbers or letters. Provides concise responses without extra explanation or commentary. Use when the user says "A or B", asks numbered questions, or connects choices with "还是".
+description: Trigger when the user presents multiple-choice or A/B questions in a single prompt, asks numbered questions, or connects choices with "or" / "还是". Use for survey-style prompts, binary decisions, and multi-part questions requiring compact answer format. Provides concise responses with numbers or letters instead of full sentences. Do NOT load for open-ended questions or single-option queries.
 version: 0.1.0
 ---
 
-# Multi-Question Answering, rules from user
-
-多项选择题回答技巧。
+# Multi-Question Answering Skill
 
 ## When to Use
 
-- 用户同时询问多个带选项的问题
-- 用户用"?"或"还是"连接多个选择题
-- 用户说"问题 1...？问题 2...？"
+- User asks multiple questions with options simultaneously
+- User connects multiple choices with "?" or "or" / "还是"
+- User says "Question 1...? Question 2...?"
+- Survey-style prompts requiring compact answer format
 
-## How to Answer
+## Steps
 
-直接提供选项编号或字母：
+1. **Identify Question Format** — Determine whether questions use A/B choice, numbered format, or mixed types.
 
-| 问题顺序 | 回答格式 | 示例 |
-|---------|---------|------|
-| 问题 1 | 说"1"或"yes"或直接说选项 | "1" / "yes" / "option 1" |
-| 问题 2 | 说"2"或"b"或"option 2" | "2" / "b" / "option 2" |
+2. **Extract Options** — Parse each question and its corresponding options. Map them to numbers (1, 2, 3...) or letters (A, B, C...).
 
-系统会根据问题数量和你的回答自动匹配。
+3. **Select Answers** — For each question, provide the most appropriate answer using the correct format:
+   - A/B choice: say "a" or "b"
+   - Numbered questions: say "1" / "2" / "yes, 4" etc.
+   - The system auto-matches answers to questions by position
+
+4. **Respond Concisely** — Provide only the selected option (number or letter). No extra explanation or commentary.
+
+## Verification
+
+- Did you respond with only the option identifier (number/letter) without extra commentary?
+- Did all questions receive a corresponding answer?
+- Is the answer format correct for the question type (A/B vs. numbered)?
+- If the question uses "yes/no + option" format, did you include both parts?
+
+## Pitfalls
+
+- **Mixed choice types**: when the same prompt contains both A/B and numbered options, answer each in its own format
+- **Ambiguous questions**: if options are unclear, ask for clarification rather than guessing
+- **Extra commentary**: resist the urge to explain the choice — the user expects only the identifier
+- **Partial answers**: when the user asks multiple questions, answer all of them, not just the first
 
 ## Examples
 
-**用户输入**："Option A preserves principal but has low returns, Option B has risk but high returns, which do you choose? A or B?"
+**User input**: "Option A preserves principal but has low returns, Option B has risk but high returns, which do you choose? A or B?"
 
-→ 回答：**"b"**（表示选择选项 B）
+Answer: **"b"**
 
-**用户输入**："Question 1: Are you available today? Question 2: Meet at 2pm or 4pm?"
+**User input**: "Question 1: Are you available today? Question 2: Meet at 2pm or 4pm?"
 
-→ 回答：**"yes, 4"**（yes 表示有空，4 表示选择下午 4 点）
+Answer: **"yes, 4"** (yes = available, 4 = 4pm)
 
-**用户输入**："1. Is tomorrow okay? 2. Or the day after?"
+**User input**: "1. Is tomorrow okay? 2. Or the day after?"
 
-→ 回答：**"2"**（表示选择第二个选项，后天）
+Answer: **"2"** (second option, the day after)
 
 ## Notes
 
-- 根据 USER.md 约定，用户理解"1/2"和"a/b"的含义
-- 无需解释你选择了哪个选项；直接提供数字/字母
-- 如果用户明确指定了选项内容，直接确认（"okay"）
+- According to USER.md convention, users understand "1/2" and "a/b" format without explanation
+- No need to explain which option was selected; directly provide the number/letter
+- If the user explicitly specifies options, confirm with a simple "okay"
 
----
-
-**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

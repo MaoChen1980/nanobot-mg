@@ -1,65 +1,82 @@
 ---
 name: cron
-description: Schedules reminders, recurring tasks, and one-shot notifications at specific times or intervals. Operates through the agent's cron system — supports cron expressions and ISO datetimes. Use when the user asks to be reminded, set a recurring task, or schedule something.
+description: Trigger when user requests reminders, recurring tasks, or one-shot notifications. Use for "remind me in X minutes", "check every hour", "notify me when done", "schedule daily report", or any time-based delayed action. Also triggers on session startup for durable tasks.
 version: 0.1.0
 ---
 
-# Cron, tools from system
+# Cron — scheduled reminders and tasks
 
-使用 `cron` 工具安排提醒或重复任务。
+Use the `cron` tool to schedule reminders or recurring tasks.
 
-## Three Modes
+## When to Use
 
-1. **Reminder** - 消息直接发送给用户
-2. **Task** - 消息是任务描述，agent 执行并发送结果
-3. **One-time** - 在特定时间运行一次，然后自动删除
+- User asks "remind me to ..." or "set a reminder"
+- User asks "run this every X minutes/hours" or "check every ..."
+- User asks "remind me on Monday at 9am" or "at a specific time"
+- User asks "list my cron jobs" or "remove a cron job"
 
-## Examples
+## Steps
 
-固定提醒：
-```
-cron(action="add", message="Time to take a break!", every_seconds=1200)
-```
+1. **Determine the schedule type** from what the user says:
 
-动态任务（agent 每次执行）：
-```
-cron(action="add", message="Check HKUDS/nanobot GitHub stars and report", every_seconds=600)
-```
+   | User says | Parameter |
+   |-----------|-----------|
+   | Every 20 minutes | `every_seconds: 1200` |
+   | Every hour | `every_seconds: 3600` |
+   | Every day at 8 AM | `cron_expr: "0 8 * * *"` |
+   | Weekdays at 5 PM | `cron_expr: "0 17 * * 1-5"` |
+   | Every day at 9 AM Vancouver time | `cron_expr: "0 9 * * *", tz: "America/Vancouver"` |
+   | At a specific time | `at:` ISO datetime string (compute from current time) |
 
-一次性定时任务（根据当前时间计算 ISO 时间）：
-```
-cron(action="add", message="Remind me about the meeting", at="<ISO datetime>")
-```
+2. **Choose the mode**:
 
-时区感知 cron：
-```
-cron(action="add", message="Morning standup", cron_expr="0 9 * * 1-5", tz="America/Vancouver")
-```
+   - **Reminder** — message is sent directly to the user
+   - **Task** — message is a task description; agent executes it and sends the result
+   - **One-time** — runs once at a specific time, then auto-deletes
 
-列出/删除：
-```
-cron(action="list")
-cron(action="remove", job_id="abc123")
-```
+3. **Add the cron job**:
 
-## Time Expressions
+   Fixed reminder:
+   ```
+   cron(action="add", message="Time to take a break!", every_seconds=1200)
+   ```
 
-| 用户说 | 参数 |
-|-----------|------------|
-| 每 20 分钟 | every_seconds: 1200 |
-| 每小时 | every_seconds: 3600 |
-| 每天早上 8 点 | cron_expr: "0 8 * * *" |
-| 工作日下午 5 点 | cron_expr: "0 17 * * 1-5" |
-| 温哥华时间每天早上 9 点 | cron_expr: "0 9 * * *", tz: "America/Vancouver" |
-| 在特定时间 | at: ISO datetime 字符串（根据当前时间计算） |
+   Dynamic task (agent executes each time):
+   ```
+   cron(action="add", message="Check HKUDS/nanobot GitHub stars and report", every_seconds=600)
+   ```
 
-## Timezone
+   One-shot at specific time (compute ISO datetime from current time):
+   ```
+   cron(action="add", message="Remind me about the meeting", at="<ISO datetime>")
+   ```
 
-使用 `tz` 配合 `cron_expr` 在特定 IANA 时区调度。不提供 `tz` 时，使用服务器的本地时区。
+   Timezone-aware cron:
+   ```
+   cron(action="add", message="Morning standup", cron_expr="0 9 * * 1-5", tz="America/Vancouver")
+   ```
+
+4. **List or remove existing jobs**:
+
+   ```
+   cron(action="list")
+   cron(action="remove", job_id="abc123")
+   ```
+
+## Verification
+
+- After `cron(action="add")`: confirm no errors returned; optionally verify with `cron(action="list")`
+- After `cron(action="remove")`: run list to confirm the job is gone
+- For timezone-specific schedules: verify the `tz` parameter matches the user's IANA timezone
+- For one-shot tasks: confirm the ISO datetime is in the future
+
+## Pitfalls
+
+- Use `tz` with `cron_expr` for IANA timezone scheduling. Without `tz`, the server's local timezone is used.
+- For one-shot tasks, compute the ISO datetime relative to the current time — do not hardcode.
+- `every_seconds` and `cron_expr`/`at` are mutually exclusive — use only one schedule parameter per job.
+- One-time jobs auto-delete after firing; no manual cleanup needed.
 
 ---
 
-**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

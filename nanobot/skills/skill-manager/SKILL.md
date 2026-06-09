@@ -111,7 +111,7 @@ name: skill-name           # 连字符命名法，小写
 description: >
   Trigger signal — when to load this skill. Include specific scenarios,
   file types, task types. NOT the goal or full instructions.
-  Keep it short — ~100 chars, hard max 1024.
+  Keep it short — ~250 chars, hard max 1024.
 always: false
 ---
 ```
