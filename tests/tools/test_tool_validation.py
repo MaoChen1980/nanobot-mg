@@ -187,17 +187,17 @@ async def test_registry_returns_validation_error() -> None:
 # --- ExecTool enhancement tests ---
 
 
-async def test_exec_always_returns_exit_code() -> None:
+async def test_exec_always_returns_exit_code(tmp_path) -> None:
     """Exit code should appear in output even on success (exit 0)."""
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     result = await tool.execute(command="echo hello")
-    assert "Exit code: 0" in result
+    assert "Exit: 0" in result
     assert "hello" in result
 
 
 async def test_exec_head_tail_truncation(tmp_path) -> None:
     """Long output should preserve both head and tail."""
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     script_file = tmp_path / "gen_output.py"
     script_file.write_text("print('A' * 6000 + chr(10) + 'B' * 6000)", encoding="utf-8")
     if sys.platform == "win32":
@@ -206,25 +206,31 @@ async def test_exec_head_tail_truncation(tmp_path) -> None:
         command = f"{shlex.quote(sys.executable)} {shlex.quote(str(script_file))}"
     result = await tool.execute(command=command)
     assert "chars truncated" in result
-    # On Windows the tool prepends [cwd: ..., shell: cmd]; skip that prefix
-    content = result.split("\n", 1)[1] if result.startswith("[") else result
-    assert content.startswith("A")
-    assert "Exit code:" in result
+    # Output format: "Exit: 0  |  cwd: ...  |  shell: ...\n────\n<head output>\n...\n────\n[Full output cached: ...]"
+    # Skip the status line + separator to reach the actual output body
+    lines = result.split("\n")
+    try:
+        sep = next(i for i, l in enumerate(lines) if l.startswith("─"))
+        body = "\n".join(lines[sep + 1:])
+    except StopIteration:
+        body = result
+    assert body.lstrip().startswith("A")
+    assert "Exit:" in result
 
 
-async def test_exec_timeout_parameter() -> None:
+async def test_exec_timeout_parameter(tmp_path) -> None:
     """LLM-supplied timeout should override the constructor default."""
-    tool = ExecTool(timeout=60)
+    tool = ExecTool(timeout=60, working_dir=str(tmp_path))
     result = await tool.execute(command="sleep 10", timeout=1)
     assert "timed out" in result
     assert "1 seconds" in result
 
 
-async def test_exec_timeout_capped_at_max() -> None:
+async def test_exec_timeout_capped_at_max(tmp_path) -> None:
     """Timeout values above _MAX_TIMEOUT should be clamped."""
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     result = await tool.execute(command="echo ok", timeout=9999)
-    assert "Exit code: 0" in result
+    assert "Exit: 0" in result
 
 
 # --- cast_params tests ---

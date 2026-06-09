@@ -23,8 +23,8 @@ def _fake_resolve_public(hostname, port, family=0, type_=0):
 
 
 @pytest.mark.asyncio
-async def test_exec_blocks_curl_metadata():
-    tool = ExecTool()
+async def test_exec_blocks_curl_metadata(tmp_path):
+    tool = ExecTool(working_dir=str(tmp_path))
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_private):
         result = await tool.execute(
             command='curl -s -H "Metadata-Flavor: Google" http://169.254.169.254/computeMetadata/v1/'
@@ -34,9 +34,9 @@ async def test_exec_blocks_curl_metadata():
 
 
 @pytest.mark.asyncio
-async def test_exec_allows_wget_localhost():
+async def test_exec_allows_wget_localhost(tmp_path):
     """localhost is allowed — agent needs to reach local services."""
-    tool = ExecTool(timeout=3)
+    tool = ExecTool(timeout=3, working_dir=str(tmp_path))
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_localhost):
         result = await tool.execute(command="wget http://localhost:8080/secret -O /tmp/out")
     # Guard passes (no internal/private error), execution may still fail
@@ -45,8 +45,8 @@ async def test_exec_allows_wget_localhost():
 
 
 @pytest.mark.asyncio
-async def test_exec_allows_normal_commands():
-    tool = ExecTool(timeout=5)
+async def test_exec_allows_normal_commands(tmp_path):
+    tool = ExecTool(timeout=5, working_dir=str(tmp_path))
     result = await tool.execute(command="echo hello")
     assert "hello" in result
     assert "Error" not in result.split("\n")[0]
@@ -62,9 +62,9 @@ async def test_exec_allows_curl_to_public_url():
 
 
 @pytest.mark.asyncio
-async def test_exec_blocks_chained_internal_url():
+async def test_exec_blocks_chained_internal_url(tmp_path):
     """Internal URLs buried in chained commands should still be caught."""
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_private):
         result = await tool.execute(
             command="echo start && curl http://169.254.169.254/latest/meta-data/ && echo done"
@@ -81,7 +81,9 @@ async def test_exec_blocks_working_dir_outside_workspace(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     tool = ExecTool(working_dir=str(workspace), restrict_to_workspace=True)
-    result = await tool.execute(command="rm calendar.ics", working_dir="/etc")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    result = await tool.execute(command="rm calendar.ics", working_dir=str(outside))
     assert "outside the configured workspace" in result
 
 

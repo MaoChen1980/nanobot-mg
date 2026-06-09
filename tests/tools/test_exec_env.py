@@ -20,9 +20,9 @@ async def test_exec_does_not_leak_parent_env(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_exec_has_working_path():
+async def test_exec_has_working_path(tmp_path):
     """Basic commands should be available via the login shell's PATH."""
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     result = await tool.execute(command="echo hello")
     assert "hello" in result
 

@@ -20,7 +20,7 @@ from nanobot.agent.tools.shell import ExecTool
 @pytest.mark.asyncio
 async def test_exec_saves_to_cache(tmp_path):
     """After execution, output is saved to the cache directory."""
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     with patch.object(ExecTool, "_guard_command", return_value=None):
         # Mock _spawn to return a controlled result
         mock_proc = AsyncMock()
@@ -53,7 +53,7 @@ async def test_exec_saves_to_cache(tmp_path):
 @pytest.mark.asyncio
 async def test_default_return_includes_cache_path(tmp_path):
     """Default exec result includes the cache file path."""
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     mock_proc = AsyncMock()
     mock_proc.communicate.return_value = (b"ok", b"")
     mock_proc.returncode = 0
@@ -72,7 +72,7 @@ async def test_default_return_includes_cache_path(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_grep_filters_output():
+async def test_grep_filters_output(tmp_path):
     """grep parameter returns only lines matching the pattern."""
     mock_proc = AsyncMock()
     mock_proc.communicate.return_value = (
@@ -80,7 +80,7 @@ async def test_grep_filters_output():
         b"",
     )
     mock_proc.returncode = 0
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     with (
         patch.object(ExecTool, "_guard_command", return_value=None),
         patch.object(ExecTool, "_spawn", return_value=mock_proc),
@@ -94,12 +94,12 @@ async def test_grep_filters_output():
 
 
 @pytest.mark.asyncio
-async def test_grep_returns_exit_code():
+async def test_grep_returns_exit_code(tmp_path):
     """grep result still shows the exit code."""
     mock_proc = AsyncMock()
     mock_proc.communicate.return_value = (b"hello\nworld\n", b"")
     mock_proc.returncode = 1
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     with (
         patch.object(ExecTool, "_guard_command", return_value=None),
         patch.object(ExecTool, "_spawn", return_value=mock_proc),
@@ -110,12 +110,12 @@ async def test_grep_returns_exit_code():
 
 
 @pytest.mark.asyncio
-async def test_grep_no_matches():
+async def test_grep_no_matches(tmp_path):
     """When no lines match, grep returns a clear message."""
     mock_proc = AsyncMock()
     mock_proc.communicate.return_value = (b"aaa\nbbb\nccc\n", b"")
     mock_proc.returncode = 0
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     with (
         patch.object(ExecTool, "_guard_command", return_value=None),
         patch.object(ExecTool, "_spawn", return_value=mock_proc),
@@ -131,7 +131,7 @@ async def test_grep_no_matches():
 
 
 @pytest.mark.asyncio
-async def test_extract_with_cache_placeholder():
+async def test_extract_with_cache_placeholder(tmp_path):
     """{cache} in extract is replaced with the actual file path."""
     mock_proc = AsyncMock()
     mock_proc.communicate.return_value = (b"some output\n" * 10, b"")
@@ -151,7 +151,7 @@ async def test_extract_with_cache_placeholder():
         spawn_index += 1
         return proc
 
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     with (
         patch.object(ExecTool, "_guard_command", return_value=None),
         patch.object(ExecTool, "_spawn", side_effect=side_effect_spawn),
@@ -193,7 +193,7 @@ async def test_from_cache_skips_execution():
 
     assert mock_spawn.call_count == 0  # No execution
     assert "Loaded from cache:" in result
-    assert "Exit code: 42" in result
+    assert "Exit: 42" in result
     assert "cached output" in result
 
 
@@ -237,27 +237,27 @@ async def test_from_cache_file_not_found():
 
 
 @pytest.mark.asyncio
-async def test_exec_allows_normal_commands():
+async def test_exec_allows_normal_commands(tmp_path):
     """Basic exec still works as before (backward compat)."""
-    tool = ExecTool(timeout=5)
+    tool = ExecTool(timeout=5, working_dir=str(tmp_path))
     result = await tool.execute(command="echo hello")
     assert "hello" in result
     assert "Error" not in result.split("\n")[0]
 
 
 @pytest.mark.asyncio
-async def test_exec_exit_code_preserved():
+async def test_exec_exit_code_preserved(tmp_path):
     """Exit code is still shown in the result."""
     mock_proc = AsyncMock()
     mock_proc.communicate.return_value = (b"", b"")
     mock_proc.returncode = 0
-    tool = ExecTool()
+    tool = ExecTool(working_dir=str(tmp_path))
     with (
         patch.object(ExecTool, "_guard_command", return_value=None),
         patch.object(ExecTool, "_spawn", return_value=mock_proc),
     ):
         result = await tool.execute(command="true")
-    assert "Exit code: 0" in result
+    assert "Exit: 0" in result
 
 
 @pytest.mark.asyncio

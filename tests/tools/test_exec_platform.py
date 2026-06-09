@@ -149,7 +149,7 @@ class TestSpawnWindows:
 class TestPathAppendPlatform:
 
     @pytest.mark.asyncio
-    async def test_unix_uses_env_var_in_fixed_export(self):
+    async def test_unix_uses_env_var_in_fixed_export(self, tmp_path):
         """On Unix, path_append must not be interpolated into shell source."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"ok", b"")
@@ -170,7 +170,7 @@ class TestPathAppendPlatform:
             patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
-            tool = ExecTool(path_append="/opt/bin; echo INJECTED")
+            tool = ExecTool(path_append="/opt/bin; echo INJECTED", working_dir=str(tmp_path))
             await tool.execute(command="ls")
 
         assert captured_cmd == 'export PATH="$PATH:$NANOBOT_PATH_APPEND"; ls'
@@ -178,7 +178,7 @@ class TestPathAppendPlatform:
         assert "INJECTED" not in captured_cmd
 
     @pytest.mark.asyncio
-    async def test_windows_modifies_env(self):
+    async def test_windows_modifies_env(self, tmp_path):
         """On Windows, path_append is appended to PATH in the env dict."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"ok", b"")
@@ -196,7 +196,7 @@ class TestPathAppendPlatform:
             patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
-            tool = ExecTool(path_append=r"C:\tools\bin")
+            tool = ExecTool(path_append=r"C:\tools\bin", working_dir=str(tmp_path))
             await tool.execute(command="dir")
 
         assert captured_env["PATH"].endswith(r";C:\tools\bin")
@@ -209,7 +209,7 @@ class TestPathAppendPlatform:
 class TestSandboxPlatform:
 
     @pytest.mark.asyncio
-    async def test_bwrap_skipped_on_windows(self):
+    async def test_bwrap_skipped_on_windows(self, tmp_path):
         """bwrap must be silently skipped on Windows, not crash."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"ok", b"")
@@ -220,7 +220,7 @@ class TestSandboxPlatform:
             patch.object(ExecTool, "_spawn", return_value=mock_proc) as mock_spawn,
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
-            tool = ExecTool(sandbox="bwrap")
+            tool = ExecTool(sandbox="bwrap", working_dir=str(tmp_path))
             result = await tool.execute(command="dir")
 
         assert "ok" in result
@@ -228,7 +228,7 @@ class TestSandboxPlatform:
         assert "bwrap" not in spawned_cmd
 
     @pytest.mark.asyncio
-    async def test_bwrap_applied_on_unix(self):
+    async def test_bwrap_applied_on_unix(self, tmp_path):
         """On Unix, sandbox wrapping should still happen normally."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"sandboxed", b"")
@@ -240,7 +240,7 @@ class TestSandboxPlatform:
             patch.object(ExecTool, "_spawn", return_value=mock_proc) as mock_spawn,
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
-            tool = ExecTool(sandbox="bwrap", working_dir="/workspace")
+            tool = ExecTool(sandbox="bwrap", working_dir=str(tmp_path))
             await tool.execute(command="ls")
 
         mock_wrap.assert_called_once()
@@ -255,7 +255,7 @@ class TestSandboxPlatform:
 class TestExecuteEndToEnd:
 
     @pytest.mark.asyncio
-    async def test_windows_full_path(self):
+    async def test_windows_full_path(self, tmp_path):
         """Full execute() flow on Windows: env, spawn, output formatting."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"hello world\r\n", b"")
@@ -266,14 +266,14 @@ class TestExecuteEndToEnd:
             patch.object(ExecTool, "_spawn", return_value=mock_proc),
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
-            tool = ExecTool()
+            tool = ExecTool(working_dir=str(tmp_path))
             result = await tool.execute(command="echo hello world")
 
         assert "hello world" in result
-        assert "Exit code: 0" in result
+        assert "Exit: 0" in result
 
     @pytest.mark.asyncio
-    async def test_unix_full_path(self):
+    async def test_unix_full_path(self, tmp_path):
         """Full execute() flow on Unix: env, spawn, output formatting."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"hello world\n", b"")
@@ -284,8 +284,8 @@ class TestExecuteEndToEnd:
             patch.object(ExecTool, "_spawn", return_value=mock_proc),
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
-            tool = ExecTool()
+            tool = ExecTool(working_dir=str(tmp_path))
             result = await tool.execute(command="echo hello world")
 
         assert "hello world" in result
-        assert "Exit code: 0" in result
+        assert "Exit: 0" in result
