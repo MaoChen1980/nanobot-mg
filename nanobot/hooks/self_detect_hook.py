@@ -68,7 +68,7 @@ REFLECTION_USER_TEMPLATE = """\
 
 {metrics_summary}
 
-## Hook Source Code for Self-Review
+## Hook Module Structure
 
 {hook_code}
 
@@ -123,6 +123,32 @@ def _fmt_args(args: dict) -> str:
     return ", ".join(parts)
 
 
+# --- User negative signal patterns ---------------------------------------------
+
+_USER_NEGATIVE_PATTERNS: dict[str, tuple[str, ...]] = {
+    "rejection": ("不要", "别", "不对", "不是", "不是这个"),
+    "correction": ("错了", "我说的是", "我问的是", "你理解错了", "不是这个意思"),
+    "redo": ("重新", "重来", "再来", "换一个"),
+    "interruption": ("停", "stop", "够了"),
+}
+
+
+def _detect_user_signals(messages: list[dict]) -> dict[str, int]:
+    """Scan real user messages for negative feedback signals."""
+    counts: dict[str, int] = {}
+    for msg in messages:
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content", "")
+        if not isinstance(content, str) or not content:
+            continue
+        for signal, keywords in _USER_NEGATIVE_PATTERNS.items():
+            if any(kw in content for kw in keywords):
+                counts[signal] = counts.get(signal, 0) + 1
+                break
+    return counts
+
+
 def _read_resolved_ids(max_ids: int = 200) -> set[str]:
     """Read resolved finding IDs from JSONL file (one ID per line)."""
     if not RESOLVED_FILE.exists():
@@ -148,6 +174,41 @@ def _read_hook_sources() -> str:
         if path.exists():
             code = path.read_text(encoding="utf-8")
             parts.append(f"### {path.resolve().as_posix()}\n\n```python\n{code}\n```")
+    return "\n\n".join(parts)
+
+
+def _summarize_hook_sources() -> str:
+    """Structural summary of hook modules (file + class + method names, no body)."""
+    parts: list[str] = []
+    for name in _HOOK_FILES:
+        path = _HOOKS_DIR / name
+        if not path.exists():
+            continue
+        code = path.read_text(encoding="utf-8")
+        lines = code.splitlines()
+        items: list[tuple[str, list[str]]] = []  # [(class_name, [methods])]
+        current_class: str | None = None
+        current_methods: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("class ") and stripped.endswith(":"):
+                if current_class:
+                    items.append((current_class, current_methods))
+                current_class = stripped.split("class ")[1].rstrip(":").split("(")[0]
+                current_methods = []
+            elif stripped.startswith(("async def ", "def ")) and stripped.endswith(":"):
+                indent = len(line) - len(line.lstrip())
+                if indent >= 4 and current_class:
+                    method_name = stripped.split("def ")[1].rstrip(":")
+                    current_methods.append(method_name)
+        if current_class:
+            items.append((current_class, current_methods))
+        summary_lines = [f"### {name}"]
+        for cls, methods in items:
+            summary_lines.append(
+                f"  class {cls}: {', '.join(methods)}" if methods else f"  class {cls}"
+            )
+        parts.append("\n".join(summary_lines))
     return "\n\n".join(parts)
 
 
@@ -202,6 +263,7 @@ class SelfDetectHook(AgentHook):
             "message_count": len(real_messages),
             "final_content_len": len(context.final_content or ""),
             "error": context.error,
+            "user_signals": _detect_user_signals(real_messages),
         }
 
     # -- before_iteration: no-op (reflection fires in after_turn) -------------
@@ -287,19 +349,30 @@ class SelfDetectHook(AgentHook):
                 seq_lines.append(f"    iter#{e['iteration']}: (no tools)")
         seq_summary = "\n".join(seq_lines)
 
+        # User negative signal aggregation
+        signal_counts: dict[str, int] = {}
+        for e in entries:
+            for sig, cnt in e.get("user_signals", {}).items():
+                signal_counts[sig] = signal_counts.get(sig, 0) + cnt
+        signal_str = ""
+        if signal_counts:
+            parts = [f"{k}={v}" for k, v in sorted(signal_counts.items())]
+            signal_str = f"  User negative signals: {', '.join(parts)}\n"
+
         metrics_text = (
             f"  Iterations: {iteration_range} @ {time_str}\n"
             f"  Total iterations: {len(entries)}\n"
             f"  Total token usage: {total_tokens}\n"
             f"  Total tool calls: {total_tool_calls}\n"
             f"  Errors: {len(errors)}\n"
+            f"{signal_str}"
             f"{freq_summary}\n"
             f"{file_summary}\n"
             f"{seq_summary}"
         )
 
-        # Read hook source code for self-review
-        hook_code = _read_hook_sources()
+        # Hook module structure (structural summary, not full source)
+        hook_code = _summarize_hook_sources()
 
         # Call LLM for structured findings
         findings, diagnostic = await self._call_for_findings(metrics_text, hook_code)
