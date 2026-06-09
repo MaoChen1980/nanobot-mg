@@ -395,7 +395,7 @@ def make_summary_pair(summary: str, timestamp: str | None = None) -> list[dict]:
     """
     msg = {
         "role": "user",
-        "content": f"{summary}\n\n---\n请继续执行我们谈好的计划和内容",
+        "content": summary,
         "status": "synthetic",
     }
     if timestamp:

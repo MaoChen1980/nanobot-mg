@@ -324,15 +324,14 @@ class TestPrependSummary:
         result = _prepend_summary(keeps, "my summary")
         assert len(result) == 3  # 1 summary + 2 turns
         assert result[0]["role"] == "user"
-        assert "my summary" in result[0]["content"]
-        assert "请继续执行我们谈好的计划和内容" in result[0]["content"]
+        assert result[0]["content"] == "my summary"
         assert result[1] == "a"
 
     def test_empty_summary(self):
         keeps = [[{"role": "assistant", "content": "ok"}]]
         result = _prepend_summary(keeps, "")
         assert len(result) == 2
-        assert "请继续执行我们谈好的计划和内容" in result[0]["content"]
+        assert result[0]["content"] == ""
 
     def test_single_turn(self):
         keeps = [[{"role": "assistant", "content": "alone"}]]
@@ -567,8 +566,7 @@ class TestMakeSummaryPair:
         pair = make_summary_pair("my summary")
         assert len(pair) == 1
         assert pair[0]["role"] == "user"
-        assert "my summary" in pair[0]["content"]
-        assert "请继续执行我们谈好的计划和内容" in pair[0]["content"]
+        assert pair[0]["content"] == "my summary"
         assert pair[0].get("status") == "synthetic"
 
     def test_with_timestamp(self):
@@ -602,8 +600,7 @@ class TestCompressTurns:
         assert result == "verified summary"
         assert len(pair) == 1
         assert pair[0]["role"] == "user"
-        assert "verified summary" in pair[0]["content"]
-        assert "请继续执行我们谈好的计划和内容" in pair[0]["content"]
+        assert pair[0]["content"] == "verified summary"
 
     @pytest.mark.asyncio
     async def test_summarize_failure_returns_none(self):
@@ -631,8 +628,7 @@ class TestCompressTurns:
                 [],
             )
         assert result == "some text"
-        assert "some text" in pair[0]["content"]
-        assert "请继续执行我们谈好的计划和内容" in pair[0]["content"]
+        assert pair[0]["content"] == "some text"
 
     @pytest.mark.asyncio
     async def test_passes_timestamp_to_pair(self):
