@@ -23,9 +23,7 @@ _STRIP_SKILL_FRONTMATTER = re.compile(
 _SELF_OPTIMIZATION_FOOTER = (
     "\n---\n\n"
     "**Self-optimization**: After using this skill, improve it based on what you learned "
-    "— fix bugs, simplify steps, add edge cases, enhance verification. "
-    "The trigger conditions and description in the frontmatter are set by the original "
-    "author and must NOT be changed.\n"
+    "— fix bugs, simplify steps, add edge cases, enhance verification.\n"
 )
 
 

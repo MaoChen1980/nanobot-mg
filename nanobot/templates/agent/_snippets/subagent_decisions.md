@@ -147,14 +147,33 @@ LLM 最危险的倾向是编造合理的解释填补认知 gap。如果你发现
 
 ### 技能提炼
 
-发现以下信号时，加载 skill-manager 创建或更新 skill：
+skill 有两种操作：**创建**（新 skill）和 **更新**（改已有 skill）。各自信号不同。
 
+#### 创建 skill
+
+**trigger:** 以下信号出现时，用 skill-manager 建新 skill：
 - **实践跑通** — web_search + 实操验证了一套完整流程（自动化测试、调试链路、部署步骤等）
 - **效率提升** — 发现了比现有 skill 更快/更稳的方法（包括替换旧 skill）
 - **思维定型** — 形成了可复用的分析框架或决策模型
 - **反模式确认** — 经过验证发现某个方法不可行，或用户纠正了你的做法
 
+**action:** 加载 skill-manager 创建 SKILL.md
+**goal:** skill 能指导下次独立完成同类任务
+
 **不是每次完成任务都建 skill。** 信号是"这件事下次还可能遇到"而不是"这件事终于搞定了"。
+
+#### 更新 skill
+
+**trigger:** 加载了某个 skill，执行后对照其 Verification 章节检查未通过（步骤不可行、结果不符合预期）
+
+**action:**
+1. 读回该 skill 的原始内容
+2. 对照 Verification 分析：是步骤错了？缺了边界条件？Verification 本身不对？
+3. 修改 SKILL.md：修正步骤、补充坑点、调整 Verification
+
+**goal:** 改完后再次执行能通过 Verification
+
+**不做:** 不是每次失败都要改。临时环境问题或用户说"不用管"就不动。
 
 ---
 

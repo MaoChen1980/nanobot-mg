@@ -60,20 +60,20 @@ version: 0.1.0
 1. **检查重复**：扫描 `skills_summary`（始终在你的 prompt 中）——如果已有 skill 覆盖此功能，则跳过。
 2. **检查 trigger**：确认有明确的触发信号（用户关键词、消息类型、工具返回、cron 周期）。没有外部 trigger 的 skill 不应创建。
 3. **创建目录**：`mkdir -p workspace/skills/<name>/`
-4. **写入 SKILL.md** 使用 `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`。在你创建的每个 SKILL.md 末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
-5. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description——这是最后的机会。创建后，description 和 trigger 将被冻结，由 skill-manager 所有。
+4. **写入 SKILL.md** 使用 `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`。必须包含 `## When to Use`、`## Steps`、`## Verification` 三个章节。末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
+5. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description。
 6. **验证**：`exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)`
 7. 修复任何验证错误
 
 ### Patch a skill (targeted fix)
 当 skill 的指令有误时：
 1. `read_file(path="workspace/skills/<name>/SKILL.md")` — 读取当前内容
-2. `edit_file(old_string="<wrong text>", new_string="<corrected text>")` — 修复特定部分。**切勿更改 skill 的 description 或 trigger**——这些由 skill-manager 所有。
+2. `edit_file(old_string="<wrong text>", new_string="<corrected text>")` — 修复特定部分。
 3. `exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)` — 验证
 
 ### Edit a skill (full rewrite)
 1. `read_file(path="workspace/skills/<name>/SKILL.md")` — 读取当前内容
-2. `write_file(path="workspace/skills/<name>/SKILL.md", content="<complete new content>")` — 完全替换。**精确保留原始 description 和 trigger**——它们由 skill-manager 所有。
+2. `write_file(path="workspace/skills/<name>/SKILL.md", content="<complete new content>")` — 完全替换。
 3. 验证
 
 ### Delete a skill
@@ -109,36 +109,57 @@ workspace/skills/<name>/
 ---
 name: skill-name           # 连字符命名法，小写
 description: >
-  Clear explanation of what this skill does and WHEN to use it.
-  Include specific scenarios, file types, task types that trigger it.
+  Trigger signal — when to load this skill. Include specific scenarios,
+  file types, task types. NOT the goal or full instructions.
+  Keep it short — ~100 chars, hard max 1024.
 always: false
 ---
 ```
 
-**关键**：`description` 字段是用来决定何时使用该 skill 的依据。使其足够具体。
+**关键**：`description` 是 **trigger 信号**，只回答"什么时候该加载"​，不写 goal 和步骤细节。LLM 在 skills_summary 只看这一行来决定是否 `read_file`。**简短、准确。**
 
-### 核心原则：Skill 必须有 Trigger → Action 映射
+### 核心原则：Trigger → Action → Goal
 
 **没有触发条件的 skill 不应该被创建。**
 
 每个 skill 必须满足：
-1. **有明确触发信号** — 什么场景下应该用？用户说了什么？系统状态是什么？
-2. **映射到具体行动** — 触发后做什么？步骤是什么？
-3. **不依赖 LLM 主动想起来** — 触发信号应当来自外部（用户消息、工具结果、cron、hook），而不是"LLM 反省时自动触发"
+1. **明确 trigger** — 什么场景下加载？用户说了什么？系统状态是什么？
+2. **具体 action** — 触发后按什么步骤做？
+3. **可验证的 goal** — 执行后怎么判断成功？在 [## Verification](#verification) 章节写清楚
+4. **不依赖 LLM 主动想起来** — trigger 应当来自外部（用户消息、工具结果、cron、hook），而不是"LLM 反省时自动触发"
 
-判断是否该创建 skill 的检验标准：
-- 这个 skill 的触发条件可以被自动检测（用户关键词、消息类型、工具返回）？
+判断的检验标准：
+- trigger 可以被自动检测（用户关键词、消息类型、工具返回）？
+- action 是否编号、可执行？
+- goal 是否写成了"执行后检查 XX"的形式？
 - 还是需要 LLM 在空闲时"回想起来"？→ 后者说明没有真正的 trigger，不适合做 skill
 
 ### Good Skill Structure
 
-Skills 的最佳实践包括：
-- **触发条件** — 何时使用此 skill
-- **编号步骤** — 确切的命令、代码或流程
-- **陷阱部分** — 已知问题、边界情况、操作系统特定说明
-- **验证步骤** — 如何确认成功
-- **自我优化说明** — 使用后，skill 可自我优化：简化步骤、修复 bug、添加边界情况、改进验证，或重新组织以提高清晰度。Description 和 trigger 不得更改——它们是 skill 的契约，由 skill-manager 所有。
-- **维护说明** 在末尾："此 skill 可自我优化：修复 bug、改进步骤、添加边界情况、增强验证。请勿更改 description 或 trigger——它们由 skill-manager 所有。"
+每个 SKILL.md 必须包含以下章节，**按此顺序**：
+
+```markdown
+## When to Use (trigger)
+什么场景下加载此 skill。
+
+## Steps (action)
+编号步骤，确切命令、代码或流程。
+
+## Verification (goal)
+执行后对照此处判断成功还是失败。
+格式：可执行的检查项或明确的 success criteria。
+例如：
+- logcat 中出现了预期的关键字
+- gradle build 返回 exit code 0
+- 生成的 PNG 文件存在且尺寸正确
+
+## Pitfalls
+已知问题、边界情况、操作系统特定说明。
+```
+
+还包括：
+- **自我优化说明** — 末尾的 self-optimization 脚注不可省略
+- **维护说明**：Skill 可自我优化：修复 bug、改进步骤、添加边界情况、增强验证。
 
 ### Progressive Disclosure
 
@@ -170,7 +191,6 @@ python {baseDir}/scripts/quick_validate.py workspace/skills/<name>
 
 - 连字符命名法、小写、仅字母和数字
 - 名称暗示 skill 的功能
-- 最长 64 个字符
 
 ## What NOT to Include
 
@@ -187,7 +207,4 @@ python {baseDir}/scripts/quick_validate.py workspace/skills/<name>
 
 ---
 
-**自我优化**：使用此 skill 后，根据所学内容进行改进——修复 bug、简化步骤、添加边界情况、增强验证。frontmatter 中的触发条件和 description 由原作者设置，不得更改。
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification. The trigger conditions and description in the frontmatter are set by the original author and must NOT be changed.
+**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.
