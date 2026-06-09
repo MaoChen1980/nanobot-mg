@@ -361,9 +361,9 @@ class AgentRunner:
                     elif executed_count > 0:
                         parts.append("、".join(tc.name for tc in tool_calls[:executed_count]) + " 已完成")
                     if pending_names:
-                        parts.append("我打算晚一点再执行 " + "、".join(pending_names))
+                        parts.append("、".join(pending_names) + " 已推迟")
                     if saved_injections:
-                        parts.append("用户发送了新消息，请根据他的意思优先处理。如果有新任务可以并行处理。")
+                        parts.append("你插入了新消息，已优先响应。")
                     closing_text = "。".join(parts)
 
                     # Preserve original assistant text content (Scenario 2)

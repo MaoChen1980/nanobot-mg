@@ -89,7 +89,7 @@ class TestInterruptionInjection:
 
         Sequence (tool_b completes → injection checked → was_interrupted):
           assistant[tc1, tc2] → tool(tc1) → tool(tc2)
-          → assistant(closing: "已完成。用户发送了新消息...")
+          → assistant(closing: "已完成。你插入了新消息...")
           → user(injection) → assistant(done)
         """
         from nanobot.agent.runner import AgentRunSpec, AgentRunner
@@ -127,7 +127,7 @@ class TestInterruptionInjection:
         # Closing assistant (second assistant msg) mentions completion + directive
         closing = assistant_msgs[1]
         assert "已完成" in closing["content"]
-        assert "用户发送了新消息" in closing["content"]
+        assert "你插入了新消息" in closing["content"]
 
         # Injection follows the closing assistant
         assert user_msgs[-1]["content"] == "new instruction"
@@ -145,7 +145,7 @@ class TestInterruptionInjection:
         Sequence:
           assistant[tc1, tc2, tc3] → tool(tc1)
           → injection checked → was_interrupted → strip tc2/tc3 from assistant
-          → assistant(closing: "已完成。我打算晚一点再执行。用户发送了新消息...")
+          → assistant(closing: "已完成。我打算晚一点再执行。你插入了新消息...")
           → user(injection) → assistant(done)
         """
         from nanobot.agent.runner import AgentRunSpec, AgentRunner
@@ -181,8 +181,8 @@ class TestInterruptionInjection:
         # Closing assistant mentions pending items
         closing = assistant_msgs[1]
         assert "已完成" in closing["content"]
-        assert "我打算晚一点再执行" in closing["content"]
-        assert "用户发送了新消息" in closing["content"]
+        assert "已推迟" in closing["content"]
+        assert "你插入了新消息" in closing["content"]
 
         # Only 1 tool result (tool_a ran, tool_b/tool_c stripped)
         assert _has_role(result.messages, "tool") == 1
@@ -220,7 +220,7 @@ class TestInterruptionInjection:
         # Original text "我正在处理" should be preserved at start of closing
         assert closing["content"].startswith("我正在处理")
         assert "已完成" in closing["content"]
-        assert "用户发送了新消息" in closing["content"]
+        assert "你插入了新消息" in closing["content"]
 
 
 # ── Tool Error scenarios ─────────────────────────────────────────────────────
@@ -335,6 +335,6 @@ class TestInterruptionNormal:
         # 2 tool results
         assert _has_role(result.messages, "tool") == 2
 
-        # No closing assistant (no "已完成" or "用户发送了新消息")
+        # No closing assistant (no "已完成" or "你插入了新消息")
         for m in assistant_msgs:
-            assert "用户发送了新消息" not in m.get("content", "")
+            assert "你插入了新消息" not in m.get("content", "")

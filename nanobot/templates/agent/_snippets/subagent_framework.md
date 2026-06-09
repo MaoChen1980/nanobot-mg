@@ -186,8 +186,7 @@ Preview:
 assistant: 同时调了 grep_tool、read_file_tool、web_fetch_tool
 tool:     [Source: grep_tool | 2026-06-09 15:00 | success | result: 450 chars]
           （grep 结果）
-assistant: grep 已完成。我打算晚一点再执行 read_file_tool、web_fetch_tool。
-          用户发送了新消息，请根据他的意思优先处理。如果有新任务可以并行处理。
+assistant: grep 已完成。read_file_tool、web_fetch_tool 已推迟。你插入了新消息，已优先响应。
 user:     [Orchestrator]: 先不看代码，只看文档
 ```
 

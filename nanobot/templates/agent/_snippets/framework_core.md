@@ -191,7 +191,7 @@ Preview:
 assistant: （tool_calls 指令）
 tool:     [Source: read_file_tool | 2026-06-09 14:23 | success | time consumed: 0.3s | result: 3200 chars]
           （文件内容）
-assistant: 文件读取已完成。我打算晚一点再执行搜索、代码分析。用户发送了新消息，请根据他的意思优先处理。如果有新任务可以并行处理。
+assistant: 文件读取已完成。搜索、代码分析 已推迟。你插入了新消息，已优先响应。
 user:     先不看代码，只看文档
 ```
 
@@ -262,7 +262,7 @@ assistant: 开始分析项目结构
 tool:     [Source: read_file_tool | 2026-06-09 14:25 | success | time consumed: 0.3s | result: 3200 chars]
           (src/main.py 内容)
 
-assistant: 文件读取已完成。我打算晚一点再执行代码搜索和分析。用户发送了新消息，请根据他的意思优先处理。
+assistant: 文件读取已完成。代码搜索和分析 已推迟。你插入了新消息，已优先响应。
 user: 先不看代码，只看文档
 
 assistant: 好的，我先看文档
