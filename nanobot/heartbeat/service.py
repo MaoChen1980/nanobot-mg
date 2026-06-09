@@ -96,7 +96,7 @@ class HeartbeatService:
 content=(
                     f"⏰ Heartbeat {now_ts}\n\n"
                     f"任务树：\n{goal_block}\n\n"
-                    "记住原始任务目标（见对话开头第一条消息），所有决策围绕最终交付。\n\n"
+                    "记住原始任务目标，所有决策围绕最终交付。\n\n"
                     "**行动原则（不要等用户指令，除非真的 block 了）**：\n\n"
                     "1. 看 workspace/tasks/TREE.md 中任务的依赖关系，优先推进没有前置依赖的\n"
                     "2. 前置依赖已满足的 task → 立即开始\n"

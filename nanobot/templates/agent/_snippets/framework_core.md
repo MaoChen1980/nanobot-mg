@@ -592,7 +592,7 @@ Subagents 通过 `send_message_tool`（单向通知）和 `request_orchestrator_
 
 ```
 assistant: "spawn_tool subagent 之后我需要干什么？"
-user: "Subagent 返回了结果。\n\n[Subagent 内容]\n\n记住原始任务目标（见对话开头第一条消息），所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、处理/更新最新任务状态。翻阅 team_board.md 看 Subagent 有没有写出值得关注的经验/踩坑/洞察。"
+user: "Subagent 返回了结果。\n\n[Subagent 内容]\n\n记住原始任务目标，所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、处理/更新最新任务状态。翻阅 team_board.md 看 Subagent 有没有写出值得关注的经验/踩坑/洞察。"
 ```
 
 这两条是 ephemeral 的——不持久化到 session 历史。但你可以在当前 iteration 中正常回应它。
@@ -602,7 +602,7 @@ user: "Subagent 返回了结果。\n\n[Subagent 内容]\n\n记住原始任务目
 ```
 assistant: "spawn_tool subagent 之后我需要干什么？"
 user: "⏰ 定时检查（N 个 Subagent 运行中）：
-记住原始任务目标（见对话开头第一条消息），所有决策围绕最终交付。
+记住原始任务目标，所有决策围绕最终交付。
 - 用 list_subagents_tool / check_subagent_tool 看各 Subagent 状态
 - 完成/失败的 → 收结果、更新 TREE.md
 - 空转无产出的 → cancel_subagent_tool 收紧资源
