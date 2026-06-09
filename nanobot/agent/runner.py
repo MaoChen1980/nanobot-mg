@@ -465,6 +465,10 @@ class AgentRunner:
                         config=backoff_cfg,
                     )
                     await hook.on_stream_end(context, resuming=False)
+                    # Run assess_me between retries — the model may need to
+                    # re-orient before its next attempt at the same context
+                    if spec.assess_me_callback is not None:
+                        await spec.assess_me_callback(messages)
                     await hook.after_iteration(context)
                     continue
                 logger.warning(
@@ -472,13 +476,14 @@ class AgentRunner:
                     iteration, spec.session_key or "default", empty_content_retries,
                 )
                 await hook.on_stream_end(context, resuming=False)
+                assess_injected = False
                 if spec.assess_me_callback is not None:
-                    await spec.assess_me_callback(messages)
+                    assess_injected = await spec.assess_me_callback(messages) or False
                     messages_for_model = strip_bypassed_tool_messages(messages)
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
                     messages_for_model = split_thinking_messages(messages_for_model)
-                response = await request_finalization_retry(spec, messages_for_model)
+                response = await request_finalization_retry(spec, messages_for_model, has_assessment=assess_injected)
                 retry_usage = usage_dict(response.usage)
                 accumulate_usage(usage, retry_usage)
                 raw_usage = merge_usage(raw_usage, retry_usage)
@@ -498,6 +503,11 @@ class AgentRunner:
                         iteration, spec.session_key or "default",
                         length_recovery_count, _MAX_LENGTH_RECOVERIES,
                     )
+                    # Run assess_me before length recovery — the truncated
+                    # output may leave the model mid-thought; assess_me helps
+                    # it re-establish context before continuing
+                    if spec.assess_me_callback is not None:
+                        await spec.assess_me_callback(messages)
                     await hook.on_stream_end(context, resuming=True)
                     messages.append(build_assistant_message(
                         clean,
@@ -589,16 +599,21 @@ class AgentRunner:
                     messages.append(build_assistant_message(
                         "[My previous response was blocked by content safety. I'll reformulate and try again.]"
                     ))
+                    # Run assess_me before reformulation — the model may not
+                    # realize its response was blocked; assess_me reframes its
+                    # intention for the retry
+                    if spec.assess_me_callback is not None:
+                        await spec.assess_me_callback(messages)
                     empty_content_retries = 0
                     retry_ctx.llm_request_state.record_success()
                     continue
                 if spec.assess_me_callback is not None:
-                    await spec.assess_me_callback(messages)
+                    assess_injected = await spec.assess_me_callback(messages) or False
                     messages_for_model = strip_bypassed_tool_messages(messages)
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
                     messages_for_model = split_thinking_messages(messages_for_model)
-                    response = await request_finalization_retry(spec, messages_for_model)
+                    response = await request_finalization_retry(spec, messages_for_model, has_assessment=assess_injected)
                     retry_usage = usage_dict(response.usage)
                     accumulate_usage(usage, retry_usage)
                     raw_usage = merge_usage(raw_usage, retry_usage)

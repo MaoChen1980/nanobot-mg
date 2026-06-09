@@ -91,12 +91,14 @@ def _build_request_kwargs(
 async def request_finalization_retry(
     spec: Any,
     messages: list[dict[str, Any]],
+    *,
+    has_assessment: bool = False,
 ) -> Any:
     """Request finalization retry when model returns empty content."""
     from nanobot.utils.runtime import build_finalization_retry_message
 
     retry_messages = list(messages)
-    retry_messages.append(build_finalization_retry_message())
+    retry_messages.append(build_finalization_retry_message(has_assessment=has_assessment))
     kwargs = _build_request_kwargs(spec, retry_messages, tools=None)
     pipe_kwargs = {k: v for k, v in kwargs.items() if k != "messages"}
     return await _message_pipe.complete(

@@ -15,7 +15,11 @@ EMPTY_FINAL_RESPONSE_MESSAGE = (
     "Please try again or narrow the task."
 )
 
-FINALIZATION_RETRY_PROMPT = (
+FINALIZATION_RETRY_WITH_ASSESS = (
+    "Review the [assess] block above. Based on that assessment, provide your response to the user."
+)
+
+FINALIZATION_RETRY_FALLBACK = (
     "Please provide your response to the user based on the conversation above."
 )
 
@@ -50,9 +54,10 @@ def is_blank_text(content: str | None) -> bool:
     return content is None or not content.strip()
 
 
-def build_finalization_retry_message() -> dict[str, str]:
-    """A short no-tools-allowed prompt for final answer recovery."""
-    return {"role": "user", "content": FINALIZATION_RETRY_PROMPT}
+def build_finalization_retry_message(has_assessment: bool = False) -> dict[str, str]:
+    """Prompt the model to finalize. References [assess] if one was injected."""
+    prompt = FINALIZATION_RETRY_WITH_ASSESS if has_assessment else FINALIZATION_RETRY_FALLBACK
+    return {"role": "user", "content": prompt}
 
 
 def build_length_recovery_message() -> dict[str, str]:

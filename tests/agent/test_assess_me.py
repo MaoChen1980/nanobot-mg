@@ -122,7 +122,7 @@ class TestIsAssessmentMessage:
         assert is_assessment_message(msg) is False
 
     def test_partial_prefix_does_not_match(self) -> None:
-        msg = {"role": "user", "content": "No response needed"}
+        msg = {"role": "user", "content": "[ass"}
         assert is_assessment_message(msg) is False
 
     def test_list_content_does_not_match(self) -> None:
@@ -311,7 +311,7 @@ class TestAppendTurnToSessionAssessmentFilter:
         assert session.messages[0]["content"] == "original msg"
         assert session.messages[1]["content"] == "Let me check..."
         assert session.messages[2]["content"] == "Here is the answer."
-        assert not any("No response needed" in m.get("content", "") for m in session.messages)
+        assert not any("[assess]" in m.get("content", "") for m in session.messages)
 
     def test_does_not_skip_tool_result_with_same_prefix(self) -> None:
         from nanobot.session.manager import Session

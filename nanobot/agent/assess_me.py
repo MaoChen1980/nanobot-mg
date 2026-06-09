@@ -10,7 +10,8 @@ from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.utils.prompt_templates import render_template
 
 _MAX_TOOL_RESULT_CHARS = 300
-_ASSESSMENT_PREFIX = "No response needed, but a reminder:"
+_ASSESSMENT_PREFIX = "[assess]"
+_ASSESSMENT_SUFFIX = "\n[/assess]"
 
 
 def format_conversation(messages: list[dict]) -> str:
@@ -86,7 +87,7 @@ def build_assessment_message(text: str) -> dict[str, Any]:
     """Build a *user*-role message for injecting an assessment into history."""
     return {
         "role": "user",
-        "content": f"{_ASSESSMENT_PREFIX}\n\n{text}",
+        "content": f"{_ASSESSMENT_PREFIX}\n{text.strip()}{_ASSESSMENT_SUFFIX}",
     }
 
 
