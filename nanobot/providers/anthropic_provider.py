@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import secrets
 import string
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from typing import Any
 
 import json_repair
@@ -136,6 +138,42 @@ class AnthropicProvider(LLMProvider):
             finish_reason="error",
             error_kind=LLMProvider._classify_error(e),
         )
+
+    @staticmethod
+    def _dump_prompt_on_error(
+        messages: list[dict[str, Any]],
+        error_status: int,
+        error_msg: str,
+        model: str,
+    ) -> str | None:
+        """Dump the full prompt to a file on 5xx errors for offline analysis.
+
+        Returns the dump file path, or None if skipped/failed.
+        """
+        if error_status < 500:
+            return None
+        dump_dir = os.environ.get(
+            "NANOBOT_DUMP_DIR",
+            os.path.expanduser("~/.nanobot/dumps"),
+        )
+        os.makedirs(dump_dir, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        filename = f"prompt_dump_{ts}_http{error_status}.json"
+        filepath = os.path.join(dump_dir, filename)
+        try:
+            payload = {
+                "error": {"status": error_status, "message": error_msg},
+                "model": model,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "messages": messages,
+            }
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+            logger.warning("Prompt dumped to {} ({} messages)", filepath, len(messages))
+            return filepath
+        except Exception as e:
+            logger.warning("Failed to dump prompt: {}", e)
+            return None
 
     @staticmethod
     def _strip_prefix(model: str) -> str:
@@ -743,6 +781,18 @@ class AnthropicProvider(LLMProvider):
                 error_kind="timeout",
             )
         except Exception as e:
+            if isinstance(e, APIStatusError) and e.status_code >= 500:
+                body = e.body or {}
+                error_obj = body.get("error", {}) if isinstance(body, dict) else {}
+                error_msg = (
+                    error_obj.get("message", "") if isinstance(error_obj, dict) else str(error_obj)
+                ) or str(body)
+                self._dump_prompt_on_error(
+                    kwargs.get("messages", []),
+                    e.status_code,
+                    error_msg,
+                    model or self.default_model,
+                )
             return self._handle_error(e)
 
     def get_default_model(self) -> str:
