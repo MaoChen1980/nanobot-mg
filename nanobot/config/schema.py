@@ -179,11 +179,11 @@ class AgentDefaults(Base):
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
     compress_trigger_tokens: int = Field(
-        default=150_000,
+        default=90_000,
         ge=1024,
     )  # History exceeds this → trigger compression (target: history_token_limit)
     history_token_limit: int = Field(
-        default=80_000,
+        default=50_000,
         ge=1024,
     )  # Target token count after compression
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
