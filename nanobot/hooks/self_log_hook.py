@@ -123,9 +123,39 @@ class SelfLogHook(AgentHook):
                 return pattern
         return None
 
+    MAX_LOG_AGE_SECONDS = 86400  # 1 day
+    _rotate_counter = 0
+
     def _append_log(self, entry: dict) -> None:
-        """Append one JSON line to the log file."""
+        """Append one JSON line to the log file. Purges entries older than 1 day."""
         self.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(self.LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        self._rotate_counter += 1
+        if self._rotate_counter % 10 == 0:
+            self._maybe_rotate()
+
+    def _maybe_rotate(self) -> None:
+        """Purge entries older than MAX_LOG_AGE_SECONDS."""
+        now = datetime.now(timezone.utc).timestamp()
+        cutoff = now - self.MAX_LOG_AGE_SECONDS
+        try:
+            with open(self.LOG_FILE, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except OSError:
+            return
+        kept = []
+        for line in lines:
+            try:
+                entry = json.loads(line)
+                ts = entry.get("time", "")
+                dt = datetime.fromisoformat(ts)
+                if dt.timestamp() >= cutoff:
+                    kept.append(line)
+            except (ValueError, KeyError, TypeError):
+                kept.append(line)
+        if len(kept) == len(lines):
+            return
+        with open(self.LOG_FILE, "w", encoding="utf-8") as f:
+            f.writelines(kept)
 
