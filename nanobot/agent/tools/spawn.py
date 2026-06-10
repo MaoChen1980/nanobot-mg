@@ -94,7 +94,7 @@ class SpawnTool(Tool):
             return "Error: subagent cannot spawn sub-subagents."
         workspace = getattr(self._manager, "workspace", None)
         context = build_context_block(workspace, team_context=team_context)
-        return await self._manager.spawn(
+        result = await self._manager.spawn(
             task=task,
             label=label,
             role=role,
@@ -105,6 +105,7 @@ class SpawnTool(Tool):
             session_key=self._session_key.get(),
             max_iterations=max_iterations,
         )
+        return f"{result}\n\n请继续按计划推进。"
 
 
 def build_context_block(workspace: Path | None = None, team_context: str | None = None) -> str:

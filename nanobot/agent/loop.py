@@ -872,7 +872,8 @@ class AgentLoop:
                 "• 中间结果需要记录到 memory/文档吗？\n"
                 "• 需要向用户汇报进度或请示决策吗？\n"
                 "\n"
-                "你决定做什么。一切正常无需行动就简短确认，不用长篇大论。"
+                "你决定做什么。一切正常无需行动就简短确认，不用长篇大论。\n\n"
+                "请继续按计划推进。"
             ),
             ephemeral=True,
             metadata={"proactive_check": True},

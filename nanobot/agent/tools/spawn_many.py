@@ -109,4 +109,4 @@ class SpawnManyTool(Tool):
             )
             results.append(result)
         summary = "\n".join(results)
-        return f"Spawned {len(tasks)} subagents:\n{summary}"
+        return f"Spawned {len(tasks)} subagents:\n{summary}\n\n请继续按计划推进。"

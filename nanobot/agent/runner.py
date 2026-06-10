@@ -389,7 +389,7 @@ class AgentRunner:
                     if pending_names:
                         parts.append("、".join(pending_names) + " 已推迟")
                     if saved_injections:
-                        parts.append("你插入了新消息，已优先响应。")
+                        parts.append("你插入了新消息，我会优先响应并做出合适安排。")
                     closing_text = "。".join(parts)
 
                     # Preserve original assistant text content (Scenario 2)

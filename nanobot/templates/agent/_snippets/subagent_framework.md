@@ -121,7 +121,7 @@ Preview:
 ```
 assistant: 同时调了 grep_tool、read_file_tool、web_fetch_tool
 tool:     （grep 结果）
-assistant: grep 已完成。read_file_tool、web_fetch_tool 已推迟。你插入了新消息，已优先响应。
+assistant: grep 已完成。read_file_tool、web_fetch_tool 已推迟。你插入了新消息，我会优先响应并做出合适安排。
 user:     [Orchestrator]: 先不看代码，只看文档
 ```
 
