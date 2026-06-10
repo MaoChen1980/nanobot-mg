@@ -234,7 +234,6 @@ class UserMessageHandler:
 
         # Stage 3: build initial messages
         initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session)
-        initial_msgs_count = len(initial_messages)
 
         # Stage 4: callbacks
         on_progress_final = on_progress or self._make_bus_progress_callback(msg)
