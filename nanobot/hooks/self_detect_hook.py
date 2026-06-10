@@ -536,12 +536,21 @@ class SelfDetectHook(AgentHook):
         Returns ``(findings, diagnostic)``.  *findings* is empty on failure;
         *diagnostic* explains why.
         """
-        try:
-            response = await self._call_llm(metrics_text, hook_code)
-        except Exception as exc:
-            logger.debug("SelfDetectHook: LLM call failed: {}", exc)
-            return [], "llm_call_error"
-        return self._parse_findings(response)
+        # Retry once on json_decode_error — LLM output is sometimes truncated mid-JSON.
+        # The second attempt reuses the same LLM call; if it still fails we accept the
+        # failure and return llm_empty so the session continues without crashing.
+        for attempt in range(2):
+            try:
+                response = await self._call_llm(metrics_text, hook_code)
+                findings, diagnostic = self._parse_findings(response)
+                if diagnostic != "json_decode_error":
+                    return findings, diagnostic
+                # fall through to retry on next iteration
+            except Exception as exc:
+                logger.debug("SelfDetectHook: LLM call failed: {}", exc)
+                return [], "llm_call_error"
+        # Second attempt also produced json_decode_error — treat as empty
+        return [], "llm_empty"
 
     async def _call_llm(self, metrics_text: str, hook_code: str) -> str:
         """Make a minimal LLM call for structured findings extraction."""
