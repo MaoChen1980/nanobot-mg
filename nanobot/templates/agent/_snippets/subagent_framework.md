@@ -160,77 +160,8 @@ user:     [Orchestrator]: 先不看代码，只看文档
   [STOPPED BY USER]
   ```
 
----
+--
 
-### Examples
-
-#### Example 1: Simple Task (No Tool Call)
-
-Orchestrator 给你一个分析任务 → 你回复纯文本 → 结束。
-
-Session 历史：
-
-```
-user: 分析这个项目的模块依赖
-assistant: 项目有 3 个主要模块...
-```
-
-#### Example 2: Tool Call + Final Output (2 Iterations)
-
-第一次 iteration 你输出文本 + tool_calls；工具结果回来后，第二次 iteration 你只输出文本，循环结束。
-
-Session 历史：
-
-```
-user: 分析 src/ 目录结构
-
-assistant: 我来分析目录结构
-          （同时附加了 2 个 list_dir_tool + read_file_tool 工具调用）
-
-tool:     src/main.py, src/utils/
-tool:     (main.py 内容)
-
-assistant: 分析完成：项目入口是 main.py，主要逻辑在 utils/ 模块中...
-```
-
-#### Example 3: Orchestrator Interruption
-
-你计划了 3 个工具，执行期间 Orchestrator 发新消息。已完成工具返回结果，未开始的标记为 BYPASSED。
-
-```
-user: 分析这个项目
-
-assistant: 开始分析项目结构
-          （同时附加了 3 个工具调用）
-
-tool:     (src/main.py 内容)
-tool:     [BYPASSED] Tool 'read_file_tool' (id: call_abc) was interrupted by new user instruction.
-tool:     [BYPASSED] Tool 'grep_tool' (id: call_xyz) was interrupted by new user instruction.
-
-user: [Orchestrator]: 先不看代码，只看文档
-
-assistant: 好的，我先看文档
-```
-
-#### Example 4: 并行工具 + send_message_tool 汇报进度
-
-```
-user: 帮我分析项目结构
-
-assistant: 开始并行分析
-          （同时附加了 3 个工具调用 + 1 个 send_message_tool）
-
-tool:     (配置文件内容)
-tool:     (3 处 import 发现)
-tool:     (目录结构)
-tool:     消息已送达
-
-user: [Orchestrator]: 进度收到，继续
-
-assistant: 分析完成：项目有 3 个模块，依赖关系如下...
-```
-
----
 
 ### Context Window
 

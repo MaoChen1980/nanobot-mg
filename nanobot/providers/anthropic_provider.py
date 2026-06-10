@@ -31,10 +31,7 @@ from anthropic.types import (
 )
 
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
-from nanobot.providers._tool_call_parser import (
-    detect_unparsed_tool_calls,
-    extract_xml_tool_calls,
-)
+from nanobot.providers._tool_call_parser import extract_xml_tool_calls
 
 _ALNUM = string.ascii_letters + string.digits
 
@@ -661,7 +658,7 @@ class AnthropicProvider(LLMProvider):
         # tool calls as XML/text in the content field instead of structured
         # ToolUseBlock.  Parse them out so the LLM doesn't see the raw XML in
         # history and learn to reproduce it on the next turn.
-        if not tool_calls and content and detect_unparsed_tool_calls(content):
+        if not tool_calls and content:
             extracted, cleaned = extract_xml_tool_calls(content)
             tool_calls.extend(extracted)
             content = cleaned

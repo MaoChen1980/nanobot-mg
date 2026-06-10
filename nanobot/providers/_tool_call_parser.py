@@ -9,7 +9,6 @@ reproduce them.
 
 Public interface:
     * ``extract_xml_tool_calls(content)`` — main entry point
-    * ``detect_unparsed_tool_calls(content)`` — detection / warning-only
 """
 
 from __future__ import annotations
@@ -22,19 +21,6 @@ from typing import Any
 from nanobot.providers.base import ToolCallRequest
 
 _ALNUM = string.ascii_letters + string.digits
-
-# Regex patterns to detect unparsed tool calls in LLM content (XML/ReAct, etc.)
-_UNPARSED_TOOL_PATTERNS = [
-    r"<invoke\s+name\s*=\s*[\"']([^\"']+)[\"']\s*>",
-    r"<invoke\s+tool\s*=\s*[\"']([^\"']+)[\"']\s*>",     # MiniMax: <invoke tool="name">
-    r"\{tool\s*=>\s*[\"']([^\"']+)[\"']\s*>",              # MiniMax: {tool => "name">
-    r"\[TOOL_CALL\]",                                       # iOS agent: [TOOL_CALL] wrapper
-    r"<tool>([^<]+)</tool>",
-    r"Action\s*:\s*(\w+)",
-    r"\[Tool:\s*\w+\s*\|",                                 # nanobot Tool metadata prefix
-    r"\[Source:\s*\w+\s*\|",                               # nanobot Source metadata prefix
-]
-_UNPARSED_TOOL_RE = re.compile("|".join(f"(?:{p})" for p in _UNPARSED_TOOL_PATTERNS))
 
 # Safe regex for retry — only matches explicit XML tool calls that won't
 # cause false positives in normal conversation.
@@ -303,38 +289,6 @@ def _parse_tool_call_args_block(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
-
-def detect_unparsed_tool_calls(content: str | None) -> bool:
-    """Return True if *content* contains unparsed tool call patterns.
-
-    Logs a warning with the matched tool name and pattern type.  The actual
-    extraction (removal from text) is done by ``extract_xml_tool_calls``.
-    """
-    if not content:
-        return False
-    m = _UNPARSED_TOOL_RE.search(content)
-    if not m:
-        return False
-    from loguru import logger
-    for i, g in enumerate(m.groups()):
-        if g:
-            logger.warning(
-                "LLM content contains unparsed tool call '{}' (pattern: {}). "
-                "The API did not return a structured tool_call — treating as plain text.",
-                g, _UNPARSED_TOOL_PATTERNS[i].split("(")[0].strip("\\"),
-            )
-            return True
-    # Patterns without capture groups (e.g. ``[TOOL_CALL]`` at index 3) still
-    # indicate unparsed tool calls — return True when the regex matched.
-    if m.group():
-        logger.warning(
-            "LLM content contains unparsed tool call marker '{}'. "
-            "The API did not return a structured tool_call — treating as plain text.",
-            m.group()[:80],
-        )
-        return True
-    return False
 
 
 def extract_xml_tool_calls(content: str) -> tuple[list[ToolCallRequest], str | None]:

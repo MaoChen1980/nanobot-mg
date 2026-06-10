@@ -33,7 +33,6 @@ else:
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
 from nanobot.providers._tool_call_parser import (
     _short_tool_id,
-    detect_unparsed_tool_calls as _detect_unparsed_tool_calls,
     extract_xml_tool_calls as _extract_xml_tool_calls,
 )
 from nanobot.providers.openai_responses import (
@@ -1341,7 +1340,7 @@ class OpenAICompatProvider(LLMProvider):
             # Some providers (MiniMax) return tool calls as XML text in ``content``
             # instead of structured ``tool_calls``.  Parse in-place instead of
             # retrying — prompt-based correction is unreliable.
-            if not result.tool_calls and result.content and _detect_unparsed_tool_calls(result.content):
+            if not result.tool_calls and result.content:
                 tool_calls, cleaned = _extract_xml_tool_calls(result.content)
                 if tool_calls:
                     result = LLMResponse(
@@ -1446,7 +1445,7 @@ class OpenAICompatProvider(LLMProvider):
             result = self._parse_chunks(chunks)
             # Same in-place XML parsing as chat() — handles MiniMax plain-text
             # tool calls even in streaming responses.
-            if not result.tool_calls and result.content and _detect_unparsed_tool_calls(result.content):
+            if not result.tool_calls and result.content:
                 tool_calls, cleaned = _extract_xml_tool_calls(result.content)
                 if tool_calls:
                     result = LLMResponse(

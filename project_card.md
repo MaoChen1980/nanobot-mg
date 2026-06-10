@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-06-09T08:55:39+0800
+Last scanned: 2026-06-10T13:31:38+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~77,093
+- **Approx LOC**: ~77,362
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 339 | ~76,805 |
+| Python | 338 | ~77,074 |
 | Shell | 5 | ~288 |
 
 ## Directory Structure
@@ -116,7 +116,6 @@ E:\claude\nanobot-mg/
     nanobot_arch.png (490KB)
     nanobot_logo.png (187KB)
     nanobot_webui.png (295KB)
-  memory/
   nanobot/
     agent/
       commands/
@@ -133,10 +132,10 @@ E:\claude\nanobot-mg/
         base.py (16KB)
         cancel_subagent.py (1KB)
         check_subagent.py (2KB)
-        conversation_search.py (5KB)
+        conversation_search.py (6KB)
         cron.py (20KB)
         debug_root_cause.py (11KB)
-        diagnose_codebase_tool.py (7KB)
+        diagnose_codebase_tool.py (8KB)
         edit_files.py (17KB)
         explore_module.py (19KB)
         file_state.py (7KB)
@@ -167,31 +166,31 @@ E:\claude\nanobot-mg/
         tool_call_log.py (3KB)
         web.py (23KB)
       __init__.py (584B)
-      assess_me.py (3KB)
+      assess_me.py (4KB)
       compress.py (16KB)
-      context.py (33KB)
+      context.py (32KB)
       context_vars.py (981B)
       db.py (17KB)
       hook.py (6KB)
       llm_context.py (2KB)
-      loop.py (60KB)
+      loop.py (59KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (773B)
       loop_dispatch.py (7KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (23KB)
+      loop_message_handlers.py (22KB)
       loop_utils.py (3KB)
       memory.py (352B)
       memory_extractor.py (63KB)
-      memory_store.py (10KB)
+      memory_store.py (11KB)
       memory_vector.py (25KB)
       message_pipe.py (5KB)
       project_scanner.py (21KB)
-      runner.py (35KB)
+      runner.py (34KB)
       runner_constants.py (582B)
       runner_context.py (6KB)
-      runner_execution.py (6KB)
+      runner_execution.py (8KB)
       runner_injection.py (5KB)
       runner_llm.py (6KB)
       runner_retry.py (4KB)
@@ -220,15 +219,14 @@ E:\claude\nanobot-mg/
     templates/
     utils/
     web/
-    workspace/
     __init__.py (1KB)
     __main__.py (147B)
     _commit.py (56B)
     nanobot.py (4KB)
+    project_card.md (4KB)
   tasks/
   tests/
   webui/
-  workspace/
   CONTRIBUTING.md (4KB)
   docker-compose.yml (1KB)
   Dockerfile (2KB)
