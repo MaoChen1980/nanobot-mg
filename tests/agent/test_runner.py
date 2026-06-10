@@ -347,7 +347,7 @@ async def test_loop_stream_filter_handles_think_only_prefix_without_crashing(tmp
     async def on_stream_end(*, resuming: bool = False) -> None:
         endings.append(resuming)
 
-    final_content, _, _, _, _ = await loop._run_agent_loop(
+    final_content, _, _, _, _, _ = await loop._run_agent_loop(
         [],
         on_stream=on_stream,
         on_stream_end=on_stream_end,
@@ -988,7 +988,127 @@ async def test_dispatch_republishes_leftover_queue_messages(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Integration: overflow → MessagePipe compression → messages sync
+# ---------------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
+async def test_runner_recovers_from_overflow_via_compression():
+    """Runner completes after overflow → MessagePipe compression → retry.
+
+    Verifies the (response, compressed) tuple flows correctly from
+    MessagePipe through request_model back into runner's messages list
+    without crashing or producing wrong output.
+    """
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    call_count = 0
+
+    async def _stream_chat(messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return LLMResponse(content="context window exceeded", finish_reason="error", error_kind="context_length")
+        if "on_content_delta" in kwargs:
+            # Main call retry (has stream callbacks)
+            return LLMResponse(content="final answer.", finish_reason="stop", tool_calls=[], usage={"prompt_tokens": 5, "completion_tokens": 5})
+        # Summary call from _compress (no stream callbacks)
+        return LLMResponse(content="summary text.", finish_reason="stop")
+
+    provider.chat_stream_with_retry = _stream_chat
+    provider.chat_with_retry = AsyncMock(return_value=LLMResponse(content="ok", finish_reason="stop"))
+    llm_set_llm(provider, "test-model")
+
+    runner = AgentRunner(provider)
+    result = await runner.run(AgentRunSpec(
+        initial_messages=[
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "first question"},
+            {"role": "assistant", "content": "first answer"},
+            {"role": "user", "content": "hello"},
+        ],
+        tools=MagicMock(get_definitions=MagicMock(return_value=[])),
+        model="test-model",
+        max_iterations=1,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    ))
+
+    assert call_count == 3  # overflow + summary + retry
+    assert result.final_content == "final answer."
+    assert result.stop_reason == "completed"
+
+
+@pytest.mark.asyncio
+async def test_initial_message_count_no_compression():
+    """initial_message_count equals len(initial_messages) when no overflow."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    provider.chat_stream_with_retry = AsyncMock(
+        return_value=LLMResponse(content="ok", finish_reason="stop", tool_calls=[], usage={}),
+    )
+    provider.chat_with_retry = AsyncMock(return_value=LLMResponse(content="ok", finish_reason="stop"))
+    llm_set_llm(provider, "test-model")
+
+    msgs = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "hello"},
+    ]
+    runner = AgentRunner(provider)
+    result = await runner.run(AgentRunSpec(
+        initial_messages=msgs,
+        tools=MagicMock(get_definitions=MagicMock(return_value=[])),
+        model="test-model",
+        max_iterations=1,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    ))
+
+    assert result.initial_message_count == len(msgs)
+
+
+@pytest.mark.asyncio
+async def test_initial_message_count_updated_after_compression():
+    """initial_message_count reflects compressed length, not original."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    call_count = 0
+
+    async def _stream_chat(messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return LLMResponse(content="context window exceeded", finish_reason="error", error_kind="context_length")
+        if "on_content_delta" in kwargs:
+            return LLMResponse(content="done", finish_reason="stop", tool_calls=[], usage={})
+        return LLMResponse(content="summary", finish_reason="stop")
+
+    provider.chat_stream_with_retry = _stream_chat
+    provider.chat_with_retry = AsyncMock(return_value=LLMResponse(content="ok", finish_reason="stop"))
+    llm_set_llm(provider, "test-model")
+
+    msgs = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "user", "content": "q2"},
+        {"role": "assistant", "content": "a2"},
+        {"role": "user", "content": "q3"},
+    ]
+    runner = AgentRunner(provider)
+    result = await runner.run(AgentRunSpec(
+        initial_messages=msgs,
+        tools=MagicMock(get_definitions=MagicMock(return_value=[])),
+        model="test-model",
+        max_iterations=1,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    ))
+
+    # After compression original 6 msgs → system + synthetic_summary + keep turn (asst + user) = 4
+    # Budget=None keeps only 1 turn, 3 turns total → 2 compressed → 1 summary msg
+    assert result.initial_message_count == 4
+    assert result.initial_message_count < len(msgs)  # compressed shorter than original
 
 

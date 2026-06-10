@@ -699,7 +699,8 @@ class AgentLoop:
             logger.error("LLM returned error: {}", (result.final_content or "")[:200])
 
         await hook.after_turn()
-        return result.final_content, result.tools_used, result.messages, result.stop_reason, result.had_injections
+        return (result.final_content, result.tools_used, result.messages,
+                result.stop_reason, result.had_injections, result.initial_message_count)
 
     def _make_retry_assess_callback(self, session: Session | None):
         """Build assess_me callback for runner retry paths."""

@@ -255,6 +255,7 @@ async def test_process_message_does_not_duplicate_early_persisted_user_message(t
         ],
         "stop",
         False,
+        2,  # initial_msg_count — matches len(initial_messages) when no compression
     ))  # type: ignore[method-assign]
 
     result = await loop._process_message(
@@ -293,6 +294,7 @@ async def test_process_message_uses_context_chat_id_for_runtime_prompt(tmp_path:
         ],
         "stop",
         False,
+        2,  # initial_msg_count
     ))
 
     result = await loop._process_message(
@@ -350,6 +352,7 @@ async def test_next_turn_after_crash_closes_pending_user_turn_before_new_input(t
         ],
         "stop",
         False,
+        4,  # initial_msg_count (system + old_question + error_asst + new_question)
     ))  # type: ignore[method-assign]
 
     result = await loop._process_message(
@@ -446,6 +449,7 @@ async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -
             [*initial_messages, {"role": "assistant", "content": "next answer"}],
             "stop",
             False,
+            len(initial_messages),  # initial_msg_count
         )
 
     loop._run_agent_loop = resumed_run_agent_loop  # type: ignore[method-assign]

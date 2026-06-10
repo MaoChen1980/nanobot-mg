@@ -50,20 +50,27 @@ class MessagePipe:
         messages: list[dict],
         budget: int | None = None,
         **kwargs: Any,
-    ) -> Any:
-        """非流式调用，带 overflow 处理。"""
+    ) -> tuple[Any, list[dict] | None]:
+        """非流式调用，带 overflow 处理。
+
+        Returns ``(response, compressed_messages)`` — 如果发生过压缩则
+        *compressed_messages* 为压缩后的消息列表，否则为 ``None``。
+        """
+        compressed_messages: list[dict] | None = None
         for attempt in range(self.MAX_RETRIES + 1):
             response = await chat_with_retry(messages=messages, **kwargs)
             if not _is_overflow(response):
-                return response
+                return response, compressed_messages
             logger.warning(
                 "Overflow detected (attempt {}/{}), compressing...",
                 attempt + 1, self.MAX_RETRIES,
             )
             messages = await self._compress(messages, budget=budget)
+            compressed_messages = messages
 
         # Last attempt: send as-is (can't compress further)
-        return await chat_with_retry(messages=messages, **kwargs)
+        response = await chat_with_retry(messages=messages, **kwargs)
+        return response, compressed_messages
 
     async def complete_stream(
         self,
@@ -73,8 +80,13 @@ class MessagePipe:
         on_content_delta: Any,
         on_reasoning_delta: Any,
         **kwargs: Any,
-    ) -> Any:
-        """流式调用，带 overflow 处理。"""
+    ) -> tuple[Any, list[dict] | None]:
+        """流式调用，带 overflow 处理。
+
+        Returns ``(response, compressed_messages)`` — 如果发生过压缩则
+        *compressed_messages* 为压缩后的消息列表，否则为 ``None``。
+        """
+        compressed_messages: list[dict] | None = None
         for attempt in range(self.MAX_RETRIES + 1):
             response = await chat_stream_with_retry(
                 messages=messages,
@@ -83,19 +95,21 @@ class MessagePipe:
                 **kwargs,
             )
             if not _is_overflow(response):
-                return response
+                return response, compressed_messages
             logger.warning(
                 "Overflow detected (attempt {}/{}), compressing...",
                 attempt + 1, self.MAX_RETRIES,
             )
             messages = await self._compress(messages, budget=budget)
+            compressed_messages = messages
 
-        return await chat_stream_with_retry(
+        response = await chat_stream_with_retry(
             messages=messages,
             on_content_delta=on_content_delta,
             on_reasoning_delta=on_reasoning_delta,
             **kwargs,
         )
+        return response, compressed_messages
 
     async def _compress(self, messages: list[dict], budget: int | None = None) -> list[dict]:
         """渐进式压缩 messages 中最旧的轮次。

@@ -24,8 +24,13 @@ async def request_model(
     messages: list[dict[str, Any]],
     hook: Any,
     context: Any,
-) -> Any:
-    """Make an LLM request with optional streaming."""
+) -> tuple[Any, list[dict] | None]:
+    """Make an LLM request with optional streaming.
+
+    Returns ``(response, compressed_messages)`` — 如果 MessagePipe 发生过
+    overflow 压缩则返回压缩后的消息列表供 caller 同步回 ``messages``，
+    否则 ``compressed_messages`` 为 ``None``。
+    """
     if _current_debug_enabled.get():
         _dump_messages_to_debug_dir(messages)
     timeout_s: float | None = spec.llm_timeout_s
@@ -64,7 +69,7 @@ async def request_model(
             content=f"Error calling LLM: timed out after {timeout_s:g}s",
             finish_reason="error",
             error_kind="timeout",
-        )
+        ), None
 
 
 def _build_request_kwargs(
@@ -95,18 +100,23 @@ async def request_finalization_retry(
     *,
     has_assessment: bool = False,
 ) -> Any:
-    """Request finalization retry when model returns empty content."""
+    """Request finalization retry when model returns empty content.
+
+    Returns only the response (compressed messages are discarded since
+    finalization runs at the end of the agent loop).
+    """
     from nanobot.utils.runtime import build_finalization_retry_message
 
     retry_messages = list(messages)
     retry_messages.append(build_finalization_retry_message(has_assessment=has_assessment))
     kwargs = _build_request_kwargs(spec, retry_messages, tools=None)
     pipe_kwargs = {k: v for k, v in kwargs.items() if k != "messages"}
-    return await _message_pipe.complete(
+    response, _ = await _message_pipe.complete(
         messages=retry_messages,
         budget=spec.history_token_limit,
         **pipe_kwargs,
     )
+    return response
 
 
 def usage_dict(usage: dict[str, Any] | None) -> dict[str, int]:

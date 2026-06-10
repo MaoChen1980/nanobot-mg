@@ -128,6 +128,11 @@ class AgentRunResult:
     # Retry tracking
     retry_count: int = 0  # total number of retries performed
     retry_summary: dict[str, Any] = field(default_factory=dict)  # detailed retry stats
+    # Number of messages in result.messages that correspond to the initial
+    # pre-loop input (system + history + user).  After reactive compression
+    # this may differ from len(spec.initial_messages).  Used by callers of
+    # _append_turn_to_session to correctly identify new-turn messages.
+    initial_message_count: int = 0
 
 
 class AgentRunner:
@@ -197,6 +202,7 @@ class AgentRunner:
     async def run(self, spec: AgentRunSpec) -> AgentRunResult:
         hook = spec.hook or AgentHook()
         messages = list(spec.initial_messages)
+        initial_msg_count = len(messages)
         final_content: str | None = None
         tools_used: list[str] = []
         usage: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
@@ -269,7 +275,17 @@ class AgentRunner:
             context = AgentHookContext(iteration=iteration, messages=messages, workspace=spec.workspace)
             await hook.before_iteration(context)
             messages_for_model = hook.before_llm_call(context, messages_for_model)
-            response = await request_model(spec, messages_for_model, hook, context)
+            response, compressed = await request_model(spec, messages_for_model, hook, context)
+            # If MessagePipe compressed due to overflow, sync the compressed
+            # messages back so the next iteration doesn't re-grow from old history.
+            # Note: compressed reflects the post-hook messages_for_model state.
+            # If a custom hook's before_llm_call injected transient content,
+            # it will be persisted into messages. Hook implementers should
+            # avoid adding one-shot-only instructions via before_llm_call;
+            # use before_iteration for persistent prep instead.
+            if compressed is not None:
+                messages[:] = compressed
+                initial_msg_count = len(messages)
             # Images are only useful once — strip base64 payloads so
             # subsequent turns don't re-send megabytes of image data.
             # The model can re-read with read_file_tool if needed.
@@ -699,6 +715,7 @@ class AgentRunner:
             had_injections=had_injections,
             retry_count=total_retry_count,
             retry_summary=retry_ctx.summary(),
+            initial_message_count=initial_msg_count,
         )
 
     def _log_tool_call(

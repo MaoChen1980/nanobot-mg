@@ -123,11 +123,10 @@ class SystemMessageHandler:
             current_role="user",
             context_state=cs,
         )
-        final_content, _, all_msgs, stop_reason, _ = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
-        msgs_count = len(messages)
+        final_content, _, all_msgs, stop_reason, _, initial_msg_count = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         if is_subagent and self._loop._persist_subagent_followup(session, msg):
             self._loop.sessions.save(session)
-        self._loop._append_turn_to_session(session, all_msgs, msgs_count if is_subagent else msgs_count - 1)
+        self._loop._append_turn_to_session(session, all_msgs, initial_msg_count if is_subagent else initial_msg_count - 1)
         self._loop.lifecycle.finalize(session)
         content = final_content or "Background task completed."
         buttons: list = []
@@ -241,7 +240,7 @@ class UserMessageHandler:
             user_persisted_early = self._persist_user_message_early(session, msg, pending_ask_id)
 
         # Stage 6: run agent loop
-        final_content, _, all_msgs, stop_reason, had_injections = await self._loop._run_agent_loop(
+        final_content, _, all_msgs, stop_reason, had_injections, initial_msg_count = await self._loop._run_agent_loop(
             initial_messages,
             on_progress=on_progress_final,
             on_stream=on_stream,
@@ -264,7 +263,7 @@ class UserMessageHandler:
             # but still clear any runtime checkpoint the loop may have set.
             self._loop.lifecycle.finalize_ephemeral(session)
         else:
-            await self._finalize_turn(session, all_msgs, initial_msgs_count, user_persisted_early, final_content)
+            await self._finalize_turn(session, all_msgs, initial_msg_count, user_persisted_early, final_content)
 
         # Stage 8: build outbound response
         return self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)

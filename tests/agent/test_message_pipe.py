@@ -59,12 +59,13 @@ class TestMessagePipeComplete:
         provider.chat_with_retry = AsyncMock(return_value=_make_success_response("ok"))
         llm_set_llm(provider, "test-model")
 
-        result = await pipe.complete(
+        result, compressed = await pipe.complete(
             messages=[{"role": "user", "content": "hi"}],
             model="test-model",
         )
 
         assert result.content == "ok"
+        assert compressed is None
         provider.chat_with_retry.assert_awaited_once()
 
     async def test_retries_on_overflow(self):
@@ -74,9 +75,11 @@ class TestMessagePipeComplete:
             _make_overflow_response(),
             _make_success_response("retried ok"),
         ])
+        # _compress calls chat_stream_with_retry for summarization
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
         llm_set_llm(provider, "test-model")
 
-        result = await pipe.complete(
+        result, compressed = await pipe.complete(
             messages=[
                 {"role": "system", "content": "be helpful"},
                 {"role": "user", "content": "hello"},
@@ -87,6 +90,7 @@ class TestMessagePipeComplete:
         )
 
         assert result.content == "retried ok"
+        assert compressed is not None
         assert provider.chat_with_retry.await_count == 2
 
     async def test_exhausts_retries(self):
@@ -95,12 +99,13 @@ class TestMessagePipeComplete:
         provider.chat_with_retry = AsyncMock(return_value=_make_overflow_response())
         llm_set_llm(provider, "test-model")
 
-        result = await pipe.complete(
+        result, compressed = await pipe.complete(
             messages=[{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
             model="test-model",
         )
 
         assert _is_overflow(result)
+        assert compressed is not None
         # MAX_RETRIES(3) loop iterations + 1 final fallback = 5 total
         assert provider.chat_with_retry.await_count == 5
 
@@ -116,7 +121,7 @@ class TestMessagePipeCompleteStream:
         on_delta = AsyncMock()
         on_reasoning = AsyncMock()
 
-        result = await pipe.complete_stream(
+        result, compressed = await pipe.complete_stream(
             messages=[{"role": "user", "content": "hi"}],
             model="test-model",
             on_content_delta=on_delta,
@@ -124,6 +129,7 @@ class TestMessagePipeCompleteStream:
         )
 
         assert result.content == "stream ok"
+        assert compressed is None
         provider.chat_stream_with_retry.assert_awaited_once()
 
     async def test_retries_on_overflow(self):
@@ -136,12 +142,13 @@ class TestMessagePipeCompleteStream:
             call_count += 1
             if call_count == 1:
                 return _make_overflow_response()
+            # call 2: compression (summarize_turns), call 3: main retry
             return _make_success_response("retried stream")
 
         provider.chat_stream_with_retry = AsyncMock(side_effect=_stream_with_retry)
         llm_set_llm(provider, "test-model")
 
-        result = await pipe.complete_stream(
+        result, compressed = await pipe.complete_stream(
             messages=[
                 {"role": "system", "content": "x"},
                 {"role": "user", "content": "a"},
@@ -154,7 +161,8 @@ class TestMessagePipeCompleteStream:
         )
 
         assert result.content == "retried stream"
-        # Overflow → _compress(sumarize) → retry = 3 calls
+        assert compressed is not None
+        # Overflow → _compress(summarize) → retry = 3 calls
         assert call_count == 3
 
 
@@ -293,6 +301,100 @@ class TestCompressWithBudget:
         assert len(result) == 4
         # 3 batches → 3 compress_turns calls → 3 chat_stream_with_retry calls
         assert provider.chat_stream_with_retry.await_count == 3
+
+
+class TestCompleteReturnsCompressed:
+    """complete / complete_stream return compressed messages after overflow."""
+
+    async def test_complete_returns_none_when_no_overflow(self):
+        """No overflow → compressed is None."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(return_value=_make_success_response("ok"))
+        provider.chat_stream_with_retry = AsyncMock()
+        llm_set_llm(provider, "test-model")
+
+        _, compressed = await pipe.complete(
+            messages=[{"role": "user", "content": "hi"}],
+            model="test-model",
+        )
+        assert compressed is None
+
+    async def test_complete_stream_returns_none_when_no_overflow(self):
+        """No overflow → compressed is None (streaming path)."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("ok"))
+        llm_set_llm(provider, "test-model")
+
+        _, compressed = await pipe.complete_stream(
+            messages=[{"role": "user", "content": "hi"}],
+            model="test-model",
+            on_content_delta=AsyncMock(),
+            on_reasoning_delta=AsyncMock(),
+        )
+        assert compressed is None
+
+    async def test_complete_returns_compressed_after_overflow_retry(self):
+        """Overflow → compress → retry success → compressed is not None."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(side_effect=[
+            _make_overflow_response(),
+            _make_success_response("retried"),
+        ])
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
+        llm_set_llm(provider, "test-model")
+
+        response, compressed = await pipe.complete(
+            messages=[
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "a"},
+                {"role": "assistant", "content": "b"},
+                {"role": "user", "content": "c"},
+            ],
+            model="test-model",
+        )
+        assert response.content == "retried"
+        assert compressed is not None
+        # System prompt preserved
+        assert compressed[0]["role"] == "system"
+        # Latest user message preserved
+        assert compressed[-1]["role"] == "user"
+
+    async def test_complete_stream_returns_compressed_after_overflow_retry(self):
+        """Overflow → compress → retry success → compressed is not None (streaming)."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        call_count = 0
+
+        async def _stream_fn(messages, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _make_overflow_response()
+            return _make_success_response("retried stream")
+
+        provider.chat_stream_with_retry = AsyncMock(side_effect=_stream_fn)
+        llm_set_llm(provider, "test-model")
+
+        response, compressed = await pipe.complete_stream(
+            messages=[
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "a"},
+                {"role": "assistant", "content": "b"},
+                {"role": "user", "content": "c"},
+            ],
+            model="test-model",
+            on_content_delta=AsyncMock(),
+            on_reasoning_delta=AsyncMock(),
+        )
+        assert response.content == "retried stream"
+        assert compressed is not None
+        # System prompt preserved
+        assert compressed[0]["role"] == "system"
+        # Latest user message preserved
+        assert compressed[-1]["role"] == "user"
 
 
 class TestSplitTurnsByAssistant:
