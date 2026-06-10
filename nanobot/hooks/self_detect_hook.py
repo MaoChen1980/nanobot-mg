@@ -60,7 +60,7 @@ REFLECTION_SYSTEM_PROMPT = """\
 }
 ```
 
-**你必须在任何时候都输出至少 1 条 finding。** 可以在你看起来最没有问题的度量里也要去质疑它。没有零结果。
+如果所有指标和代码都没有问题，输出空的 findings 列表是正常的。不要为了满足"必须有 finding"而强制制造怀疑。
 """
 
 REFLECTION_USER_TEMPLATE = """\
@@ -149,15 +149,20 @@ def _detect_user_signals(messages: list[dict]) -> dict[str, int]:
     return counts
 
 
-def _read_resolved_ids(max_ids: int = 200) -> set[str]:
-    """Read resolved finding IDs from JSONL file (one ID per line)."""
+def _read_resolved_ids() -> set[str]:
+    """Read resolved finding IDs from JSONL file (one ID per line).
+
+    Reads ALL lines — no truncation. resolved_findings.jsonl grows slowly
+    (one ID per resolved finding) and bounded set prevents unbounded memory.
+    Truncation to 200 was causing old resolved IDs to be forgotten, making
+    resolved findings re-appear as new.
+    """
     if not RESOLVED_FILE.exists():
         return set()
     ids: set[str] = set()
     try:
         lines = RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines()
-        # Keep only the last max_ids to prevent unbounded growth
-        for line in lines[-max_ids:]:
+        for line in lines:
             line = line.strip()
             if line:
                 ids.add(line)
