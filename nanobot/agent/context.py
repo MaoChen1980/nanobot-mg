@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import mimetypes
 import os
 import platform
@@ -95,6 +96,7 @@ class ContextBuilder:
         channel: str | None = None,
         tool_definitions: list[dict[str, Any]] | None = None,
         runtime_context: str | None = None,
+        framework_search: str | None = None,
     ) -> str:
         """Build the static portion of the system prompt (identity, tools, bootstrap, skills)."""
         _t0 = time.time()
@@ -128,6 +130,7 @@ class ContextBuilder:
             tools=tools,
             bootstrap=bootstrap or None,
             workflows=workflow_routing or None,
+            framework_search=framework_search,
             always_skills=always_content,
             skills_summary=skills_section,
             runtime_context=runtime_context,
@@ -327,6 +330,67 @@ class ContextBuilder:
             "Create and update it with write_file_tool.\n\n"
             + self._shift_headings(content, offset=1)
         )
+
+    def _build_framework_search_section(self, history: list[dict[str, Any]]) -> str:
+        """Auto-search framework docs using the last turn's intent/plan output.
+
+        Walks backwards to the last user message, then takes the first 150 chars
+        of the assistant message immediately after it (first response = intent/plan
+        per OUTPUT GUIDE). Falls back silently on first turn.
+        """
+        query = ""
+        for msg in reversed(history):
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+            if role == "user":
+                break  # reached the last user — assistant before it in rev = first after user
+            if role != "assistant":
+                continue
+
+            # Content from text output
+            content = ""
+            if isinstance(msg.get("content"), str):
+                content = msg["content"].strip()
+
+            # Fallback: content from message_tool() tool call
+            if not content:
+                for tc in msg.get("tool_calls") or ():
+                    try:
+                        fn = tc.get("function", {})
+                        if fn.get("name") in ("message_tool", "message"):
+                            raw = fn.get("arguments", "{}")
+                            if isinstance(raw, str):
+                                raw = json.loads(raw)
+                            if isinstance(raw, dict):
+                                content = (raw.get("content") or "").strip()
+                    except Exception:
+                        continue
+
+            if content:
+                query = content[:150]
+
+        if len(query) < 10:
+            return ""
+
+        results = self.memory.framework_index.search(query, k=3, min_score=0.3)
+        if not results:
+            return ""
+
+        lines: list[str] = [
+            "# Relevant Framework Docs\n\n",
+            "Auto-matched from framework/ based on your last stated intent/plan. "
+            "May contain relevant workflows, rules, or constraints.\n",
+        ]
+        for r in results:
+            source = r.get("source", "")
+            heading = r.get("heading", "")
+            text = r.get("text", "")
+            score = r.get("score", 0)
+            label = f"{source}" if not heading else f"{source} — {heading}"
+            lines.append(f"- **{label}** [rel={score:.2f}]\n  {text[:200]}\n")
+
+        return "\n".join(lines)
 
     # -- vector-indexed memory -------------------------------------------------
 
@@ -584,10 +648,13 @@ class ContextBuilder:
         if cs.history_budget_tokens is not None:
             runtime_lines.append(f"History Budget: ~{cs.history_budget_tokens} tokens available")
 
+        framework_hits = self._build_framework_search_section(history)
+
         sys_static = self.build_system_prompt(
             channel=channel,
             tool_definitions=cs.tool_definitions,
             runtime_context="\n".join(runtime_lines),
+            framework_search=framework_hits,
         )
         retained_history = history
 
