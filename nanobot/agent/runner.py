@@ -95,6 +95,7 @@ class AgentRunSpec:
     workspace: Path | None = None
     session_key: str | None = None
     context_window_tokens: int | None = None
+    history_token_limit: int | None = None
     context_block_limit: int | None = None
     provider_retry_mode: str = "standard"
     progress_callback: Any | None = None

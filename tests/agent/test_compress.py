@@ -15,6 +15,7 @@ from nanobot.agent.compress import (
     _compress_session,
     _format_turns,
     _prepend_summary,
+    _take_future_turns,
     compress_session,
     compress_turns,
     make_summary_pair,
@@ -210,6 +211,40 @@ class TestSplitHistoryByBudget:
         assert len(keeps_fmt) == 2
         # The first retained fmt turn starts with the 2nd assistant, not "x"
         assert "pair" in keeps_fmt[-1][0]["content"]
+
+
+class TestTakeFutureTurns:
+    """_take_future_turns — shared helper for progressive batches."""
+
+    def test_normal_enough_future(self):
+        all_turns = [[{"role": "assistant", "content": str(i)}] for i in range(20)]
+        result = _take_future_turns(all_turns, 0, 5, 5, [])
+        assert len(result) == 5
+
+    def test_pads_from_keep_when_insufficient(self):
+        all_turns = [[{"role": "assistant", "content": str(i)}] for i in range(6)]
+        keep = [[{"role": "user", "content": "k1"}], [{"role": "user", "content": "k2"}]]
+        result = _take_future_turns(all_turns, 0, 5, 5, keep)
+        # 1 from all_turns (idx 5) + 2 from keep = 3
+        assert len(result) == 3
+        assert all(m["role"] == "user" for m in result[1:])  # remainder from keep
+
+    def test_all_from_keep_when_no_future(self):
+        all_turns = [[{"role": "assistant", "content": "last"}]]
+        keep = [[{"role": "user", "content": "k1"}]]
+        result = _take_future_turns(all_turns, 0, 1, 3, keep)
+        assert len(result) == 1  # only 1 from keep available
+
+    def test_exact_boundary_future_count(self):
+        all_turns = [[{"role": "assistant", "content": str(i)}] for i in range(15)]
+        result = _take_future_turns(all_turns, 0, 5, 10, [])
+        assert len(result) == 10
+        # Verify correct turns: indices 5-14
+        assert result[0]["content"] == "5"
+        assert result[-1]["content"] == "14"
+
+    def test_empty_all_turns_and_keep(self):
+        assert _take_future_turns([], 0, 0, 5, []) == []
 
 
 # ===========================================================================

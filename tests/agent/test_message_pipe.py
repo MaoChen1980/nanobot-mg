@@ -209,6 +209,92 @@ class TestCompress:
         assert len(result) > 0
 
 
+class TestCompressWithBudget:
+    """_compress with budget parameter — budget walk + progressive batches."""
+
+    async def test_budget_none_keeps_one_turn(self):
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
+        llm_set_llm(provider, "test-model")
+
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "assistant", "content": "a1"}, {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a2"}, {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a3"}, {"role": "user", "content": "q3"},
+        ]
+        result = await pipe._compress(messages, budget=None)
+
+        assert result[0]["role"] == "system"
+        assert result[-1]["content"] == "q3"
+        # system + synthetic(1) + keep turn(2) = 4
+        assert len(result) == 4
+
+    async def test_budget_fits_all_turns_returns_unchanged(self):
+        pipe = MessagePipe()
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "assistant", "content": "a1"}, {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a2"}, {"role": "user", "content": "q2"},
+        ]
+        with patch("nanobot.utils.helpers.estimate_message_tokens", return_value=10):
+            result = await pipe._compress(messages, budget=100)
+        # 2 turns × 20 tokens = 40 ≤ budget 100 → unchanged
+        assert result == messages
+
+
+    async def test_budget_walk_keeps_limited_turns(self):
+        """Budget-based walk: keep 2 of 4 turns, compress the rest."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
+        llm_set_llm(provider, "test-model")
+
+        messages = [{"role": "system", "content": "sys"}]
+        for i in range(4):
+            messages.append({"role": "assistant", "content": f"a{i}"})
+            messages.append({"role": "user", "content": f"q{i}"})
+
+        # Each msg = 10 tokens, each turn = 20 tokens, 4 turns = 80
+        # budget=50 → keep 2 turns (40 tokens), compress 2 turns
+        with patch("nanobot.utils.helpers.estimate_message_tokens", return_value=10):
+            result = await pipe._compress(messages, budget=50)
+
+        assert result[0]["role"] == "system"
+        assert result[-1]["content"] == "q3"
+        # system + synthetic(1) + 2 keep turns(4) = 6
+        assert len(result) == 6
+        assert provider.chat_stream_with_retry.await_count == 1
+
+    async def test_progressive_multi_batch(self):
+        """> COMPRESS_BATCH_SIZE turns to compress → spans multiple progressive batches."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
+        llm_set_llm(provider, "test-model")
+
+        from nanobot.agent.compress import COMPRESS_BATCH_SIZE
+
+        total = COMPRESS_BATCH_SIZE * 2 + 20  # 120 turns → 119 to_compress → 3 batches
+        messages = [{"role": "system", "content": "sys"}]
+        for i in range(total):
+            messages.append({"role": "assistant", "content": f"a{i}"})
+            messages.append({"role": "user", "content": f"q{i}"})
+
+        # Each turn = 200 tokens (2×100), budget=50 → keep only 1 turn
+        with patch("nanobot.utils.helpers.estimate_message_tokens", return_value=100):
+            result = await pipe._compress(messages, budget=50)
+
+        assert result[0]["role"] == "system"
+        assert result[-1]["content"] == f"q{total - 1}"
+        assert result[-1]["role"] == "user"
+        # system + synthetic(1) + keep(2) = 4
+        assert len(result) == 4
+        # 3 batches → 3 compress_turns calls → 3 chat_stream_with_retry calls
+        assert provider.chat_stream_with_retry.await_count == 3
+
+
 class TestSplitTurnsByAssistant:
     """Session._split_turns_by_assistant used by MessagePipe._compress."""
 

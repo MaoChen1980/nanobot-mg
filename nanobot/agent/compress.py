@@ -36,6 +36,10 @@ from nanobot.utils.helpers import estimate_message_tokens
 # Minimum number of turns to keep after compression (code constant, not configurable)
 MIN_KEEP_TURNS = 1
 
+# Progressive compression: batch size and future context window
+COMPRESS_BATCH_SIZE = 50
+FUTURE_TURNS = 10
+
 
 # ---------------------------------------------------------------------------
 # Summary prompt (shared with MessagePipe)
@@ -137,6 +141,27 @@ def split_history_by_budget(
     to_compress_fmt = fmt_turns[:keep_start]
     keeps_fmt = fmt_turns[keep_start:]
     return keeps_raw, to_compress_fmt, keeps_fmt
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers (used by both compress_session and MessagePipe._compress)
+# ---------------------------------------------------------------------------
+
+
+def _take_future_turns(
+    all_turns: list[list[dict]],
+    batch_start: int,
+    batch_size: int,
+    n_future: int,
+    keep: list[list[dict]],
+) -> list[dict]:
+    """取 batch 后面 n_future 轮作为 future context."""
+    future_start = batch_start + batch_size
+    src = all_turns[future_start:future_start + n_future]
+    if len(src) < n_future:
+        need = n_future - len(src)
+        src = src + keep[:need]
+    return [m for turn in src for m in turn]
 
 
 # ---------------------------------------------------------------------------
@@ -282,11 +307,24 @@ async def compress_session(
     pair: list[dict] = []
     if to_compress_fmt:
         prev = getattr(session, "_last_summary", None)
-        summary, pair = await compress_turns(
-            [m for turn in to_compress_fmt for m in turn],
-            [m for turn in keeps_fmt for m in turn],
-            previous_summary=prev,
-        )
+
+        for batch_start in range(0, len(to_compress_fmt), COMPRESS_BATCH_SIZE):
+            batch = to_compress_fmt[batch_start:batch_start + COMPRESS_BATCH_SIZE]
+            batch_flat = [m for turn in batch for m in turn]
+            future_ctx = _take_future_turns(
+                to_compress_fmt, batch_start, len(batch),
+                FUTURE_TURNS, keeps_fmt,
+            )
+
+            s, p = await compress_turns(
+                batch_flat, future_ctx,
+                previous_summary=prev,
+            )
+            if not p:
+                break
+            prev = s
+            summary = s
+            pair = p
 
     _compress_session(session, keeps_raw, db=db, summary=summary or "")
 

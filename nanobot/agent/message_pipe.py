@@ -48,6 +48,7 @@ class MessagePipe:
     async def complete(
         self,
         messages: list[dict],
+        budget: int | None = None,
         **kwargs: Any,
     ) -> Any:
         """非流式调用，带 overflow 处理。"""
@@ -59,7 +60,7 @@ class MessagePipe:
                 "Overflow detected (attempt {}/{}), compressing...",
                 attempt + 1, self.MAX_RETRIES,
             )
-            messages = await self._compress(messages)
+            messages = await self._compress(messages, budget=budget)
 
         # Last attempt: send as-is (can't compress further)
         return await chat_with_retry(messages=messages, **kwargs)
@@ -68,6 +69,7 @@ class MessagePipe:
         self,
         messages: list[dict],
         *,
+        budget: int | None = None,
         on_content_delta: Any,
         on_reasoning_delta: Any,
         **kwargs: Any,
@@ -86,7 +88,7 @@ class MessagePipe:
                 "Overflow detected (attempt {}/{}), compressing...",
                 attempt + 1, self.MAX_RETRIES,
             )
-            messages = await self._compress(messages)
+            messages = await self._compress(messages, budget=budget)
 
         return await chat_stream_with_retry(
             messages=messages,
@@ -95,20 +97,29 @@ class MessagePipe:
             **kwargs,
         )
 
-    async def _compress(self, messages: list[dict]) -> list[dict]:
-        """压缩 messages 中最旧的轮次 — 异步（调 LLM 做 summary）。"""
-        from nanobot.agent.compress import compress_turns
+    async def _compress(self, messages: list[dict], budget: int | None = None) -> list[dict]:
+        """渐进式压缩 messages 中最旧的轮次。
+
+        1. 按 budget 确定保留轮次
+        2. 50 轮一批，从最旧开始渐进压缩
+        3. 每批用后续 10 轮作 relevance 判断
+        4. 批间通过 previous_summary 合并
+
+        无 budget 时保持向后兼容：只保留最新 1 轮，其余全压。
+        """
+        from nanobot.agent.compress import (
+            COMPRESS_BATCH_SIZE, FUTURE_TURNS, _take_future_turns,
+            compress_turns,
+        )
+        from nanobot.utils.helpers import estimate_message_tokens
 
         if len(messages) < 3:
             return messages
 
-        # messages[0] = system prompt, rest = history + current user message
         history_msgs = messages[1:]
         turns = Session._split_turns_by_assistant(history_msgs)
 
         if len(turns) <= 1:
-            # Single turn — can't compress by turns. Fallback: drop
-            # everything except system + newest user message.
             if len(messages) >= 3:
                 logger.warning(
                     "Single turn compression: dropping {} messages, keeping system + latest",
@@ -117,22 +128,60 @@ class MessagePipe:
                 return [messages[0], messages[-1]]
             return messages
 
-        # Keep the newest turn, compress everything older
-        keep = turns[-1:]
-        to_compress = turns[:-1]
+        if budget is not None:
+            keep_start = len(turns)
+            used = 0
+            for i in range(len(turns) - 1, -1, -1):
+                turn_tokens = sum(estimate_message_tokens(m) for m in turns[i])
+                if keep_start < len(turns) and used + turn_tokens > budget:
+                    break
+                used += turn_tokens
+                keep_start = i
+            keep_start = max(0, min(keep_start, len(turns) - 1))
+        else:
+            keep_start = max(0, len(turns) - 1)
 
-        compress_flat = [m for turn in to_compress for m in turn]
-        future_context = [m for turn in keep for m in turn]
+        keep = turns[keep_start:]
+        to_compress = turns[:keep_start]
 
-        _, synthetic_pair = await compress_turns(
-            compress_flat, future_context,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+        if not to_compress:
+            return messages
+
+        logger.info(
+            "Compressing {} of {} turns (budget={}, keeping {} turns)",
+            len(to_compress), len(turns), budget, len(keep),
         )
+
+        prev_summary = None
+        synthetic_pair: list[dict] = []
+        for batch_start in range(0, len(to_compress), COMPRESS_BATCH_SIZE):
+            chunk = to_compress[batch_start:batch_start + COMPRESS_BATCH_SIZE]
+            chunk_flat = [m for turn in chunk for m in turn]
+            future_context = _take_future_turns(
+                to_compress, batch_start, len(chunk),
+                FUTURE_TURNS, keep,
+            )
+
+            summary, pair = await compress_turns(
+                chunk_flat, future_context,
+                previous_summary=prev_summary,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+            if not pair:
+                if prev_summary is None:
+                    logger.warning("First compression batch failed, keeping raw turns")
+                    result: list[dict] = [messages[0]]
+                    for turn in keep:
+                        result.extend(turn)
+                    return result
+                break
+            prev_summary = summary
+            synthetic_pair = pair
 
         last_is_user = messages[-1].get("role") == "user"
 
         if synthetic_pair:
-            result: list[dict] = [messages[0]] + synthetic_pair
+            result = [messages[0]] + synthetic_pair
         else:
             result = [messages[0]]
 

@@ -670,6 +670,7 @@ class AgentLoop:
             workspace=self.workspace,
             session_key=session.key if session else None,
             context_window_tokens=self.context_window_tokens,
+            history_token_limit=self._history_token_limit,
             context_block_limit=self.context_block_limit,
             provider_retry_mode=self.provider_retry_mode,
             progress_callback=on_progress,
