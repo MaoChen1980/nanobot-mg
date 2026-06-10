@@ -5,19 +5,16 @@ Public API (async, one-call):
     Summarise old turns + create synthetic pair in a single call.
     Use when you have a flat message list and no Session object.
 
-  ``compress_session(session, history, db, ...)``
-    Full session-level compression: split → summarise → persist → return
-    updated history with synthetic pair.  Wraps ``compress_turns`` +
-    ``_compress_session`` + ``_prepend_summary``.
+  ``compress_session(session, history, ...)``
+    Pure session-level compression: split → summarise → return
+    ``(updated_history, CompressEvent)``.  Does **not** persist or
+    mutate.  Callers use ``apply_compress_event`` for side effects.
 
   ``split_history_by_budget(session_messages, formatted, limit)``
     Pure splitter — determine what to keep vs compress.
 
-Internal (still importable but should not be needed externally):
-  ``summarize_turns`` — the LLM call.
-  ``make_summary_pair`` — creates the synthetic summary message.
-  ``_compress_session`` — replaces session.messages, writes DB.
-  ``_prepend_summary`` — pair + keeps in one flat list.
+  ``apply_compress_event(session, event, db)``
+    Persist a ``CompressEvent`` to DB and update ``session.messages``.
 """
 
 from __future__ import annotations
@@ -29,6 +26,7 @@ from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.compressor import CompressEvent, Compressor
 from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.agent.loop_utils import strip_think
 from nanobot.session.manager import Session
@@ -306,63 +304,60 @@ async def compress_turns(
 
 
 # ---------------------------------------------------------------------------
-# Public: full session compression (has Session, writes DB)
+# Public: full session compression (reads session, no side effects)
 # ---------------------------------------------------------------------------
 
 async def compress_session(
     session: Session,
     history: list[dict],
-    db: Any = None,
     *,
     limit: int,
     min_keep_turns: int = MIN_KEEP_TURNS,
-) -> list[dict]:
-    """Compress session history: split, summarise, persist, return updated history.
+) -> tuple[list[dict], CompressEvent]:
+    """Compress session history: split, summarise, return updated history + event.
 
-    *session* — session object (mutated in-place via ``_compress_session``).
+    *session* — session object (read-only here; caller mutates via
+    ``apply_compress_event``).
     *history* — formatted message list for LLM input.
-    *db* — optional DB handle for persisting compressed history.
     *limit* — token budget for kept turns.
     *min_keep_turns* — minimum turns to retain after compression.
 
-    Returns the updated *history* (with synthetic summary pair prepended).
-    This is the single async entry-point for session-level compression.
+    Returns ``(updated_history, compress_event)``.  Does **not** mutate
+    *session* or write to DB — callers handle persistence via
+    ``apply_compress_event``.
     """
     keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
         session.messages, history, limit=limit, min_keep_turns=min_keep_turns,
     )
 
-    summary = None
-    pair: list[dict] = []
+    event = CompressEvent()
     if to_compress_fmt:
         prev = getattr(session, "_last_summary", None)
+        event = await Compressor.compress(to_compress_fmt, keeps_fmt, previous_summary=prev)
 
-        for batch_start in range(0, len(to_compress_fmt), COMPRESS_BATCH_SIZE):
-            batch = to_compress_fmt[batch_start:batch_start + COMPRESS_BATCH_SIZE]
-            batch_flat = [m for turn in batch for m in turn]
-            future_ctx = _take_future_turns(
-                to_compress_fmt, batch_start, len(batch),
-                FUTURE_TURNS, keeps_fmt,
-            )
-
-            s, p = await compress_turns(
-                batch_flat, future_ctx,
-                previous_summary=prev,
-            )
-            if not p:
+    # Find replaced raw messages using message object identity
+    if keeps_raw:
+        flat_kept = [m for turn in keeps_raw for m in turn]
+        kept_ids = {id(m) for m in flat_kept}
+        split_point = 0
+        for i, m in enumerate(session.messages):
+            if id(m) in kept_ids:
+                split_point = i
                 break
-            prev = s
-            summary = s
-            pair = p
+        else:
+            split_point = len(session.messages)
+        event.replaced_raw = session.messages[:split_point]
+    else:
+        event.replaced_raw = []
 
-    _compress_session(session, keeps_raw, db=db, summary=summary or "")
-
-    if pair:
-        result = list(pair)
+    if event.synthetic_pair:
+        result = list(event.synthetic_pair)
         for turn in keeps_fmt:
             result.extend(turn)
-        return result
-    return [m for turn in keeps_fmt for m in turn]
+    else:
+        result = [m for turn in keeps_fmt for m in turn]
+
+    return result, event
 
 
 # ---------------------------------------------------------------------------
@@ -411,46 +406,30 @@ def _build_prompt(
     )
 
 
-def _compress_session(
-    session: Session,
-    keeps_raw: list[list[dict]],
-    db: Any = None,
-    summary: str = "",
-) -> None:
-    """Replace ``session.messages`` with *keeps_raw* (RAW messages only).
+def apply_compress_event(session: Session, event: CompressEvent, db=None) -> None:
+    """Persist *event* to DB and update ``session.messages``.
 
-    The replaced messages are written to the *history* table via *db* for
-    durability.  Never writes synthetic fields (breadcrumbs, timestamps)
-    into the session.
+    Side-effectful: writes to DB history table, mutates ``session.messages``.
+    This is the explicit counterpart to the pure ``compress_session`` —
+    callers invoke this when they are ready to commit the compression.
     """
-    flat = [m for turn in keeps_raw for m in turn]
-
-    # Find the split point using message object identity
-    kept_ids = {id(m) for m in flat}
-    split_point = 0
-    for i, m in enumerate(session.messages):
-        if id(m) in kept_ids:
-            split_point = i
-            break
-    else:
-        split_point = len(session.messages)
-
-    replaced = session.messages[:split_point]
-    if replaced and db is not None:
+    if not event.replaced_raw:
+        return
+    if db is not None:
         try:
             db.append_history(
-                content=json.dumps(replaced, ensure_ascii=False),
-                summary=summary,
+                content=json.dumps(event.replaced_raw, ensure_ascii=False),
+                summary=event.summary or "",
             )
         except Exception:
             logger.exception("Failed to persist compressed history to DB")
-
-    session.messages[:] = flat
-    if summary:
-        session._last_summary = summary
+    kept = session.messages[len(event.replaced_raw):]
+    session.messages[:] = kept
+    if event.summary:
+        session._last_summary = event.summary
     logger.info(
         "Compressed session {}: dropped {} messages, kept {}",
-        session.key, len(replaced), len(flat),
+        session.key, len(event.replaced_raw), len(kept),
     )
 
 

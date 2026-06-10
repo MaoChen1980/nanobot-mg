@@ -12,6 +12,7 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.context_vars import _current_debug_enabled
+from .compressor import CompressEvent
 from .message_pipe import MessagePipe
 from .runner_constants import _DEFAULT_ERROR_MESSAGE
 
@@ -24,12 +25,13 @@ async def request_model(
     messages: list[dict[str, Any]],
     hook: Any,
     context: Any,
-) -> tuple[Any, list[dict] | None]:
+) -> tuple[Any, CompressEvent | None]:
     """Make an LLM request with optional streaming.
 
-    Returns ``(response, compressed_messages)`` — 如果 MessagePipe 发生过
-    overflow 压缩则返回压缩后的消息列表供 caller 同步回 ``messages``，
-    否则 ``compressed_messages`` 为 ``None``。
+    Returns ``(response, compress_event)`` — 如果 MessagePipe 发生过
+    overflow 压缩则返回 ``CompressEvent``（含压缩后消息列表和待持久化的
+    原始消息）供 caller 同步回 ``messages``，否则 ``compress_event`` 为
+    ``None``。
     """
     if _current_debug_enabled.get():
         _dump_messages_to_debug_dir(messages)
@@ -54,6 +56,7 @@ async def request_model(
     coro = _message_pipe.complete_stream(
         messages=messages,
         budget=spec.history_token_limit,
+        previous_summary=spec.previous_summary,
         on_content_delta=_stream,
         on_reasoning_delta=_reasoning,
         **pipe_kwargs,
@@ -114,6 +117,7 @@ async def request_finalization_retry(
     response, _ = await _message_pipe.complete(
         messages=retry_messages,
         budget=spec.history_token_limit,
+        previous_summary=spec.previous_summary,
         **pipe_kwargs,
     )
     return response

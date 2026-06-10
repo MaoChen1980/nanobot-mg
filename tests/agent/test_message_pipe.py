@@ -177,7 +177,7 @@ class TestCompress:
             {"role": "user", "content": "hi"},
         ]
 
-        result = await pipe._compress(messages)
+        result, event = await pipe._compress(messages)
         assert result == messages  # no compression needed
 
     async def test_appends_latest_user_if_missing_after_compress(self):
@@ -193,7 +193,7 @@ class TestCompress:
             {"role": "user", "content": "latest q"},
         ]
 
-        result = await pipe._compress(messages)
+        result, event = await pipe._compress(messages)
         # Latest user message should still be at the end
         assert result[-1]["content"] == "latest q"
 
@@ -211,7 +211,7 @@ class TestCompress:
         ]
 
         with patch("asyncio.sleep", AsyncMock()):
-            result = await pipe._compress(messages)
+            result, event = await pipe._compress(messages)
         # Should still produce a result without summary
         assert result[0]["role"] == "system"
         assert len(result) > 0
@@ -232,7 +232,7 @@ class TestCompressWithBudget:
             {"role": "assistant", "content": "a2"}, {"role": "user", "content": "q2"},
             {"role": "assistant", "content": "a3"}, {"role": "user", "content": "q3"},
         ]
-        result = await pipe._compress(messages, budget=None)
+        result, event = await pipe._compress(messages, budget=None)
 
         assert result[0]["role"] == "system"
         assert result[-1]["content"] == "q3"
@@ -247,7 +247,7 @@ class TestCompressWithBudget:
             {"role": "assistant", "content": "a2"}, {"role": "user", "content": "q2"},
         ]
         with patch("nanobot.utils.helpers.estimate_message_tokens", return_value=10):
-            result = await pipe._compress(messages, budget=100)
+            result, event = await pipe._compress(messages, budget=100)
         # 2 turns × 20 tokens = 40 ≤ budget 100 → unchanged
         assert result == messages
 
@@ -267,7 +267,7 @@ class TestCompressWithBudget:
         # Each msg = 10 tokens, each turn = 20 tokens, 4 turns = 80
         # budget=50 → keep 2 turns (40 tokens), compress 2 turns
         with patch("nanobot.utils.helpers.estimate_message_tokens", return_value=10):
-            result = await pipe._compress(messages, budget=50)
+            result, event = await pipe._compress(messages, budget=50)
 
         assert result[0]["role"] == "system"
         assert result[-1]["content"] == "q3"
@@ -292,7 +292,7 @@ class TestCompressWithBudget:
 
         # Each turn = 200 tokens (2×100), budget=50 → keep only 1 turn
         with patch("nanobot.utils.helpers.estimate_message_tokens", return_value=100):
-            result = await pipe._compress(messages, budget=50)
+            result, event = await pipe._compress(messages, budget=50)
 
         assert result[0]["role"] == "system"
         assert result[-1]["content"] == f"q{total - 1}"
@@ -307,36 +307,36 @@ class TestCompleteReturnsCompressed:
     """complete / complete_stream return compressed messages after overflow."""
 
     async def test_complete_returns_none_when_no_overflow(self):
-        """No overflow → compressed is None."""
+        """No overflow → compress_event is None."""
         pipe = MessagePipe()
         provider = MagicMock()
         provider.chat_with_retry = AsyncMock(return_value=_make_success_response("ok"))
         provider.chat_stream_with_retry = AsyncMock()
         llm_set_llm(provider, "test-model")
 
-        _, compressed = await pipe.complete(
+        _, event = await pipe.complete(
             messages=[{"role": "user", "content": "hi"}],
             model="test-model",
         )
-        assert compressed is None
+        assert event is None
 
     async def test_complete_stream_returns_none_when_no_overflow(self):
-        """No overflow → compressed is None (streaming path)."""
+        """No overflow → compress_event is None (streaming path)."""
         pipe = MessagePipe()
         provider = MagicMock()
         provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("ok"))
         llm_set_llm(provider, "test-model")
 
-        _, compressed = await pipe.complete_stream(
+        _, event = await pipe.complete_stream(
             messages=[{"role": "user", "content": "hi"}],
             model="test-model",
             on_content_delta=AsyncMock(),
             on_reasoning_delta=AsyncMock(),
         )
-        assert compressed is None
+        assert event is None
 
     async def test_complete_returns_compressed_after_overflow_retry(self):
-        """Overflow → compress → retry success → compressed is not None."""
+        """Overflow → compress → retry success → event is not None."""
         pipe = MessagePipe()
         provider = MagicMock()
         provider.chat_with_retry = AsyncMock(side_effect=[
@@ -346,7 +346,7 @@ class TestCompleteReturnsCompressed:
         provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
         llm_set_llm(provider, "test-model")
 
-        response, compressed = await pipe.complete(
+        response, event = await pipe.complete(
             messages=[
                 {"role": "system", "content": "sys"},
                 {"role": "user", "content": "a"},
@@ -356,14 +356,15 @@ class TestCompleteReturnsCompressed:
             model="test-model",
         )
         assert response.content == "retried"
-        assert compressed is not None
+        assert event is not None
+        assert event.compressed_messages is not None
         # System prompt preserved
-        assert compressed[0]["role"] == "system"
+        assert event.compressed_messages[0]["role"] == "system"
         # Latest user message preserved
-        assert compressed[-1]["role"] == "user"
+        assert event.compressed_messages[-1]["role"] == "user"
 
     async def test_complete_stream_returns_compressed_after_overflow_retry(self):
-        """Overflow → compress → retry success → compressed is not None (streaming)."""
+        """Overflow → compress → retry success → event is not None (streaming)."""
         pipe = MessagePipe()
         provider = MagicMock()
         call_count = 0
@@ -378,7 +379,7 @@ class TestCompleteReturnsCompressed:
         provider.chat_stream_with_retry = AsyncMock(side_effect=_stream_fn)
         llm_set_llm(provider, "test-model")
 
-        response, compressed = await pipe.complete_stream(
+        response, event = await pipe.complete_stream(
             messages=[
                 {"role": "system", "content": "sys"},
                 {"role": "user", "content": "a"},
@@ -390,11 +391,12 @@ class TestCompleteReturnsCompressed:
             on_reasoning_delta=AsyncMock(),
         )
         assert response.content == "retried stream"
-        assert compressed is not None
+        assert event is not None
+        assert event.compressed_messages is not None
         # System prompt preserved
-        assert compressed[0]["role"] == "system"
+        assert event.compressed_messages[0]["role"] == "system"
         # Latest user message preserved
-        assert compressed[-1]["role"] == "user"
+        assert event.compressed_messages[-1]["role"] == "user"
 
 
 class TestSplitTurnsByAssistant:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -391,6 +391,8 @@ class NanobotDB:
     # Tool Calls
     # --------------------------------------------------------------------------
 
+    _TOOL_CALL_RETENTION_DAYS = 2
+
     def insert_tool_call(
         self,
         session_key: str,
@@ -403,6 +405,7 @@ class NanobotDB:
         error: str | None = None,
         duration_ms: int | None = None,
     ) -> int:
+        self._purge_old_tool_calls()
         result_size = len(result) if result else 0
         cursor = self._conn.execute(
             """INSERT INTO tool_calls
@@ -413,6 +416,14 @@ class NanobotDB:
         )
         self._conn.commit()
         return cursor.lastrowid or 0
+
+    def _purge_old_tool_calls(self) -> None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=self._TOOL_CALL_RETENTION_DAYS)).isoformat()
+        deleted = self._conn.execute(
+            "DELETE FROM tool_calls WHERE timestamp < ?", (cutoff,)
+        ).rowcount
+        if deleted:
+            logger.debug("Purged {} old tool call records (>{} days)", deleted, self._TOOL_CALL_RETENTION_DAYS)
 
     def query_tool_calls(
         self,

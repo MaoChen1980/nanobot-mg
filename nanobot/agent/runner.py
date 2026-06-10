@@ -111,6 +111,7 @@ class AgentRunSpec:
     # AssessMe: called when retry/error thresholds are crossed
     # Signature: async (messages: list[dict]) -> bool (True if injected)
     assess_me_callback: Any | None = None
+    previous_summary: str | None = None
 
 
 @dataclass(slots=True)
@@ -133,6 +134,8 @@ class AgentRunResult:
     # this may differ from len(spec.initial_messages).  Used by callers of
     # _append_turn_to_session to correctly identify new-turn messages.
     initial_message_count: int = 0
+    # Non-None when overflow compression occurred during this run
+    overflow_summary: str | None = None
 
 
 class AgentRunner:
@@ -220,6 +223,9 @@ class AgentRunner:
 
         _current_messages_for_subagent.set(messages)
 
+        # Track overflow summary from latest compression event
+        _overflow_summary: str | None = None
+
         # Initialize retry context from spec
         retry_ctx = spec.retry_context
         backoff_cfg = spec.backoff_config
@@ -275,17 +281,28 @@ class AgentRunner:
             context = AgentHookContext(iteration=iteration, messages=messages, workspace=spec.workspace)
             await hook.before_iteration(context)
             messages_for_model = hook.before_llm_call(context, messages_for_model)
-            response, compressed = await request_model(spec, messages_for_model, hook, context)
+            response, compress_event = await request_model(spec, messages_for_model, hook, context)
             # If MessagePipe compressed due to overflow, sync the compressed
             # messages back so the next iteration doesn't re-grow from old history.
-            # Note: compressed reflects the post-hook messages_for_model state.
+            # Note: compress_event reflects the post-hook messages_for_model state.
             # If a custom hook's before_llm_call injected transient content,
             # it will be persisted into messages. Hook implementers should
             # avoid adding one-shot-only instructions via before_llm_call;
             # use before_iteration for persistent prep instead.
-            if compressed is not None:
-                messages[:] = compressed
-                initial_msg_count = len(messages)
+            if compress_event is not None:
+                if compress_event.compressed_messages is not None:
+                    messages[:] = compress_event.compressed_messages
+                    initial_msg_count = len(messages)
+                if compress_event.replaced_raw and self._db is not None:
+                    try:
+                        self._db.append_history(
+                            content=json.dumps(compress_event.replaced_raw, ensure_ascii=False),
+                            summary=compress_event.summary or "",
+                        )
+                    except Exception:
+                        logger.debug("Failed to persist overflow-compressed messages to history")
+                if compress_event.summary:
+                    _overflow_summary = compress_event.summary
             # Images are only useful once — strip base64 payloads so
             # subsequent turns don't re-send megabytes of image data.
             # The model can re-read with read_file_tool if needed.
@@ -716,6 +733,7 @@ class AgentRunner:
             retry_count=total_retry_count,
             retry_summary=retry_ctx.summary(),
             initial_message_count=initial_msg_count,
+            overflow_summary=_overflow_summary,
         )
 
     def _log_tool_call(

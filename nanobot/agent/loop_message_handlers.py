@@ -86,12 +86,15 @@ class SystemMessageHandler:
         limit = self._loop._history_token_limit
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         if hist_tokens > self._loop._compress_trigger_tokens:
-            from nanobot.agent.compress import compress_session, MIN_KEEP_TURNS
+            from nanobot.agent.compress import (
+                apply_compress_event, compress_session, MIN_KEEP_TURNS,
+            )
 
-            history = await compress_session(
-                session, history, db=self._loop._db,
+            history, event = await compress_session(
+                session, history,
                 limit=limit, min_keep_turns=MIN_KEEP_TURNS,
             )
+            apply_compress_event(session, event, db=self._loop._db)
 
         hist_tokens_after = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns_after = sum(1 for m in history if m.get("role") == "assistant")
@@ -211,12 +214,15 @@ class UserMessageHandler:
         _hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         _compress_happened = False
         if _hist_tokens > self._loop._compress_trigger_tokens:
-            from nanobot.agent.compress import compress_session, MIN_KEEP_TURNS
+            from nanobot.agent.compress import (
+                apply_compress_event, compress_session, MIN_KEEP_TURNS,
+            )
 
-            history = await compress_session(
-                session, history, db=self._loop._db,
+            history, event = await compress_session(
+                session, history,
                 limit=self._loop._history_token_limit, min_keep_turns=MIN_KEEP_TURNS,
             )
+            apply_compress_event(session, event, db=self._loop._db)
             _compress_happened = True
 
         # Stage 1.5b: assess_me triggers — interval + compression

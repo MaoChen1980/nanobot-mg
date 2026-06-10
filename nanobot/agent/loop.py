@@ -683,8 +683,11 @@ class AgentLoop:
             max_llm_retries=self.max_retries,
             max_overflow_retries=self.max_retries,
             assess_me_callback=self._make_retry_assess_callback(session),
+            previous_summary=getattr(session, "_last_summary", None),
         ))
         # Track total retries and token usage across this turn
+        if result.overflow_summary:
+            session._last_summary = result.overflow_summary
         self.retry_count += result.retry_count
         self._last_usage = result.usage
 

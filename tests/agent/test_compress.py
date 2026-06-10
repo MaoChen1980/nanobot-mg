@@ -12,16 +12,17 @@ import pytest
 
 from nanobot.agent.compress import (
     _build_prompt,
-    _compress_session,
     _format_turns,
     _prepend_summary,
     _take_future_turns,
+    apply_compress_event,
     compress_session,
     compress_turns,
     make_summary_pair,
     split_history_by_budget,
     summarize_turns,
 )
+from nanobot.agent.compressor import CompressEvent
 from nanobot.providers.base import LLMResponse
 
 
@@ -383,11 +384,11 @@ class TestPrependSummary:
 
 
 # ===========================================================================
-# _compress_session
+# apply_compress_event
 # ===========================================================================
 
-class TestCompressSession:
-    """``_compress_session`` — mutates Session, optionally writes to DB."""
+class TestApplyCompressEvent:
+    """``apply_compress_event`` — mutates Session, optionally writes to DB."""
 
     # -- helpers ------------------------------------------------------------
 
@@ -397,6 +398,12 @@ class TestCompressSession:
         session.key = "test-key"
         return session
 
+    def _event(self, session, keep_start: int, summary: str = "") -> CompressEvent:
+        return CompressEvent(
+            replaced_raw=session.messages[:keep_start],
+            summary=summary or None,
+        )
+
     # -- tests --------------------------------------------------------------
 
     def test_replaces_messages(self):
@@ -404,8 +411,8 @@ class TestCompressSession:
             {"role": "user", "content": "old"},
             {"role": "assistant", "content": "kept"},
         ])
-        keeps_raw = [[{"role": "assistant", "content": "kept"}]]
-        _compress_session(session, keeps_raw)
+        event = self._event(session, keep_start=1)  # first 1 msg replaced
+        apply_compress_event(session, event)
         assert len(session.messages) == 1
         assert session.messages[0]["content"] == "kept"
 
@@ -415,8 +422,8 @@ class TestCompressSession:
             {"role": "assistant", "content": "new"},
         ])
         db = MagicMock()
-        keeps_raw = [[{"role": "assistant", "content": "new"}]]
-        _compress_session(session, keeps_raw, db=db)
+        event = self._event(session, keep_start=1)
+        apply_compress_event(session, event, db=db)
         assert db.append_history.called
 
     def test_no_db_no_error(self):
@@ -424,16 +431,16 @@ class TestCompressSession:
             {"role": "user", "content": "old"},
             {"role": "assistant", "content": "new"},
         ])
-        keeps_raw = [[{"role": "assistant", "content": "new"}]]
-        _compress_session(session, keeps_raw, db=None)  # should not raise
+        event = self._event(session, keep_start=1)
+        apply_compress_event(session, event, db=None)  # should not raise
 
     def test_sets_summary_on_session(self):
         session = self._make_session([
             {"role": "user", "content": "old"},
             {"role": "assistant", "content": "new"},
         ])
-        keeps_raw = [[{"role": "assistant", "content": "new"}]]
-        _compress_session(session, keeps_raw, summary="my summary")
+        event = self._event(session, keep_start=1, summary="my summary")
+        apply_compress_event(session, event)
         assert session._last_summary == "my summary"
 
     def test_no_summary_does_not_set(self):
@@ -441,20 +448,18 @@ class TestCompressSession:
             {"role": "user", "content": "old"},
             {"role": "assistant", "content": "new"},
         ])
-        keeps_raw = [[{"role": "assistant", "content": "new"}]]
-        _compress_session(session, keeps_raw)
-        # _last_summary is not in the spec, so hasattr checks are unreliable
-        # with MagicMock. Verify that messages were replaced correctly.
+        event = self._event(session, keep_start=1)
+        apply_compress_event(session, event)
         assert len(session.messages) == 1
         assert session.messages[0]["content"] == "new"
 
     def test_no_replaced_messages_does_not_write_db(self):
-        """If nothing was replaced (split_point=0), DB write is skipped."""
+        """If nothing was replaced (replaced_raw empty), DB write is skipped."""
         msg = {"role": "assistant", "content": "only"}
         session = self._make_session([msg])
         db = MagicMock()
-        keeps_raw = [[msg]]  # same object identity
-        _compress_session(session, keeps_raw, db=db)
+        event = CompressEvent(replaced_raw=[])
+        apply_compress_event(session, event, db=db)
         assert not db.append_history.called
 
 
@@ -725,7 +730,7 @@ class TestCompressTurns:
 # ===========================================================================
 
 class TestCompressSessionHighLevel:
-    """``compress_session`` — orchestrates split + summarise + persist."""
+    """``compress_session`` — returns (history, event) tuple, no side effects."""
 
     def _make_session(self, messages: list[dict]) -> MagicMock:
         session = MagicMock(spec=["messages", "key"])
@@ -742,11 +747,12 @@ class TestCompressSessionHighLevel:
         ])
         history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
         with patch("nanobot.agent.compress.compress_turns") as mock_ct, \
-             patch("nanobot.agent.compress.estimate_message_tokens", return_value=5):
-            result = await compress_session(
+             patch("nanobot.utils.helpers.estimate_message_tokens", return_value=5):
+            result, event = await compress_session(
                 session, history, limit=100,
             )
         assert len(result) == 2
+        assert event.summary is None
         mock_ct.assert_not_called()
 
     @pytest.mark.asyncio
@@ -765,8 +771,8 @@ class TestCompressSessionHighLevel:
             "nanobot.agent.compress.compress_turns",
             return_value=("summarized", [{"role": "assistant", "status": "synthetic", "content": "x"},
                                           {"role": "user", "status": "synthetic", "content": "summarized"}]),
-        ), patch("nanobot.agent.compress.estimate_message_tokens", return_value=100):
-            result = await compress_session(
+        ), patch("nanobot.utils.helpers.estimate_message_tokens", return_value=100):
+            result, event = await compress_session(
                 session, history, limit=10,
             )
         # Summary pair prepended + kept turns (each turn may have multiple msgs)
@@ -775,9 +781,11 @@ class TestCompressSessionHighLevel:
         assert result[1]["content"] == "summarized"
         assert result[2]["role"] == "assistant"
         assert result[3]["content"] == "keep this"
+        assert event.summary == "summarized"
 
     @pytest.mark.asyncio
-    async def test_writes_summary_to_db(self):
+    async def test_event_has_replaced_raw(self):
+        """compress_session returns event with replaced_raw (no DB write)."""
         session = self._make_session([
             {"role": "user", "content": "old"},
             {"role": "assistant", "content": "resp"},
@@ -788,13 +796,14 @@ class TestCompressSessionHighLevel:
             {"role": "assistant", "content": "resp"},
             {"role": "user", "content": "keep"},
         ]
-        db = MagicMock()
         with patch(
             "nanobot.agent.compress.compress_turns",
             return_value=("my summary", [{"role": "assistant", "status": "synthetic", "content": "q"},
                                           {"role": "user", "status": "synthetic", "content": "my summary"}]),
-        ), patch("nanobot.agent.compress.estimate_message_tokens", return_value=100):
-            await compress_session(
-                session, history, db=db, limit=10,
+        ), patch("nanobot.utils.helpers.estimate_message_tokens", return_value=100):
+            result, event = await compress_session(
+                session, history, limit=10,
             )
-        assert db.append_history.called
+        # event carries replaced_raw — only pre-first-assistant msgs replaced
+        assert event.summary == "my summary"
+        assert len(event.replaced_raw) == 1  # only user:"old" (1 turn before first asst)
