@@ -158,7 +158,7 @@ async def _run_tool(
             if isinstance(prepared, tuple) and len(prepared) == 3:
                 tool, params, prep_error = prepared
         except Exception:
-            logger.warning("prepare_call failed for tool '{}'", tool_call.name)
+            logger.exception("prepare_call failed for tool '{}'", tool_call.name)
             pass
     if prep_error:
         event = {

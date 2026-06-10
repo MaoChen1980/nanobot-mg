@@ -276,6 +276,11 @@ class AgentRunner:
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
                     messages_for_model = split_thinking_messages(messages_for_model)
                 except Exception:
+                    logger.exception(
+                        "Context governance minimal repair failed on turn {} for {}; "
+                        "falling back to raw messages",
+                        iteration, spec.session_key or "default",
+                    )
                     messages_for_model = messages
 
             context = AgentHookContext(iteration=iteration, messages=messages, workspace=spec.workspace)
@@ -300,7 +305,7 @@ class AgentRunner:
                             summary=compress_event.summary or "",
                         )
                     except Exception:
-                        logger.debug("Failed to persist overflow-compressed messages to history")
+                        logger.exception("Failed to persist overflow-compressed messages to history")
                 if compress_event.summary:
                     _overflow_summary = compress_event.summary
             # Images are only useful once — strip base64 payloads so
@@ -750,7 +755,7 @@ class AgentRunner:
                 success=success, error=error,
             )
         except Exception:
-            logger.debug("Failed to log tool call to DB")
+            logger.exception("Failed to log tool call to DB")
 
     async def _emit_checkpoint(self, spec: AgentRunSpec, payload: dict[str, Any]) -> None:
         if spec.checkpoint_callback is not None:

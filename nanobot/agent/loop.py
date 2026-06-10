@@ -516,9 +516,18 @@ class AgentLoop:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.warning("Error during task cancellation")
+                logger.warning("Error during task cancellation", exc_info=True)
         sub_cancelled = await self.subagents.cancel_by_session(key)
         return cancelled + sub_cancelled
+
+    def get_session_lock(self, session_key: str) -> asyncio.Lock:
+        """Return (or create) the per-session ``asyncio.Lock`` for *session_key*.
+
+        Callers outside ``_dispatch`` (e.g. slash command handlers) must
+        acquire this lock before mutating session state to prevent races
+        with the active dispatch task.
+        """
+        return self._session_locks.setdefault(session_key, asyncio.Lock())
 
     def _get_session_key_for_chat(self, chat_id: str, channel: str) -> str:
         """Derive session_key from chat_id and channel for observe toggle commands.
@@ -747,7 +756,7 @@ class AgentLoop:
                         raise
                     continue
                 except Exception as e:
-                    logger.warning("Error consuming inbound message: {}, continuing...", e)
+                    logger.warning("Error consuming inbound message: {}, continuing...", e, exc_info=True)
                     continue
 
                 raw = msg.content.strip()

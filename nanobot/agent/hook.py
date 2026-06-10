@@ -157,12 +157,18 @@ class CompositeHook(AgentHook):
         self, context: AgentHookContext, messages: list[dict]
     ) -> list[dict]:
         for h in self._hooks:
-            messages = h.before_llm_call(context, messages)
+            try:
+                messages = h.before_llm_call(context, messages)
+            except Exception:
+                logger.exception("AgentHook.before_llm_call error in {}", type(h).__name__)
         return messages
 
     def filter_tool_calls(
         self, context: AgentHookContext, tool_calls: list[ToolCallRequest]
     ) -> list[ToolCallRequest]:
         for h in self._hooks:
-            tool_calls = h.filter_tool_calls(context, tool_calls)
+            try:
+                tool_calls = h.filter_tool_calls(context, tool_calls)
+            except Exception:
+                logger.exception("AgentHook.filter_tool_calls error in {}", type(h).__name__)
         return tool_calls

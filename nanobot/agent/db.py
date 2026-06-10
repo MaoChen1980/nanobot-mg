@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -23,82 +25,91 @@ class NanobotDB:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path), timeout=30, check_same_thread=False)
+        self._lock = threading.Lock()
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._workspace = Path(workspace) if workspace else Path.home() / ".nanobot" / "workspace"
         self._init_tables()
+
+    @contextmanager
+    def _conn_access(self):
+        """Context manager that serializes all access to sqlite3.Connection."""
+        with self._lock:
+            yield self._conn
 
     # --------------------------------------------------------------------------
     # Schema init
     # --------------------------------------------------------------------------
 
     def _init_tables(self) -> None:
-        self._conn.executescript("""
-            CREATE TABLE IF NOT EXISTS history (
-                cursor INTEGER PRIMARY KEY,
-                timestamp TEXT NOT NULL,
-                content TEXT NOT NULL,
-                summary TEXT NOT NULL DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS facts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                fact TEXT NOT NULL,
-                tags TEXT DEFAULT '[]',
-                source TEXT,
-                project TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT,
-                confidence REAL DEFAULT 1.0
-            );
-            CREATE INDEX IF NOT EXISTS idx_facts_tags ON facts(tags);
-            CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project);
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_unique ON facts(fact);
-            CREATE TABLE IF NOT EXISTS tool_calls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_key TEXT NOT NULL,
-                iteration INTEGER NOT NULL,
-                turn INTEGER NOT NULL,
-                tool_name TEXT NOT NULL,
-                params TEXT,
-                result TEXT,
-                result_size INTEGER,
-                success INTEGER DEFAULT 1,
-                error TEXT,
-                duration_ms INTEGER,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_key);
-            CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool_name);
-            CREATE INDEX IF NOT EXISTS idx_tool_calls_time ON tool_calls(timestamp);
-            CREATE TABLE IF NOT EXISTS metadata (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            );
-            CREATE TABLE IF NOT EXISTS sessions (
-                key TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                metadata TEXT NOT NULL DEFAULT '{}',
-                last_consolidated INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_key TEXT NOT NULL,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                extra TEXT,
-                FOREIGN KEY (session_key) REFERENCES sessions(key) ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_key);
-            CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
-        """)
-        self._conn.commit()
+        with self._conn_access() as conn:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS history (
+                    cursor INTEGER PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    summary TEXT NOT NULL DEFAULT ''
+                );
+                CREATE TABLE IF NOT EXISTS facts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fact TEXT NOT NULL,
+                    tags TEXT DEFAULT '[]',
+                    source TEXT,
+                    project TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT,
+                    confidence REAL DEFAULT 1.0
+                );
+                CREATE INDEX IF NOT EXISTS idx_facts_tags ON facts(tags);
+                CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_unique ON facts(fact);
+                CREATE TABLE IF NOT EXISTS tool_calls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_key TEXT NOT NULL,
+                    iteration INTEGER NOT NULL,
+                    turn INTEGER NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    params TEXT,
+                    result TEXT,
+                    result_size INTEGER,
+                    success INTEGER DEFAULT 1,
+                    error TEXT,
+                    duration_ms INTEGER,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_key);
+                CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool_name);
+                CREATE INDEX IF NOT EXISTS idx_tool_calls_time ON tool_calls(timestamp);
+                CREATE TABLE IF NOT EXISTS metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                );
+                CREATE TABLE IF NOT EXISTS sessions (
+                    key TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    metadata TEXT NOT NULL DEFAULT '{}',
+                    last_consolidated INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_key TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    extra TEXT,
+                    FOREIGN KEY (session_key) REFERENCES sessions(key) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_key);
+                CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
+            """)
+            conn.commit()
         self._migrate_schema()
 
     def _migrate_schema(self) -> None:
         """Apply backward-compatible schema migrations for existing databases."""
-        self._conn.commit()
+        with self._conn_access() as conn:
+            conn.commit()
 
     @property
     def workspace(self) -> Path:
@@ -109,17 +120,19 @@ class NanobotDB:
     # --------------------------------------------------------------------------
 
     def get_metadata(self, key: str) -> str | None:
-        row = self._conn.execute(
-            "SELECT value FROM metadata WHERE key = ?", (key,)
-        ).fetchone()
+        with self._conn_access() as conn:
+            row = conn.execute(
+                "SELECT value FROM metadata WHERE key = ?", (key,)
+            ).fetchone()
         return row[0] if row else None
 
     def set_metadata(self, key: str, value: str) -> None:
-        self._conn.execute(
-            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-            (key, value),
-        )
-        self._conn.commit()
+        with self._conn_access() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+            conn.commit()
 
     # --------------------------------------------------------------------------
     # History
@@ -127,18 +140,16 @@ class NanobotDB:
 
     def append_history(self, content: str, *, timestamp: str | None = None, summary: str = "") -> int:
         ts = timestamp or _utc_now_iso()
-        cursor = self._next_cursor()
-        self._conn.execute(
-            "INSERT INTO history (cursor, timestamp, content, summary) VALUES (?, ?, ?, ?)",
-            (cursor, ts, content, summary),
-        )
-        self._conn.commit()
+        with self._conn_access() as conn:
+            row = conn.execute("SELECT MAX(cursor) FROM history").fetchone()
+            cursor = (row[0] or 0) + 1
+            conn.execute(
+                "INSERT INTO history (cursor, timestamp, content, summary) VALUES (?, ?, ?, ?)",
+                (cursor, ts, content, summary),
+            )
+            conn.commit()
         self.set_metadata("cursor", str(cursor))
         return cursor
-
-    def _next_cursor(self) -> int:
-        row = self._conn.execute("SELECT MAX(cursor) FROM history").fetchone()
-        return (row[0] or 0) + 1
 
     def get_cursor(self) -> int:
         val = self.get_metadata("cursor")
@@ -161,44 +172,49 @@ class NanobotDB:
 
     def read_entries(self) -> list[dict[str, Any]]:
         cols = ["cursor", "timestamp", "content", "summary"]
-        rows = self._conn.execute(
-            "SELECT cursor, timestamp, content, summary FROM history ORDER BY cursor"
-        ).fetchall()
+        with self._conn_access() as conn:
+            rows = conn.execute(
+                "SELECT cursor, timestamp, content, summary FROM history ORDER BY cursor"
+            ).fetchall()
         return [_row_to_dict(row, cols) for row in rows]
 
     def read_unprocessed_history(self, since_cursor: int) -> list[dict[str, Any]]:
         cols = ["cursor", "timestamp", "content", "summary"]
-        rows = self._conn.execute(
-            "SELECT cursor, timestamp, content, summary FROM history WHERE cursor > ? ORDER BY cursor",
-            (since_cursor,),
-        ).fetchall()
+        with self._conn_access() as conn:
+            rows = conn.execute(
+                "SELECT cursor, timestamp, content, summary FROM history WHERE cursor > ? ORDER BY cursor",
+                (since_cursor,),
+            ).fetchall()
         return [_row_to_dict(row, cols) for row in rows]
 
     def compact_history(self, max_entries: int = 1000) -> None:
-        count = self._conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
-        if count <= max_entries:
-            return
-        keep_cursors = [
-            r[0]
-            for r in self._conn.execute(
-                "SELECT cursor FROM history ORDER BY cursor DESC LIMIT ?", (max_entries,)
-            ).fetchall()
-        ]
-        if not keep_cursors:
-            return
-        oldest = min(keep_cursors)
-        self._conn.execute("DELETE FROM history WHERE cursor < ?", (oldest,))
-        self._conn.commit()
+        with self._conn_access() as conn:
+            count = conn.execute("SELECT COUNT(*) FROM history").fetchone()[0]
+            if count <= max_entries:
+                return
+            keep_cursors = [
+                r[0]
+                for r in conn.execute(
+                    "SELECT cursor FROM history ORDER BY cursor DESC LIMIT ?", (max_entries,)
+                ).fetchall()
+            ]
+            if not keep_cursors:
+                return
+            oldest = min(keep_cursors)
+            conn.execute("DELETE FROM history WHERE cursor < ?", (oldest,))
+            conn.commit()
 
     def update_summary(self, cursor: int, summary: str) -> None:
-        self._conn.execute(
-            "UPDATE history SET summary = ? WHERE cursor = ?",
-            (summary, cursor),
-        )
-        self._conn.commit()
+        with self._conn_access() as conn:
+            conn.execute(
+                "UPDATE history SET summary = ? WHERE cursor = ?",
+                (summary, cursor),
+            )
+            conn.commit()
 
     def history_exists(self) -> bool:
-        row = self._conn.execute("SELECT 1 FROM history LIMIT 1").fetchone()
+        with self._conn_access() as conn:
+            row = conn.execute("SELECT 1 FROM history LIMIT 1").fetchone()
         return row is not None
 
     # --------------------------------------------------------------------------
@@ -207,22 +223,24 @@ class NanobotDB:
 
     def save_session(self, session: "Session") -> None:
         """Full save: upsert session metadata, delete and re-insert all messages."""
-        with self._conn:
-            self._conn.execute(
-                """INSERT OR REPLACE INTO sessions
-                   (key, created_at, updated_at, metadata)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    session.key,
-                    session.created_at.isoformat(),
-                    session.updated_at.isoformat(),
-                    json.dumps(session.metadata),
-                ),
-            )
-            self._conn.execute("DELETE FROM messages WHERE session_key = ?", (session.key,))
-            self._insert_messages(session.key, session.messages)
+        with self._conn_access() as conn:
+            with conn:
+                conn.execute(
+                    """INSERT OR REPLACE INTO sessions
+                       (key, created_at, updated_at, metadata)
+                       VALUES (?, ?, ?, ?)""",
+                    (
+                        session.key,
+                        session.created_at.isoformat(),
+                        session.updated_at.isoformat(),
+                        json.dumps(session.metadata),
+                    ),
+                )
+                conn.execute("DELETE FROM messages WHERE session_key = ?", (session.key,))
+                self._insert_messages(conn, session.key, session.messages)
 
-    def _insert_messages(self, session_key: str, messages: list[dict[str, Any]]) -> None:
+    @staticmethod
+    def _insert_messages(conn: sqlite3.Connection, session_key: str, messages: list[dict[str, Any]]) -> None:
         """Batch-insert messages (no commit — caller owns the transaction)."""
         for msg in messages:
             extra = {k: v for k, v in msg.items() if k not in ("role", "content", "timestamp")}
@@ -232,7 +250,7 @@ class NanobotDB:
             elif isinstance(content, (list, dict)):
                 extra["_content_is_json"] = True
                 content = json.dumps(content, ensure_ascii=False)
-            self._conn.execute(
+            conn.execute(
                 "INSERT INTO messages (session_key, role, content, timestamp, extra) VALUES (?, ?, ?, ?, ?)",
                 (
                     session_key,
@@ -247,18 +265,19 @@ class NanobotDB:
         from dataclasses import replace
         from nanobot.session.manager import Session
 
-        row = self._conn.execute(
-            "SELECT created_at, updated_at, metadata FROM sessions WHERE key = ?",
-            (key,),
-        ).fetchone()
-        if row is None:
-            return None
-        created_at, updated_at, metadata_json = row
-        metadata = json.loads(metadata_json)
-        msg_rows = self._conn.execute(
-            "SELECT role, content, timestamp, extra FROM messages WHERE session_key = ? ORDER BY id",
-            (key,),
-        ).fetchall()
+        with self._conn_access() as conn:
+            row = conn.execute(
+                "SELECT created_at, updated_at, metadata FROM sessions WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                return None
+            created_at, updated_at, metadata_json = row
+            metadata = json.loads(metadata_json)
+            msg_rows = conn.execute(
+                "SELECT role, content, timestamp, extra FROM messages WHERE session_key = ? ORDER BY id",
+                (key,),
+            ).fetchall()
         messages = []
         for role, content, timestamp, extra in msg_rows:
             msg: dict[str, Any] = {"role": role, "content": content, "timestamp": timestamp}
@@ -277,9 +296,10 @@ class NanobotDB:
         )
 
     def list_sessions(self) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT key, created_at, updated_at, metadata, last_consolidated FROM sessions ORDER BY updated_at DESC"
-        ).fetchall()
+        with self._conn_access() as conn:
+            rows = conn.execute(
+                "SELECT key, created_at, updated_at, metadata, last_consolidated FROM sessions ORDER BY updated_at DESC"
+            ).fetchall()
         return [
             {
                 "key": row[0],
@@ -292,11 +312,13 @@ class NanobotDB:
         ]
 
     def delete_session(self, key: str) -> None:
-        self._conn.execute("DELETE FROM sessions WHERE key = ?", (key,))
-        self._conn.commit()
+        with self._conn_access() as conn:
+            conn.execute("DELETE FROM sessions WHERE key = ?", (key,))
+            conn.commit()
 
     def sessions_exist(self) -> bool:
-        row = self._conn.execute("SELECT 1 FROM sessions LIMIT 1").fetchone()
+        with self._conn_access() as conn:
+            row = conn.execute("SELECT 1 FROM sessions LIMIT 1").fetchone()
         return row is not None
 
     def search_sessions(
@@ -368,7 +390,8 @@ class NanobotDB:
         query += " ORDER BY timestamp DESC LIMIT ?"
         args.append(limit)
 
-        rows = self._conn.execute(query, args).fetchall()
+        with self._conn_access() as conn:
+            rows = conn.execute(query, args).fetchall()
 
         for session_key, role, content, timestamp, extra in rows:
             if extra:
@@ -385,7 +408,8 @@ class NanobotDB:
         return results
 
     def close(self) -> None:
-        self._conn.close()
+        with self._conn_access() as conn:
+            conn.close()
 
     # --------------------------------------------------------------------------
     # Tool Calls
@@ -407,21 +431,23 @@ class NanobotDB:
     ) -> int:
         self._purge_old_tool_calls()
         result_size = len(result) if result else 0
-        cursor = self._conn.execute(
-            """INSERT INTO tool_calls
-               (session_key, iteration, turn, tool_name, params, result, result_size, success, error, duration_ms, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (session_key, iteration, turn, tool_name, json.dumps(params or {}),
-             result, result_size, int(success), error, duration_ms, _utc_now_iso()),
-        )
-        self._conn.commit()
+        with self._conn_access() as conn:
+            cursor = conn.execute(
+                """INSERT INTO tool_calls
+                   (session_key, iteration, turn, tool_name, params, result, result_size, success, error, duration_ms, timestamp)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (session_key, iteration, turn, tool_name, json.dumps(params or {}),
+                 result, result_size, int(success), error, duration_ms, _utc_now_iso()),
+            )
+            conn.commit()
         return cursor.lastrowid or 0
 
     def _purge_old_tool_calls(self) -> None:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=self._TOOL_CALL_RETENTION_DAYS)).isoformat()
-        deleted = self._conn.execute(
-            "DELETE FROM tool_calls WHERE timestamp < ?", (cutoff,)
-        ).rowcount
+        with self._conn_access() as conn:
+            deleted = conn.execute(
+                "DELETE FROM tool_calls WHERE timestamp < ?", (cutoff,)
+            ).rowcount
         if deleted:
             logger.debug("Purged {} old tool call records (>{} days)", deleted, self._TOOL_CALL_RETENTION_DAYS)
 
@@ -452,7 +478,8 @@ class NanobotDB:
         args.append(limit)
         cols = ["id", "session_key", "iteration", "turn", "tool_name", "params",
                 "result", "result_size", "success", "error", "duration_ms", "timestamp"]
-        rows = self._conn.execute(query, args).fetchall()
+        with self._conn_access() as conn:
+            rows = conn.execute(query, args).fetchall()
         results: list[dict[str, Any]] = []
         for row in rows:
             d = self._row_to_dict(row, cols)

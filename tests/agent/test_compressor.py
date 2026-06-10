@@ -301,3 +301,141 @@ class TestCompress:
         mock_fn.assert_called_once()
         _, kwargs = mock_fn.call_args
         assert kwargs.get("previous_summary") == "initial summary"
+
+
+# ===========================================================================
+# Compressor.split_turns
+# ===========================================================================
+
+class TestSplitTurns:
+    """``Compressor.split_turns`` — thin wrapper around Session._split_turns_by_assistant."""
+
+    def test_empty_messages(self):
+        assert Compressor.split_turns([]) == []
+
+    def test_single_user_message(self):
+        msgs = [{"role": "user", "content": "hello"}]
+        result = Compressor.split_turns(msgs)
+        assert result == [[{"role": "user", "content": "hello"}]]
+
+    def test_single_assistant_message(self):
+        msgs = [{"role": "assistant", "content": "hi"}]
+        result = Compressor.split_turns(msgs)
+        assert result == [[{"role": "assistant", "content": "hi"}]]
+
+    def test_splits_at_assistant_boundary(self):
+        """Messages before the first assistant form their own turn;
+        each assistant message starts a new turn, collecting subsequent
+        non-assistant messages until the next assistant."""
+        msgs = [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "tool", "content": "t2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        result = Compressor.split_turns(msgs)
+        assert len(result) == 3
+        assert result[0] == [
+            {"role": "user", "content": "q1"},
+        ]
+        assert result[1] == [
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "tool", "content": "t2"},
+        ]
+        assert result[2] == [
+            {"role": "assistant", "content": "a2"},
+        ]
+
+    def test_consecutive_assistant(self):
+        """Consecutive assistant messages each start their own turn."""
+        msgs = [
+            {"role": "assistant", "content": "first"},
+            {"role": "assistant", "content": "second"},
+        ]
+        result = Compressor.split_turns(msgs)
+        assert len(result) == 2
+        assert result[0] == [{"role": "assistant", "content": "first"}]
+        assert result[1] == [{"role": "assistant", "content": "second"}]
+
+    def test_no_assistant_returns_single_turn(self):
+        msgs = [
+            {"role": "user", "content": "q1"},
+            {"role": "user", "content": "q2"},
+        ]
+        result = Compressor.split_turns(msgs)
+        assert len(result) == 1
+        assert len(result[0]) == 2
+
+
+# ===========================================================================
+# Compressor.take_future_turns
+# ===========================================================================
+
+class TestTakeFutureTurns:
+    """``Compressor.take_future_turns`` — thin wrapper around _take_future_turns."""
+
+    @staticmethod
+    def _turn(content: str) -> list[dict]:
+        return [{"role": "user", "content": content}]
+
+    _T1 = [{"role": "user", "content": "t1"}]
+    _T2 = [{"role": "user", "content": "t2"}]
+    _T3 = [{"role": "user", "content": "t3"}]
+    _T4 = [{"role": "user", "content": "t4"}]
+    _K1 = [{"role": "user", "content": "k1"}]
+    _K2 = [{"role": "user", "content": "k2"}]
+
+    def test_takes_future_turns_from_all_turns(self):
+        """Batch starts at 0, size 1, so future turns after index 0 come from all_turns."""
+        all_turns = [self._T1, self._T2, self._T3, self._T4]
+        result = Compressor.take_future_turns(all_turns, 0, 1, 3, [self._K1])
+        assert result == [self._T2[0], self._T3[0], self._T4[0]]
+
+    def test_fills_remainder_from_keep(self):
+        """When all_turns runs out, fill from keep."""
+        all_turns = [self._T1, self._T2]
+        result = Compressor.take_future_turns(all_turns, 0, 2, 3, [self._K1, self._K2])
+        assert result == [self._K1[0], self._K2[0]]
+
+    def test_partial_fill_from_keep(self):
+        """Partially from all_turns, partially from keep."""
+        all_turns = [self._T1, self._T2, self._T3]
+        result = Compressor.take_future_turns(all_turns, 0, 1, 3, [self._K1, self._K2])
+        assert result == [self._T2[0], self._T3[0], self._K1[0]]
+
+    def test_empty_all_turns(self):
+        result = Compressor.take_future_turns([], 0, 0, 3, [self._K1, self._K2])
+        assert result == [self._K1[0], self._K2[0]]
+
+    def test_empty_keep_and_all_turns(self):
+        result = Compressor.take_future_turns([], 0, 0, 3, [])
+        assert result == []
+
+
+# ===========================================================================
+# Compressor.make_summary_pair
+# ===========================================================================
+
+class TestMakeSummaryPair:
+    """``Compressor.make_summary_pair`` — thin wrapper around compress.make_summary_pair."""
+
+    def test_basic(self):
+        pair = Compressor.make_summary_pair("my summary")
+        assert len(pair) == 1
+        assert pair[0]["role"] == "user"
+        assert pair[0]["content"] == "my summary"
+        assert pair[0]["status"] == "synthetic"
+
+    def test_with_timestamp(self):
+        pair = Compressor.make_summary_pair("summary", timestamp="2026-06-08T00:00:00")
+        assert pair[0]["timestamp"] == "2026-06-08T00:00:00"
+
+    def test_empty_summary(self):
+        pair = Compressor.make_summary_pair("")
+        assert pair[0]["content"] == ""
+
+    def test_no_timestamp_omits_key(self):
+        pair = Compressor.make_summary_pair("test")
+        assert "timestamp" not in pair[0]

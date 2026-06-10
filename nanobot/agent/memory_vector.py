@@ -126,7 +126,7 @@ class MemoryVectorIndex:
             try:
                 return json.loads(path.read_text(encoding="utf-8"))
             except Exception:
-                logger.warning("Failed to load file_map.json, starting fresh")
+                logger.warning("Failed to load file_map.json, starting fresh", exc_info=True)
         return {"next_id": 0, "files": {}}
 
     def _save_file_map(self, file_map: dict[str, Any]) -> None:
@@ -283,7 +283,7 @@ class MemoryVectorIndex:
         try:
             return self._incremental_update(file_map, current_files, deleted, changed, new_files)
         except Exception as e:
-            logger.warning("FAISS incremental update failed: {}, falling back to full rebuild", e)
+            logger.exception("FAISS incremental update failed: {}, falling back to full rebuild", e)
             file_texts: dict[str, str] = {}
             for rel in current_files:
                 try:
@@ -588,7 +588,7 @@ class MemoryVectorIndex:
         try:
             loaded_chunks = json.loads(chunks_path.read_text(encoding="utf-8"))
         except Exception:
-            logger.warning("Failed to load memory index chunks")
+            logger.exception("Failed to load memory index chunks")
             return False
 
         # Ensure chunks is a list (not dict - legacy format was list)

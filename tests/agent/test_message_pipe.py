@@ -10,6 +10,7 @@ from nanobot.agent.message_pipe import (
     _has_context_window_error,
     _is_overflow,
 )
+from nanobot.agent.compressor import CompressEvent, Compressor
 from nanobot.providers.base import LLMResponse
 from nanobot.session.manager import Session
 
@@ -424,3 +425,171 @@ class TestSplitTurnsByAssistant:
         turns = Session._split_turns_by_assistant(msgs)
         assert len(turns) == 1
         assert turns[0][0]["role"] == "user"
+
+
+# ===========================================================================
+# MessagePipe._compress — additional edge cases
+# ===========================================================================
+
+class TestCompressEdgeCases:
+    """``_compress`` edge cases not covered by main tests."""
+
+    async def test_single_turn_drops_messages(self):
+        """Only 1 turn after system → log warning and drop to system + latest."""
+        pipe = MessagePipe()
+        # history_msgs = [assistant:a1, user:q1, user:extra] → 1 turn
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q1"},
+            {"role": "user", "content": "extra"},
+        ]
+        result, event = await pipe._compress(messages)
+        # Single-turn branch: returns [system, latest]
+        assert len(result) == 2
+        assert result[0]["content"] == "sys"
+        assert result[-1]["content"] == "extra"
+
+    async def test_no_turns_to_compress_returns_unchanged(self):
+        """All turns fit within budget → nothing to compress."""
+        pipe = MessagePipe()
+        # 2 turns, each 2 msgs, estimate=5/msg → 20 total, budget=100
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "assistant", "content": "a1"}, {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a2"}, {"role": "user", "content": "q2"},
+        ]
+        with patch("nanobot.utils.helpers.estimate_message_tokens", return_value=5):
+            result, event = await pipe._compress(messages, budget=100)
+        assert result == messages
+
+    async def test_last_message_not_user_no_duplicate(self):
+        """Last message is assistant → _compress doesn't try to append it again."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
+        llm_set_llm(provider, "test-model")
+
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        result, event = await pipe._compress(messages)
+        # No user message to re-append at the end
+        assert result[-1]["role"] != "user" or result[-1]["content"] == "q1"
+        # result[-1] is either a1 or the synthetic summary
+
+    async def test_synthetic_pair_empty_fallback(self):
+        """compress_turns returns failure → empty synthetic_pair → only system + keep."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
+        llm_set_llm(provider, "test-model")
+
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+        ]
+
+        with patch("nanobot.agent.compress.compress_turns", return_value=(None, [])):
+            result, event = await pipe._compress(messages)
+
+        # No synthetic pair: only system + keep turns
+        assert result[0]["role"] == "system"
+        assert len(result) > 0
+
+    async def test_last_user_already_in_result_no_duplicate(self):
+        """User message is already the last entry in keep → no duplicate append."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_success_response("summary"))
+        llm_set_llm(provider, "test-model")
+
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q1"},  # this will be kept as last turn
+        ]
+
+        result, event = await pipe._compress(messages)
+        # The last user message should appear exactly once
+        user_messages = [m for m in result if m.get("role") == "user"]
+        assert len(user_messages) == 1
+        assert user_messages[0]["content"] == "q1"
+
+
+# ===========================================================================
+# MessagePipe final fallback overflow
+# ===========================================================================
+
+class TestFinalFallbackOverflow:
+    """Last-attempt call itself overflows."""
+
+    async def test_complete_last_attempt_overflow(self):
+        """All MAX_RETRIES+1 calls overflow → last response is still overflow."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(return_value=_make_overflow_response())
+        llm_set_llm(provider, "test-model")
+
+        result, compressed = await pipe.complete(
+            messages=[{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
+            model="test-model",
+        )
+
+        assert _is_overflow(result)
+        assert compressed is not None
+        # MAX_RETRIES(3) + 1 compression + 1 final fallback = 5
+        assert provider.chat_with_retry.await_count == 5
+
+    async def test_complete_stream_last_attempt_overflow(self):
+        """All calls overflow in streaming path."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_stream_with_retry = AsyncMock(return_value=_make_overflow_response())
+        llm_set_llm(provider, "test-model")
+
+        result, compressed = await pipe.complete_stream(
+            messages=[{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
+            model="test-model",
+            on_content_delta=AsyncMock(),
+            on_reasoning_delta=AsyncMock(),
+        )
+
+        assert _is_overflow(result)
+        assert compressed is not None
+
+
+# ===========================================================================
+# MessagePipe budget passthrough
+# ===========================================================================
+
+class TestBudgetPassthrough:
+    """budget parameter propagates from complete/complete_stream to _compress."""
+
+    async def test_complete_passes_budget_to_compress(self):
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(side_effect=[
+            _make_overflow_response(),
+            _make_success_response("ok"),
+        ])
+        provider.chat_stream_with_retry = AsyncMock()
+        llm_set_llm(provider, "test-model")
+
+        with patch.object(pipe, "_compress") as mock_compress:
+            mock_compress.return_value = (
+                [{"role": "user", "content": "compressed"}],
+                CompressEvent(summary="s"),
+            )
+            await pipe.complete(
+                messages=[{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
+                model="test-model",
+                budget=42,
+            )
+
+        _args, kwargs = mock_compress.call_args
+        assert kwargs.get("budget") == 42

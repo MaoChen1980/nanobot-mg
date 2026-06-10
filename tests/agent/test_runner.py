@@ -1112,3 +1112,117 @@ async def test_initial_message_count_updated_after_compression():
     assert result.initial_message_count < len(msgs)  # compressed shorter than original
 
 
+# ===========================================================================
+# AgentRunner._append_final_message
+# ===========================================================================
+
+class TestAppendFinalMessage:
+    """``AgentRunner._append_final_message`` — static, appends/replaces final message."""
+
+    def _runner(self):
+        from nanobot.agent.runner import AgentRunner
+        return AgentRunner
+
+    def test_none_content_noop(self):
+        msgs = [{"role": "user", "content": "hi"}]
+        self._runner()._append_final_message(msgs, None)
+        assert len(msgs) == 1
+
+    def test_same_content_skips_duplicate(self):
+        msgs = [{"role": "assistant", "content": "already"}]
+        self._runner()._append_final_message(msgs, "already")
+        assert len(msgs) == 1
+
+    def test_replaces_last_assistant_without_tool_calls(self):
+        msgs = [{"role": "user", "content": "q"}, {"role": "assistant", "content": "old"}]
+        self._runner()._append_final_message(msgs, "new")
+        assert len(msgs) == 2
+        assert msgs[-1]["content"] == "new"
+
+    def test_appends_when_last_is_user(self):
+        msgs = [{"role": "user", "content": "q"}]
+        self._runner()._append_final_message(msgs, "final answer")
+        assert len(msgs) == 2
+        assert msgs[-1]["role"] == "assistant"
+        assert msgs[-1]["content"] == "final answer"
+
+    def test_appends_when_last_assistant_has_tool_calls(self):
+        msgs = [{"role": "assistant", "content": "", "tool_calls": [{"id": "tc1"}]}]
+        self._runner()._append_final_message(msgs, "final")
+        assert len(msgs) == 2
+        assert msgs[-1]["content"] == "final"
+
+    def test_empty_messages_list(self):
+        msgs: list = []
+        self._runner()._append_final_message(msgs, "content")
+        assert len(msgs) == 1
+        assert msgs[0]["content"] == "content"
+
+
+# ===========================================================================
+# AgentRunner._append_model_error_placeholder
+# ===========================================================================
+
+class TestAppendModelErrorPlaceholder:
+    """``AgentRunner._append_model_error_placeholder`` — inserts placeholder."""
+
+    def _runner(self):
+        from nanobot.agent.runner import AgentRunner
+        return AgentRunner
+
+    def test_skips_when_last_is_assistant_without_tool_calls(self):
+        msgs = [{"role": "assistant", "content": "partial"}]
+        self._runner()._append_model_error_placeholder(msgs)
+        assert len(msgs) == 1
+
+    def test_appends_when_last_is_user(self):
+        msgs = [{"role": "user", "content": "q"}]
+        self._runner()._append_model_error_placeholder(msgs)
+        assert len(msgs) == 2
+        assert msgs[-1]["role"] == "assistant"
+        assert "unavailable" in msgs[-1]["content"]
+
+    def test_appends_when_last_assistant_has_tool_calls(self):
+        msgs = [{"role": "assistant", "content": "", "tool_calls": [{"id": "tc1"}]}]
+        self._runner()._append_model_error_placeholder(msgs)
+        assert len(msgs) == 2
+        assert "unavailable" in msgs[-1]["content"]
+
+    def test_appends_to_empty_list(self):
+        msgs: list = []
+        self._runner()._append_model_error_placeholder(msgs)
+        assert len(msgs) == 1
+        assert "unavailable" in msgs[0]["content"]
+
+
+# ===========================================================================
+# AgentRunner._log_tool_call
+# ===========================================================================
+
+class TestLogToolCall:
+    """``AgentRunner._log_tool_call`` — persists tool call to DB."""
+
+    def test_noop_without_db(self):
+        from nanobot.agent.runner import AgentRunner
+        runner = AgentRunner(MagicMock(), db=None)
+        runner._log_tool_call("sess", 0, 0, "read_file", {}, "result", True, None)
+
+    def test_calls_insert_tool_call(self):
+        from nanobot.agent.runner import AgentRunner
+        db = MagicMock()
+        runner = AgentRunner(MagicMock(), db=db)
+        runner._log_tool_call("sess", 0, 0, "read_file", {"path": "/x"}, "result", True, None)
+        db.insert_tool_call.assert_called_once_with(
+            session_key="sess", iteration=0, turn=0,
+            tool_name="read_file", params={"path": "/x"},
+            result="result", success=True, error=None,
+        )
+
+    def test_logs_exception_on_failure(self):
+        from nanobot.agent.runner import AgentRunner
+        db = MagicMock()
+        db.insert_tool_call.side_effect = RuntimeError("DB down")
+        runner = AgentRunner(MagicMock(), db=db)
+        with patch("nanobot.agent.runner.logger.exception") as mock_log:
+            runner._log_tool_call("sess", 0, 0, "read_file", {}, "result", True, None)
+        mock_log.assert_called_once()

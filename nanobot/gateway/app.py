@@ -313,11 +313,17 @@ class GatewayApplication:
                 key = session_key or _channel_session_key(
                     msg.channel, msg.chat_id
                 )
-                session = self.session_manager.get_or_create(key)
-                session.add_message(
-                    "assistant", msg.content, _channel_delivery=True
-                )
-                self.session_manager.save(session)
+                # Acquire per-session lock to prevent race with _dispatch
+                if self.agent is not None:
+                    lock = self.agent.get_session_lock(key)
+                    async with lock:
+                        session = self.session_manager.get_or_create(key)
+                        session.add_message("assistant", msg.content, _channel_delivery=True)
+                        self.session_manager.save(session)
+                else:
+                    session = self.session_manager.get_or_create(key)
+                    session.add_message("assistant", msg.content, _channel_delivery=True)
+                    self.session_manager.save(session)
 
             # Proxy channels: deliver via proxy TCP connection
             proxy_key: str | None = None

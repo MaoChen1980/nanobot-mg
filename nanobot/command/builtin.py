@@ -125,9 +125,12 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage | None:
         except Exception:
             logger.exception("Failed to archive session to history")
 
-    session.clear()
-    loop.sessions.save(session)
-    loop.sessions.invalidate(session.key)
+    # Acquire per-session lock to prevent race with active _dispatch
+    lock = loop.get_session_lock(ctx.key)
+    async with lock:
+        session.clear()
+        loop.sessions.save(session)
+        loop.sessions.invalidate(session.key)
 
     stopped = f"Stopped {cancelled} running task(s)." if cancelled else "No running tasks."
     return OutboundMessage(
