@@ -613,6 +613,32 @@ class TestMakeSummaryPair:
 # compress_turns
 # ===========================================================================
 
+class TestStripXmlToolCalls:
+    def test_plain_text_unchanged(self):
+        from nanobot.agent.compress import _strip_xml_tool_calls
+        assert _strip_xml_tool_calls("Hello world.") == "Hello world."
+
+    def test_invoke_xml_stripped(self):
+        from nanobot.agent.compress import _strip_xml_tool_calls
+        result = _strip_xml_tool_calls(
+            'Text <invoke name="search"><parameter name="q">x</parameter></invoke> after'
+        )
+        assert "<invoke" not in result
+        assert "Text" in result
+        assert "after" in result
+
+    def test_dict_tool_call_stripped(self):
+        from nanobot.agent.compress import _strip_xml_tool_calls
+        result = _strip_xml_tool_calls('Some {tool => "search", args => { --q "x" }} text')
+        assert "{tool" not in result
+        assert "Some" in result
+
+    def test_tc_wrapper_stripped(self):
+        from nanobot.agent.compress import _strip_xml_tool_calls
+        result = _strip_xml_tool_calls('[TOOL_CALL] content [/TOOL_CALL]')
+        assert "TOOL_CALL" not in result
+        assert "content" in result
+
 class TestCompressTurns:
     """``compress_turns`` — async with mocked provider."""
 

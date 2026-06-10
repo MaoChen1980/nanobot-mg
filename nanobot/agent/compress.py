@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any
 
 from loguru import logger
@@ -81,6 +82,7 @@ _SUMMARY_PROMPT_TEMPLATE = (
     "- 提取有用的事实、决策、配置、约定\n"
     "- 把完整的推理链、试错过程**压缩成结论**（如「已确认方案 X 可行」而非每一步尝试）\n"
     "- 按主题分组，简洁的要点列表，不要按 turn 顺序\n"
+    "- 除非专用名词（命令、路径、参数等），都用自然语言表述，不要包含任何 XML、代码、或工具调用格式\n"
     "\n"
     "{previous_summary}"
     "以下是即将被裁剪的旧对话：\n\n"
@@ -162,6 +164,32 @@ def _take_future_turns(
         need = n_future - len(src)
         src = src + keep[:need]
     return [m for turn in src for m in turn]
+
+
+# Matches MiniMax dict format: {tool => "name", args => { ... }}
+_TOOL_DICT_RE = re.compile(
+    r'\{tool\s*=>\s*"[^"]+"\s*,\s*args\s*=>\s*\{[^}]*\}\s*\}',
+    re.DOTALL,
+)
+# Matches XML invoke: <invoke name/tool="...">...</invoke>
+_TOOL_INVOKE_RE = re.compile(
+    r'<invoke\s+(?:name|tool)\s*=\s*["\'][^"\']+["\']\s*>.*?</invoke>',
+    re.DOTALL,
+)
+# Matches [TOOL_CALL] wrapper markers
+_TOOL_TC_RE = re.compile(r'\[/?TOOL_CALL\]')
+
+
+def _strip_xml_tool_calls(text: str) -> str:
+    """Strip residual XML tool call patterns from summary text.
+
+    Safety net: if the LLM ignored the natural-language instruction and
+    emitted tool-call XML/dict/args formats in the summary, remove them.
+    """
+    result = _TOOL_INVOKE_RE.sub("", text)
+    result = _TOOL_DICT_RE.sub("", result)
+    result = _TOOL_TC_RE.sub("", result)
+    return result.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +299,7 @@ async def compress_turns(
         to_compress, future_context=keep, previous_summary=previous_summary,
     )
     summary = strip_think(summary).strip() if summary else ""
+    summary = _strip_xml_tool_calls(summary) if summary else ""
     if not summary:
         return None, []
     return summary, make_summary_pair(summary, timestamp)

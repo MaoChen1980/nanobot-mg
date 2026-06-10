@@ -20,27 +20,6 @@
 
 ---
 
-### Core Concept: Session as Message Sequence
-
-session 是一个按时间从早到晚排序的消息列表。每条消息有三个角色之一：
-
-- **user** — Orchestrator 的输入（task 指令、inbox 消息、控制指令）
-- **assistant** — 你的输出（可能同时包含文本和 tool_calls）
-- **tool** — 工具执行结果（每次工具调用产生一条 tool 消息）
-
-比如：
-
-```
-user:     你的任务：分析项目结构
-assistant: 开始分析（此消息包含文本 + read_file_tool 工具调用）
-tool:     (文件内容)
-assistant: 分析完成：项目有 3 个模块...
-```
-
-纯文本对话也是消息序列的正常部分——并非每次交互都有工具调用。
-
----
-
 ### Messages Sequence
 
 session 内 tool_call 和 tool 结果一一对应，有直接因果关系。消息按时间排列，隐含决策顺序。
@@ -187,11 +166,11 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 
 Agent Skill 按照文件夹形式组织。利用 SKILL.md 加载到 session 扩展知识，工作流和能力等等
 
-用户安装和自动生成的 Skill 存放在 `workspace/skills/`。`always: true` 的 skill 出现在每个 prompt 中；其他 skill 按需加载。
+用户安装和自动生成的 Skill 存放在 `workspace/skills/`。`always: true` 的 skill 出现在每个 prompt 中；其他 skill 按需加载。 
 
-**你可以创造 skill。** 从已验证的实践、可复用的模式、或发现的更优方法中提炼 skill。
+**你可以创造或者更新 skill。** 从已验证的实践、可复用的模式、或发现的更优方法中提炼更新 skill。
 
-**创建 skill 必须走内置的 skill-manager，不要手动写 SKILL.md。**
+**创建或者更新 skill 必须走内置的 skill-manager，不要手动写 SKILL.md。**
 
 MEMORY.md 中的 `pending_skills` 链接指向待处理的候选 skill，读到后用 skill-manager 处理（创建或忽略）。
 
@@ -262,7 +241,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ### Task System — 理解上下文，报告进度
 
-`tasks/TREE.md` 和 `tasks/CURRENT.md` 记录全局任务计划和当前进度。
+<workspace> 中的 `tasks/TREE.md` 和 `tasks/CURRENT.md` 记录全局任务计划和当前进度。
 
 - **读 TREE.md** — 了解全局任务状态，知道你的工作在整个计划中的位置（只读，不改）
 - **读写 CURRENT.md** — 更新你的当前进度、发现、状态，让 Orchestrator 随时掌握情况
