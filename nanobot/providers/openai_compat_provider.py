@@ -333,11 +333,17 @@ class OpenAICompatProvider(LLMProvider):
         # LAN.  Cloud providers benefit from keepalive, so we leave the
         # default pool settings for them.
         timeout_s = _openai_compat_timeout_s()
+        # Align httpx read timeout with the per-chunk idle timeout so that
+        # httpx does not preemptively raise ReadTimeout during long streaming
+        # gaps (e.g. reasoning models that pause >120s between chunks).
+        # The actual per-chunk guard is asyncio.wait_for in chat_stream().
+        idle_read_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "900"))
+        t = httpx.Timeout(timeout_s, read=idle_read_timeout_s, pool=None)
         http_client: httpx.AsyncClient | None = None
         if _is_local_endpoint(spec, effective_base):
             http_client = httpx.AsyncClient(
                 limits=httpx.Limits(keepalive_expiry=0),
-                timeout=timeout_s,
+                timeout=t,
             )
 
         self._client = AsyncOpenAI(
@@ -345,7 +351,7 @@ class OpenAICompatProvider(LLMProvider):
             base_url=effective_base,
             default_headers=default_headers,
             max_retries=0,
-            timeout=timeout_s,
+            timeout=t,
             http_client=http_client,
         )
 
@@ -1254,7 +1260,7 @@ class OpenAICompatProvider(LLMProvider):
             msg = f"Error calling LLM: {err_str}"
         else:
             # e.g. httpx.ReadTimeout with empty str() representation
-            msg = "Error calling LLM: connection error (no detail)"
+            msg = f"Error calling LLM: {e.__class__.__name__}"
 
         text = f"{body_text} {e}".lower()
         if spec and spec.is_local and ("502" in text or "connection" in text or "refused" in text):
