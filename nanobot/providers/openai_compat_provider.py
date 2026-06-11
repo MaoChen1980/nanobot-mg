@@ -1372,6 +1372,7 @@ class OpenAICompatProvider(LLMProvider):
         on_reasoning_delta: Callable[[str], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "900"))
+        stream = None
         try:
             if self._should_use_responses_api(model, reasoning_effort):
                 try:
@@ -1473,10 +1474,11 @@ class OpenAICompatProvider(LLMProvider):
         except Exception as e:
             # Close the stream so the underlying httpx connection is
             # properly released back to the pool (or discarded if broken).
-            try:
-                await stream.close()
-            except Exception:
-                pass
+            if stream is not None:
+                try:
+                    await stream.close()
+                except Exception:
+                    pass
             return self._handle_error(e, spec=self._spec, api_base=self.api_base)
 
     def get_default_model(self) -> str:

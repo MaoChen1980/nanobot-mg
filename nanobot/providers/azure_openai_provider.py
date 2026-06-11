@@ -167,6 +167,7 @@ class AzureOpenAIProvider(LLMProvider):
             reasoning_effort, tool_choice,
         )
         body["stream"] = True
+        stream = None
 
         try:
             stream = await self._client.responses.create(**body)
@@ -181,10 +182,11 @@ class AzureOpenAIProvider(LLMProvider):
                 reasoning_content=reasoning_content,
             )
         except Exception as e:
-            try:
-                await stream.close()
-            except Exception:
-                pass
+            if stream is not None:
+                try:
+                    await stream.close()
+                except Exception:
+                    pass
             return self._handle_error(e)
 
     def get_default_model(self) -> str:

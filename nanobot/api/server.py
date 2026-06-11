@@ -559,10 +559,13 @@ async def handle_memory_chat(request: Request) -> Response:
 
         async def run_chat():
             try:
-                await chat_stream_with_retry(
+                response = await chat_stream_with_retry(
                     messages=messages,
                     on_content_delta=on_token,
                 )
+                if response.finish_reason == "error":
+                    err_text = (response.content or "").strip() or "LLM call failed"
+                    await queue.put(f"__error__:{err_text}")
             except Exception as e:
                 logger.exception("Memory chat streaming failed")
                 await queue.put(f"__error__:{e}")

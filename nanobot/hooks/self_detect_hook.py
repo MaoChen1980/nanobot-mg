@@ -490,6 +490,8 @@ class SelfDetectHook(AgentHook):
                 )},
             ],
         )
+        if response.finish_reason == "error":
+            return ""
         return response.content or ""
 
     @staticmethod

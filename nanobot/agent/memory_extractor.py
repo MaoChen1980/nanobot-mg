@@ -215,6 +215,9 @@ class MemoryExtractor:
             logger.exception("MemoryExtractor: analysis LLM call failed")
             return None
 
+        if response.finish_reason == "error":
+            return None
+
         raw = (response.content or "").strip()
         if not raw:
             return None
@@ -717,6 +720,9 @@ class MemoryExtractor:
             logger.exception("MemoryExtractor: skill creation LLM call failed")
             return False
 
+        if response.finish_reason == "error":
+            return False
+
         raw = (response.content or "").strip()
         if not raw:
             return False
@@ -937,6 +943,9 @@ class MemoryExtractor:
             )
         except Exception:
             logger.exception("MemoryExtractor: consolidation LLM call failed")
+            return False
+
+        if response.finish_reason == "error":
             return False
 
         raw = (response.content or "").strip()
@@ -1501,6 +1510,9 @@ class MemoryExtractor:
             )
         except Exception:
             logger.exception("MemoryExtractor: cleanup LLM call failed")
+            return
+
+        if response.finish_reason == "error":
             return
 
         raw = (response.content or "").strip()
