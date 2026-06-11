@@ -203,7 +203,8 @@ class TestSpecificSchemaDefaults:
 
     def test_send_message_priority_enum(self):
         from nanobot.agent.tools.send_message import SendMessageTool
-        tool = SendMessageTool()
+        from unittest.mock import MagicMock
+        tool = SendMessageTool(manager=MagicMock())
         schema = tool._tool_parameters_schema
         assert schema["properties"]["priority"]["enum"] == ["info", "suggestion", "blocker"]
 

@@ -29,6 +29,10 @@ from nanobot.utils.tools_index import rebuild_tools_index as _rebuild_tools_inde
 _template_content_cache: dict[str, tuple[float, str]] = {}
 _MAX_TEMPLATE_CACHE_SIZE = 20
 
+# Module-level caches for system info — computed once per session
+_memory_info_cache: tuple[str, str] | None = None  # (total, available)
+_gpu_info_cache: str | None = None  # GPU description
+
 # Regex matching Windows absolute paths with backslashes (e.g. C:\Users\foo)
 _WIN_PATH_RE = re.compile(r"\b[A-Za-z]:\\[^\s\"'|&;<>()$`]*")
 
@@ -72,6 +76,11 @@ class ContextBuilder:
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
         self._bootstrap_cache: dict[str, tuple[float, str | None]] = {}
         self._framework_config = framework_config or {}
+        # Content caches — invalidated by mtime change
+        self._file_text_cache: dict[str, tuple[float, str]] = {}
+        self._identity_cache: dict[tuple, str] = {}
+        # Workflow routing cache — invalidated by workflows dir mtime
+        self._wf_cache: tuple[float, str] | None = None
 
 
     def warmup(self) -> None:
@@ -90,6 +99,27 @@ class ContextBuilder:
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 50:
             logger.info("ContextBuilder warmup took {:.0f}ms", _elapsed)
+
+    def _cached_read_text(self, path: Path) -> str | None:
+        """Read file text with mtime-based caching.
+
+        Returns None if the file doesn't exist or can't be read.
+        Cache is invalidated when the file's mtime changes.
+        """
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return None
+        key = str(path)
+        cached = self._file_text_cache.get(key)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception:
+            return None
+        self._file_text_cache[key] = (mtime, content)
+        return content
 
     def build_system_prompt(
         self,
@@ -216,7 +246,12 @@ class ContextBuilder:
         return text
 
     def _get_identity(self, channel: str | None = None, include_vector_search: bool = True) -> str:
-        """Get the core identity section."""
+        """Get the core identity section. Cached by (channel, include_vector_search)."""
+        cache_key = (channel, include_vector_search)
+        cached = self._identity_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         workspace_path = self._workspace_path_str
         import shutil
 
@@ -271,7 +306,9 @@ class ContextBuilder:
         else:
             kwargs["sentence_transformers"] = None
 
-        return render_template("agent/identity.md", **kwargs)
+        result = render_template("agent/identity.md", **kwargs)
+        self._identity_cache[cache_key] = result
+        return result
 
     @staticmethod
     def _convert_timestamp(ts: str, timezone: str | None) -> str:
@@ -297,15 +334,12 @@ class ContextBuilder:
         return _split_thinking_messages(messages)
 
     def _build_task_tree_section(self) -> str:
-        """Read tasks/TREE.md from the workspace for context injection."""
+        """Read tasks/TREE.md from the workspace for context injection (cached by mtime)."""
         tree_path = self.workspace / "tasks" / "TREE.md"
-        if not tree_path.exists():
+        content = self._cached_read_text(tree_path)
+        if not content:
             return ""
-        try:
-            content = tree_path.read_text(encoding="utf-8").strip()
-        except Exception:
-            logger.warning("Failed to read task tree at {}", tree_path)
-            return ""
+        content = content.strip()
         if not content:
             return ""
         return (
@@ -316,15 +350,12 @@ class ContextBuilder:
         )
 
     def _build_current_context_section(self) -> str:
-        """Read tasks/CURRENT.md from the workspace for session-level working context."""
+        """Read tasks/CURRENT.md from the workspace for session-level working context (cached by mtime)."""
         current_path = self.workspace / "tasks" / "CURRENT.md"
-        if not current_path.exists():
+        content = self._cached_read_text(current_path)
+        if not content:
             return ""
-        try:
-            content = current_path.read_text(encoding="utf-8").strip()
-        except Exception:
-            logger.warning("Failed to read current context at {}", current_path)
-            return ""
+        content = content.strip()
         if not content:
             return ""
         return (
@@ -335,19 +366,17 @@ class ContextBuilder:
         )
 
     def _build_self_findings_section(self) -> str:
-        """Read workspace/framework/self_findings.md for system prompt injection.
+        """Read workspace/framework/self_findings.md for system prompt injection (cached by mtime).
 
         Written by SelfDetectHook after each detection cycle (~15 turns).
         Renders at the end of system content via session_parts, alongside other
         dynamic context like memory and task-tree.
         """
         path = self.workspace / "framework" / "self_findings.md"
-        if not path.exists():
+        content = self._cached_read_text(path)
+        if not content:
             return ""
-        try:
-            return path.read_text(encoding="utf-8").strip()
-        except Exception:
-            return ""
+        return content.strip()
 
     def _build_framework_search_section(self, history: list[dict[str, Any]]) -> str:
         """Auto-search framework docs using the last turn's intent/plan output.
@@ -418,8 +447,8 @@ class ContextBuilder:
         memory_dir = self.memory.memory_dir
         parts = []
 
-        # Load MEMORY.md index
-        index_content = self.memory.read_memory()
+        # Load MEMORY.md index (cached by mtime)
+        index_content = self._cached_read_text(self.memory.memory_file) or ""
         if index_content and not self._is_default_template_content(index_content, "memory/MEMORY.md"):
             lines = index_content.split("\n")
             if lines and lines[0].startswith("# "):
@@ -428,14 +457,14 @@ class ContextBuilder:
             if index_text:
                 parts.append(f"# Memory - {self._workspace_path_str}/memory/MEMORY.md\n\n{index_text}")
 
-        # Also inline key memory files so rules/preferences are visible without recall
+        # Also inline key memory files so rules/preferences are visible without recall (cached by mtime)
         for name in ("system.md", "user.md"):
             fpath = memory_dir / name
-            if fpath.exists():
-                text = fpath.read_text(encoding="utf-8").strip()
-                if text:
-                    heading = name.replace(".md", "").title()
-                    parts.append(f"### {heading}\n\n{text}")
+            text = self._cached_read_text(fpath)
+            if text:
+                text = text.strip()
+                heading = name.replace(".md", "").title()
+                parts.append(f"### {heading}\n\n{text}")
 
         if not parts:
             return ""
@@ -601,10 +630,29 @@ class ContextBuilder:
 
     def _build_workflow_routing(self) -> str:
         """Build workflow routing table from workspace/framework/workflows/ so
-        workflows are discoverable via framework_search_tool."""
+        workflows are discoverable via framework_search_tool. Cached by dir mtime.
+        """
         wf_dir = self.workspace / "framework" / "workflows"
         if not wf_dir.is_dir():
             return ""
+
+        # Check cache by directory mtime
+        try:
+            dir_mtime = wf_dir.stat().st_mtime
+        except OSError:
+            dir_mtime = 0.0
+        # Also consider individual file mtimes
+        max_mtime = dir_mtime
+        try:
+            for f in sorted(wf_dir.iterdir()):
+                if f.name.endswith(".md"):
+                    max_mtime = max(max_mtime, f.stat().st_mtime)
+        except OSError:
+            pass
+
+        if self._wf_cache is not None and self._wf_cache[0] == max_mtime:
+            return self._wf_cache[1]
+
         lines: list[str] = []
         for f in sorted(wf_dir.iterdir()):
             if not f.name.endswith(".md"):
@@ -624,8 +672,11 @@ class ContextBuilder:
                     break
             lines.append(f"- **{f.stem}**: {trigger} — `framework_search_tool(query=\"{f.stem}\")`")
         if not lines:
-            return ""
-        return "## Workflows\n\nSearch with framework_search_tool when scenario matches:\n" + "\n".join(lines)
+            result = ""
+        else:
+            result = "## Workflows\n\nSearch with framework_search_tool when scenario matches:\n" + "\n".join(lines)
+        self._wf_cache = (max_mtime, result)
+        return result
 
     @staticmethod
     def _is_default_template_content(content: str, template_path: str) -> bool:
@@ -787,11 +838,15 @@ def _fmt_gb(n: float | int | None) -> str:
 
 
 def _get_memory_info() -> tuple[str, str]:
-    """Return (total_memory_str, available_memory_str), best-effort."""
+    """Return (total_memory_str, available_memory_str), best-effort. Cached after first call."""
+    global _memory_info_cache
+    if _memory_info_cache is not None:
+        return _memory_info_cache
     try:
         import psutil
         mem = psutil.virtual_memory()
-        return _fmt_gb(mem.total), _fmt_gb(mem.available)
+        _memory_info_cache = (_fmt_gb(mem.total), _fmt_gb(mem.available))
+        return _memory_info_cache
     except ImportError:
         pass
     except Exception:
@@ -812,11 +867,13 @@ def _get_memory_info() -> tuple[str, str]:
                 if len(parts) >= 2:
                     total_kb = int(parts[0])
                     free_kb = int(parts[1])
-                    return _fmt_gb(total_kb * 1024), _fmt_gb(free_kb * 1024)
+                    _memory_info_cache = (_fmt_gb(total_kb * 1024), _fmt_gb(free_kb * 1024))
+                    return _memory_info_cache
         elif sys.platform == "darwin":
             import os as _os
             total = _os.sysconf('SC_PHYS_PAGES') * _os.sysconf('SC_PAGE_SIZE')
-            return _fmt_gb(total), "unknown"
+            _memory_info_cache = (_fmt_gb(total), "unknown")
+            return _memory_info_cache
         elif sys.platform == "linux":
             with open("/proc/meminfo") as _f:
                 total_kb = avail_kb = 0
@@ -826,14 +883,19 @@ def _get_memory_info() -> tuple[str, str]:
                     elif _line.startswith("MemAvailable:"):
                         avail_kb = int(_line.split()[1])
             if total_kb:
-                return _fmt_gb(total_kb * 1024), _fmt_gb(avail_kb * 1024)
+                _memory_info_cache = (_fmt_gb(total_kb * 1024), _fmt_gb(avail_kb * 1024))
+                return _memory_info_cache
     except Exception:
         logger.warning("Failed to get memory info via platform fallback", exc_info=True)
-    return "unknown", "unknown"
+    _memory_info_cache = ("unknown", "unknown")
+    return _memory_info_cache
 
 
 def _get_gpu_info() -> str | None:
-    """Return GPU description string, or None if no GPU detected."""
+    """Return GPU description string, or None if no GPU detected. Cached after first call."""
+    global _gpu_info_cache
+    if _gpu_info_cache is not None:
+        return _gpu_info_cache if _gpu_info_cache else None
     try:
         import torch
         if torch.cuda.is_available():
@@ -841,7 +903,8 @@ def _get_gpu_info() -> str | None:
             names: list[str] = []
             for i in range(count):
                 names.append(torch.cuda.get_device_name(i))
-            return ", ".join(names)
+            _gpu_info_cache = ", ".join(names)
+            return _gpu_info_cache
     except Exception:
         logger.warning("Failed to detect GPU via torch", exc_info=True)
     import subprocess
@@ -852,7 +915,9 @@ def _get_gpu_info() -> str | None:
         )
         gpus = [line.strip() for line in out.strip().splitlines() if line.strip()]
         if gpus:
-            return "; ".join(gpus)
+            _gpu_info_cache = "; ".join(gpus)
+            return _gpu_info_cache
     except Exception:
         logger.warning("Failed to detect GPU via nvidia-smi", exc_info=True)
+    _gpu_info_cache = ""
     return None

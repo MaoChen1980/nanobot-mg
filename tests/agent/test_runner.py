@@ -1226,3 +1226,101 @@ class TestLogToolCall:
         with patch("nanobot.agent.runner.logger.exception") as mock_log:
             runner._log_tool_call("sess", 0, 0, "read_file", {}, "result", True, None)
         mock_log.assert_called_once()
+
+
+# ===========================================================================
+# Surrogate resilience: json.dumps fallback for tool results
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_tool_result_with_surrogate_does_not_crash():
+    """A tool returning a dict with surrogates should not crash the runner."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    call_count = 0
+
+    async def chat_with_retry(*, messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return LLMResponse(
+                content=None,
+                finish_reason="tool_calls",
+                tool_calls=[
+                    ToolCallRequest(id="tc1", name="surrogate_tool", arguments={}),
+                ],
+                usage={},
+            )
+        return LLMResponse(content="ok", finish_reason="stop", tool_calls=[], usage={})
+
+    provider.chat_with_retry = chat_with_retry
+    provider.chat_stream_with_retry = chat_with_retry
+    llm_set_llm(provider, "test-model")
+
+    async def _execute(name, args, **kw):
+        return {"data": "surrogate \ud800 in result"}
+
+    tools = MagicMock()
+    tools.get_definitions.return_value = []
+    tools.execute = AsyncMock(side_effect=_execute)
+
+    runner = AgentRunner(provider)
+    result = await runner.run(AgentRunSpec(
+        initial_messages=[{"role": "user", "content": "use tool"}],
+        tools=tools,
+        model="test-model",
+        max_iterations=2,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    ))
+
+    assert result.stop_reason == "completed"
+
+
+@pytest.mark.asyncio
+async def test_tool_result_surrogate_with_persist_failure():
+    """When maybe_persist_tool_result fails and result is a dict, the
+    json.dumps(result, ensure_ascii=True) fallback should handle surrogates."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    call_count = 0
+
+    async def chat_with_retry(*, messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return LLMResponse(
+                content=None,
+                finish_reason="tool_calls",
+                tool_calls=[
+                    ToolCallRequest(id="tc1", name="surrogate_tool", arguments={}),
+                ],
+                usage={},
+            )
+        return LLMResponse(content="done", finish_reason="stop", tool_calls=[], usage={})
+
+    provider.chat_with_retry = chat_with_retry
+    provider.chat_stream_with_retry = chat_with_retry
+    llm_set_llm(provider, "test-model")
+
+    async def _execute(name, args, **kw):
+        return {"data": "surrogate \ud800 here"}
+
+    tools = MagicMock()
+    tools.get_definitions.return_value = []
+    tools.execute = AsyncMock(side_effect=_execute)
+
+    with patch("nanobot.agent.runner.maybe_persist_tool_result",
+               side_effect=RuntimeError("mock persist failure")):
+        runner = AgentRunner(provider)
+        result = await runner.run(AgentRunSpec(
+            initial_messages=[{"role": "user", "content": "use tool"}],
+            tools=tools,
+            model="test-model",
+            max_iterations=2,
+            max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        ))
+
+    assert result.stop_reason == "completed"

@@ -7,6 +7,10 @@ from pathlib import Path
 from importlib.resources import files as pkg_files
 from loguru import logger
 
+# Module-level cache: workspace_path -> (dir_exists, max_mtime, content)
+# Only regenerates TOOLS.md when tools/ directory content actually changes.
+_tools_index_cache: dict[str, tuple[bool, float, str]] = {}
+
 
 _GUIDE_SECTION = """\
 ## Creating New Tools
@@ -76,16 +80,45 @@ def init_tools_dir(workspace: Path) -> Path:
     return tools_dir
 
 
-def rebuild_tools_index(workspace: Path) -> None:
+def rebuild_tools_index(workspace: Path) -> str:
     """Scan workspace/tools/*/ for installed tools and regenerate workspace/TOOLS.md.
 
     Reads each tool's readme.md to build the index, then writes the complete
-    TOOLS.md with index + guide. Called automatically on every system prompt build.
+    TOOLS.md with index + guide. Cached by tools/ directory mtime — only writes
+    to disk when tools/ content has changed. Returns the generated content.
+
+    Returns:
+        The generated TOOLS.md content string.
     """
     tools_dir = workspace / "tools"
+    ws_key = str(workspace.resolve())
 
+    # Compute current state signature
+    dir_exists = tools_dir.is_dir()
+    max_mtime = 0.0
+    if dir_exists:
+        for child in sorted(tools_dir.iterdir()):
+            if not child.is_dir():
+                continue
+            try:
+                max_mtime = max(max_mtime, child.stat().st_mtime)
+            except OSError:
+                continue
+            readme = child / "readme.md"
+            if readme.is_file():
+                try:
+                    max_mtime = max(max_mtime, readme.stat().st_mtime)
+                except OSError:
+                    continue
+
+    # Return cached content if nothing changed
+    cached = _tools_index_cache.get(ws_key)
+    if cached is not None and cached[0] == dir_exists and cached[1] == max_mtime:
+        return cached[2]
+
+    # Build index
     entries: list[dict[str, str]] = []
-    if tools_dir.is_dir():
+    if dir_exists:
         for child in sorted(tools_dir.iterdir()):
             if not child.is_dir():
                 continue
@@ -107,6 +140,9 @@ def rebuild_tools_index(workspace: Path) -> None:
 
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "TOOLS.md").write_text(output, encoding="utf-8")
+
+    _tools_index_cache[ws_key] = (dir_exists, max_mtime, output)
+    return output
 
 
 def _readme_first_heading(path: Path) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -157,7 +158,7 @@ class NanobotDB:
             cursor = (row[0] or 0) + 1
             conn.execute(
                 "INSERT INTO history (cursor, timestamp, content, summary) VALUES (?, ?, ?, ?)",
-                (cursor, ts, content, summary),
+                (cursor, ts, re.sub(r"[\ud800-\udfff]", "�", content), summary),
             )
             conn.commit()
         self.set_metadata("cursor", str(cursor))
@@ -259,6 +260,8 @@ class NanobotDB:
             content = msg["content"]
             if content is None:
                 content = ""
+            elif isinstance(content, str):
+                content = re.sub(r"[\ud800-\udfff]", "�", content)
             elif isinstance(content, (list, dict)):
                 extra["_content_is_json"] = True
                 content = json.dumps(content, ensure_ascii=True)
@@ -504,6 +507,10 @@ class NanobotDB:
         duration_ms: int | None = None,
     ) -> int:
         self._purge_old_tool_calls()
+        if result:
+            result = re.sub(r"[\ud800-\udfff]", "�", result)
+        if error:
+            error = re.sub(r"[\ud800-\udfff]", "�", error)
         result_size = len(result) if result else 0
         with self._conn_access() as conn:
             cursor = conn.execute(
