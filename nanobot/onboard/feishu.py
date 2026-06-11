@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -380,7 +380,7 @@ def _render_qrcode(url: str, print_fn: Any = print) -> None:
     try:
         import qrcode
     except ImportError:
-        print_fn(f"[qrcode library not available, open the URL instead]")
+        print_fn("[qrcode library not available, open the URL instead]")
         return
 
     try:

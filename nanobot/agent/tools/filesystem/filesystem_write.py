@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-from nanobot.agent.tools.base import Tool, tool_parameters
+from nanobot.agent.tools.base import tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from .filesystem_base import _FsTool
 from nanobot.agent.tools import file_state

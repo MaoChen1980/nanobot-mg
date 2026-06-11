@@ -334,6 +334,21 @@ class ContextBuilder:
             + self._shift_headings(content, offset=1)
         )
 
+    def _build_self_findings_section(self) -> str:
+        """Read workspace/framework/self_findings.md for system prompt injection.
+
+        Written by SelfDetectHook after each detection cycle (~15 turns).
+        Renders at the end of system content via session_parts, alongside other
+        dynamic context like memory and task-tree.
+        """
+        path = self.workspace / "framework" / "self_findings.md"
+        if not path.exists():
+            return ""
+        try:
+            return path.read_text(encoding="utf-8").strip()
+        except Exception:
+            return ""
+
     def _build_framework_search_section(self, history: list[dict[str, Any]]) -> str:
         """Auto-search framework docs using the last turn's intent/plan output.
 
@@ -368,6 +383,7 @@ class ContextBuilder:
                             if isinstance(raw, dict):
                                 content = (raw.get("content") or "").strip()
                     except Exception:
+                        logger.warning("Failed to parse tool call arguments in history", exc_info=True)
                         continue
 
             if content:
@@ -596,6 +612,7 @@ class ContextBuilder:
             try:
                 c = f.read_text(encoding="utf-8").strip()
             except Exception:
+                logger.warning("Failed to read workflow file {}", f.name, exc_info=True)
                 continue
             if not c:
                 continue
@@ -675,6 +692,10 @@ class ContextBuilder:
         current_block = self._build_current_context_section()
         if current_block:
             session_parts.append(current_block)
+
+        findings_block = self._build_self_findings_section()
+        if findings_block:
+            session_parts.append(findings_block)
 
         if session_parts:
             sys_static = sys_static + "\n\n" + "\n\n".join(session_parts)
@@ -774,7 +795,7 @@ def _get_memory_info() -> tuple[str, str]:
     except ImportError:
         pass
     except Exception:
-        pass
+        logger.warning("Failed to get memory info via psutil", exc_info=True)
 
     # Fallback: platform-specific commands (Windows) / pure Python (macOS, Linux)
     import sys
@@ -807,7 +828,7 @@ def _get_memory_info() -> tuple[str, str]:
             if total_kb:
                 return _fmt_gb(total_kb * 1024), _fmt_gb(avail_kb * 1024)
     except Exception:
-        pass
+        logger.warning("Failed to get memory info via platform fallback", exc_info=True)
     return "unknown", "unknown"
 
 
@@ -822,7 +843,7 @@ def _get_gpu_info() -> str | None:
                 names.append(torch.cuda.get_device_name(i))
             return ", ".join(names)
     except Exception:
-        pass
+        logger.warning("Failed to detect GPU via torch", exc_info=True)
     import subprocess
     try:
         out = subprocess.check_output(
@@ -833,5 +854,5 @@ def _get_gpu_info() -> str | None:
         if gpus:
             return "; ".join(gpus)
     except Exception:
-        pass
+        logger.warning("Failed to detect GPU via nvidia-smi", exc_info=True)
     return None

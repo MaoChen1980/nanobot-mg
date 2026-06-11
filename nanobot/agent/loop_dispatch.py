@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -58,7 +57,7 @@ class DispatchManager:
             except asyncio.CancelledError:
                 await self._handle_cancellation(msg, session_key)
                 raise
-            except Exception as exc:
+            except Exception:
                 logger.exception(
                     "Error processing message for session {}", session_key,
                 )

@@ -2,22 +2,13 @@
 
 from __future__ import annotations
 
-import difflib
-import mimetypes
-import os
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
-from loguru import logger
 
-from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import p
-from nanobot.agent.tools import file_state
-from nanobot.utils.media_decode import build_image_content_blocks, detect_image_mime
-from nanobot.config.paths import get_media_dir as _get_media_dir
+from nanobot.agent.tools.base import Tool
 
 
 # Allow test-time override (set by test via filesystem module)

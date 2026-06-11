@@ -139,6 +139,7 @@ def compress_image(
     try:
         img = Image.open(io.BytesIO(raw))
     except Exception:
+        logger.warning("Failed to open image for decoding", exc_info=True)
         return raw, mime or "image/png"
 
     target = _DEFAULT_TARGET_BYTES if max_bytes is None else max_bytes

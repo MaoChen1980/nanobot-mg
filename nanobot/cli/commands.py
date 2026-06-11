@@ -130,7 +130,6 @@ def _restore_terminal() -> None:
         if sys.platform == "win32":
             try:
                 import ctypes
-                from ctypes import wintypes
 
                 kernel32 = ctypes.windll.kernel32
                 h = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
@@ -365,7 +364,7 @@ def onboard(
     console.print(f"\n{__logo__} nanobot is ready!")
     console.print("\nNext steps:")
     console.print(f"  1. Start gateway: [cyan]nanobot gateway --config {config_path}[/cyan]")
-    console.print(f"  2. Open WebUI and configure from your browser")
+    console.print("  2. Open WebUI and configure from your browser")
     console.print(
         "\n[dim]See: https://github.com/HKUDS/nanobot#-chat-apps[/dim]"
     )
@@ -444,8 +443,8 @@ def init(
         tree_path.write_text("# Task Tree\n\n## active\n\n## paused\n\n## done\n", encoding="utf-8")
         console.print(f"[green]✓[/green] Created [bold]{tree_path}[/bold]")
 
-    console.print(f"\n[bold]Project initialized for coding agent.[/bold]")
-    console.print(f"  Next: start the agent with [cyan]nanobot agent --project-root .[/cyan]")
+    console.print("\n[bold]Project initialized for coding agent.[/bold]")
+    console.print("  Next: start the agent with [cyan]nanobot agent --project-root .[/cyan]")
 
 
 def _make_provider(config: Config):
@@ -976,7 +975,7 @@ def channels_login(
         set_config_path(resolved_config_path)
 
     config = load_config(resolved_config_path)
-    channel_cfg = getattr(config.channels, channel_name, None) or {}
+    getattr(config.channels, channel_name, None) or {}
 
     # Validate channel exists
     all_channels = discover_all()

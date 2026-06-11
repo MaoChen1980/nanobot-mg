@@ -269,3 +269,226 @@ class TestAppendToLog:
             hook._append_to_log("#x", "ts", [], [], "ok")
         lines = hook.LOG_FILE.read_text().splitlines()
         assert len(lines) <= 210
+
+
+class TestSetWorkspace:
+    def test_sets_workspace_attribute(self, tmp_path):
+        h = SelfDetectHook()
+        h.set_workspace(tmp_path)
+        assert h._workspace == tmp_path
+
+
+class TestWriteFindingsDoc:
+    def test_skips_when_no_workspace(self, tmp_path):
+        """set_workspace was never called → no-op, no file created."""
+        h = SelfDetectHook()
+        h._write_findings_doc([{"id": "abc", "type": "self_bug", "content": "test"}])
+        assert not (tmp_path / "framework" / "self_findings.md").exists()
+
+    def test_writes_unresolved_findings(self, tmp_path):
+        """Findings not in resolved set → written to doc."""
+        h = SelfDetectHook()
+        h.RESOLVED_FILE = tmp_path / "resolved_findings.jsonl"
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([{"id": "abc", "type": "behavior", "content": "repeated tool calls"}])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        assert doc.exists()
+        content = doc.read_text(encoding="utf-8")
+        assert "Self-Evolution Findings" in content
+        assert "abc" in content
+        assert "behavior" in content
+        assert "repeated tool calls" in content
+
+    def test_filters_resolved_ids(self, tmp_path):
+        """Finding ID present in resolved_findings.jsonl → excluded from doc."""
+        resolved_file = tmp_path / "resolved_findings.jsonl"
+        resolved_file.write_text("abc\n", encoding="utf-8")
+
+        h = SelfDetectHook()
+        h.RESOLVED_FILE = resolved_file
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([
+            {"id": "abc", "type": "behavior", "content": "resolved one"},
+            {"id": "def", "type": "self_bug", "content": "unresolved one"},
+        ])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        assert doc.exists()
+        content = doc.read_text(encoding="utf-8")
+        print(f"RESOLVED_FILE: {h.RESOLVED_FILE}")
+        print(f"exists: {h.RESOLVED_FILE.exists()}")
+        print(f"content: {h.RESOLVED_FILE.read_text()}")
+        # Check the "abc" finding (resolved) is excluded — verify its header is absent
+        assert "### abc" not in content, f"finding abc should be filtered but found in:\n{content}"
+        # Check the "def" finding (unresolved) is included
+        assert "### def" in content, f"finding def should be present but not found in:\n{content}"
+
+    def test_removes_doc_when_all_resolved(self, tmp_path):
+        """All findings resolved → existing doc is deleted."""
+        resolved_file = tmp_path / "resolved_findings.jsonl"
+        resolved_file.write_text("abc\n", encoding="utf-8")
+
+        h = SelfDetectHook()
+        h.RESOLVED_FILE = resolved_file
+        h.set_workspace(tmp_path)
+        doc = tmp_path / "framework" / "self_findings.md"
+        doc.parent.mkdir(parents=True)
+        doc.write_text("old content")
+
+        h._write_findings_doc([{"id": "abc", "type": "self_bug", "content": "resolved"}])
+
+        assert not doc.exists()
+
+    def test_removes_doc_when_no_findings(self, tmp_path):
+        """Empty findings list → existing doc is deleted."""
+        h = SelfDetectHook()
+        h.set_workspace(tmp_path)
+        doc = tmp_path / "framework" / "self_findings.md"
+        doc.parent.mkdir(parents=True)
+        doc.write_text("old content")
+
+        h._write_findings_doc([])
+        assert not doc.exists()
+
+    def test_format_contains_ids_and_types(self, tmp_path):
+        """Output contains expected markdown structure."""
+        h = SelfDetectHook()
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([
+            {"id": "abc123", "type": "self_bug", "content": "bug description", "relevance": "causes wrong count"},
+        ])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        content = doc.read_text(encoding="utf-8")
+        assert "### abc123" in content
+        assert "**Content**: bug description" in content
+        assert "**Relevance**: causes wrong count" in content
+        assert "**Resolve**" in content
+        assert "echo abc123" in content
+
+
+class TestRunTurnReflectionExt:
+    """Extension: verify _write_findings_doc is called during reflection."""
+
+    @pytest.mark.asyncio
+    async def test_calls_write_findings_doc(self, hook):
+        entries = [{"iteration": 1, "time": "2025-01-01T00:00:00", "tool_calls": [], "tool_count": 0,
+                     "usage": {"total_tokens": 50}, "error": None}]
+
+        with (
+            patch.object(hook, "_call_for_findings", AsyncMock(return_value=([{"type": "self_bug", "content": "bug"}], "ok"))),
+            patch.object(hook, "_save_findings"),
+            patch.object(hook, "_write_findings_doc") as mock_write,
+            patch.object(hook, "_append_to_log"),
+            patch("nanobot.hooks.self_detect_hook._read_hook_sources", return_value="## source"),
+        ):
+            await hook._run_turn_reflection(entries)
+
+        mock_write.assert_called_once_with([{"type": "self_bug", "content": "bug"}])
+
+    @pytest.mark.asyncio
+    async def test_calls_write_findings_doc_with_no_findings(self, hook):
+        """When LLM returns no findings, write is still called with empty list."""
+        entries = [{"iteration": 1, "time": "2025-01-01T00:00:00", "tool_calls": [], "tool_count": 0,
+                     "usage": {"total_tokens": 50}, "error": None}]
+
+        with (
+            patch.object(hook, "_call_for_findings", AsyncMock(return_value=([], "empty_findings"))),
+            patch.object(hook, "_save_findings"),
+            patch.object(hook, "_write_findings_doc") as mock_write,
+            patch.object(hook, "_append_to_log"),
+            patch("nanobot.hooks.self_detect_hook._read_hook_sources", return_value="## source"),
+        ):
+            await hook._run_turn_reflection(entries)
+
+        mock_write.assert_called_once_with([])
+
+
+class TestWriteFindingsDocEdgeCases:
+    """Additional edge cases for _write_findings_doc."""
+
+    def test_skips_findings_without_id(self, tmp_path):
+        """Finding with no id field → excluded from output (can't be resolved)."""
+        h = SelfDetectHook()
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([
+            {"type": "behavior", "content": "no id finding"},
+            {"id": "valid", "type": "self_bug", "content": "has id"},
+        ])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        content = doc.read_text(encoding="utf-8")
+        assert "no id finding" not in content
+        assert "has id" in content
+
+    def test_resolved_file_with_blank_lines(self, tmp_path):
+        """Blank lines in resolved file are skipped."""
+        h = SelfDetectHook()
+        h.RESOLVED_FILE = tmp_path / "resolved_findings.jsonl"
+        h.RESOLVED_FILE.write_text("abc\n\n  \ndef\n", encoding="utf-8")
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([
+            {"id": "abc", "type": "behavior", "content": "resolved"},
+            {"id": "def", "type": "behavior", "content": "also resolved"},
+            {"id": "ghi", "type": "self_bug", "content": "unresolved"},
+        ])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        content = doc.read_text(encoding="utf-8")
+        assert "### abc" not in content
+        assert "### def" not in content
+        assert "### ghi" in content
+
+    def test_missing_resolved_file(self, tmp_path):
+        """No resolved_findings.jsonl → all findings included."""
+        h = SelfDetectHook()
+        h.RESOLVED_FILE = tmp_path / "nonexistent.jsonl"
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([
+            {"id": "abc", "type": "behavior", "content": "included"},
+        ])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        content = doc.read_text(encoding="utf-8")
+        assert "### abc" in content
+
+    def test_multiple_findings_sorted_by_input_order(self, tmp_path):
+        """Multiple findings appear in the order they were provided."""
+        h = SelfDetectHook()
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([
+            {"id": "aaa", "type": "behavior", "content": "first"},
+            {"id": "bbb", "type": "self_bug", "content": "second"},
+        ])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        content = doc.read_text(encoding="utf-8")
+        aaa_pos = content.index("### aaa")
+        bbb_pos = content.index("### bbb")
+        assert aaa_pos < bbb_pos, "findings should preserve input order"
+
+    def test_creates_framework_dir_if_not_exists(self, tmp_path):
+        """Framework directory is auto-created by mkdir(parents=True)."""
+        h = SelfDetectHook()
+        h.set_workspace(tmp_path)
+        assert not (tmp_path / "framework").exists()
+
+        h._write_findings_doc([{"id": "abc", "type": "behavior", "content": "test"}])
+
+        assert (tmp_path / "framework").exists()
+        assert (tmp_path / "framework" / "self_findings.md").exists()
+
+    def test_edge_case_no_type_and_no_relevance(self, tmp_path):
+        """Finding with only id and content — minimal required fields."""
+        h = SelfDetectHook()
+        h.set_workspace(tmp_path)
+        h._write_findings_doc([
+            {"id": "minimal", "content": "just a note"},
+        ])
+
+        doc = tmp_path / "framework" / "self_findings.md"
+        content = doc.read_text(encoding="utf-8")
+        assert "### minimal" in content
+        assert "just a note" in content
+        assert "**Relevance**" not in content

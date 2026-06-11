@@ -838,7 +838,7 @@ class MemoryExtractor:
             category = op.get("category", "")
             sources = op.get("sources", [])
             target = op.get("target", "")
-            reason = op.get("reason", "")
+            op.get("reason", "")
 
             if op_type == "merge_files":
                 if not target or not category or not sources:
@@ -902,7 +902,7 @@ class MemoryExtractor:
                 if not target or not sources:
                     continue
                 for src_path_str in sources:
-                    src_parts = src_path_str.split("/", 1)
+                    src_path_str.split("/", 1)
                     src_rel = src_path_str
                     full_src = self.store.memory_dir / src_rel
                     if not full_src.exists():

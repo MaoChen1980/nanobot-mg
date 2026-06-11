@@ -93,7 +93,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
             else:
                 logger.warning(f"Upload failed: {resp.status_code} - {resp.text[:200]}")
 
-        except Exception as e:
+        except Exception:
             logger.exception(f"Failed to upload media: {file_path}")
         return None
 
@@ -200,7 +200,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
             logger.info(f"Downloaded {media_type} ({len(file_resp.content)} bytes) to {dest}")
             return str(dest)
 
-        except Exception as e:
+        except Exception:
             logger.exception(f"Failed to download media: {download_code}")
         return None
 

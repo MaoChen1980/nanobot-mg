@@ -67,3 +67,45 @@ async def test_handle_shutdown_safe_without_proxy_manager() -> None:
     assert resp.status_code == 200
     data = _json_body(resp)
     assert data["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_handle_config_update_invalid_json() -> None:
+    """Invalid JSON body -> returns 400 error."""
+    from nanobot.api.server import handle_config_update
+
+    request = MagicMock()
+    request.json = AsyncMock(side_effect=ValueError("bad json"))
+
+    resp = await handle_config_update(request)
+    assert resp.status_code == 400
+    data = _json_body(resp)
+    assert data["error"] == "Invalid JSON"
+
+
+@pytest.mark.asyncio
+async def test_handle_settings_update_invalid_json() -> None:
+    """Invalid JSON body -> returns 400 error."""
+    from nanobot.api.server import handle_settings_update
+
+    request = MagicMock()
+    request.json = AsyncMock(side_effect=ValueError("bad json"))
+
+    resp = await handle_settings_update(request)
+    assert resp.status_code == 400
+    data = _json_body(resp)
+    assert data["error"] == "Invalid JSON"
+
+
+@pytest.mark.asyncio
+async def test_handle_memory_chat_invalid_json() -> None:
+    """Invalid JSON body -> returns 400 error."""
+    from nanobot.api.server import handle_memory_chat
+
+    request = MagicMock()
+    request.json = AsyncMock(side_effect=ValueError("bad json"))
+
+    resp = await handle_memory_chat(request)
+    assert resp.status_code == 400
+    data = _json_body(resp)
+    assert data["error"] == "Invalid JSON"

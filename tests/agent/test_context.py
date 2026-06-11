@@ -326,3 +326,156 @@ def test_lessons_omitted_when_file_missing(tmp_path) -> None:
 
     assert "## Past Lessons" not in prompt
 
+
+# ---------------------------------------------------------------------------
+# Self-findings section (_build_self_findings_section)
+# ---------------------------------------------------------------------------
+
+
+def test_self_findings_returns_empty_when_no_file(tmp_path):
+    """No self_findings.md in framework dir → returns empty string."""
+    builder = _make_builder(tmp_path)
+    result = builder._build_self_findings_section()
+    assert result == ""
+
+
+def test_self_findings_reads_content_when_file_exists(tmp_path):
+    """self_findings.md exists with content → returns content."""
+    workspace = _make_workspace(tmp_path)
+    framework_dir = workspace / "framework"
+    framework_dir.mkdir(parents=True)
+    findings_file = framework_dir / "self_findings.md"
+    findings_file.write_text("## Self-Evolution Findings\n\n- test finding\n", encoding="utf-8")
+
+    builder = ContextBuilder(workspace)
+    result = builder._build_self_findings_section()
+    assert "Self-Evolution Findings" in result
+    assert "test finding" in result
+
+
+def test_self_findings_returns_empty_when_file_empty(tmp_path):
+    """Empty self_findings.md → returns empty string."""
+    workspace = _make_workspace(tmp_path)
+    framework_dir = workspace / "framework"
+    framework_dir.mkdir(parents=True)
+    (framework_dir / "self_findings.md").write_text("   \n\n  ", encoding="utf-8")
+
+    builder = ContextBuilder(workspace)
+    result = builder._build_self_findings_section()
+    assert result == ""
+
+
+def test_self_findings_included_in_build_messages(tmp_path):
+    """self_findings.md content appears in build_messages output."""
+    workspace = _make_workspace(tmp_path)
+    framework_dir = workspace / "framework"
+    framework_dir.mkdir(parents=True)
+    (framework_dir / "self_findings.md").write_text(
+        "## Self-Evolution Findings\n\n### abc123 (self_bug)\n**Content**: test bug\n",
+        encoding="utf-8",
+    )
+
+    from nanobot.agent.context import ContextBuilder
+    builder = ContextBuilder(workspace)
+    messages = builder.build_messages(history=[], current_message="hello")
+
+    system_content = messages[0]["content"]
+    assert "Self-Evolution Findings" in system_content
+    assert "abc123" in system_content
+    assert "self_bug" in system_content
+
+
+# ---------------------------------------------------------------------------
+# _build_framework_search_section — exception paths
+# ---------------------------------------------------------------------------
+
+
+def test_search_handles_corrupt_tool_call_args(tmp_path):
+    """Corrupt JSON in tool_call arguments -> caught, search continues."""
+    builder = _make_builder(tmp_path)
+    history = [
+        {"role": "user", "content": "查天气"},
+        {"role": "assistant", "content": "",
+         "tool_calls": [
+             {"function": {"name": "message_tool", "arguments": "not valid json at all!!!"}},
+         ]},
+    ]
+    with patch.object(builder.memory.framework_index, "search", return_value=[_MOCK_RESULT]):
+        result = builder._build_framework_search_section(history)
+    assert result == ""
+
+
+def test_search_handles_non_string_tool_call_args(tmp_path):
+    """Non-string tool_call arguments (already parsed) -> handled correctly."""
+    builder = _make_builder(tmp_path)
+    history = [
+        {"role": "user", "content": "查天气"},
+        {"role": "assistant", "content": "",
+         "tool_calls": [
+             {"function": {"name": "message_tool", "arguments": {"content": "有效内容查天气比较温差"}}},
+         ]},
+    ]
+    with patch.object(builder.memory.framework_index, "search", return_value=[_MOCK_RESULT]):
+        result = builder._build_framework_search_section(history)
+    assert "Relevant Framework Docs" in result
+
+
+def test_search_handles_missing_arguments(tmp_path):
+    """Tool call missing 'arguments' key -> caught, search continues."""
+    builder = _make_builder(tmp_path)
+    history = [
+        {"role": "user", "content": "查天气"},
+        {"role": "assistant", "content": "",
+         "tool_calls": [
+             {"function": {"name": "message_tool"}},
+         ]},
+    ]
+    with patch.object(builder.memory.framework_index, "search", return_value=[_MOCK_RESULT]):
+        result = builder._build_framework_search_section(history)
+    assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# _build_workflow_routing — file read exception
+# ---------------------------------------------------------------------------
+
+
+def test_workflow_skips_unreadable_file(tmp_path):
+    """When a workflow file can't be read, it's skipped and routing continues."""
+    workspace = _make_workspace(tmp_path)
+    wf_dir = workspace / "framework" / "workflows"
+    wf_dir.mkdir(parents=True)
+
+    good = wf_dir / "good.md"
+    good.write_text("## Workflow\ncontent\n", encoding="utf-8")
+    bad = wf_dir / "bad.md"
+    bad.write_text("should fail", encoding="utf-8")
+
+    original_read_text = Path.read_text
+
+    def side_effect(self_inst, *args, **kwargs):
+        if self_inst == bad:
+            raise PermissionError("no read")
+        return original_read_text(self_inst, *args, **kwargs)
+
+    with patch.object(Path, "read_text", side_effect):
+        builder = ContextBuilder(workspace)
+        result = builder._build_workflow_routing()
+    assert "good" in result
+    assert "bad" not in result
+
+
+def test_workflow_empty_directory_returns_empty(tmp_path):
+    """No workflow files -> returns empty string."""
+    workspace = _make_workspace(tmp_path)
+    wf_dir = workspace / "framework" / "workflows"
+    wf_dir.mkdir(parents=True)
+    builder = ContextBuilder(workspace)
+    assert builder._build_workflow_routing() == ""
+
+
+def test_workflow_no_directory_returns_empty(tmp_path):
+    """No workflow directory at all -> returns empty string."""
+    builder = _make_builder(tmp_path)
+    assert builder._build_workflow_routing() == ""
+

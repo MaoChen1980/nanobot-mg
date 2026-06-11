@@ -382,7 +382,7 @@ class LLMProvider(ABC):
         if not messages:
             return messages
 
-        orig_count = len(messages)
+        len(messages)
         merged: list[dict[str, Any]] = []
         for msg in messages:
             role = msg.get("role")

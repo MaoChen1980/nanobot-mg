@@ -55,7 +55,6 @@ async def handle_health(request: Request) -> Response:
 
 async def handle_workspace_file(request: Request) -> Response:
     """GET /api/workspace/file?path=... — serve a markdown file from workspace with path-traversal guard."""
-    from nanobot.config.loader import load_config
     config = _cached_config()
     workspace = config.workspace_path
     file_path = request.query_params.get("path", "memory/MEMORY.md")
@@ -74,7 +73,6 @@ async def handle_workspace_file(request: Request) -> Response:
 
 async def handle_memory_search(request: Request) -> Response:
     """GET /api/memory/search?q=...&llm=1 — FAISS search with grep fallback."""
-    from nanobot.config.loader import load_config
 
     q = (request.query_params.get("q") or "").strip()
     if not q:
@@ -167,8 +165,8 @@ def _grep_directory(directory: Path, q: str, k: int = 5, score_boost: float = 1.
         try:
             text = f.read_text(encoding="utf-8")
         except Exception:
+            logger.warning("Failed to read markdown file {}", f, exc_info=True)
             continue
-        text_lower = text.lower()
         lines = text.split("\n")
         lines_lower = [line.lower() for line in lines]
 
@@ -214,7 +212,6 @@ def _grep_memory(workspace: Path, q: str, k: int = 5) -> list[dict]:
 async def handle_memory_rebuild_index(request: Request) -> Response:
     """POST /api/memory/rebuild-index — rebuild FAISS index in background thread."""
     import asyncio
-    from nanobot.config.loader import load_config
 
     config = _cached_config()
     workspace = config.workspace_path
@@ -242,12 +239,6 @@ async def handle_memory_rebuild_index(request: Request) -> Response:
 
 async def handle_settings_get(request: Request) -> Response:
     """GET /api/settings"""
-    try:
-        from nanobot.config.loader import load_config
-    except Exception as e:
-        logger.exception("Failed to import load_config for /api/settings")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
     config = _cached_config()
     defaults = config.agents.defaults
 
@@ -275,11 +266,6 @@ async def handle_settings_get(request: Request) -> Response:
 async def handle_config_get(request: Request) -> Response:
     """GET /api/config — return full config as JSON"""
     try:
-        from nanobot.config.loader import load_config
-    except Exception as e:
-        logger.exception("Failed to import load_config for /api/config")
-        return JSONResponse({"error": str(e)}, status_code=500)
-    try:
         config = _cached_config()
         return JSONResponse(config.model_dump())
     except Exception as e:
@@ -290,7 +276,7 @@ async def handle_config_get(request: Request) -> Response:
 async def handle_config_update(request: Request) -> Response:
     """PUT /api/config — save full config from JSON"""
     try:
-        from nanobot.config.loader import load_config, save_config
+        from nanobot.config.loader import save_config
         from nanobot.config.schema import Config
     except Exception as e:
         logger.exception("Failed to import for /api/config update")
@@ -298,6 +284,7 @@ async def handle_config_update(request: Request) -> Response:
     try:
         data = await request.json()
     except Exception:
+        logger.warning("Invalid JSON in config update request", exc_info=True)
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
     try:
         validated = Config.model_validate(data)
@@ -324,11 +311,6 @@ async def handle_provider_models(request: Request) -> Response:
     provider = request.query_params.get("provider", "")
     if not provider:
         return JSONResponse({"error": "provider required"}, status_code=400)
-    try:
-        from nanobot.config.loader import load_config
-    except Exception as e:
-        logger.exception("Failed to import load_config for /api/provider-models")
-        return JSONResponse({"error": str(e)}, status_code=500)
     config = _cached_config()
     provider_cfg = getattr(config.providers, provider, None)
     if not provider_cfg or not provider_cfg.api_key:
@@ -373,7 +355,7 @@ async def handle_provider_models(request: Request) -> Response:
 async def handle_settings_update(request: Request) -> Response:
     """PUT /api/settings/update"""
     try:
-        from nanobot.config.loader import load_config, save_config
+        from nanobot.config.loader import save_config
     except Exception as e:
         logger.exception("Failed to import for /api/settings/update")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -381,6 +363,7 @@ async def handle_settings_update(request: Request) -> Response:
     try:
         data = await request.json()
     except Exception:
+        logger.warning("Invalid JSON in settings update request", exc_info=True)
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
     config = _cached_config()
@@ -472,7 +455,6 @@ async def handle_shutdown(request: Request) -> Response:
 async def handle_stop(request: Request) -> Response:
     """POST /api/stop — stop proxies then exit the gateway process."""
     import os
-    import sys
     import threading
 
     proxy_manager = getattr(request.app.state, "proxy_manager", None)
@@ -500,6 +482,7 @@ async def handle_memory_chat(request: Request) -> Response:
     try:
         body = await request.json()
     except Exception:
+        logger.warning("Invalid JSON in chat request", exc_info=True)
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
     message = (body.get("message") or "").strip()
@@ -510,11 +493,9 @@ async def handle_memory_chat(request: Request) -> Response:
     if not isinstance(history, list):
         return JSONResponse({"error": "history must be a list"}, status_code=400)
 
-    from nanobot.config.loader import load_config
 
     config = _cached_config()
     workspace = config.workspace_path
-    model = config.agents.defaults.model
 
     # Search memory via FAISS + grep fallback
     store = _get_memory_store(workspace)

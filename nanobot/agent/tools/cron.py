@@ -457,10 +457,10 @@ class CronTool(Tool):
 
                 steps.append("")  # blank line before result
                 if isinstance(result, str):
-                    steps.append(f"✅ Test completed successfully")
+                    steps.append("✅ Test completed successfully")
                     steps.append(f"Result preview: {result[:200]}{'...' if len(result) > 200 else ''}")
                 elif result:
-                    steps.append(f"✅ Test completed successfully")
+                    steps.append("✅ Test completed successfully")
                 else:
                     steps.append("⚠️  Test completed but returned empty result")
 

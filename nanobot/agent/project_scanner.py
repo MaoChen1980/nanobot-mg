@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 
 @dataclass
 class ProjectInfo:
@@ -138,12 +140,10 @@ SCAN_EXCLUDE_DIRS = {
 def _parse_toml_key(text: str, key_path: str) -> str | None:
     """Naive TOML key parser."""
     parts = key_path.split(".")
-    in_table = ""
     current_idx = 0
     for line in text.splitlines():
         line = line.strip()
         if line.startswith("[") and "]" in line:
-            in_table = line.strip("[]").strip()
             current_idx = 0
             continue
         if not line or line.startswith("#"):
@@ -272,7 +272,7 @@ def _estimate_loc(root: Path, exts: set[str]) -> int:
                 total += len(f.read_bytes().splitlines())
                 count += 1
             except Exception:
-                pass
+                logger.warning("Failed to read file {} for line count", f, exc_info=True)
     return total
 
 
@@ -322,6 +322,7 @@ def _read_config_snippet(path: Path) -> str | None:
             return "\n".join(lines[:MAX_CONFIG_VALUE_LINES]) + f"\n... ({len(lines) - MAX_CONFIG_VALUE_LINES} more lines)"
         return text if text.strip() else None
     except Exception:
+        logger.warning("Failed to read config file {}", path, exc_info=True)
         return None
 
 
@@ -431,7 +432,7 @@ def scan_project(project_root: str | Path, use_real_paths: bool = True) -> Proje
             if m:
                 info.deps_total = len([l for l in m.group(1).splitlines() if l.strip() and not l.strip().startswith("#") and "=" in l])
         except Exception:
-            pass
+            logger.warning("Failed to parse pyproject.toml dependencies", exc_info=True)
 
     # Entry points
     if package.exists():

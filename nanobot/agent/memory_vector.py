@@ -53,6 +53,7 @@ class MemoryVectorIndex:
                 self._model = SentenceTransformer(self._MODEL_NAME)
                 return True
             except Exception:
+                logger.warning("Failed to load SentenceTransformer model", exc_info=True)
                 return False
 
     # --------------------------------------------------------------------------
@@ -264,6 +265,7 @@ class MemoryVectorIndex:
                     if content.strip():
                         file_texts[rel] = content
                 except Exception:
+                    logger.warning("Failed to read memory file {}", rel, exc_info=True)
                     continue
             if file_texts:
                 self.build_from_files(file_texts)
@@ -291,6 +293,7 @@ class MemoryVectorIndex:
                     if content.strip():
                         file_texts[rel] = content
                 except Exception:
+                    logger.warning("Failed to re-read memory file {}", rel, exc_info=True)
                     continue
             if file_texts:
                 self.build_from_files(file_texts)
@@ -326,6 +329,7 @@ class MemoryVectorIndex:
             try:
                 content = (self._memory_dir / rel).read_text(encoding="utf-8")
             except Exception:
+                logger.warning("Failed to read changed memory file {}", rel, exc_info=True)
                 continue
 
             entry = files.get(rel)
@@ -356,6 +360,7 @@ class MemoryVectorIndex:
             try:
                 content = (self._memory_dir / rel).read_text(encoding="utf-8")
             except Exception:
+                logger.warning("Failed to read new memory file {}", rel, exc_info=True)
                 continue
             if not content.strip():
                 continue

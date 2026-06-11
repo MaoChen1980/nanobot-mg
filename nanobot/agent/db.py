@@ -8,7 +8,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
 
@@ -274,7 +274,6 @@ class NanobotDB:
             )
 
     def load_session(self, key: str) -> "Session | None":
-        from dataclasses import replace
         from nanobot.session.manager import Session
 
         with self._conn_access() as conn:

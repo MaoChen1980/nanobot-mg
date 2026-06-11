@@ -74,7 +74,7 @@ class AnalyzeTool(_FsTool):
 
         kw = self._extract_keywords(text, max_keywords)
         if kw:
-            parts.append(f"\n## Keywords")
+            parts.append("\n## Keywords")
             parts.append(", ".join(f"`{w}`" for w, _ in kw[:max_keywords]))
 
         if keyword:

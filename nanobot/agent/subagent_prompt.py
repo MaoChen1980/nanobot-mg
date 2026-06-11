@@ -9,7 +9,7 @@ from nanobot.agent.context import ContextBuilder
 from nanobot.utils.prompt_templates import render_template
 
 if TYPE_CHECKING:
-    from nanobot.agent.tools.registry import ToolRegistry
+    pass
 
 
 _TEAM_BOARD_PATH = "tasks/team_board.md"

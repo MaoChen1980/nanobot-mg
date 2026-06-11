@@ -6,10 +6,9 @@ import asyncio
 import re
 from typing import TYPE_CHECKING, Any
 
-from loguru import logger
 
 if TYPE_CHECKING:
-    from nanobot.agent.loop import AgentLoop
+    pass
 
 
 def strip_think(text: str | None) -> str | None:

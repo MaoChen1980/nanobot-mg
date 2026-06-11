@@ -293,7 +293,7 @@ def run_onboard_dingtalk(
     print_fn("")
     print_fn("Next steps:")
     print_fn(f"  1. Start the gateway: nanobot gateway{_fmt_config_hint(config_path)}")
-    print_fn(f"  2. Add the bot to a DingTalk chat and start talking!")
+    print_fn("  2. Add the bot to a DingTalk chat and start talking!")
     print_fn("")
 
 

@@ -188,7 +188,7 @@ def _format_subagent_status(statuses: dict[str, "SubagentStatus"], running: dict
         if status.error:
             lines.append(f"   error: {status.error[:80]}")
         if not is_running:
-            lines.append(f"   ⚠️ task not in running dict (may be done)")
+            lines.append("   ⚠️ task not in running dict (may be done)")
     return "\n".join(lines)
 
 

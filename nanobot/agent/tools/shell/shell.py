@@ -20,7 +20,7 @@ from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.sandbox import wrap_command
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.agent.tools.shell_validators import DANGEROUS_PATTERNS, check_command_safety
-from nanobot.config.paths import get_media_dir, get_runtime_subdir
+from nanobot.config.paths import get_runtime_subdir
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -532,7 +532,7 @@ class ExecTool(Tool):
             stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=30)
             out = stdout_b.decode("utf-8", errors="replace") if stdout_b else ""
             err = stderr_b.decode("utf-8", errors="replace") if stderr_b else ""
-            parts = [f"[Extract result]:"]
+            parts = ["[Extract result]:"]
             if out.strip():
                 parts.append(out.rstrip())
             if err.strip():
@@ -541,7 +541,7 @@ class ExecTool(Tool):
             return "\n".join(parts)
         except asyncio.TimeoutError:
             await self._kill_process(proc)
-            return f"[Extract timed out after 30s]"
+            return "[Extract timed out after 30s]"
         except Exception as e:
             return f"[Extract error: {e}]"
 

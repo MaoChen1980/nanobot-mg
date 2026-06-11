@@ -363,7 +363,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             Local file path on success, ``None`` on failure.
         """
         try:
-            import io, pathlib, tempfile, time
+            import io, pathlib, time
             from lark_oapi.api.im.v1 import GetMessageResourceRequest
 
             request = (

@@ -16,7 +16,6 @@ from __future__ import annotations
 import re
 import secrets
 import string
-from typing import Any
 
 from nanobot.providers.base import ToolCallRequest
 

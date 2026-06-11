@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import signal
 import subprocess
@@ -173,7 +174,6 @@ class ProxyManager:
     def _kill_process(pid: int) -> None:
         """Kill a process by PID, cross-platform."""
         import platform
-        import signal
         import subprocess
 
         try:
@@ -219,7 +219,6 @@ class ProxyManager:
         produce identical processes.
         """
         import json
-        import io
         import threading
 
         cmd = [
@@ -471,7 +470,7 @@ class ProxyManager:
                 proxy.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proxy.process.kill()
-            except Exception as e:
+            except Exception:
                 logger.debug("Non-critical error during proxy {} stop", key)
 
         await asyncio.gather(*[_wait_or_force(k, p) for k, p in proxies])

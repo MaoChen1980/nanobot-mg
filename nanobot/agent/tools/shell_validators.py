@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from nanobot.security.network import targets_internal_address
+    pass
 
 # Dangerous command patterns that should be blocked.
 # Each pattern must be specific enough to avoid false positives

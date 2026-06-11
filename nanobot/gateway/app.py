@@ -378,7 +378,6 @@ class GatewayApplication:
 
         # Cron job handler
         async def on_cron_job(job: Any) -> str | None:
-            from nanobot.agent.tools.cron import CronTool
             from nanobot.agent.tools.message import MessageTool
             from nanobot.utils.evaluator import evaluate_response
 
@@ -395,7 +394,7 @@ class GatewayApplication:
                 return None
 
             # Check if this is a test/dry-run execution
-            is_test_mode = isinstance(getattr(self.agent.tools.get("cron_tool"), "_test_mode", None), object)
+            isinstance(getattr(self.agent.tools.get("cron_tool"), "_test_mode", None), object)
 
             reminder_note = (
                 "The scheduled time has arrived. Deliver this reminder to the user now, "

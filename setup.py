@@ -130,7 +130,7 @@ def main():
         else:
             print(f"⚠️  运行异常：{r.stderr[:100]}")
     except Exception:
-        pass
+        print("Warning: failed to verify entry point")
 
 
 if __name__ == "__main__":

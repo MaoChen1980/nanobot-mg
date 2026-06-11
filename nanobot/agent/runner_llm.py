@@ -14,7 +14,6 @@ from loguru import logger
 from nanobot.agent.context_vars import _current_debug_enabled
 from .compressor import CompressEvent
 from .message_pipe import MessagePipe
-from .runner_constants import _DEFAULT_ERROR_MESSAGE
 
 # Module-level pipe instance (stateless, handles overflow automatically)
 _message_pipe = MessagePipe()

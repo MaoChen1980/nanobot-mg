@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 
 from nanobot.agent.db import NanobotDB
 from nanobot.agent.tools.base import Tool, tool_parameters

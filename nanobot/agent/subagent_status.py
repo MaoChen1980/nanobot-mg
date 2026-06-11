@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import field
-from typing import Any
 
 from nanobot.utils.compat import dataclass
 

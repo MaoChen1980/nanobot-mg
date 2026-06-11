@@ -1,6 +1,6 @@
 """Filesystem tools — re-exports from split modules for backward compatibility."""
 
-from nanobot.agent.tools.filesystem.filesystem import ListDirTool, _FsTool
+from nanobot.agent.tools.filesystem.filesystem import ListDirTool
 from nanobot.agent.tools.filesystem.filesystem_read import ReadFileTool
 from nanobot.agent.tools.filesystem.filesystem_write import WriteFileTool
 from nanobot.agent.tools.filesystem.filesystem_edit import EditFileTool, _find_match

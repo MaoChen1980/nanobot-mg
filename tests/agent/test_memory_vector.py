@@ -390,3 +390,41 @@ class TestExtendChunks:
         assert idx._chunks[0]["text"] == "first"
         assert idx._chunks[1] is None
         assert idx._chunks[2]["text"] == "third"
+
+
+# ===========================================================================
+# _load_model — lazy initialization
+# ===========================================================================
+
+class TestLoadModel:
+    """``_load_model`` — lazy-load SentenceTransformer."""
+
+    def test_returns_true_when_already_loaded(self, tmp_path):
+        """When self._model is set, _load_model returns True immediately."""
+        idx = MemoryVectorIndex(tmp_path)
+        idx._model = MagicMock()
+        assert idx._load_model() is True
+
+    def test_returns_false_on_import_error(self, tmp_path):
+        """When SentenceTransformer import fails, returns False with warning."""
+        with patch("sentence_transformers.SentenceTransformer",
+                   side_effect=ImportError("not installed")):
+            idx = MemoryVectorIndex(tmp_path)
+            result = idx._load_model()
+        assert result is False
+
+    def test_returns_false_on_init_error(self, tmp_path):
+        """When SentenceTransformer constructor fails, returns False with warning."""
+        with patch("sentence_transformers.SentenceTransformer",
+                   side_effect=OSError("model file not found")):
+            idx = MemoryVectorIndex(tmp_path)
+            result = idx._load_model()
+        assert result is False
+
+    def test_failure_not_cached(self, tmp_path):
+        """A failed _load_model can be retried (model stays None)."""
+        idx = MemoryVectorIndex(tmp_path)
+        with patch("sentence_transformers.SentenceTransformer",
+                   side_effect=ImportError("not installed")):
+            assert idx._load_model() is False
+        assert idx._model is None

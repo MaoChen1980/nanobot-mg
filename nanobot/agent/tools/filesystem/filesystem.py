@@ -2,7 +2,7 @@
 
 from nanobot.agent.tools.filesystem.filesystem_read import ReadFileTool
 from nanobot.agent.tools.filesystem.filesystem_write import WriteFileTool
-from nanobot.agent.tools.filesystem.filesystem_edit import EditFileTool, _find_match
+from nanobot.agent.tools.filesystem.filesystem_edit import EditFileTool
 from nanobot.agent.tools.filesystem.filesystem_list import ListDirTool
 from nanobot.agent.tools.filesystem.filesystem_delete import DeleteFileTool
 from nanobot.agent.tools.filesystem.filesystem_move import MoveFileTool

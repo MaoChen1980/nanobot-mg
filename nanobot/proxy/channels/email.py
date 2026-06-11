@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-import email
 import html
 import imaplib
-import json
 import mimetypes
 import os
 import re
@@ -78,6 +75,7 @@ class EmailProxyChannel(BaseProxyChannel):
         try:
             return str(make_header(decode_header(value)))
         except Exception:
+            logger.warning("Failed to decode email header", exc_info=True)
             return value
 
     def _extract_text_body(self, msg: Any) -> tuple[str, list[str]]:
@@ -156,7 +154,7 @@ class EmailProxyChannel(BaseProxyChannel):
             imap_username = self.config.get("imap_username", "")
             imap_password = self.config.get("imap_password", "")
             imap_mailbox = self.config.get("imap_mailbox", "INBOX")
-            imap_use_ssl = self.config.get("imap_use_ssl", True)
+            self.config.get("imap_use_ssl", True)
             mark_seen = self.config.get("mark_seen", True)
             max_body_chars = self.config.get("max_body_chars", 12000)
 

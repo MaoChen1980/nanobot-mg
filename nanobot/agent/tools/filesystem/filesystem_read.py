@@ -21,7 +21,7 @@ def _safe_regex_search(pattern: re.Pattern, text: str, timeout: float = 3.0) -> 
 from loguru import logger
 
 from nanobot.agent.tools._section_utils import detect_sections, format_section_overview
-from nanobot.agent.tools.base import Tool, tool_parameters
+from nanobot.agent.tools.base import tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from .filesystem_base import _FsTool, _is_blocked_device, _line_tag, _parse_page_range
 from nanobot.agent.tools import file_state

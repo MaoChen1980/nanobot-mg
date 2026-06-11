@@ -14,10 +14,8 @@ Usage::
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
-from nanobot.agent.tools.base import Schema
 
 
 def p(type: str, description: str = "", **kwargs: Any) -> dict[str, Any]:

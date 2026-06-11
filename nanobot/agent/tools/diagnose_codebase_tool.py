@@ -72,7 +72,7 @@ class DiagnoseTool(_FsTool):
                 parts.append("")
                 parts.extend(log)
             else:
-                parts.append(f"## Recent changes")
+                parts.append("## Recent changes")
                 parts.append(f"(No commits touching related files in the last {days} days)")
         else:
             parts.append("## Git history")

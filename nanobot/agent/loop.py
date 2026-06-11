@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import json
 import os
 import time
-from contextlib import AsyncExitStack, nullcontext
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from loguru import logger
 
 from nanobot.agent.context import ContextBuilder
-from nanobot.agent.hook import AgentHook, AgentHookContext, CompositeHook
+from nanobot.agent.hook import AgentHook, CompositeHook
 from nanobot.agent.memory import MemoryExtractor
 from nanobot.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunner, AgentRunSpec
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
@@ -64,13 +63,6 @@ from nanobot.session.lifecycle import SessionLifecycle
 from nanobot.utils.document import separate_and_extract_media
 from nanobot.utils.media_decode import image_placeholder_text
 from nanobot.utils.helpers import truncate_text as truncate_text_fn
-from nanobot.utils.progress_events import (
-    build_tool_event_finish_payloads,
-    build_tool_event_start_payload,
-    process_tool_events_and_progress,
-    on_progress_accepts_tool_events,
-)
-from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 
 # Import from split modules
 from .loop_constants import (
@@ -81,12 +73,6 @@ from .loop_constants import (
     _DEFAULT_RETRY_BACKOFF_JITTER,
     _RUNTIME_CHECKPOINT_KEY,
     _PENDING_USER_TURN_KEY,
-)
-from .loop_utils import (
-    strip_think,
-    runtime_chat_id,
-    tool_hint,
-    cancel_active_tasks,
 )
 from .loop_mcp import connect_mcp as _connect_mcp, close_mcp as _close_mcp
 from nanobot.agent.loop_hook import _LoopHook
@@ -1147,6 +1133,19 @@ class AgentLoop:
                 except Exception as e:
                     logger.warning(
                         "Hook {} set_provider failed: {}",
+                        type(hook).__name__,
+                        e,
+                    )
+
+        # 4. Wire the workspace path into hooks that opt in via set_workspace().
+        for hook in discovered:
+            inject = getattr(hook, "set_workspace", None)
+            if callable(inject):
+                try:
+                    inject(self.workspace)
+                except Exception as e:
+                    logger.warning(
+                        "Hook {} set_workspace failed: {}",
                         type(hook).__name__,
                         e,
                     )

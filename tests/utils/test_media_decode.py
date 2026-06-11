@@ -139,6 +139,22 @@ def test_image_placeholder_text_none():
     assert image_placeholder_text(None) == "[image]"
 
 
-def test_image_placeholder_text_custom_empty():
+def test_compress_image_corrupt_data_returns_raw():
+    """Corrupt image data -> returns raw bytes unchanged."""
+    from nanobot.utils.media_decode import compress_image
+
+    result_bytes, result_mime = compress_image(b"not-a-real-image-file-data")
+    assert result_bytes == b"not-a-real-image-file-data"
+    assert result_mime == "image/png"
+
+
+def test_compress_image_empty_bytes_returns_raw():
+    """Empty bytes for compress_image -> returns raw."""
+    from nanobot.utils.media_decode import compress_image
+
+    result_bytes, result_mime = compress_image(b"")
+    # Empty bytes won't open as image -> exception path
+    assert result_bytes == b""
+
     from nanobot.utils.media_decode import image_placeholder_text
     assert image_placeholder_text(None, empty="[photo]") == "[photo]"

@@ -7,6 +7,8 @@ import threading
 from collections import Counter
 from typing import Any
 
+from loguru import logger
+
 # numpy is imported lazily inside functions that need it (not available on all setups)
 
 _MODEL: Any = None
@@ -407,6 +409,7 @@ def _find_representative(text: str, model: Any) -> str:
         scores = np.dot(vecs, centroid)
         return sentences[int(np.argmax(scores))][:200]
     except Exception:
+        logger.warning("Failed to compute centroid summary", exc_info=True)
         return sentences[0][:200]
 
 

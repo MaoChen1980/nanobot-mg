@@ -32,5 +32,5 @@ def _get_commit() -> str:
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
     except Exception:
-        pass
+        print("Warning: failed to get git commit hash")
     return "unknown"

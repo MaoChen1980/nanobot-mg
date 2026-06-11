@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -229,6 +228,7 @@ class SelfDetectHook(AgentHook):
 
     LOG_FILE = Path.home() / ".nanobot" / "self_improve" / "self_log.md"
     FINDINGS_FILE = Path.home() / ".nanobot" / "self_improve" / "self_reflect_findings.json"
+    RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
     DEFAULT_INTERVAL = 15  # fire once every N turns
 
     def __init__(self, reraise: bool = False, interval: int | None = None) -> None:
@@ -236,6 +236,15 @@ class SelfDetectHook(AgentHook):
         self._turn_count = 0  # user turns (for interval check)
         self._entries_accumulated = []
         self._interval = interval if interval is not None else self.DEFAULT_INTERVAL
+        self._workspace: Path | None = None
+
+    def set_workspace(self, workspace_path: Path) -> None:
+        """Set the workspace path for writing findings doc.
+
+        Called by AgentLoop._discover_hooks() after discovery, following the
+        same pattern as set_provider().
+        """
+        self._workspace = workspace_path
 
     # -- after_iteration: accumulate metrics in memory ------------------------
 
@@ -295,6 +304,72 @@ class SelfDetectHook(AgentHook):
             await self._run_turn_reflection(entries)
         except Exception:
             logger.debug("SelfDetectHook.after_turn failed")
+
+    def _write_findings_doc(self, findings: list[dict]) -> None:
+        """Write unresolved findings to workspace/framework/self_findings.md.
+
+        Only findings whose IDs are NOT in resolved_findings.jsonl are included.
+        If all findings are resolved (or no findings), the doc is removed so
+        ContextBuilder has nothing to inject.
+        """
+        if not self._workspace:
+            return
+
+        # Read resolved IDs from the class-level RESOLVED_FILE (overridable in tests)
+        resolved_ids: set[str] = set()
+        try:
+            if self.RESOLVED_FILE.exists():
+                resolved_ids = set(
+                    line.strip()
+                    for line in self.RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines()
+                    if line.strip()
+                )
+        except OSError:
+            pass
+        unresolved = [f for f in findings if f.get("id") and f["id"] not in resolved_ids]
+
+        doc_path = self._workspace / "framework" / "self_findings.md"
+
+        if not unresolved:
+            if doc_path.exists():
+                try:
+                    doc_path.unlink()
+                except OSError:
+                    pass
+            return
+
+        parts = [
+            "## Self-Evolution Findings",
+            "",
+            "The following items were flagged by the self-review system. "
+            "Inspect each and mark resolved when addressed.",
+            "",
+            "To mark a finding as resolved, run:",
+            "```",
+            "echo <finding_id> >> ~/.nanobot/self_improve/resolved_findings.jsonl",
+            "```",
+            "",
+        ]
+        for f in unresolved:
+            fid = f["id"]
+            ftype = f.get("type", "?")
+            content = f.get("content", "")
+            relevance = f.get("relevance", "")
+
+            parts.append(f"### {fid} ({ftype})")
+            parts.append(f"**Content**: {content}")
+            if relevance:
+                parts.append(f"**Relevance**: {relevance}")
+            parts.append(
+                f"**Resolve**: `echo {fid} >> ~/.nanobot/self_improve/resolved_findings.jsonl`"
+            )
+            parts.append("")
+
+        try:
+            doc_path.parent.mkdir(parents=True, exist_ok=True)
+            doc_path.write_text("\n".join(parts), encoding="utf-8")
+        except OSError:
+            logger.debug("SelfDetectHook: failed to write findings doc")
 
     async def _run_turn_reflection(self, entries: list[dict]) -> None:
         """Build a summary from all iterations, fire LLM, save results."""
@@ -384,6 +459,9 @@ class SelfDetectHook(AgentHook):
 
         # Save findings JSON (consumed by SelfFixHook)
         self._save_findings(findings, iteration_range, time_str)
+
+        # Write findings doc to workspace framework dir (for ContextBuilder injection)
+        self._write_findings_doc(findings)
 
         # Also write readable log for human review
         self._append_to_log(iteration_range, time_str, errors, findings, diagnostic)

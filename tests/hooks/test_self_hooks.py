@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 
 from nanobot.agent.hook import AgentHookContext
 from nanobot.hooks.self_log_hook import SelfLogHook
-from nanobot.hooks.self_fix_hook import SelfFixHook
 
 
 class _FakeContext:
