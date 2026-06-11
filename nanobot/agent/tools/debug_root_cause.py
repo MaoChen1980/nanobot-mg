@@ -102,7 +102,8 @@ _RCA_METHODS = """
 @tool_parameters(
     build_parameters_schema(
         problem=p("string", "What happened? Describe the error, unexpected behavior, or situation you need to figure out."),
-        focus_method=p("string", "Optional — constrain analysis to one specific method: 'divide_conquer', 'comparison', 'rollback', 'hypothesis_testing', 'reverse_inference', 'trial_error', 'look_inside', 'single_variable', 'boundary_testing', 'reproduction', 'elimination', 'substitution', 'chain_tracing', 'log_injection', 'time_travel', 'wait_observe', 'layer_stripping', 'outlier_analysis', 'force_failure', 'peer_review'."),
+        focus_method=p("string", "Optional — constrain analysis to one specific method: 'divide_conquer', 'comparison', 'rollback', 'hypothesis_testing', 'reverse_inference', 'trial_error', 'look_inside', 'single_variable', 'boundary_testing', 'reproduction', 'elimination', 'substitution', 'chain_tracing', 'log_injection', 'time_travel', 'wait_observe', 'layer_stripping', 'outlier_analysis', 'force_failure', 'peer_review'.",
+            enum=["divide_conquer", "comparison", "rollback", "hypothesis_testing", "reverse_inference", "trial_error", "look_inside", "single_variable", "boundary_testing", "reproduction", "elimination", "substitution", "chain_tracing", "log_injection", "time_travel", "wait_observe", "layer_stripping", "outlier_analysis", "force_failure", "peer_review"]),
         required=["problem"],
     )
 )

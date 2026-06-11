@@ -13,8 +13,8 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 
 @tool_parameters(
     build_parameters_schema(
-        data=p("string", "Text content to analyze (provide this or path)"),
-        path=p("string", "Absolute path to a file to read and analyze. Provide this or data."),
+        data=p("string", "Text content to analyze. Must provide data or path (exactly one)."),
+        path=p("string", "Absolute path to a file to read and analyze. Must provide path or data (exactly one)."),
         keyword=p("string", "Optional keyword filter — simple term matching, NOT semantic analysis. Example: 'database connection error' shows lines containing those words ranked by match count. (Legacy alias: question)"),
         max_keywords=p("integer", "Maximum keywords to extract (default 15)", minimum=1, maximum=50, default=15),
     ),

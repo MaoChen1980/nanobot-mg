@@ -79,6 +79,7 @@ class ExploreModuleTool(_FsTool):
         "**Output format**:\n"
         "- Function and class definitions with 1-indexed line numbers (directly usable as read_file_tool offset param)\n"
         "- Python uses AST parsing (precise), other languages use regex (may be incomplete)\n"
+        "- **Supported file types**: .py, .js, .ts, .go, .rs, .java, .kt\n"
         "- Appends a read_file_tool tip command ready to copy-paste\n\n"
         "**When to use**:\n"
         "- When you want a quick overview of what classes and functions exist in a file or directory and where they are defined\n\n"

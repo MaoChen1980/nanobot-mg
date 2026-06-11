@@ -70,7 +70,7 @@ def _extract_powershell_inner(command: str) -> str | None:
         working_dir=p("string", "Absolute path to the working directory. **Required.**"),
         timeout=p("integer",
             "Timeout in seconds. Increase for long-running commands like compilation or installation.",
-            minimum=1, maximum=600, default=60,
+            minimum=1, maximum=7200, default=60,
         ),
         capture_file=p("string",
             "If set, write command output to this absolute file path "

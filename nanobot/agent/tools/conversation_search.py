@@ -20,7 +20,7 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
         ),
         query=p(
             "string",
-            "Alias for keyword. Provide this or keyword.",
+            "Deprecated alias for keyword. Will be removed — use keyword instead.",
         ),
         start=p(
             "string",

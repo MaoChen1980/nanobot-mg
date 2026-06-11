@@ -91,7 +91,7 @@ _EDIT_ITEM_SCHEMA = {
             nullable=True,
         ),
     },
-    "required": ["path", "action"],
+    "required": ["path", "action", "new_text"],
 }
 
 _APPLY_PATCH_SCHEMA = build_parameters_schema(

@@ -11,7 +11,8 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 
 @tool_parameters(
     build_parameters_schema(
-        focus=p("string", "Optional — narrow assessment: 'direction' (current investigation approach — is it sound?), 'gaps' (what information should I have but don't?), 'assumptions' (unverified beliefs driving my debugging), 'progress' (what's done vs pending). Default = full assessment."),
+        focus=p("string", "Optional — narrow assessment: 'direction' (current investigation approach — is it sound?), 'gaps' (what information should I have but don't?), 'assumptions' (unverified beliefs driving my debugging), 'progress' (what's done vs pending). Default = full assessment.",
+            enum=["direction", "gaps", "assumptions", "progress"]),
         verify=p("string", "Optional — specific claims to check against the conversation. Pass each as clear statements. The assessor marks each as ✅ verified, ❌ not verified, or ⚠️ insufficient evidence. E.g.: verify=\"The error is in the SSE parsing, The API key is being passed correctly, I've checked the right file\""),
         required=[],
     )

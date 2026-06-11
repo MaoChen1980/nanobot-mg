@@ -176,7 +176,7 @@ class GlobTool(_SearchTool):
                 "head_limit": {
                     "type": "integer",
                     "default": 250,
-                    "description": "Maximum number of matches to return (default 250)",
+                    "description": "Maximum number of matches to return (default 250). Set to 0 for unlimited results.",
                     "minimum": 0,
                     "maximum": 1000,
                 },

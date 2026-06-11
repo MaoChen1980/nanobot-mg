@@ -136,6 +136,9 @@ class NotebookEditTool(_FsTool):
                 fp.write_text(json.dumps(nb, indent=1, ensure_ascii=False), encoding="utf-8")
                 return f"Successfully inserted cell at index {insert_at} in {fp.as_posix()}"
 
+            # Guard: new_source is required for replace/insert
+            if not new_source:
+                return f"Error: new_source is required for '{edit_mode}' mode — cannot write empty cell content."
             # Default: replace
             if cell_index < 0 or cell_index >= len(cells):
                 return f"Error: cell_index {cell_index} out of range (notebook has {len(cells)} cells)"

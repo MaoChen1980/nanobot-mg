@@ -24,8 +24,8 @@ _MAX_TEXT_BYTES = 5 * 1024 * 1024  # 5 MB
 @tool_parameters(
     build_parameters_schema(
         query=p("string", "Natural-language query to find relevant passages"),
-        text=p("string", "Text content to search within (max 5 MB). Provide this or path."),
-        path=p("string", "Absolute path to a file to read and search. Provide this or text."),
+        text=p("string", "Text content to search within (max 5 MB). Provide exactly one of text or path (not both, not neither)."),
+        path=p("string", "Absolute path to a file to read and search. Provide exactly one of text or path (not both, not neither)."),
         k=p("integer", "Number of results to return (default 5)", minimum=1, maximum=20, default=5),
         required=["query"],
     ),

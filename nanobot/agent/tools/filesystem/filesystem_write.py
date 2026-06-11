@@ -23,7 +23,8 @@ from nanobot.agent.tools import file_state
         then_check=p("string",
             "If set, type-checks the file after writing before executing then_exec. "
             "Type checker to use: 'auto' (detect from extension), 'pyright' (Python), or 'tsc' (TypeScript/JavaScript). Returns pass/fail + errors. "
-            "Works with then_exec: write → check → exec."
+            "Works with then_exec: write → check → exec.",
+            enum=["auto", "pyright", "tsc"],
         ),
         then_grep=p("string",
             "If set, searches the written file for this exact substring (not a regex) after saving, "

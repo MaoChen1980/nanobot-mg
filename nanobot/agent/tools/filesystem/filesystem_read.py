@@ -57,7 +57,7 @@ class ReadFileTool(_FsTool):
         "**Purpose**: Read file contents (text/images/PDF/Office). Supports mode selection, regex filtering, and line-based pagination.\n\n"
         "**Output Format (mode=full)**:\n"
         "Each line is formatted as `LINENO:4CHAR_TAG| CONTENT` (e.g. `42:Q8fA| def foo():`).\n"
-        "The TAG is a 4-character checksum of the content, passable to edit_file_tool's line_tag parameter for modification verification.\n\n"
+        "The TAG is a 4-character checksum of the line content for visual change detection.\n\n"
         "**Modes**:\n"
         "- `mode=full` (default) — Full read, supports offset+limit pagination\n"
         "- `mode=overview` — Preview structure without reading the full file (headings/sections), use when unsure what a file contains\n"

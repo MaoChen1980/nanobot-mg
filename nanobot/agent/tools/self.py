@@ -131,15 +131,15 @@ class SelfTool(Tool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["check", "set", "inspect", "modify"],
-                    "description": "Action: 'check' or 'inspect' (view config), 'set' or 'modify' (change config or store scratchpad notes)",
+                    "enum": ["check", "set"],
+                    "description": "Action: 'check' (view config; alias 'inspect'), 'set' (modify config or store scratchpad notes; alias 'modify')",
                 },
                 "key": {
                     "type": "string",
                     "description": "Dot-path for check/set. Examples: 'max_iterations', 'workspace', 'provider_retry_mode'. "
                     "For check without key, shows all config values.",
                 },
-                "value": {"type": ["string", "integer", "boolean", "number", "array", "object"], "description": "New value (for set). Type must match target (int for max_iterations/context_window_tokens, str for model). Supports arrays and objects for scratchpad storage."},
+                "value": {"type": "string", "description": "New value (for set). Pass JSON-encoded value. The framework decodes JSON types on the receiving end (int for max_iterations, string for model, array/object for scratchpad)."},
             },
             "required": ["action"],
         }

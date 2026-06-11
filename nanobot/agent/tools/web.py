@@ -303,7 +303,7 @@ class WebSearchTool(WebToolBase, Tool):
             "default": "markdown",
             "description": "Output format: 'markdown' (default) — clean structured text preserving tables and code blocks; 'text' — raw text extraction with minimal formatting",
         },
-        maxChars=p("integer", "Max characters to extract (minimum 100, default 100000). Pages exceeding this limit are truncated (~100KB of text). Typical pages are 10-40KB after extraction. Use smaller values (1000-5000) for quick previews to reduce token cost.",
+        max_chars=p("integer", "Max characters to extract (minimum 100, default 100000). Pages exceeding this limit are truncated (~100KB of text). Typical pages are 10-40KB after extraction. Use smaller values (1000-5000) for quick previews to reduce token cost.",
             minimum=100, default=100000,
         ),
         extract=p("string", "Optional regex — only lines matching this pattern are returned from the fetched text, with 1 line context before/after"),
@@ -336,10 +336,10 @@ class WebFetchTool(WebToolBase, Tool):
 
     read_only = True
 
-    async def execute(self, url: str, format: str = "markdown", maxChars: int | None = None, extract: str | None = None, **kwargs: Any) -> Any:
+    async def execute(self, url: str, format: str = "markdown", max_chars: int | None = None, extract: str | None = None, **kwargs: Any) -> Any:
         # Strip whitespace, markdown backticks, and quotes that LLM-generated URLs often carry
         url = url.strip().strip("`").strip('"').strip("'")
-        max_chars = maxChars or self.max_chars
+        max_chars = max_chars or self.max_chars
         is_valid, error_msg = await _validate_url_safe(url)
         if not is_valid:
             return json.dumps({"error": f"URL validation failed: {error_msg}", "url": url}, ensure_ascii=False)
