@@ -542,6 +542,7 @@ class AgentLoop:
         session_key: str | None = None,
         pending_queue: asyncio.Queue | None = None,
     ) -> tuple[str | None, list[str], list[dict], str, bool]:
+        logger.info("RUN_DBG: _run_agent_loop start ({} messages)", len(initial_messages))
         """Run the agent iteration loop.
 
         *on_stream*: called with each content delta during streaming.

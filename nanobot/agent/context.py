@@ -732,19 +732,35 @@ class ContextBuilder:
         # Dynamic session state — appended to system prompt (changes each turn)
         session_parts: list[str] = []
 
+        _t_log = time.time()
         memory_section = self._build_memory_section()
+        _elapsed = (time.time() - _t_log) * 1000
+        if _elapsed > 50:
+            logger.info("build_messages: _build_memory_section took {:.0f}ms", _elapsed)
         if memory_section:
             session_parts.append(memory_section)
 
+        _t_log = time.time()
         state_block = self._build_task_tree_section()
+        _elapsed = (time.time() - _t_log) * 1000
+        if _elapsed > 50:
+            logger.info("build_messages: _build_task_tree_section took {:.0f}ms", _elapsed)
         if state_block:
             session_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
 
+        _t_log = time.time()
         current_block = self._build_current_context_section()
+        _elapsed = (time.time() - _t_log) * 1000
+        if _elapsed > 50:
+            logger.info("build_messages: _build_current_context_section took {:.0f}ms", _elapsed)
         if current_block:
             session_parts.append(current_block)
 
+        _t_log = time.time()
         findings_block = self._build_self_findings_section()
+        _elapsed = (time.time() - _t_log) * 1000
+        if _elapsed > 50:
+            logger.info("build_messages: _build_self_findings_section took {:.0f}ms", _elapsed)
         if findings_block:
             session_parts.append(findings_block)
 
@@ -760,9 +776,14 @@ class ContextBuilder:
         # Strip image data from history — only the incoming user message keeps
         # its image_url blocks.  Old images and base64-laden tool results are
         # replaced with text placeholders to prevent token bloat across turns.
+        _t_log = time.time()
         self._strip_old_images(messages)
+        _elapsed = (time.time() - _t_log) * 1000
+        if _elapsed > 50:
+            logger.info("build_messages: _strip_old_images took {:.0f}ms", _elapsed)
 
         # Clean user message — no injected metadata
+        _t_log = time.time()
         user_content = self._build_user_content(current_message, media)
         if messages[-1].get("role") == current_role:
             last = dict(messages[-1])

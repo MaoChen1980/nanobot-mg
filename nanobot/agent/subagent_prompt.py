@@ -173,7 +173,7 @@ def build_subagent_prompt(
 
     ws_path = workspace.expanduser().resolve().as_posix()
 
-    # 8. Thinking framework (three-phase task methodology)
+    # 8. Thinking framework
     parts.append(render_template("agent/_snippets/think_framework.md"))
 
     # 9. Framework rules (adapted for subagent)

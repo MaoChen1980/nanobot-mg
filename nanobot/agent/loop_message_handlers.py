@@ -222,24 +222,30 @@ class UserMessageHandler:
 
         # Stage 1.5b: assess_me triggers — interval + compression
         await self._maybe_assess(session, history, compress_triggered=_compress_happened)
+        logger.info("STAGE_DBG: _maybe_assess done")
 
         # Stage 2: tool context
         self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
         self._maybe_start_message_tool()
+        logger.info("STAGE_DBG: tool context done")
 
         # Stage 3: build initial messages
         initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session)
+        logger.info("STAGE_DBG: _build_initial_messages done ({} messages)", len(initial_messages))
 
         # Stage 4: callbacks
         on_progress_final = on_progress or self._make_bus_progress_callback(msg)
         on_retry_wait = self._make_retry_wait_callback(msg, on_progress_final)
+        logger.info("STAGE_DBG: callbacks done")
 
         # Stage 5: persist user message before loop runs
         user_persisted_early = False
         if not msg.ephemeral:
             user_persisted_early = self._persist_user_message_early(session, msg, pending_ask_id)
+        logger.info("STAGE_DBG: persist done (ephemeral={}, early={})", msg.ephemeral, user_persisted_early)
 
         # Stage 6: run agent loop
+        logger.info("STAGE_DBG: entering _run_agent_loop")
         final_content, _, all_msgs, stop_reason, had_injections, initial_msg_count = await self._loop._run_agent_loop(
             initial_messages,
             on_progress=on_progress_final,
@@ -307,6 +313,7 @@ class UserMessageHandler:
     async def _maybe_assess(self, session, history, compress_triggered: bool = False) -> None:
         """Check assess_me trigger conditions and inject if needed."""
         from nanobot.agent.loop_constants import _DEFAULT_ASSESS_INTERVAL
+        logger.info("STAGE_DBG: _maybe_assess entry (compress_triggered={})", compress_triggered)
         from nanobot.agent.assess_me import assess_me, build_assessment_message
 
         trigger = False

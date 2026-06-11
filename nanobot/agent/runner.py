@@ -297,9 +297,14 @@ class AgentRunner:
                     messages_for_model = messages
 
             context = AgentHookContext(iteration=iteration, messages=messages, workspace=spec.workspace)
+            logger.info("RUN_DBG: before_iteration (iter={})", iteration)
             await hook.before_iteration(context)
+            logger.info("RUN_DBG: before_llm_call (iter={})", iteration)
             messages_for_model = hook.before_llm_call(context, messages_for_model)
+            logger.info("RUN_DBG: request_model start (iter={}, msgs={})", iteration, len(messages_for_model))
             response, compress_event = await request_model(spec, messages_for_model, hook, context)
+            logger.info("RUN_DBG: request_model done (iter={}, finish={}, tools={})",
+                        iteration, response.finish_reason, len(response.tool_calls))
             # If MessagePipe compressed due to overflow, sync the compressed
             # messages back so the next iteration doesn't re-grow from old history.
             # Note: compress_event reflects the post-hook messages_for_model state.
