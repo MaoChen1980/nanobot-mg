@@ -400,9 +400,9 @@ class UserMessageHandler:
 
     def _make_retry_wait_callback(self, msg, on_progress=None):
         async def _on_retry_wait(content):
-            # Route through on_progress when available so the message
-            # actually reaches the user (hub → deliver_to_proxy, CLI →
-            # progress line).  Fall back to bus for other consumers.
+            # Internal retry categories are meaningless to the user — skip them.
+            if content in {"empty_response", "length_recovery"}:
+                return
             if on_progress:
                 await on_progress(content, tool_events=None)
                 return

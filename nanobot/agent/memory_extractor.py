@@ -197,7 +197,8 @@ class MemoryExtractor:
             f"{pt_text}"
         )
 
-        prompt = render_template("agent/extractor_analysis.md")
+        ws_path = self.store.workspace.expanduser().resolve().as_posix()
+        prompt = render_template("agent/extractor_analysis.md", workspace_path=ws_path)
 
         try:
             response = await chat_stream_with_retry(
