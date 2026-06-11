@@ -20,12 +20,12 @@ _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv"
     build_parameters_schema(
         pattern=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py' (legacy alias: glob)"),
         extract=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context). Legacy alias: grep"),
-        path=p("string", "Absolute path to a directory to search from. **Required.**"),
+        path=p("string", "Absolute path to a directory to search from. Optional if pattern is already an absolute path (path is auto-extracted from pattern)."),
         max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50, default=10),
         max_lines=p("integer", "Maximum lines per file (default 2000, max 5000). Most files fit within 2000 lines — increase if file is longer.",
             minimum=1, maximum=5000, default=2000),
     ),
-    required=["pattern", "path"],
+    required=["pattern"],
 )
 class ReadFilesTool(_FsTool):
     """Read multiple files at once by glob pattern — no more glob→read loops."""
@@ -56,7 +56,16 @@ class ReadFilesTool(_FsTool):
         if extract is None and kwargs.get("grep"):
             extract = kwargs["grep"]
         if not path:
-            return "Error: `path` is required — provide an absolute path to a directory."
+            # Auto-extract path from pattern if it's an absolute path
+            abs_pattern = pattern.strip().replace("\\", "/")
+            if ":" in abs_pattern or abs_pattern.startswith("/"):
+                p = Path(abs_pattern)
+                parent = p.parent
+                if parent.exists() and parent.is_dir():
+                    path = str(parent)
+                    pattern = p.name
+            if not path:
+                return "Error: `path` is required — provide an absolute path to a directory."
         try:
             root = self._resolve(path)
             if not root.exists():
