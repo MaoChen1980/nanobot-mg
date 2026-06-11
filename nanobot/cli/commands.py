@@ -11,6 +11,8 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 # Force UTF-8 encoding for Windows console
 if sys.platform == "win32":
     if sys.stdout.encoding != "utf-8":
@@ -37,7 +39,6 @@ if sys.platform == "win32":
         logger.debug("Failed to enable Virtual Terminal Processing")
 
 import typer
-from loguru import logger
 from prompt_toolkit import PromptSession, print_formatted_text
 from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.formatted_text import ANSI, HTML

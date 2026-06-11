@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from importlib.resources import files as pkg_files
+from loguru import logger
 
 
 _GUIDE_SECTION = """\

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import difflib
 from dataclasses import field
+from pathlib import Path
 from typing import Any
 
 from loguru import logger

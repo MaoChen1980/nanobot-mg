@@ -372,7 +372,8 @@ class ExecTool(Tool):
                     capture_fh.close()
 
             exit_code = process.returncode
-            status_line = f"Exit: {exit_code}  |  cwd: {cwd.replace('\\', '/')}  |  shell: {'pwsh' if _IS_WINDOWS else 'sh'}"
+            cwd_safe = cwd.replace('\\', '/')
+            status_line = f"Exit: {exit_code}  |  cwd: {cwd_safe}  |  shell: {'pwsh' if _IS_WINDOWS else 'sh'}"
 
             body = "\n".join(output_parts) if output_parts else "(no output)"
             SEP = "─" * 56

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
@@ -11,6 +12,7 @@ from pydantic_settings import BaseSettings
 
 from nanobot.cron.types import CronSchedule
 
+logger = logging.getLogger(__name__)
 
 # Common Windows timezone → IANA name mapping (CLDR subset).
 # Covers ~95 % of users; the rest can set timezone explicitly.

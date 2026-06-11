@@ -545,7 +545,8 @@ class HubTCPServer:
                 task = asyncio.create_task(self._route_message(
                     item.write_lock, item.writer, item.data, item.peername,
                 ))
-                _track_task(task)
+                # Re-dispatched tasks are already tracked by _handle_client
+                # (_pending_tasks in the closure scope), skip re-tracking.
 
         # Route response through proxy_manager so it reaches the CURRENT
         # TCP connection — the proxy may have reconnected during processing.

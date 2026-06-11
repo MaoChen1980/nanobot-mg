@@ -188,7 +188,7 @@ class NanobotDB:
             rows = conn.execute(
                 "SELECT cursor, timestamp, content, summary FROM history ORDER BY cursor"
             ).fetchall()
-        return [_row_to_dict(row, cols) for row in rows]
+        return [self._row_to_dict(row, cols) for row in rows]
 
     def read_unprocessed_history(self, since_cursor: int) -> list[dict[str, Any]]:
         cols = ["cursor", "timestamp", "content", "summary"]
@@ -197,7 +197,7 @@ class NanobotDB:
                 "SELECT cursor, timestamp, content, summary FROM history WHERE cursor > ? ORDER BY cursor",
                 (since_cursor,),
             ).fetchall()
-        return [_row_to_dict(row, cols) for row in rows]
+        return [self._row_to_dict(row, cols) for row in rows]
 
     def compact_history(self, max_entries: int = 1000) -> None:
         with self._conn_access() as conn:
