@@ -50,7 +50,7 @@ from nanobot.agent.tools.self_restart_tool import SelfRestartTool
 from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
 from nanobot.agent.tools.assess_me_tool import AssessMeTool
-from nanobot.agent.assess_me import is_assessment_message
+from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.agent.context_vars import _current_debug_enabled
@@ -1037,8 +1037,8 @@ class AgentLoop:
             role, content = entry.get("role"), entry.get("content")
             if role == "assistant" and not entry.get("tool_calls") and not (content and content.strip() if isinstance(content, str) else content):
                 continue  # skip empty assistant messages — they poison session context
-            if is_assessment_message(entry):
-                continue  # skip ephemeral self-assessment reminders — not part of real conversation
+            if is_assessment_message(entry) or is_debug_root_cause_message(entry):
+                continue  # skip ephemeral framework-injected messages — not part of real conversation
             if role == "tool":
                 if isinstance(content, str) and len(content) > self.max_tool_result_chars:
                     entry["content"] = truncate_text_fn(content, self.max_tool_result_chars)

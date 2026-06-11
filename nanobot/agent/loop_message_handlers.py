@@ -314,7 +314,7 @@ class UserMessageHandler:
         """Check assess_me trigger conditions and inject if needed."""
         from nanobot.agent.loop_constants import _DEFAULT_ASSESS_INTERVAL
         logger.info("STAGE_DBG: _maybe_assess entry (compress_triggered={})", compress_triggered)
-        from nanobot.agent.assess_me import assess_me, build_assessment_message
+        from nanobot.agent.assess_me import assess_me, build_assessment_message, build_debug_root_cause_message
 
         trigger = False
 
@@ -341,14 +341,30 @@ class UserMessageHandler:
             logger.warning("assess_me LLM call failed: {}", e)
             return
 
-        if result:
-            history.append(build_assessment_message(result))
-            logger.info(
-                "assess_me triggered (compress={}, session={}, history={} msgs)",
-                compress_triggered, session.key, len(history),
-            )
-        else:
+        if not result:
             logger.info("assess_me returned empty — LLM had no conclusion, skipping injection")
+            return
+
+        history.append(build_assessment_message(result))
+        logger.info(
+            "assess_me triggered (compress={}, session={}, history={} msgs)",
+            compress_triggered, session.key, len(history),
+        )
+
+        # Chain: assess_me returned → feed result as problem to debug_root_cause
+        try:
+            from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+            dcr = DebugRootCauseTool()
+            dcr.set_context(history)
+            dcr_result = await dcr.execute(problem=result)
+            if dcr_result:
+                history.append(build_debug_root_cause_message(dcr_result))
+                logger.info(
+                    "debug_root_cause injected (session={}, history={} msgs)",
+                    session.key, len(history),
+                )
+        except Exception as e:
+            logger.warning("debug_root_cause chain call failed: {}", e)
 
     async def _dispatch_command(self, msg, session, key):
         """Run command dispatch, return result if handled."""

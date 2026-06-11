@@ -110,3 +110,23 @@ def is_assessment_message(msg: dict) -> bool:
         return False
     content = msg.get("content", "")
     return isinstance(content, str) and content.startswith(_ASSESSMENT_PREFIX)
+
+
+_DEBUG_RC_PREFIX = "[debug_root_cause]"
+_DEBUG_RC_SUFFIX = "\n[/debug_root_cause]"
+
+
+def build_debug_root_cause_message(text: str) -> dict[str, Any]:
+    """Build a *user*-role message for injecting a debug_root_cause into history."""
+    return {
+        "role": "user",
+        "content": f"{_DEBUG_RC_PREFIX}\n{text.strip()}{_DEBUG_RC_SUFFIX}",
+    }
+
+
+def is_debug_root_cause_message(msg: dict) -> bool:
+    """Check if a message is a debug_root_cause injection."""
+    if msg.get("role") != "user":
+        return False
+    content = msg.get("content", "")
+    return isinstance(content, str) and content.startswith(_DEBUG_RC_PREFIX)
