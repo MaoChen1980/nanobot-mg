@@ -134,6 +134,8 @@ class ContextBuilder:
             always_skills=always_content,
             skills_summary=skills_section,
             runtime_context=runtime_context,
+            # Workspace path — used by included templates (framework_core etc.)
+            workspace_path=self.workspace.expanduser().resolve().as_posix(),
             # Framework config — used by framework_core.md via {% include %}
             max_iterations=self._framework_config.get("max_iterations", 200),
             context_window_tokens=self._framework_config.get("context_window_tokens", 200_000),
@@ -407,7 +409,8 @@ class ContextBuilder:
                 lines = lines[1:]
             index_text = "\n".join(lines).strip()
             if index_text:
-                parts.append(f"# Memory - workspace/memory/MEMORY.md\n\n{index_text}")
+                mem_path = self.workspace.as_posix()
+                parts.append(f"# Memory - {mem_path}/memory/MEMORY.md\n\n{index_text}")
 
         # Also inline key memory files so rules/preferences are visible without recall
         for name in ("system.md", "user.md"):

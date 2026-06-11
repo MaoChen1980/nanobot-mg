@@ -33,7 +33,7 @@ def _get_git_commit() -> str:
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
     except Exception:
-        pass
+        logger.debug("Failed to resolve git commit hash via subprocess")
     try:
         from nanobot import __version__
         if __version__:

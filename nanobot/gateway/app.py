@@ -1055,6 +1055,14 @@ class GatewayApplication:
     async def _shutdown(self) -> None:
         """Graceful shutdown of all services."""
         _t0 = time.monotonic()
+
+        # Cancel background tasks first so they stop during shutdown
+        for task in self._bg_tasks:
+            task.cancel()
+        if self._bg_tasks:
+            await asyncio.gather(*self._bg_tasks, return_exceptions=True)
+            self._bg_tasks.clear()
+
         if self.agent is not None:
             try:
                 await self.agent.close_mcp()
@@ -1101,6 +1109,12 @@ class GatewayApplication:
                 logger.debug("Error waiting for API server shutdown")
         _t4 = time.monotonic()
         logger.info("SHUTDOWN_DBG: api_server.shutdown done in {:.1f}s (cum={:.1f}s)", _t4 - _t3, _t4 - _t0)
+
+        if self.nanobot_db is not None:
+            try:
+                self.nanobot_db.close()
+            except Exception:
+                logger.debug("Error closing database during shutdown")
 
     # ------------------------------------------------------------------
     # Helpers (shared with CLI but kept here for self-containment)

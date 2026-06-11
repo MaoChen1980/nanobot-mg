@@ -87,7 +87,7 @@ def _detect_timezone() -> str:
         if local_tz is not None and hasattr(local_tz, "key"):
             return local_tz.key
     except Exception:
-        pass
+        logger.debug("Failed to detect timezone via POSIX method")
 
     # 2 — Windows: read the registry and map to IANA
     try:
@@ -101,7 +101,7 @@ def _detect_timezone() -> str:
             if win_name in _WINDOWS_TO_IANA:
                 return _WINDOWS_TO_IANA[win_name]
     except Exception:
-        pass
+        logger.debug("Failed to detect timezone via Windows registry")
 
     # 3 — Everything else: UTC
     return "UTC"

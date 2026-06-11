@@ -112,6 +112,7 @@ def _readme_first_heading(path: Path) -> str:
     try:
         text = path.read_text(encoding="utf-8")
     except Exception:
+        logger.debug("Failed to read first heading from {}", path)
         return "No description"
 
     for line in text.splitlines():
@@ -135,5 +136,5 @@ def _guide_section() -> str:
             if guide:
                 return guide
     except Exception:
-        pass
+        logger.debug("Failed to load guide section template")
     return _GUIDE_SECTION.strip()

@@ -297,66 +297,70 @@ class ExecTool(Tool):
                 capture_path.parent.mkdir(parents=True, exist_ok=True)
                 capture_fh = open(capture_path, "w", encoding="utf-8")
 
-            process = await self._spawn(command, cwd, env)
-            stdout_chunks: list[bytes] = []
-            stderr_lines: list[str] = []
+            try:
+                process = await self._spawn(command, cwd, env)
+                stdout_chunks: list[bytes] = []
+                stderr_lines: list[str] = []
 
-            if capture_fh:
-                # Stream lines to file as they arrive
-                lines_accum = b""
-                try:
-                    while True:
-                        chunk = await process.stdout.read(512)
-                        if not chunk:
-                            break
-                        lines_accum += chunk
-                        while b"\n" in lines_accum:
-                            line, lines_accum = lines_accum.split(b"\n", 1)
-                            text = line.decode("utf-8", errors="replace")
+                if capture_fh:
+                    # Stream lines to file as they arrive
+                    lines_accum = b""
+                    try:
+                        while True:
+                            chunk = await process.stdout.read(512)
+                            if not chunk:
+                                break
+                            lines_accum += chunk
+                            while b"\n" in lines_accum:
+                                line, lines_accum = lines_accum.split(b"\n", 1)
+                                text = line.decode("utf-8", errors="replace")
+                                capture_fh.write(text + "\n")
+                                capture_fh.flush()
+                                stdout_chunks.append(text.encode("utf-8"))
+                        if lines_accum:
+                            text = lines_accum.decode("utf-8", errors="replace")
                             capture_fh.write(text + "\n")
                             capture_fh.flush()
                             stdout_chunks.append(text.encode("utf-8"))
-                    if lines_accum:
-                        text = lines_accum.decode("utf-8", errors="replace")
-                        capture_fh.write(text + "\n")
-                        capture_fh.flush()
-                        stdout_chunks.append(text.encode("utf-8"))
-                except asyncio.TimeoutError:
-                    await self._kill_process(process)
-                    logger.warning("Command timed out after {}s", effective_timeout)
-                    return f"Error: Command timed out after {effective_timeout} seconds"
-                except asyncio.CancelledError:
-                    await self._kill_process(process)
-                    raise
-                # Normal completion: fall through to post-processing
-                await process.wait()
-                stderr_bytes = await process.stderr.read() if process.stderr else b""
-                stderr_text = stderr_bytes.decode("utf-8", errors="replace")
-                if stderr_text.strip():
-                    stderr_lines.append(stderr_text)
-                capture_fh.close()
-                stdout_text = b"".join(stdout_chunks).decode("utf-8", errors="replace") if stdout_chunks else ""
-                output_parts = [stdout_text] if stdout_text else []
-            else:
-                try:
-                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                        process.communicate(),
-                        timeout=effective_timeout,
-                    )
-                except asyncio.TimeoutError:
-                    await self._kill_process(process)
-                    logger.warning("Command timed out after {}s", effective_timeout)
-                    return f"Error: Command timed out after {effective_timeout} seconds"
-                except asyncio.CancelledError:
-                    await self._kill_process(process)
-                    raise
-                stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
-                stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-                output_parts = []
-                if stdout_text:
-                    output_parts.append(stdout_text)
-                if stderr_text.strip():
-                    output_parts.append(f"STDERR:\n{stderr_text}")
+                    except asyncio.TimeoutError:
+                        await self._kill_process(process)
+                        logger.warning("Command timed out after {}s", effective_timeout)
+                        return f"Error: Command timed out after {effective_timeout} seconds"
+                    except asyncio.CancelledError:
+                        await self._kill_process(process)
+                        raise
+                    # Normal completion: fall through to post-processing
+                    await process.wait()
+                    stderr_bytes = await process.stderr.read() if process.stderr else b""
+                    stderr_text = stderr_bytes.decode("utf-8", errors="replace")
+                    if stderr_text.strip():
+                        stderr_lines.append(stderr_text)
+                    stdout_text = b"".join(stdout_chunks).decode("utf-8", errors="replace") if stdout_chunks else ""
+                    output_parts = [stdout_text] if stdout_text else []
+                else:
+                    try:
+                        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                            process.communicate(),
+                            timeout=effective_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        await self._kill_process(process)
+                        logger.warning("Command timed out after {}s", effective_timeout)
+                        return f"Error: Command timed out after {effective_timeout} seconds"
+                    except asyncio.CancelledError:
+                        await self._kill_process(process)
+                        raise
+                    stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+                    stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+                    output_parts = []
+                    if stdout_text:
+                        output_parts.append(stdout_text)
+                    if stderr_text.strip():
+                        output_parts.append(f"STDERR:\n{stderr_text}")
+
+            finally:
+                if capture_fh:
+                    capture_fh.close()
 
             exit_code = process.returncode
             status_line = f"Exit: {exit_code}  |  cwd: {cwd.replace('\\', '/')}  |  shell: {'pwsh' if _IS_WINDOWS else 'sh'}"

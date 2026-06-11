@@ -6,6 +6,8 @@ from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Optional
 
+from loguru import logger
+
 try:
     import tomllib
 except ImportError:
@@ -36,7 +38,7 @@ def _resolve_version() -> str:
         if tag:
             return tag
     except Exception:
-        pass
+        logger.debug("Failed to resolve git version")
     try:
         return _pkg_version("nanobot-ai")
     except PackageNotFoundError:

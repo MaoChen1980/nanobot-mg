@@ -112,16 +112,19 @@ class TelegramProxyChannel(BaseProxyChannel):
                     continue
                 ext = os.path.splitext(path)[1].lower()
                 if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"):
-                    future = asyncio.run_coroutine_threadsafe(
-                        self._app.bot.send_photo(chat_id=chat_id, photo=open(path, "rb")),
-                        self._telegram_loop,
-                    )
+                    with open(path, "rb") as fh:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._app.bot.send_photo(chat_id=chat_id, photo=fh),
+                            self._telegram_loop,
+                        )
+                        future.result(timeout=30)
                 else:
-                    future = asyncio.run_coroutine_threadsafe(
-                        self._app.bot.send_document(chat_id=chat_id, document=open(path, "rb")),
-                        self._telegram_loop,
-                    )
-                future.result(timeout=30)
+                    with open(path, "rb") as fh:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._app.bot.send_document(chat_id=chat_id, document=fh),
+                            self._telegram_loop,
+                        )
+                        future.result(timeout=30)
 
             # Send text content after media
             if content:

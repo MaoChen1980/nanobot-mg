@@ -95,7 +95,7 @@ class WriteFileTool(_FsTool):
                 from nanobot.agent.tools.shell import ExecTool
                 exec_tool = ExecTool(
                     working_dir=str(fp.parent),
-                    restrict_to_workspace=False,
+                    restrict_to_workspace=True,
                 )
                 exec_result = f"\n\nExec output:\n{await exec_tool.execute(then_exec)}"
 
@@ -130,7 +130,7 @@ class WriteFileTool(_FsTool):
         from nanobot.agent.tools.shell import ExecTool
 
         wd = self._workspace or fp.parent
-        exec_tool = ExecTool(working_dir=str(wd), restrict_to_workspace=False)
+        exec_tool = ExecTool(working_dir=str(wd), restrict_to_workspace=True)
 
         if checker == "pyright":
             cmd = f"npx --prefix tools pyright {fp} --outputjson"

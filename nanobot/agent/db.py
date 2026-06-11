@@ -24,12 +24,24 @@ class NanobotDB:
     def __init__(self, db_path: Path | str, *, workspace: Path | str | None = None):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.db_path), timeout=30, check_same_thread=False)
-        self._lock = threading.Lock()
-        self._conn.execute("PRAGMA journal_mode = WAL")
-        self._conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            self._conn = sqlite3.connect(str(self.db_path), timeout=30, check_same_thread=False)
+            self._lock = threading.Lock()
+            self._conn.execute("PRAGMA journal_mode = WAL")
+            self._conn.execute("PRAGMA foreign_keys = ON")
+        except sqlite3.DatabaseError:
+            logger.exception("Failed to open database at {}", self.db_path)
+            raise
         self._workspace = Path(workspace) if workspace else Path.home() / ".nanobot" / "workspace"
-        self._init_tables()
+        try:
+            self._init_tables()
+        except sqlite3.DatabaseError:
+            logger.exception(
+                "Database corruption detected at {}. "
+                "Delete the file and restart to recreate it automatically.",
+                self.db_path,
+            )
+            raise
 
     @contextmanager
     def _conn_access(self):
@@ -273,7 +285,11 @@ class NanobotDB:
             if row is None:
                 return None
             created_at, updated_at, metadata_json = row
-            metadata = json.loads(metadata_json)
+            try:
+                metadata = json.loads(metadata_json)
+            except json.JSONDecodeError:
+                logger.warning("Corrupt session metadata for {}", key)
+                return None
             msg_rows = conn.execute(
                 "SELECT role, content, timestamp, extra FROM messages WHERE session_key = ? ORDER BY id",
                 (key,),
@@ -282,16 +298,30 @@ class NanobotDB:
         for role, content, timestamp, extra in msg_rows:
             msg: dict[str, Any] = {"role": role, "content": content, "timestamp": timestamp}
             if extra:
-                parsed_extra = json.loads(extra)
+                try:
+                    parsed_extra = json.loads(extra)
+                except json.JSONDecodeError:
+                    logger.warning("Corrupt message extra in session {}, skipping", key)
+                    continue
                 if parsed_extra.pop("_content_is_json", False):
-                    msg["content"] = json.loads(content)
+                    try:
+                        msg["content"] = json.loads(content)
+                    except json.JSONDecodeError:
+                        logger.warning("Corrupt JSON message content in session {}, skipping", key)
+                        continue
                 msg.update(parsed_extra)
             messages.append(msg)
+        try:
+            created = datetime.fromisoformat(created_at)
+            updated = datetime.fromisoformat(updated_at)
+        except ValueError:
+            logger.warning("Corrupt session timestamps for {}", key)
+            return None
         return Session(
             key=key,
             messages=messages,
-            created_at=datetime.fromisoformat(created_at),
-            updated_at=datetime.fromisoformat(updated_at),
+            created_at=created,
+            updated_at=updated,
             metadata=metadata,
         )
 

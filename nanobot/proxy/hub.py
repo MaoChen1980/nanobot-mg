@@ -542,9 +542,10 @@ class HubTCPServer:
                 if pard.message_id:
                     dk = f"{proxy_key}:{pard.message_id}" if proxy_key else pard.message_id
                     self._seen_message_ids.pop(dk, None)
-                asyncio.create_task(self._route_message(
+                task = asyncio.create_task(self._route_message(
                     item.write_lock, item.writer, item.data, item.peername,
                 ))
+                _track_task(task)
 
         # Route response through proxy_manager so it reaches the CURRENT
         # TCP connection — the proxy may have reconnected during processing.

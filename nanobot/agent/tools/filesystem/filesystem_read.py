@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+import concurrent.futures
 import mimetypes
 import os
 import re
 from pathlib import Path
 from typing import Any
+
+_regex_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+
+def _safe_regex_search(pattern: re.Pattern, text: str, timeout: float = 3.0) -> bool:
+    """Search with timeout to prevent ReDoS from malicious patterns."""
+    fut = _regex_pool.submit(pattern.search, text)
+    try:
+        return fut.result(timeout=timeout) is not None
+    except concurrent.futures.TimeoutError:
+        return False
 
 from loguru import logger
 
@@ -146,7 +158,7 @@ class ReadFileTool(_FsTool):
                 match_idx: set[int] = set()
                 for i, numbered_line in enumerate(numbered):
                     content = numbered_line.split("|", 1)[1] if "|" in numbered_line else numbered_line
-                    if extract_re.search(content):
+                    if _safe_regex_search(extract_re, content):
                         if i > 0:
                             match_idx.add(i - 1)
                         match_idx.add(i)

@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import html
 import json
 import os
 import re
 from typing import TYPE_CHECKING, Any
+
+_regex_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+
+def _safe_regex_search(pattern: re.Pattern, text: str, timeout: float = 3.0) -> bool:
+    """Search with timeout to prevent ReDoS from malicious patterns."""
+    fut = _regex_pool.submit(pattern.search, text)
+    try:
+        return fut.result(timeout=timeout) is not None
+    except concurrent.futures.TimeoutError:
+        return False
 from urllib.parse import quote, urlparse
 
 import httpx
@@ -485,7 +497,7 @@ class WebFetchTool(WebToolBase, Tool):
         lines = body.split("\n")
         match_idx: set[int] = set()
         for i, line in enumerate(lines):
-            if extract_re.search(line):
+            if _safe_regex_search(extract_re, line):
                 if i > 0:
                     match_idx.add(i - 1)
                 match_idx.add(i)

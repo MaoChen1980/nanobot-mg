@@ -171,14 +171,16 @@ def build_subagent_prompt(
         if board_section:
             parts.append(board_section)
 
+    ws_path = workspace.as_posix()
+
     # 8. Thinking framework (three-phase task methodology)
     parts.append(render_template("agent/_snippets/think_framework.md"))
 
     # 9. Framework rules (adapted for subagent)
-    parts.append(render_template("agent/_snippets/subagent_framework.md"))
+    parts.append(render_template("agent/_snippets/subagent_framework.md", workspace_path=ws_path))
 
     # 10. Operating principles (shared rules adapted for subagent)
-    parts.append(render_template("agent/_snippets/subagent_decisions.md"))
+    parts.append(render_template("agent/_snippets/subagent_decisions.md", workspace_path=ws_path))
 
     # 11. Search tool selector
     parts.append(render_template("agent/resolver.md"))
@@ -219,7 +221,7 @@ def build_subagent_prompt(
         "- Do NOT make changes outside your task scope\n"
         "- If the task is impossible or ambiguous, document your reasoning clearly\n"
         "- Return the best result you can within your iteration budget\n"
-        "- **Task plan**: `tasks/TREE.md` and `tasks/CURRENT.md` show the overall plan and where your work fits. Read them for context, update `tasks/CURRENT.md` to report progress.\n\n"
+        f"- **Task plan**: `{ws_path}/tasks/TREE.md` and `{ws_path}/tasks/CURRENT.md` show the overall plan and where your work fits. Read them for context, update `{ws_path}/tasks/CURRENT.md` to report progress.\n\n"
         "**Before starting**: confirm your understanding across these four dimensions. "
         "If any are unclear, use `request_orchestrator_input` to clarify:\n\n"
         "1. **Task** — what exactly to do, what to deliver\n"
@@ -247,7 +249,7 @@ def build_subagent_prompt(
         "- **Capability**: what you've tried, what you found so far\n"
         "- **Boundary**: what you need from the Orchestrator, and why\n"
         "- **Suggestion**: your recommended path forward (if you have one)\n\n"
-        "**Learn from and contribute to the team.** Read and write `tasks/team_board.md`. "
+        f"**Learn from and contribute to the team.** Read and write `{ws_path}/tasks/team_board.md`. "
         "Check it every ~5 iterations: other Subagents may have found something relevant. "
         "Write your own findings, blockers, and insights there. "
         "One Subagent's insight becomes the whole team's advantage.\n\n"
