@@ -497,13 +497,15 @@ def test_exec_extract_absolute_paths_captures_quoted_paths() -> None:
 def test_exec_guard_blocks_home_path_outside_workspace(tmp_path) -> None:
     tool = ExecTool(restrict_to_workspace=True, working_dir=str(tmp_path))
     error = tool._guard_command("cat C:\\Users\\savyc\\.nanobot\\config.json", str(tmp_path))
-    assert error == "Error: Command blocked by safety guard (path outside working dir)"
+    assert "⚠️ Danger:" in error
+    assert "outside" in error.lower()
 
 
 def test_exec_guard_blocks_quoted_home_path_outside_workspace(tmp_path) -> None:
     tool = ExecTool(restrict_to_workspace=True, working_dir=str(tmp_path))
     error = tool._guard_command('cat "C:\\Users\\savyc\\.nanobot\\config.json"', str(tmp_path))
-    assert error == "Error: Command blocked by safety guard (path outside working dir)"
+    assert "⚠️ Danger:" in error
+    assert "outside" in error.lower()
 
 
 def test_exec_guard_allows_media_path_outside_workspace(tmp_path, monkeypatch) -> None:
@@ -553,7 +555,8 @@ def test_exec_guard_blocks_windows_drive_root_outside_workspace(monkeypatch) -> 
 
     tool = ExecTool(restrict_to_workspace=True, working_dir="E:\\workspace")
     error = tool._guard_command("dir E:\\", "E:\\workspace")
-    assert error == "Error: Command blocked by safety guard (path outside working dir)"
+    assert "⚠️ Danger:" in error
+    assert "outside" in error.lower()
 
 
 # --- _resolve_type and nullable param tests ---

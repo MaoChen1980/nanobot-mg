@@ -8,6 +8,7 @@ from loguru import logger
 
 from nanobot.agent.tools import file_state
 from nanobot.agent.tools.base import tool_parameters
+from nanobot.agent.tools.danger import danger_warning
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.utils.compat import dataclass
 from .filesystem_base import _FsTool, _normalize_quotes
@@ -37,6 +38,12 @@ _EDIT_FILE_SCHEMA = build_parameters_schema(
         "If set, searches the edited file for this exact substring (not a regex) after saving, "
         "and returns matching line numbers and content. "
         "Helps verify the edit landed correctly."
+    ),
+    danger_override=p("boolean",
+        "When true, bypasses danger detection for edits that remove large amounts of content. "
+        "Use only after verifying the edit is safe. "
+        "Default: false. Detection re-enables automatically for the next call.",
+        default=False,
     ),
     required=["path", "new_text"],
 )
@@ -167,6 +174,7 @@ class EditFileTool(_FsTool):
         last_line: int | None = None,
         line_tag: str | None = None,  # deprecated, ignored
         then_grep: str | None = None,
+        danger_override: bool = False,
         **kwargs: Any,
     ) -> str:
         try:
@@ -174,6 +182,17 @@ class EditFileTool(_FsTool):
                 raise ValueError("Unknown path")
             if new_text is None:
                 raise ValueError("Unknown new_text")
+
+            # Danger detection: warn when removing large content
+            if not danger_override and old_text and new_text == "" and len(old_text) > 200:
+                return danger_warning(
+                    problem=f"Removing {len(old_text)} characters from {path}",
+                    risk="Large content removal may delete more than intended, "
+                         "especially if old_text matches unexpected locations",
+                    suggestion="Read the file first with read_file_tool to verify the exact text "
+                               "you want to remove, then edit with more surrounding context",
+                    tool_name="edit_file_tool",
+                )
 
             # Line-based mode: replace lines first_line through last_line
             if first_line is not None or last_line is not None:

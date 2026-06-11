@@ -6,6 +6,7 @@ from typing import Any
 from loguru import logger
 
 from nanobot.agent.tools.base import tool_parameters
+from nanobot.agent.tools.danger import check_overwrite_danger, danger_warning
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from .filesystem_base import _FsTool
 from nanobot.agent.tools import file_state
@@ -28,6 +29,12 @@ from nanobot.agent.tools import file_state
             "If set, searches the written file for this exact substring (not a regex) after saving, "
             "and returns matching line numbers and content. "
             "Helps verify the write landed correctly without re-reading the entire file."
+        ),
+        danger_override=p("boolean",
+            "When true, bypasses danger detection (e.g. overwrite warnings). "
+            "Use only after verifying the operation is safe. "
+            "Default: false. Detection re-enables automatically for the next call.",
+            default=False,
         ),
         required=["path", "content"],
     )
@@ -55,6 +62,7 @@ class WriteFileTool(_FsTool):
         then_exec: str | None = None,
         then_check: str | None = None,
         then_grep: str | None = None,
+        danger_override: bool = False,
         **kwargs: Any,
     ) -> str:
         try:
@@ -64,8 +72,28 @@ class WriteFileTool(_FsTool):
                 raise ValueError("Unknown content")
             fp = self._resolve(path)
 
+            # Danger detection: overwriting existing file without reading it first
+            read_check = None
+            if not danger_override and fp.exists():
+                try:
+                    size = fp.stat().st_size
+                except OSError:
+                    size = 0
+                # check_read() returns None when file was read, warning string when not
+                read_check = file_state.check_read(fp)
+                was_read = read_check is None
+                is_danger, reason = check_overwrite_danger(fp, was_read, size)
+                if is_danger:
+                    return danger_warning(
+                        problem=reason,
+                        risk="You may overwrite content you haven't verified — potential data loss",
+                        suggestion="Read the file first with read_file_tool to verify its contents, "
+                                   "or use edit_file_tool for targeted edits",
+                        tool_name="write_file_tool",
+                    )
+
             # Read-before-write check: warn if overwriting unread content
-            warning = file_state.check_read(fp)
+            warning = read_check if read_check is not None else file_state.check_read(fp)
 
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")

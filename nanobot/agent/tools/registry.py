@@ -158,6 +158,10 @@ class ToolRegistry:
         if isinstance(result, str) and result.startswith("Error"):
             return result + " ❌" + _HINT
 
+        # Danger warnings pass through as-is — not errors, no ❌
+        if isinstance(result, str) and result.startswith("⚠️ Danger:"):
+            return result
+
         # Post-validators
         warnings: list[str] = []
         for v in tool._post_validators:
@@ -185,11 +189,14 @@ class ToolRegistry:
         """Standardize result formatting.
 
         - Error strings (starting with ``Error``) get ``❌``.
+        - Danger warnings (starting with ``⚠️ Danger:``) pass through as-is.
         - Single-line success strings get ``✓``.
         - Multi-line results (file contents, exec output) are returned as-is.
         """
         if isinstance(result, str) and result.startswith("Error"):
             return result + " ❌"
+        if isinstance(result, str) and result.startswith("⚠️ Danger:"):
+            return result
         if isinstance(result, str) and "\n" not in result and "✓" not in result:
             return result + " ✓"
         return str(result)

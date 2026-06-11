@@ -29,7 +29,7 @@ async def test_exec_blocks_curl_metadata(tmp_path):
         result = await tool.execute(
             command='curl -s -H "Metadata-Flavor: Google" http://169.254.169.254/computeMetadata/v1/'
         )
-    assert "Error" in result
+    assert "⚠️ Danger:" in result
     assert "internal" in result.lower() or "private" in result.lower()
 
 
@@ -69,7 +69,7 @@ async def test_exec_blocks_chained_internal_url(tmp_path):
         result = await tool.execute(
             command="echo start && curl http://169.254.169.254/latest/meta-data/ && echo done"
         )
-    assert "Error" in result
+    assert "⚠️ Danger:" in result
 
 
 # --- #2826: working_dir must not escape the configured workspace ---------

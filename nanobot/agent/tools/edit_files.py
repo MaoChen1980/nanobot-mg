@@ -11,6 +11,7 @@ from typing import Any
 
 from nanobot.agent.tools import file_state
 from nanobot.agent.tools.base import Tool, Validator, tool_parameters
+from nanobot.agent.tools.danger import danger_warning
 from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
 from nanobot.agent.tools.schema import p, build_parameters_schema
 
@@ -102,6 +103,12 @@ _APPLY_PATCH_SCHEMA = build_parameters_schema(
         "maxItems": 20,
     },
     dry_run=p("boolean", "If true, validate edits and show summary without writing any files. Use this to preview changes first.", default=False),
+    danger_override=p("boolean",
+        "When true, bypasses danger detection for stale files or destructive edits. "
+        "Use only after verifying all edits are safe. "
+        "Default: false. Detection re-enables automatically for the next call.",
+        default=False,
+    ),
     required=["edits"],
 )
 
@@ -161,6 +168,7 @@ class EditFilesTool(_FsTool):
         self,
         edits: list[dict] | None = None,
         dry_run: bool = False,
+        danger_override: bool = False,
         **kwargs: Any,
     ) -> str:
         try:
@@ -301,6 +309,36 @@ class EditFilesTool(_FsTool):
             if dry_run:
                 return "Patch dry-run:\n" + "\n".join(
                     _format_summary(r) for r in results
+                )
+
+            # Danger detection: stale files or destructive edits
+            stale_edits = [r for r in results if r.stale_warning]
+            if stale_edits and not danger_override:
+                stale_paths = "\n".join(
+                    f"  {r.path}: {r.stale_warning}" for r in stale_edits
+                )
+                return danger_warning(
+                    problem=f"{len(stale_edits)} file(s) have changed since last read:\n{stale_paths}",
+                    risk="Editing stale files may undo changes or produce incorrect results",
+                    suggestion=f"Re-read the affected files with read_file_tool, then retry the edit, "
+                               f"or set danger_override=true if you are sure the edits are safe",
+                    tool_name="edit_files_tool",
+                )
+
+            # Dangerous: large content deletion in replace operations
+            destructive_edits = [
+                r for r in results
+                if not r.error and r.action == "replace" and r.added == 0 and r.deleted > 20
+            ]
+            if destructive_edits and not danger_override:
+                destructive_paths = "\n".join(
+                    f"  {r.path}: removing {r.deleted} lines, adding 0 lines" for r in destructive_edits
+                )
+                return danger_warning(
+                    problem=f"{len(destructive_edits)} edit(s) remove content without adding any:\n{destructive_paths}",
+                    risk="Accidental content deletion — may cause data loss",
+                    suggestion="Verify the old_text is correct, or set danger_override=true if the edit is intentional",
+                    tool_name="edit_files_tool",
                 )
 
             # Backup files that will be written

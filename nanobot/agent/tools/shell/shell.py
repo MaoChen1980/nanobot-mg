@@ -118,6 +118,12 @@ def _extract_powershell_inner(command: str) -> str | None:
             "  check=\"python -c \\\"import sys; data=open('{cache}').read(); sys.exit(0 if 'PASS' in data else 1)\\\"\"\n"
             "  check=\"test -f dist/app.exe\""
         ),
+        danger_override=p("boolean",
+            "When true, bypasses danger detection and allows potentially dangerous commands. "
+            "Use only after verifying the operation is safe. "
+            "Default: false. Detection re-enables automatically for the next call.",
+            default=False,
+        ),
         required=["working_dir"],
     )
 )
@@ -209,6 +215,7 @@ class ExecTool(Tool):
         grep: str | None = None, extract: str | None = None,
         from_cache: str | None = None,
         verify: str | None = None, check: str | None = None,
+        danger_override: bool = False,
         **kwargs: Any,
     ) -> str:
         # ── Tool suggestion nudge ──
@@ -248,7 +255,7 @@ class ExecTool(Tool):
             if requested != workspace_root and workspace_root not in requested.parents:
                 return "Error: working_dir is outside the configured workspace"
 
-        guard_error = self._guard_command(command, cwd)
+        guard_error = self._guard_command(command, cwd, danger_override)
         if guard_error:
             return guard_error
 
@@ -780,8 +787,12 @@ class ExecTool(Tool):
         env["NANOBOT_RECURSION_GUARD"] = "1"
         return env
 
-    def _guard_command(self, command: str, cwd: str) -> str | None:
-        """Safety guard for potentially destructive commands."""
+    def _guard_command(self, command: str, cwd: str, danger_override: bool = False) -> str | None:
+        """Safety guard for potentially destructive commands.
+
+        Returns a warning string (not ``"Error"``) when danger is detected,
+        so the LLM can reconsider and retry with ``danger_override=true``.
+        """
         return check_command_safety(
             command=command,
             cwd=cwd,
@@ -789,6 +800,7 @@ class ExecTool(Tool):
             allow_patterns=self.allow_patterns,
             restrict_to_workspace=self.restrict_to_workspace,
             workspace_root=self.working_dir,
+            danger_override=danger_override,
         )
 
     @staticmethod
