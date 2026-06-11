@@ -18,7 +18,7 @@ _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv"
 
 @tool_parameters(
     build_parameters_schema(
-        pattern=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py' (legacy alias: glob)"),
+        pattern=p("string", "Glob pattern to match files, e.g. 'src/**/*.py' or 'tests/*.py'. Can also be an absolute path (e.g. '/path/to/dir/*.py') — path is auto-extracted. (legacy alias: glob)"),
         extract=p("string", "Optional regex — only lines matching this pattern are returned from each file (with 1 line context). Legacy alias: grep"),
         path=p("string", "Absolute path to a directory to search from. Optional if pattern is already an absolute path (path is auto-extracted from pattern)."),
         max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50, default=10),
