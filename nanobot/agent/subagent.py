@@ -245,7 +245,7 @@ class SubagentManager:
                     initial_messages=messages,
                     tools=tools,
                     model=self.model,
-                    max_iterations=max_iterations or 200,
+                    max_iterations=max_iterations or 100,
                     max_tool_result_chars=self.max_tool_result_chars,
                     hook=_SubagentHook(task_id, tools=tools, status=status),
                     max_iterations_message="Task completed but no final response was generated.",

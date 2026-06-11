@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         label=p("string", "Optional short label for the task (for display)"),
         role=p("string", "Optional expert role for the subagent (e.g. 'Python 安全专家', 'SwiftUI 性能优化专家'). If omitted, the subagent auto-identifies its role from the task."),
         output_schema=p("string", "Optional JSON schema describing the expected output format. When provided, the sub-agent will be instructed to structure its response accordingly, making it easier for you to parse and compose results from multiple sub-agents."),
-        max_iterations=p("integer", "Maximum tool call iterations (default 100)", default=100),
+        max_iterations=p("integer", "Maximum tool call iterations (default 100, max 200)", default=100, maximum=200),
         team_context=p("string", "Optional team context: describe other Subagents, their tasks, and dependencies so this Subagent understands its role in the team."),
         required=["task"],
     )
@@ -68,7 +68,7 @@ class SpawnTool(Tool):
             "- The subtask may be time-consuming and you don't want the user to wait\n"
             "- **You are willing to embrace uncertainty**\n\n"
             "## Limitations\n\n"
-            "- Maximum 100 tool-call iterations per subtask (adjustable via `max_iterations` parameter)\n"
+            "- Maximum 200 tool-call iterations per subtask (adjustable via `max_iterations` parameter, default 100)\n"
             "- Can read and execute skills\n"
             "- Cannot nest spawn calls\n"
             "- Cannot use the spawn tool itself\n"

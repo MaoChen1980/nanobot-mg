@@ -24,7 +24,7 @@ if TYPE_CHECKING:
                     "label": {"type": "string", "description": "Optional short label"},
                     "role": {"type": "string", "description": "Optional expert role specification (e.g. 'Python 安全专家')"},
                     "output_schema": {"type": "string", "description": "Optional JSON output schema"},
-                    "max_iterations": {"type": "integer", "description": "Max tool iterations (default 100)"},
+                    "max_iterations": {"type": "integer", "description": "Max tool iterations (default 100, max 200)", "maximum": 200},
                 },
                 "required": ["task"],
             }
