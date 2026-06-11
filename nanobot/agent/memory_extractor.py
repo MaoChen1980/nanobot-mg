@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,6 +81,7 @@ class MemoryExtractor:
         self.failed_dir = ensure_dir(self.prompts_dir / "failed")
         self.processed_dir = ensure_dir(self.prompts_dir / "processed")
         self._last_modified_files: list[str] = []
+        self._pending_tool_scripts: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -149,6 +151,8 @@ class MemoryExtractor:
         # ── Step 3: post-process ──
         changed = recent_entries is not None or self._memory_dir_changed()
 
+        if await self._materialize_tool_scripts():
+            changed = True
         if await self._materialize_skills():
             changed = True
         if await self._consolidate_memory():
@@ -332,6 +336,9 @@ class MemoryExtractor:
                 memory_state.setdefault(rel_path, []).append({
                     "content": paragraph, "ts": ts_num, "pinned": pinned,
                 })
+
+            elif ftype == "tool_script":
+                self._pending_tool_scripts.append(finding)
 
             else:
                 logger.warning("MemoryExtractor: unknown finding type '{}', dropped", ftype)
@@ -533,6 +540,123 @@ class MemoryExtractor:
         return f"- {content}"
 
     # (supersedes is now handled by _supersedes_in_memory + flush-time plan)
+
+    # ------------------------------------------------------------------
+    # Tool/script materialization — tool_script findings → tools/ + pending_skills.md
+    # ------------------------------------------------------------------
+
+    async def _materialize_tool_scripts(self) -> bool:
+        """Process tool_script findings: save to workspace/tools/ and enqueue skills.
+
+        For ``script`` type: copy file to ``workspace/tools/<name>/``.
+        For ``system`` type: no script to copy.
+        Both types write a readme.md to ``workspace/tools/<name>/`` and append an
+        entry to ``pending_skills.md`` so downstream ``_materialize_skills()``
+        can create a full SKILL.md.
+
+        Returns True if any changes were made.
+        """
+        if not self._pending_tool_scripts:
+            return False
+
+        tools_dir = ensure_dir(self.store.workspace / "tools")
+        pending_path = self.store.memory_dir / "pending_skills.md"
+
+        # Build set of existing tool dirs for dedup
+        existing_tools: set[str] = set()
+        if tools_dir.is_dir():
+            for child in tools_dir.iterdir():
+                if child.is_dir():
+                    existing_tools.add(child.name)
+
+        changed = False
+
+        for ts in self._pending_tool_scripts:
+            name = (ts.get("name") or "").strip()
+            tool_type = ts.get("tool_type", "system")
+            description = ts.get("description", "") or ""
+            install_hint = ts.get("install_hint", "") or ""
+            uninstall_hint = ts.get("uninstall_hint", "") or ""
+            usage = ts.get("usage", "") or ""
+            if not name:
+                continue
+
+            # Dedup: skip if already registered
+            if name in existing_tools:
+                logger.debug("MemoryExtractor: tool {} already exists, skipping", name)
+                continue
+
+            # ── Ensure workspace/tools/<name>/ exists ──
+            tool_dir = tools_dir / name
+            tool_dir.mkdir(parents=True, exist_ok=True)
+            existing_tools.add(name)
+
+            # ── Script type: copy file to tools dir ──
+            if tool_type == "script":
+                script_path_str = (ts.get("script_path") or "").strip()
+                if script_path_str:
+                    src = Path(script_path_str)
+                    if src.exists():
+                        dest = tool_dir / src.name
+                        shutil.copy2(src, dest)
+                        logger.info(
+                            "MemoryExtractor: saved script {} → workspace/tools/{}/{}",
+                            src.name, name, src.name,
+                        )
+                    else:
+                        logger.warning(
+                            "MemoryExtractor: script_path '{}' not found, skipping copy for tool '{}'",
+                            script_path_str, name,
+                        )
+
+            # ── Write readme.md (both types) ──
+            readme_parts: list[str] = [
+                f"# {name} — {description}",
+                "",
+            ]
+            if install_hint:
+                readme_parts.extend([
+                    "## Install",
+                    install_hint,
+                    "",
+                ])
+            if uninstall_hint:
+                readme_parts.extend([
+                    "## Uninstall",
+                    uninstall_hint,
+                    "",
+                ])
+            if usage:
+                readme_parts.extend([
+                    "## Usage",
+                    f"    {usage}",
+                    "",
+                ])
+            (tool_dir / "readme.md").write_text(
+                "\n".join(readme_parts), encoding="utf-8"
+            )
+            logger.info("MemoryExtractor: wrote workspace/tools/{}/readme.md", name)
+
+            # ── Append skill entry to pending_skills.md (single-line for clean removal) ──
+            meta_parts = []
+            if install_hint:
+                meta_parts.append(f"Install: {install_hint}")
+            if uninstall_hint:
+                meta_parts.append(f"Uninstall: {uninstall_hint}")
+            if usage:
+                meta_parts.append(f"Usage: {usage}")
+            meta_str = " | ".join(meta_parts)
+            skill_line = f"- **{name}**: {description} — {meta_str}" if meta_str else f"- **{name}**: {description}"
+
+            existing = pending_path.read_text(encoding="utf-8") if pending_path.exists() else ""
+            new_entry = f"\n{skill_line}\n<!--ts:{time.time()}-->"
+            pending_path.write_text(existing.strip() + new_entry + "\n", encoding="utf-8")
+
+            changed = True
+            logger.info("MemoryExtractor: added tool {} to pending_skills.md", name)
+
+        self._pending_tool_scripts = []
+        return changed
 
     # ------------------------------------------------------------------
     # Skill creation — Phase 2: pending_skills.md → skills/<name>/SKILL.md

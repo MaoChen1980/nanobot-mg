@@ -20,7 +20,9 @@ Skill is a form of memory. Memory has storage and retrieval costs. A skill is wo
 
 4. **Not duplicative** — If an existing skill already covers the same workflow, skip.
 
-## Two Types of Skill
+**Note — Tool entries:** Entries tagged with Install/Uninstall/Usage come from the tool discovery pipeline. They represent tools/scripts available on the system. These are **always worth creating** as "tool" type skills — the cost is documenting install/uninstall/usage so it can be reused across sessions and machines.
+
+## Three Types of Skill
 
 ### Execution Skill — "What to do"
 A verified multi-step workflow. Structure:
@@ -65,7 +67,27 @@ A pitfall that appeared repeatedly — knowing when to skip saves as much cost a
 <Concrete example of the trap and the save>
 ```
 
-### Rules for content (both types):
+### Tool Skill — "What's installed and how to use it"
+A system tool or self-written script that needs install/uninstall/usage documentation. Structure:
+
+```markdown
+## When to Use
+<What situation or signal triggers using this tool>
+
+## Install
+<Install command or procedure — pip install / npm install -g / brew install / manual setup>
+
+## Uninstall
+<How to remove the tool — pip uninstall / npm uninstall -g / brew uninstall>
+
+## Usage
+<Common usage patterns and examples>
+
+## Example
+<Concrete usage example with expected output>
+```
+
+### Rules for content (all types):
 - **Frontmatter**: only `name` and `description` — the description is the trigger, make it precise
 - **Keep under 2000 words** — concise and actionable
 - **Information gathering is mandatory** — every skill must describe what context to check before taking action
@@ -79,7 +101,7 @@ Output as JSON:
   "skills": [
     {
       "name": "kebab-case-name",
-      "type": "execution|avoidance",
+      "type": "execution|avoidance|tool",
       "description": "Precise one-line description — when to trigger this skill",
       "content": "---\nname: kebab-case-name\ndescription: ...\n---\n\n# Title\n\nBody..."
     }
