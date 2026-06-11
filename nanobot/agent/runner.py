@@ -11,6 +11,8 @@ from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.assess_me import assess_me as _run_assess_me
+from nanobot.agent.assess_me import build_assessment_message
 from nanobot.agent.context_vars import _current_messages_for_subagent
 from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.agent.tools.registry import ToolRegistry
@@ -138,6 +140,16 @@ class AgentRunResult:
     overflow_summary: str | None = None
 
 
+@dataclass(slots=True)
+class _ToolLoopState:
+    """State tracking for tool-call loop recovery (parameter validation errors)."""
+    tool_name: str = ""
+    error_sig: str = ""
+    count: int = 0
+    level: int = 0  # 0=normal, 1=assess_done, 2=compress_done, 3=max
+    checked_iteration: int = -1
+
+
 class AgentRunner:
     """Run a tool-capable LLM loop without product-layer concerns."""
 
@@ -220,6 +232,7 @@ class AgentRunner:
         had_injections = False
         injection_cycles = 0
         total_retry_count = 0
+        _tool_loop_state = _ToolLoopState()
 
         _current_messages_for_subagent.set(messages)
 
@@ -478,6 +491,40 @@ class AgentRunner:
                 empty_content_retries = 0
                 length_recovery_count = 0
                 await hook.after_iteration(context)
+
+                # Tool loop recovery: detect repeated param validation errors
+                if tool_calls and not fatal_error:
+                    recovery_action = await self._check_tool_loop(
+                        _tool_loop_state, tool_calls, new_events, messages, iteration,
+                    )
+                    if recovery_action == "assess_me":
+                        assess_text = await _run_assess_me(messages)
+                        if assess_text:
+                            messages.append(build_assessment_message(assess_text))
+                            had_injections = True
+                            logger.info(
+                                "Tool loop recovery: injected assess_me "
+                                "(iteration {}, tool={})",
+                                iteration, _tool_loop_state.tool_name,
+                            )
+                    elif recovery_action == "compress":
+                        _trim_to_last_n_turns(messages, keep_turns=2)
+                        logger.info(
+                            "Tool loop recovery: trimmed to last 2 turns "
+                            "(iteration {}, tool={})",
+                            iteration, _tool_loop_state.tool_name,
+                        )
+                    elif recovery_action == "force_stop":
+                        _force_final_response(
+                            messages,
+                            "工具连续调用出错，请检查参数后重试。",
+                        )
+                        final_content = messages[-1]["content"] if messages else "工具调用连续出错"
+                        stop_reason = "tool_loop_breaker"
+                        context.final_content = final_content
+                        context.stop_reason = stop_reason
+                        await hook.after_iteration(context)
+                        break
                 continue
 
             if response.has_tool_calls:
@@ -772,6 +819,65 @@ class AgentRunner:
             return
         messages.append(build_assistant_message(content))
 
+    async def _check_tool_loop(
+        self,
+        state: _ToolLoopState,
+        tool_calls: list,
+        new_events: list,
+        messages: list[dict],
+        iteration: int,
+    ) -> str | None:
+        """Check for repeated parameter validation errors.
+
+        Returns None (no action), "assess_me", "compress", or "force_stop".
+        """
+        if iteration == state.checked_iteration:
+            return None
+        state.checked_iteration = iteration
+
+        # Collect parameter validation errors only
+        param_errors: list[tuple[str, str]] = []
+        for tc, ev in zip(tool_calls, new_events):
+            detail = ev.get("detail", "")
+            if ev.get("status") == "error" and "Invalid parameters" in detail:
+                param_errors.append((tc.name, detail))
+
+        if not param_errors:
+            state.tool_name = ""
+            state.error_sig = ""
+            state.count = 0
+            state.level = 0
+            return None
+
+        tool_name = param_errors[0][0]
+        error_sig = param_errors[0][1][:80]
+
+        if tool_name == state.tool_name and error_sig == state.error_sig:
+            state.count += 1
+        else:
+            state.tool_name = tool_name
+            state.error_sig = error_sig
+            state.count = 1
+            state.level = 0
+            return None
+
+        if state.count < 3:
+            return None
+
+        # Threshold crossed — escalate
+        state.count = 0
+
+        if state.level == 0:
+            state.level = 1
+            return "assess_me"
+        elif state.level == 1:
+            state.level = 2
+            return "compress"
+        elif state.level == 2:
+            state.level = 3
+            return "force_stop"
+        return None
+
     @staticmethod
     def _append_model_error_placeholder(messages: list[dict[str, Any]]) -> None:
         if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
@@ -781,3 +887,32 @@ class AgentRunner:
     # Backward compatibility — delegate to module functions
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)
     _backfill_missing_tool_results = staticmethod(backfill_missing_tool_results)
+
+
+def _trim_to_last_n_turns(messages: list[dict], keep_turns: int = 2) -> None:
+    """Keep system prompt + last N assistant-tool exchanges, discard the rest."""
+    if not messages or messages[0].get("role") != "system":
+        return
+    assistant_indices = []
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "assistant" and messages[i].get("tool_calls"):
+            assistant_indices.append(i)
+            if len(assistant_indices) >= keep_turns:
+                break
+    if not assistant_indices:
+        return
+    cutoff = assistant_indices[-1]
+    if cutoff > 1:
+        cutoff -= 1  # include preceding user message
+    new = messages[:1] + messages[cutoff:]
+    messages[:] = new
+
+
+def _force_final_response(messages: list[dict], text: str) -> str:
+    """Strip the last broken tool-call turn and append a final text response."""
+    if messages and messages[-1].get("role") == "assistant" and messages[-1].get("tool_calls"):
+        messages.pop()
+    while messages and messages[-1].get("role") == "tool":
+        messages.pop()
+    messages.append(build_assistant_message(text))
+    return text

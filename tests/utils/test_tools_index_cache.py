@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 
 from nanobot.utils.tools_index import rebuild_tools_index, _tools_index_cache
@@ -14,6 +16,13 @@ def _make_tool(workspace: Path, name: str, readme_content: str | None = None) ->
     if readme_content is not None:
         (tool_dir / "readme.md").write_text(readme_content, encoding="utf-8")
     return tool_dir
+
+
+def _write_file(path: Path, content: str) -> None:
+    """Write a file and ensure mtime changes (Windows has coarse mtime granularity)."""
+    path.write_text(content, encoding="utf-8")
+    new_mtime = time.time() + 1
+    os.utime(path, (new_mtime, new_mtime))
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +108,9 @@ def test_cache_invalidated_by_modified_readme(tmp_path):
     content_before = rebuild_tools_index(tmp_path)
     assert "Old Description" in content_before
 
-    (tmp_path / "tools" / "test-tool" / "readme.md").write_text(
-        "# New Description\n\nNew content", encoding="utf-8"
+    _write_file(
+        tmp_path / "tools" / "test-tool" / "readme.md",
+        "# New Description\n\nNew content",
     )
     content_after = rebuild_tools_index(tmp_path)
     assert "New Description" in content_after

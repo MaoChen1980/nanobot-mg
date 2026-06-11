@@ -7,9 +7,10 @@ from pathlib import Path
 from importlib.resources import files as pkg_files
 from loguru import logger
 
-# Module-level cache: workspace_path -> (dir_exists, max_mtime, content)
+# Module-level cache: workspace_path -> (dir_exists, max_mtime, tool_count, content)
 # Only regenerates TOOLS.md when tools/ directory content actually changes.
-_tools_index_cache: dict[str, tuple[bool, float, str]] = {}
+# tool_count prevents stale cache when one tool replaces another at same mtime.
+_tools_index_cache: dict[str, tuple[bool, float, int, str]] = {}
 
 
 _GUIDE_SECTION = """\
@@ -96,10 +97,12 @@ def rebuild_tools_index(workspace: Path) -> str:
     # Compute current state signature
     dir_exists = tools_dir.is_dir()
     max_mtime = 0.0
+    tool_count = 0
     if dir_exists:
         for child in sorted(tools_dir.iterdir()):
             if not child.is_dir():
                 continue
+            tool_count += 1
             try:
                 max_mtime = max(max_mtime, child.stat().st_mtime)
             except OSError:
@@ -113,8 +116,8 @@ def rebuild_tools_index(workspace: Path) -> str:
 
     # Return cached content if nothing changed
     cached = _tools_index_cache.get(ws_key)
-    if cached is not None and cached[0] == dir_exists and cached[1] == max_mtime:
-        return cached[2]
+    if cached is not None and cached[0] == dir_exists and cached[1] == max_mtime and cached[2] == tool_count:
+        return cached[3]
 
     # Build index
     entries: list[dict[str, str]] = []
@@ -141,7 +144,7 @@ def rebuild_tools_index(workspace: Path) -> str:
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "TOOLS.md").write_text(output, encoding="utf-8")
 
-    _tools_index_cache[ws_key] = (dir_exists, max_mtime, output)
+    _tools_index_cache[ws_key] = (dir_exists, max_mtime, tool_count, output)
     return output
 
 
