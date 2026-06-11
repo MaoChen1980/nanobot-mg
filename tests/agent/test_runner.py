@@ -1234,6 +1234,266 @@ class TestLogToolCall:
 
 
 @pytest.mark.asyncio
+# ===========================================================================
+# Tool loop recovery — _check_tool_loop, _trim_to_last_n_turns, _force_final_response
+# ===========================================================================
+
+
+class TestTrimToLastNTurns:
+    """Module-level _trim_to_last_n_turns."""
+
+    def test_keeps_last_two_turns(self):
+        from nanobot.agent.runner import _trim_to_last_n_turns
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1", "tool_calls": [{"id": "tc1"}]},
+            {"role": "tool", "content": "r1", "tool_call_id": "tc1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2", "tool_calls": [{"id": "tc2"}]},
+            {"role": "tool", "content": "r2", "tool_call_id": "tc2"},
+            {"role": "user", "content": "q3"},
+            {"role": "assistant", "content": "a3", "tool_calls": [{"id": "tc3"}]},
+            {"role": "tool", "content": "r3", "tool_call_id": "tc3"},
+        ]
+        _trim_to_last_n_turns(msgs)
+        assert msgs[0]["role"] == "system"
+        # System + last 2 turns (each: user → assistant(tc) → tool) = 1 + 6 = 7
+        assert len(msgs) == 7
+        # First turn (q1+a1+r1) should be discarded
+        assert all(m["content"] != "q1" for m in msgs)
+        assert all(m["content"] != "a1" for m in msgs)
+
+    def test_keeps_system_prompt(self):
+        from nanobot.agent.runner import _trim_to_last_n_turns
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": "a", "tool_calls": [{"id": "tc"}]},
+            {"role": "tool", "content": "r", "tool_call_id": "tc"},
+        ]
+        _trim_to_last_n_turns(msgs)
+        assert msgs[0]["role"] == "system"
+        assert msgs[0]["content"] == "sys"
+
+    def test_empty_or_no_system_returns_early(self):
+        from nanobot.agent.runner import _trim_to_last_n_turns
+        msgs: list = []
+        _trim_to_last_n_turns(msgs)
+        assert msgs == []
+
+        msgs2 = [{"role": "user", "content": "hi"}]
+        _trim_to_last_n_turns(msgs2)
+        assert len(msgs2) == 1
+
+    def test_fewer_turns_keeps_everything(self):
+        from nanobot.agent.runner import _trim_to_last_n_turns
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": "a", "tool_calls": [{"id": "tc"}]},
+            {"role": "tool", "content": "r", "tool_call_id": "tc"},
+        ]
+        original_len = len(msgs)
+        _trim_to_last_n_turns(msgs)
+        assert len(msgs) == original_len
+
+
+class TestForceFinalResponse:
+    """Module-level _force_final_response."""
+
+    def test_strips_tool_call_turn_and_appends(self):
+        from nanobot.agent.runner import _force_final_response
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "tc1"}]},
+            {"role": "tool", "content": "r", "tool_call_id": "tc1"},
+        ]
+        _force_final_response(msgs, "done")
+        assert msgs[-1]["role"] == "assistant"
+        assert msgs[-1]["content"] == "done"
+        assert "tool_calls" not in msgs[-1]
+
+    def test_strips_multiple_tool_results(self):
+        from nanobot.agent.runner import _force_final_response
+        msgs = [
+            {"role": "system", "content": "sys"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "tc1"}, {"id": "tc2"}]},
+            {"role": "tool", "content": "r1", "tool_call_id": "tc1"},
+            {"role": "tool", "content": "r2", "tool_call_id": "tc2"},
+        ]
+        _force_final_response(msgs, "final")
+        # Tool results stripped, assistant tool-call message kept, final appended
+        assert all(m["role"] != "tool" for m in msgs)
+        assert msgs[-1]["role"] == "assistant"
+        assert msgs[-1]["content"] == "final"
+
+    def test_empty_messages(self):
+        from nanobot.agent.runner import _force_final_response
+        msgs: list = []
+        _force_final_response(msgs, "done")
+        assert len(msgs) == 1
+        assert msgs[0]["content"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_no_param_errors_returns_none():
+    """No parameter validation errors → no action."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState()
+    tool_calls = [MagicMock(name="get_weather")]
+    new_events = [{"status": "success", "detail": "ok"}]
+
+    result = await runner._check_tool_loop(state, tool_calls, new_events, [], iteration=1)
+    assert result is None
+    assert state.count == 0
+    assert state.level == 0
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_first_error_starts_tracking():
+    """First param error sets name/sig and count=1."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState()
+    tc = MagicMock(name="get_weather")
+    ev = {"status": "error", "detail": "Invalid parameters for tool 'get_weather': missing 'city'"}
+
+    result = await runner._check_tool_loop(state, [tc], [ev], [], iteration=1)
+    assert result is None  # first hit, doesn't escalate
+    assert state.count == 1
+    assert state.level == 0
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_three_hits_escalates_to_assess_me():
+    """Three consecutive same errors → 'assess_me' at level 0."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState()
+    tc = MagicMock(name="get_weather")
+    ev = {"status": "error", "detail": "Invalid parameters for tool 'get_weather': missing 'city'"}
+
+    # Two hits → tracking, no action
+    await runner._check_tool_loop(state, [tc], [ev], [], iteration=1)
+    await runner._check_tool_loop(state, [tc], [ev], [], iteration=2)
+    assert state.count == 2
+
+    # Third hit → assess_me
+    result = await runner._check_tool_loop(state, [tc], [ev], [], iteration=3)
+    assert result == "assess_me"
+    assert state.count == 0  # reset after escalation
+    assert state.level == 1
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_escalates_to_compress():
+    """Next three same errors after assess_me → 'compress' at level 1."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState(
+        level=1, count=0, tool_name="get_weather",
+        error_sig="Invalid parameters for tool 'get_weather': missing 'city'",
+        checked_iteration=0,
+    )
+    from unittest.mock import PropertyMock
+    tc = MagicMock()
+    type(tc).name = PropertyMock(return_value="get_weather")
+    ev = {"status": "error", "detail": "Invalid parameters for tool 'get_weather': missing 'city'"}
+
+    await runner._check_tool_loop(state, [tc], [ev], [], iteration=1)
+    await runner._check_tool_loop(state, [tc], [ev], [], iteration=2)
+
+    result = await runner._check_tool_loop(state, [tc], [ev], [], iteration=3)
+    assert result == "compress"
+    assert state.level == 2
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_escalates_to_force_stop():
+    """Next three same errors after compress → 'force_stop' at level 2."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState(
+        level=2, count=0, tool_name="get_weather",
+        error_sig="Invalid parameters for tool 'get_weather': missing 'city'",
+        checked_iteration=0,
+    )
+    from unittest.mock import PropertyMock
+    tc = MagicMock()
+    type(tc).name = PropertyMock(return_value="get_weather")
+    ev = {"status": "error", "detail": "Invalid parameters for tool 'get_weather': missing 'city'"}
+
+    await runner._check_tool_loop(state, [tc], [ev], [], iteration=1)
+    await runner._check_tool_loop(state, [tc], [ev], [], iteration=2)
+
+    result = await runner._check_tool_loop(state, [tc], [ev], [], iteration=3)
+    assert result == "force_stop"
+    assert state.level == 3
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_different_tool_resets():
+    """Different tool name resets counter and level."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState()
+
+    from unittest.mock import PropertyMock
+    tc1 = MagicMock()
+    type(tc1).name = PropertyMock(return_value="tool_a")
+    ev1 = {"status": "error", "detail": "Invalid parameters for tool 'tool_a': bad"}
+
+    tc2 = MagicMock()
+    type(tc2).name = PropertyMock(return_value="tool_b")
+    ev2 = {"status": "error", "detail": "Invalid parameters for tool 'tool_b': bad"}
+
+    await runner._check_tool_loop(state, [tc1], [ev1], [], iteration=1)
+    assert state.tool_name == "tool_a"
+
+    # Different tool resets
+    await runner._check_tool_loop(state, [tc2], [ev2], [], iteration=2)
+    assert state.tool_name == "tool_b"
+    assert state.count == 1
+    assert state.level == 0
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_same_iteration_skipped():
+    """Calling with same iteration returns None (idempotent guard)."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState(checked_iteration=5)
+
+    result = await runner._check_tool_loop(state, [], [], [], iteration=5)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_check_tool_loop_non_param_errors_ignored():
+    """Errors that don't contain 'Invalid parameters' are not tracked."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState()
+    tc = MagicMock(name="exec_tool")
+    ev = {"status": "error", "detail": "ExecutionError: command not found"}
+
+    result = await runner._check_tool_loop(state, [tc], [ev], [], iteration=1)
+    assert result is None
+    assert state.count == 0
+    assert state.tool_name == ""
+
+
 async def test_tool_result_with_surrogate_does_not_crash():
     """A tool returning a dict with surrogates should not crash the runner."""
     from nanobot.agent.runner import AgentRunSpec, AgentRunner
