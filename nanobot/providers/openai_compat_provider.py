@@ -336,7 +336,7 @@ class OpenAICompatProvider(LLMProvider):
         # httpx does not preemptively raise ReadTimeout during long streaming
         # gaps (e.g. reasoning models that pause >120s between chunks).
         # The actual per-chunk guard is asyncio.wait_for in chat_stream().
-        idle_read_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "900"))
+        idle_read_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "300"))
         t = httpx.Timeout(timeout_s, read=idle_read_timeout_s, pool=None)
         http_client: httpx.AsyncClient | None = None
         if _is_local_endpoint(spec, effective_base):
@@ -1371,7 +1371,7 @@ class OpenAICompatProvider(LLMProvider):
         on_content_delta: Callable[[str], Awaitable[None]] | None = None,
         on_reasoning_delta: Callable[[str], Awaitable[None]] | None = None,
     ) -> LLMResponse:
-        idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "900"))
+        idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "300"))
         stream = None
         try:
             if self._should_use_responses_api(model, reasoning_effort):
