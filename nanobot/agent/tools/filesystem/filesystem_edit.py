@@ -17,10 +17,12 @@ from .filesystem_base import _FsTool, _normalize_quotes
 _EDIT_FILE_SCHEMA = build_parameters_schema(
     path=p("string", "Absolute path to a file to edit. Directories and special files are rejected."),
     old_text=p("string", "Text to find and replace. Must match EXACTLY and be UNIQUE in the file — include surrounding lines for disambiguation, or set replace_all=true. "
-        "Leave empty (or omit) to prepend new_text at file beginning. Pair with first_line+last_line for line-range mode instead of text matching."),
+        "Leave empty to create a new file (errors if file already exists with content). "
+        "Pair with first_line+last_line for line-range mode instead of text matching."),
     new_text=p("string", "REQUIRED in all modes. Replacement text. "
         "Pass empty string to delete old_text. "
-        "When used with first_line+last_line (no old_text), replaces the entire line range."),
+        "When used with first_line+last_line (no old_text), replaces the entire line range.",
+        minLength=0),
     replace_all=p("boolean",
         "Replace all occurrences (default false). "
         "When old_text appears multiple times and replace_all=false, "
@@ -217,7 +219,7 @@ class EditFileTool(_FsTool):
                 return result
 
             if old_text is None:
-                raise ValueError("Unknown old_text")
+                return "Error: old_text is required in text-match mode. Omit old_text only when using first_line+last_line for line-range replacement."
 
             # .ipynb detection
             if path.endswith(".ipynb"):

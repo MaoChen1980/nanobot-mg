@@ -83,7 +83,7 @@ _EDIT_ITEM_SCHEMA = {
         "path": p("string", "Absolute path to the file to edit. Must not contain '..'."),
         "action": p("string", "Operation: 'replace' to replace exact old_text with new_text; 'add' to append to file or create new file.", enum=["replace", "add"]),
         "old_text": p("string", "Required for replace. Exact text to search for — must be unique in the file. Include enough surrounding context for disambiguation.", nullable=True),
-        "new_text": p("string", "Required for replace and add. For replace: text to replace old_text with. For add: content to append (or file content if creating new file).", nullable=True),
+        "new_text": p("string", "Required for replace and add. For replace: text to replace old_text with. For add: content to append (or file content if creating new file)."),
         "then_grep": p("string",
             "Optional. After writing, search the file for this exact substring and return "
             "matching lines + line numbers to verify the edit landed correctly. "

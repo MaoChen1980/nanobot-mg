@@ -165,6 +165,7 @@ class GlobTool(_SearchTool):
                 "path": {
                     "type": "string",
                     "description": "Absolute path to a directory to search in. **Required.**",
+                    "minLength": 1,
                 },
                 "max_results": {
                     "type": "integer",
@@ -296,6 +297,7 @@ class GrepTool(_SearchTool):
                 "path": {
                     "type": "string",
                     "description": "Absolute path to a file or directory to search in. **Required.**",
+                    "minLength": 1,
                 },
                 "glob": {
                     "type": "string",

@@ -65,8 +65,8 @@ _LANG_PATTERNS: dict[str, list[tuple[str, str]]] = {
         path=p("string", "Absolute path to a file or directory to explore."),
         max_level=p("integer", "Maximum depth for directory listing (default 3, max 5). Depth=1 lists top-level; depth=3 shows subdirectories 3 levels deep.", minimum=1, maximum=5, default=3),
         show_refs=p("boolean", "Show a sample of internal references for each symbol (default true)", default=True),
+        required=["path"],
     ),
-    required=["path"],
 )
 class ExploreModuleTool(_FsTool):
     """Get a bird's-eye view of a code module — classes, functions, their signatures and line numbers."""

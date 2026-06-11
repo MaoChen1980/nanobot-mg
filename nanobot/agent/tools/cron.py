@@ -22,7 +22,8 @@ _CRON_PARAMETERS = build_parameters_schema(
     message=p("string",
         "REQUIRED when action='add'. Instruction for the agent to execute when the job triggers "
         "(e.g., 'Send a reminder to WeChat: xxx' or 'Check system status and report'). "
-        "Not used for action='list' or action='remove'."
+        "Not used for action='list' or action='remove'.",
+        minLength=1,
     ),
     every_seconds=p("integer", "Interval in seconds (for recurring tasks)"),
     cron_expr=p("string", "Cron expression like '0 9 * * *' (for scheduled tasks)"),
@@ -39,7 +40,9 @@ _CRON_PARAMETERS = build_parameters_schema(
     ),
     job_id=p("string", "REQUIRED for action='remove', 'update', or 'test'. "
         "Optional when inside a cron job (defaults to current job). "
-        "Obtain via action='list'."),
+        "Obtain via action='list'.",
+        minLength=1,
+    ),
     dry_run=p("boolean",
         "For action='test': run without delivering result to user channel. "
         "Use this to test the task without sending messages.",

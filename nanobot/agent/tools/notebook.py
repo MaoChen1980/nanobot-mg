@@ -52,7 +52,7 @@ def _make_empty_notebook() -> dict:
             "Mode: 'replace' overwrites cell at cell_index, 'insert' adds a new cell after cell_index, 'delete' removes cell at cell_index",
             enum=["replace", "insert", "delete"], default="replace",
         ),
-        required=["path", "cell_index"],
+        required=["path"],
     )
 )
 class NotebookEditTool(_FsTool):

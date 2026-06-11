@@ -24,8 +24,8 @@ _IGNORE_DIRS = frozenset({".git", "node_modules", "__pycache__", ".venv", "venv"
         max_files=p("integer", "Maximum number of files to read (default 10, max 50)", minimum=1, maximum=50, default=10),
         max_lines=p("integer", "Maximum lines per file (default 2000, max 5000). Most files fit within 2000 lines — increase if file is longer.",
             minimum=1, maximum=5000, default=2000),
+        required=["pattern"],
     ),
-    required=["pattern"],
 )
 class ReadFilesTool(_FsTool):
     """Read multiple files at once by glob pattern — no more glob→read loops."""

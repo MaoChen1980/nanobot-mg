@@ -131,7 +131,7 @@ class SelfTool(Tool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["check", "set"],
+                    "enum": ["check", "set", "inspect", "modify"],
                     "description": "Action: 'check' (view config) or 'set' (modify config or store scratchpad notes)",
                 },
                 "key": {
@@ -139,7 +139,7 @@ class SelfTool(Tool):
                     "description": "Dot-path for check/set. Examples: 'max_iterations', 'workspace', 'provider_retry_mode'. "
                     "For check without key, shows all config values.",
                 },
-                "value": {"type": "string", "description": "New value (for set). Type must match target (int for max_iterations/context_window_tokens, str for model)."},
+                "value": {"type": ["string", "integer", "boolean", "number"], "description": "New value (for set). Type must match target (int for max_iterations/context_window_tokens, str for model)."},
             },
             "required": ["action"],
         }

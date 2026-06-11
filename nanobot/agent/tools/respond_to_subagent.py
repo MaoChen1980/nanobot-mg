@@ -36,7 +36,7 @@ class RespondToSubagentTool(Tool):
             "- A Subagent requests input and needs your decision\n"
             "- A Subagent reports a blocker and you have a solution\n\n"
             "**Notes**:\n"
-            "- Use the Subagent's label as subagent_id (not task_id)\n"
+            "- Use the Subagent's label (not task_id)\n"
             "- If the Subagent has timed out, the reply is ignored\n"
             "- Make responses clear and actionable so the Subagent can proceed directly"
         )

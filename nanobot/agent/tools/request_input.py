@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 @tool_parameters(
     build_parameters_schema(
         question=p("string", "The question for the Orchestrator"),
-        context=p("string", "Optional context to help the Orchestrator understand the question"),
-        timeout=p("number", "Seconds to wait before continuing autonomously (default 300)"),
+        context=p("string", "Optional context to help the Orchestrator understand the question", default=""),
+        timeout=p("number", "Seconds to wait before continuing autonomously (default 300)", default=300),
         required=["question"],
     )
 )

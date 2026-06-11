@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         label=p("string", "Optional short label for the task (for display)"),
         role=p("string", "Optional expert role for the subagent (e.g. 'Python 安全专家', 'SwiftUI 性能优化专家'). If omitted, the subagent auto-identifies its role from the task."),
         output_schema=p("string", "Optional JSON schema describing the expected output format. When provided, the sub-agent will be instructed to structure its response accordingly, making it easier for you to parse and compose results from multiple sub-agents."),
-        max_iterations=p("integer", "Maximum tool call iterations (default 100)"),
+        max_iterations=p("integer", "Maximum tool call iterations (default 100)", default=100),
         team_context=p("string", "Optional team context: describe other Subagents, their tasks, and dependencies so this Subagent understands its role in the team."),
         required=["task"],
     )

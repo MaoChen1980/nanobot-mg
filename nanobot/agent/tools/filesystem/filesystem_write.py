@@ -14,7 +14,7 @@ from nanobot.agent.tools import file_state
 @tool_parameters(
     build_parameters_schema(
         path=p("string", "Absolute path to a file to write. OVERWRITES existing file, auto-creates parent directories."),
-        content=p("string", "Full file content to write. Replaces entire file — use edit_file_tool for partial edits or substitutions."),
+        content=p("string", "Full file content to write. Replaces entire file — use edit_file_tool for partial edits or substitutions.", minLength=0),
         then_exec=p("string",
             "If set to a shell command string, executes it after writing (and after then_check if set) "
             "and returns the command output. Working directory is the written file's parent. "
