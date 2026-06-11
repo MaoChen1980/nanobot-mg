@@ -100,6 +100,204 @@ class TestBuildAssessmentMessage:
         assert msg["content"].startswith(_ASSESSMENT_PREFIX)
         assert "test analysis" in msg["content"]
 
+    def test_no_tailing_directive(self) -> None:
+        """Verify the injected message has no trailing instruction.
+
+        The assessment should be purely informational — no call to action
+        appended after the [/assess] marker.
+        """
+        msg = build_assessment_message("some analysis")
+        content = msg["content"]
+        # Should end with [/assess], not with any directive text
+        assert content.rstrip().endswith("[/assess]")
+        # Assert the old Chinese directive is gone
+        assert "请继续按计划推进" not in content
+
+
+# =========================================================================
+# _maybe_assess — interval trigger logic (assistant_count)
+# =========================================================================
+
+
+class TestMaybeAssess:
+    """Test _maybe_assess triggers correctly with assistant_count.
+
+    The interval trigger should fire based on LLM assistant turns, not user
+    messages — so dense tool-call sequences get periodic direction checks.
+    """
+
+    def _make_handler(self):
+        from nanobot.agent.loop import AgentLoop
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+
+        loop = MagicMock(spec=AgentLoop)
+        return UserMessageHandler(loop)
+
+    def _make_msgs(self, n_assistants: int) -> list[dict]:
+        """Build alternating user/assistant messages with *n_assistants* assistant turns."""
+        msgs: list[dict] = []
+        for i in range(n_assistants):
+            msgs.append({"role": "user", "content": f"msg {i}"})
+            msgs.append({"role": "assistant", "content": f"resp {i}"})
+        return msgs
+
+    @pytest.mark.asyncio
+    async def test_no_trigger_when_few_assistants(self) -> None:
+        """assistant_count < interval (10) → no trigger."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(4)  # 4 assistant, 8 total
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            await handler._maybe_assess(session, history)
+            mock_assess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_no_trigger_on_first_turn(self) -> None:
+        """assistant_count == 0 → no trigger (clean session)."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = []
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            await handler._maybe_assess(session, history)
+            mock_assess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_trigger_at_interval(self) -> None:
+        """assistant_count % 10 == 0 → trigger assess_me."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(10)  # 10 assistant, 20 total
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = "analysis at 10"
+            await handler._maybe_assess(session, history)
+
+            mock_assess.assert_called_once()
+            # Verify assessment was injected into history
+            assert any(
+                m.get("role") == "user" and "[assess]" in m.get("content", "")
+                for m in history
+            )
+
+    @pytest.mark.asyncio
+    async def test_trigger_at_multiple_of_interval(self) -> None:
+        """assistant_count == 20 also triggers (next multiple)."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(20)
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = "analysis at 20"
+            await handler._maybe_assess(session, history)
+
+            mock_assess.assert_called_once()
+            assert any(
+                m.get("role") == "user" and "[assess]" in m.get("content", "")
+                for m in history
+            )
+
+    @pytest.mark.asyncio
+    async def test_no_trigger_just_past_interval(self) -> None:
+        """assistant_count == 11 (just past 10, 11%10=1) → no trigger."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(11)
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            await handler._maybe_assess(session, history)
+            mock_assess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_compress_triggers_regardless_of_count(self) -> None:
+        """compress_triggered=True fires even with 0 assistants."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = []
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = "post-compress analysis"
+            await handler._maybe_assess(session, history, compress_triggered=True)
+
+            mock_assess.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_no_inject_when_assess_empty(self) -> None:
+        """Empty assess_me result → history unchanged."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(10)
+        history = session.format_history()
+        original_len = len(history)
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = ""
+            await handler._maybe_assess(session, history)
+
+            assert len(history) == original_len, "history should not grow on empty result"
+
+    @pytest.mark.asyncio
+    async def test_handles_assess_exception_gracefully(self) -> None:
+        """Exception in assess_me → handled, no crash, no injection."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(10)
+        history = session.format_history()
+        original_len = len(history)
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.side_effect = RuntimeError("LLM down")
+            await handler._maybe_assess(session, history)
+
+            assert len(history) == original_len, "history unchanged after exception"
+
+    @pytest.mark.asyncio
+    async def test_only_assistant_count_matters_not_user_count(self) -> None:
+        """Many user messages but few assistant → no trigger.
+
+        This is the key behavioral change: dense user messages without
+        corresponding LLM turns should not trigger assess_me.
+        """
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        # 15 user messages but only 5 assistant responses
+        msgs: list[dict] = []
+        for i in range(15):
+            msgs.append({"role": "user", "content": f"msg {i}"})
+        for i in range(5):
+            msgs.append({"role": "assistant", "content": f"resp {i}"})
+        session.messages = msgs
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            await handler._maybe_assess(session, history)
+            mock_assess.assert_not_called()
+
 
 # =========================================================================
 # is_assessment_message
@@ -442,3 +640,64 @@ class TestRunnerAssessMeSpec:
             assess_me_callback=dummy,
         )
         assert spec.assess_me_callback is dummy
+
+
+# =========================================================================
+# assess_me.md template — field coverage
+# =========================================================================
+
+
+class TestAssessMeTemplate:
+    """Verify the assess_me.md template includes the new Thinking patterns field."""
+
+    def test_includes_thinking_patterns(self) -> None:
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/assess_me.md",
+            conversation="user: hello\nassistant: hi",
+            verify="",
+        )
+        assert "Thinking patterns" in content, (
+            "Template should include the Thinking patterns field"
+        )
+
+    def test_renders_without_verify(self) -> None:
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/assess_me.md",
+            conversation="user: hello",
+        )
+        assert "Thinking patterns" in content
+        assert "Items to Verify" not in content
+
+    def test_renders_with_verify(self) -> None:
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/assess_me.md",
+            conversation="user: hello",
+            verify="Claim A is true\nClaim B is false",
+        )
+        assert "Items to Verify" in content
+        assert "Claim A is true" in content
+        assert "Claim B is false" in content
+
+    def test_renders_from_assess_me_function(self) -> None:
+        """Integration: assess_me() renders template with Thinking patterns."""
+        from nanobot.agent.assess_me import format_conversation
+
+        conv = format_conversation([
+            {"role": "user", "content": "check this"},
+        ])
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/assess_me.md",
+            conversation=conv,
+            verify="",
+        )
+        # The formatted conversation should appear in the prompt
+        assert "check this" in content
+        assert "Thinking patterns" in content

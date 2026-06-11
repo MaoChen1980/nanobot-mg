@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
-import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 if TYPE_CHECKING:
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.bus.events import InboundMessage, OutboundMessage
+    from nanobot.bus.events import OutboundMessage
 
 from nanobot.agent.context import ContextState
 from nanobot.bus.events import OutboundMessage
-from nanobot.session.manager import Session
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.memory_extractor import MemoryExtractor
 from nanobot.agent.tools.message import MessageTool
@@ -69,7 +65,6 @@ class SystemMessageHandler:
         logger.info("Processing system message from {}", msg.sender_id)
         key = msg.session_key_override or f"{channel}:{chat_id}"
         session = self._loop.lifecycle.prepare(key)
-        pending = None
         # Subagent messages arrive on "system" channel from _inject_to_orchestrator,
         # identified by _origin_channel/_origin_chat_id metadata.
         is_subagent = bool(msg.metadata.get("_origin_channel"))
@@ -320,13 +315,14 @@ class UserMessageHandler:
         if compress_triggered:
             trigger = True
 
-        # (2) Interval trigger
+        # (2) Interval trigger — count LLM turns, not user messages
+        # Dense tool-call sequences need periodic direction checks too
         if not trigger:
-            user_count = sum(
+            assistant_count = sum(
                 1 for m in session.messages
-                if m.get("role") == "user"
+                if m.get("role") == "assistant"
             )
-            if user_count > 0 and user_count % _DEFAULT_ASSESS_INTERVAL == 0:
+            if assistant_count > 0 and assistant_count % _DEFAULT_ASSESS_INTERVAL == 0:
                 trigger = True
 
         if not trigger:
@@ -437,7 +433,6 @@ class UserMessageHandler:
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
         """Format the final OutboundMessage for the user."""
-        import re
         if not msg.ephemeral and (mt := self._loop.tools.get("message_tool")) and isinstance(mt, MessageTool) and mt._sent_in_turn:
             if not had_injections or stop_reason == "empty_final_response":
                 return None

@@ -17,4 +17,4 @@ _DEFAULT_RETRY_BACKOFF_JITTER = 0.1
 # ----------------------------------------------------------------------
 # AssessMe defaults
 # ----------------------------------------------------------------------
-_DEFAULT_ASSESS_INTERVAL = 10  # every N user messages
+_DEFAULT_ASSESS_INTERVAL = 10  # every N LLM assistant turns

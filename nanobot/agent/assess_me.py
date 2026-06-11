@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from loguru import logger
 
 from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.utils.prompt_templates import render_template
@@ -87,7 +86,7 @@ def build_assessment_message(text: str) -> dict[str, Any]:
     """Build a *user*-role message for injecting an assessment into history."""
     return {
         "role": "user",
-        "content": f"{_ASSESSMENT_PREFIX}\n{text.strip()}{_ASSESSMENT_SUFFIX}\n\n请继续按计划推进。",
+        "content": f"{_ASSESSMENT_PREFIX}\n{text.strip()}{_ASSESSMENT_SUFFIX}",
     }
 
 
