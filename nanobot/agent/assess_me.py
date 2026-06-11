@@ -83,7 +83,13 @@ async def assess_me(
     if resp.finish_reason == "error":
         logger.warning("assess_me LLM call failed: {}", (resp.content or "")[:200])
         return ""
-    return (resp.content or "").strip()
+    if not resp.content:
+        logger.warning(
+            "assess_me LLM returned empty content (finish_reason={})",
+            resp.finish_reason,
+        )
+        return ""
+    return resp.content.strip()
 
 
 def build_assessment_message(text: str) -> dict[str, Any]:

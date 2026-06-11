@@ -285,9 +285,20 @@ async def summarize_turns(
                 continue
             return ""
 
-        summary = (resp.content or "").strip()
+        if not resp.content:
+            logger.warning(
+                "Summary attempt {}/6 returned empty content (finish_reason={})",
+                attempt + 1,
+                resp.finish_reason,
+            )
+            if attempt < 5:
+                await asyncio.sleep(10)
+                continue
+            return ""
+
+        summary = resp.content.strip()
         logger.info("Summarized {} turns ({} chars)", len(current_turns), len(summary))
-        return summary or "(no context to preserve)"
+        return summary
 
     return ""
 
