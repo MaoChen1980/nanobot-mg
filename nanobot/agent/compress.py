@@ -35,7 +35,7 @@ from nanobot.utils.helpers import estimate_message_tokens
 MIN_KEEP_TURNS = 1
 
 # Progressive compression: batch size and future context window
-COMPRESS_BATCH_SIZE = 50
+COMPRESS_BATCH_SIZE = 35
 FUTURE_TURNS = 10
 
 
@@ -232,6 +232,12 @@ async def summarize_turns(
 
     for attempt in range(6):
         prompt = _build_prompt(current_turns, current_future, previous_summary)
+        t_tok = sum(estimate_message_tokens(m) for m in current_turns)
+        f_tok = sum(estimate_message_tokens(m) for m in current_future)
+        logger.info(
+            "CT_DBG: summarize_turns attempt {}/6: {} turns ({} tok), {} future ({} tok)",
+            attempt + 1, len(current_turns), t_tok, len(current_future), f_tok,
+        )
 
         try:
             resp = await chat_stream_with_retry(
@@ -361,11 +367,23 @@ async def compress_session(
     keeps_raw, to_compress_fmt, keeps_fmt = split_history_by_budget(
         session.messages, history, limit=limit, min_keep_turns=min_keep_turns,
     )
+    logger.info(
+        "CT_DBG: split done — to_compress={} turns, keep={} turns",
+        len(to_compress_fmt), len(keeps_fmt),
+    )
 
     event = CompressEvent()
     if to_compress_fmt:
         prev = getattr(session, "_last_summary", None)
+        logger.info(
+            "CT_DBG: Compressor.compress start (to_compress={} turns, keep={} turns, prev_summary={})",
+            len(to_compress_fmt), len(keeps_fmt), bool(prev),
+        )
         event = await Compressor.compress(to_compress_fmt, keeps_fmt, previous_summary=prev)
+        logger.info(
+            "CT_DBG: Compressor.compress done (summary={}, synthetic_pair={})",
+            bool(event.summary), len(event.synthetic_pair),
+        )
 
     # Find replaced raw messages using message object identity
     if keeps_raw:

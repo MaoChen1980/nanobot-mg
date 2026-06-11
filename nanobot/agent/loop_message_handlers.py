@@ -80,16 +80,24 @@ class SystemMessageHandler:
         # Compression check: trigger → compress
         limit = self._loop._history_token_limit
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
+        logger.info(
+            "CT_DBG: entry (sysmsg), hist_tokens={}, trigger={}, limit={}",
+            hist_tokens, self._loop._compress_trigger_tokens, limit,
+        )
         if hist_tokens > self._loop._compress_trigger_tokens:
             from nanobot.agent.compress import (
                 apply_compress_event, compress_session, MIN_KEEP_TURNS,
             )
 
+            logger.info("CT_DBG: compress_session start (sysmsg)")
             history, event = await compress_session(
                 session, history,
                 limit=limit, min_keep_turns=MIN_KEEP_TURNS,
             )
+            logger.info("CT_DBG: compress_session done (sysmsg, summary={})", bool(event.summary))
+            logger.info("CT_DBG: apply_compress_event start (sysmsg)")
             apply_compress_event(session, event, db=self._loop._db)
+            logger.info("CT_DBG: apply_compress_event done (sysmsg)")
 
         hist_tokens_after = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns_after = sum(1 for m in history if m.get("role") == "assistant")
@@ -207,17 +215,26 @@ class UserMessageHandler:
         # Stage 1.5: compression check — if formatted history exceeds trigger, compress
         from nanobot.utils.helpers import estimate_message_tokens
         _hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
+        logger.info(
+            "CT_DBG: stage=entry, hist_tokens={}, trigger={}, limit={}",
+            _hist_tokens, self._loop._compress_trigger_tokens, self._loop._history_token_limit,
+        )
         _compress_happened = False
         if _hist_tokens > self._loop._compress_trigger_tokens:
             from nanobot.agent.compress import (
                 apply_compress_event, compress_session, MIN_KEEP_TURNS,
             )
 
+            logger.info("CT_DBG: compress_session start")
             history, event = await compress_session(
                 session, history,
                 limit=self._loop._history_token_limit, min_keep_turns=MIN_KEEP_TURNS,
             )
+            logger.info("CT_DBG: compress_session done (summary={})", bool(event.summary))
+
+            logger.info("CT_DBG: apply_compress_event start")
             apply_compress_event(session, event, db=self._loop._db)
+            logger.info("CT_DBG: apply_compress_event done")
             _compress_happened = True
 
         # Stage 1.5b: assess_me triggers — interval + compression
@@ -335,11 +352,13 @@ class UserMessageHandler:
         if not trigger:
             return
 
+        logger.info("CT_DBG: assess_me call start")
         try:
             result = await assess_me(history)
         except Exception as e:
-            logger.warning("assess_me LLM call failed: {}", e)
+            logger.warning("CT_DBG: assess_me call failed: {}", e)
             return
+        logger.info("CT_DBG: assess_me call done (result_len={})", len(result) if result else 0)
 
         if not result:
             logger.info("assess_me returned empty — LLM had no conclusion, skipping injection")
@@ -347,16 +366,18 @@ class UserMessageHandler:
 
         history.append(build_assessment_message(result))
         logger.info(
-            "assess_me triggered (compress={}, session={}, history={} msgs)",
+            "CT_DBG: assess_me injected (compress={}, session={}, history={} msgs)",
             compress_triggered, session.key, len(history),
         )
 
         # Chain: assess_me returned → feed result as problem to debug_root_cause
+        logger.info("CT_DBG: debug_root_cause call start")
         try:
             from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
             dcr = DebugRootCauseTool()
             dcr.set_context(history)
             dcr_result = await dcr.execute(problem=result)
+            logger.info("CT_DBG: debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
             if dcr_result:
                 history.append(build_debug_root_cause_message(dcr_result))
                 logger.info(

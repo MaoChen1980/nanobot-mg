@@ -147,7 +147,7 @@ class MessagePipe:
             return messages, CompressEvent()
 
         logger.info(
-            "Compressing {} of {} turns (budget={})",
+            "CT_DBG: message_pipe compress {} of {} turns (budget={})",
             len(to_compress), len(all_turns), budget,
         )
 

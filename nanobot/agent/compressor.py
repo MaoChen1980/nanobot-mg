@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from loguru import logger
+
 
 @dataclass
 class CompressEvent:
@@ -144,18 +146,26 @@ class Compressor:
 
         summary = None
         synthetic_pair: list[dict] = []
-        for batch_start in range(0, len(to_compress_turns), COMPRESS_BATCH_SIZE):
+        n_total = len(to_compress_turns)
+        n_batches = (n_total + COMPRESS_BATCH_SIZE - 1) // COMPRESS_BATCH_SIZE
+        for batch_start in range(0, n_total, COMPRESS_BATCH_SIZE):
             chunk = to_compress_turns[batch_start:batch_start + COMPRESS_BATCH_SIZE]
             chunk_flat = [m for turn in chunk for m in turn]
             future_ctx = Compressor.take_future_turns(
                 to_compress_turns, batch_start, len(chunk),
                 FUTURE_TURNS, keep_turns,
             )
+            batch_idx = batch_start // COMPRESS_BATCH_SIZE + 1
+            logger.info(
+                "CT_DBG: batch {}/{} — compressing {} turns ({} msgs), future_ctx={} msgs",
+                batch_idx, n_batches, len(chunk), len(chunk_flat), len(future_ctx),
+            )
             s, p = await compress_turns(
                 chunk_flat, future_ctx,
                 previous_summary=previous_summary,
                 timestamp=timestamp,
             )
+            logger.info("CT_DBG: batch {}/{} done (success={})", batch_idx, n_batches, bool(p))
             if not p:
                 if summary is None:
                     return CompressEvent()
