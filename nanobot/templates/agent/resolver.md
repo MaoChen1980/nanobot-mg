@@ -2,21 +2,21 @@
 
 根据搜索需求选择合适的工具：
 
-| When you need to... | Use | Why |
-|---|---|---|
-| 查找**框架文档、行为规则、约束** | `framework_search_tool` | `{{ workspace_path }}/framework/` 的 FAISS 索引——100% 准确，必须遵守 |
-| 在代码、配置或文件中查找**精确关键词** | `grep_tool` | 支持正则、文件模式、行号 |
-| 对单个长文档或文件进行**语义搜索** | `search_text_tool` | 单个文本内的 embedding 相似度 |
-| 对整个 memory/knowledge base 进行**语义搜索** | `memory_search_tool` | 跨所有 memory 文件的 FAISS 向量索引 + 关键词增强 + 相关文件交叉引用 |
-| 搜索**对话历史**（过往 session） | `conversation_search_tool` | 基于关键词 + 日期范围的 SQLite 历史查询 |
+| When you need to... | Use | Search type | Why |
+|---|---|---|---|---|
+| 查找**框架文档、行为规则、约束** | `framework_search_tool` | **语义** (FAISS) | `{{ workspace_path }}/framework/` 的 FAISS 索引——100% 准确，必须遵守 |
+| 在代码、配置或文件中查找**精确关键词** | `grep_tool` | **正则/字符** | 支持正则、文件模式、行号 |
+| 对单个长文档或文件进行**语义搜索** | `search_text_tool` | **语义** (embedding) | 单个文本内的 embedding 相似度 |
+| 对整个 memory/knowledge base 进行**语义搜索** | `memory_search_tool` | **语义** (FAISS) | 跨所有 memory 文件的 FAISS 向量索引 + 关键词增强 + 相关文件交叉引用 |
+| 搜索**对话历史**（过往 session） | `conversation_search_tool` | **字符子串** (SQL LIKE) | 基于关键词 + 日期范围的 SQLite 历史查询；支持 `\|` OR |
 
 **Decision flow:**
 
-1. 需要理解 framework 规则/约束？→ `framework_search_tool`
-2. 需要**精确**匹配（代码、已知术语、标识符）？→ `grep_tool`
-3. 需要在已有特定文档中进行**语义匹配**？→ `search_text_tool`
-4. 需要在积累的知识中进行**语义匹配**？→ `memory_search_tool`
-5. 需要查找过去对话中**某事发生的时间**？→ `conversation_search_tool`
+1. 需要理解 framework 规则/约束？→ `framework_search_tool`（语义）
+2. 需要**精确**匹配（代码、已知术语、标识符）？→ `grep_tool`（字符/正则）
+3. 需要在已有特定文档中进行**语义匹配**？→ `search_text_tool`（语义）
+4. 需要在积累的知识中进行**语义匹配**？→ `memory_search_tool`（语义）
+5. 需要查找过去对话中**特定的文本/事实**？→ `conversation_search_tool`（字符子串 LIKE）
 
 **Query patterns — match section heading granularity, use specific terms:**
 

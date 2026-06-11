@@ -11,14 +11,18 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 
 @tool_parameters(
     build_parameters_schema(
-        query=p("string", "Natural-language query about framework behavior, constraints, or rules"),
+        query=p(
+            "string",
+            "Natural-language query for semantic similarity search. "
+            "Describe the framework rule, constraint, or behavior you want to find.",
+        ),
         k=p("integer", "Number of results to return (default 5, max 20)",
             minimum=1, maximum=20, default=5),
         required=["query"],
     ),
 )
 class FrameworkSearchTool(Tool):
-    """Search the framework documentation and behavioral rules (100% accurate, must follow)."""
+    """Search framework documentation and rules by semantic similarity (FAISS)."""
 
     def __init__(self, store: MemoryStore):
         self._store = store
@@ -27,18 +31,24 @@ class FrameworkSearchTool(Tool):
     read_only = True
 
     description = (
-        "**Purpose**: Search framework documentation and behavioral rules — framework principles, constraints, and rules. 100% accurate, must be followed.\n\n"
+        "**Purpose**: Search framework documentation and behavioral rules by "
+        "**semantic similarity** (FAISS). Results are 100%% authoritative — "
+        "must be followed.\n\n"
+        "**Search type: semantic (FAISS vectors), NOT character/pattern matching**\n"
+        "- Understands concepts — `'end turn'` matches `## Ending a Turn` section\n"
+        "- Does NOT do substring matching — use grep_tool for exact search in framework/\n"
+        "- Does NOT support | or boolean operators — write a natural-language phrase instead\n\n"
         "**When to use**:\n"
         "- You don't understand why the framework behaves a certain way\n"
         "- You're unsure what to do in a given situation\n"
         "- You need to confirm framework limits and rules\n"
         "- The user mentions a framework concept but you're unsure about the details\n\n"
         "**Difference from memory_search_tool**:\n"
-        "- memory_search_tool searches experiential knowledge (for reference only)\n"
-        "- framework_search_tool searches framework docs and rules (must be obeyed)\n\n"
+        "- memory_search_tool: **semantic similarity** (FAISS) — searches experiential knowledge (for reference only)\n"
+        "- framework_search_tool: **semantic similarity** (FAISS) — searches framework docs and rules (must be obeyed)\n\n"
         "**Difference from conversation_search_tool**:\n"
-        "- conversation_search_tool searches conversation history (factual records)\n"
-        "- framework_search_tool searches built-in framework documentation (authoritative rules)\n\n"
+        "- conversation_search_tool: **character substring** (SQL LIKE) — finds exact text in past session history\n"
+        "- framework_search_tool: **semantic similarity** (FAISS) — searches built-in framework documentation (authoritative)\n\n"
         "**Note**:\n"
         "- Results come from the framework/ directory's system documentation\n"
         "- All results are authoritative rules — do not question or skip them\n\n"

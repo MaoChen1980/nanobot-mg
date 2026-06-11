@@ -30,14 +30,18 @@ def _find_line_range(full_text: str, chunk_text: str) -> tuple[int, int]:
 
 @tool_parameters(
     build_parameters_schema(
-        query=p("string", "Natural-language query to find relevant knowledge passages"),
+        query=p(
+            "string",
+            "Natural-language query for semantic similarity search. "
+            "Describe what you want to find — this is NOT character/pattern matching.",
+        ),
         k=p("integer", "Number of results to return (default 5, max 20)",
             minimum=1, maximum=20, default=5),
         required=["query"],
     ),
 )
 class MemorySearchTool(Tool):
-    """Search across the memory/ knowledge base using semantic similarity."""
+    """Search the memory/ knowledge base by semantic similarity (FAISS vectors)."""
 
     def __init__(self, store: MemoryStore):
         self._store = store
@@ -46,17 +50,26 @@ class MemorySearchTool(Tool):
     read_only = True
 
     description = (
-        "**Purpose**: Search the persistent knowledge base (memory/ directory) by semantic similarity.\n\n"
+        "**Purpose**: Search the persistent knowledge base (memory/ directory) by "
+        "**semantic similarity** using FAISS vector embeddings.\n\n"
+        "**Search type: semantic (FAISS vectors), NOT character/pattern matching**\n"
+        "- Understands concepts and meaning, not just keywords\n"
+        "- `query='deploy failure'` can find entries about 'rollback issues' or 'release incident'\n"
+        "- Does NOT do substring matching — use grep_tool for exact keyword search in memory/\n"
+        "- Does NOT support | or boolean operators — write a natural-language phrase instead\n\n"
         "**When to use**:\n"
         '- The user says "we encountered this before", "we learned this last time", "we did something similar"\n'
         "- You need to recall accumulated knowledge, experience, or decisions\n"
-        "- You want to find historical records related to the current topic\n\n"
+        "- You want to find conceptually related information in the knowledge base\n\n"
         "**Difference from search_text_tool**:\n"
-        "- search_text_tool searches the single text snippet or file you pass in\n"
-        "- memory_search_tool searches the entire memory/ knowledge base (FAISS vector index)\n\n"
+        "- search_text_tool searches a single document you pass in\n"
+        "- memory_search_tool searches the entire memory/ knowledge base (FAISS index)\n\n"
         "**Difference from conversation_search_tool**:\n"
-        "- conversation_search_tool searches conversation history (keyword match + time filter)\n"
-        "- memory_search_tool searches the knowledge base (semantic similarity match)\n\n"
+        "- conversation_search_tool: **character substring** (SQL LIKE) — finds exact text matches in past sessions\n"
+        "- memory_search_tool: **semantic similarity** (FAISS vectors) — finds conceptually related knowledge\n\n"
+        "**Difference from framework_search_tool**:\n"
+        "- framework_search_tool: **semantic similarity** (FAISS) — searches authoritative framework rules\n"
+        "- memory_search_tool: **semantic similarity** (FAISS) — searches experiential knowledge (for reference only)\n\n"
         "**Note**:\n"
         "- New or modified knowledge takes up to 2 hours to appear in the index\n"
         "- This is fuzzy semantic matching — may miss specific terms. Use grep_tool for exact keywords.\n\n"

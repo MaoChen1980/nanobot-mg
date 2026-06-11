@@ -350,6 +350,22 @@ class NanobotDB:
             row = conn.execute("SELECT 1 FROM sessions LIMIT 1").fetchone()
         return row is not None
 
+    @staticmethod
+    def _build_content_filter(keyword: str | None) -> tuple[str, list[str]]:
+        """Build SQL snippet + args for keyword content filter (supports | OR).
+
+        Returns (sql_clause, args_list). sql_clause is empty if no valid terms.
+        """
+        if not keyword:
+            return "", []
+        terms = [t.strip().lower() for t in keyword.split("|") if t.strip()]
+        if len(terms) == 1:
+            return "AND LOWER(content) LIKE ?", [f"%{terms[0]}%"]
+        if len(terms) > 1:
+            clauses = [f"LOWER(content) LIKE ?" for _ in terms]
+            return f"AND ({' OR '.join(clauses)})", [f"%{t}%" for t in terms]
+        return "", []
+
     def search_sessions(
         self,
         keyword: str | None = None,
@@ -358,10 +374,14 @@ class NanobotDB:
         end: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """Search session messages by keyword and date range.
+        """Search session messages and archived history by keyword and date range.
+
+        Searches both the current session (messages table) and past archived
+        sessions (history table).
 
         Args:
-            keyword: Substring to match in message content (case-insensitive)
+            keyword: Substring to match in message content (case-insensitive).
+                     Use | for OR logic (e.g. 'deploy|rollback').
             start: Start date (YYYY-MM-DD or ISO format), inclusive
             end: End date (YYYY-MM-DD or ISO format), inclusive
             limit: Maximum results to return
@@ -369,8 +389,6 @@ class NanobotDB:
         Returns:
             List of dicts with session_key, timestamp, content, role
         """
-        results: list[dict[str, Any]] = []
-
         # Parse dates
         start_dt = None
         end_dt = None
@@ -400,27 +418,26 @@ class NanobotDB:
                 except ValueError:
                     pass
 
-        # Build query for messages
-        query = "SELECT session_key, role, content, timestamp, extra FROM messages WHERE 1=1"
-        args: list[Any] = []
+        content_clause, content_args = self._build_content_filter(keyword)
+        results: list[dict[str, Any]] = []
 
-        if keyword:
-            query += " AND LOWER(content) LIKE ?"
-            args.append(f"%{keyword.lower()}%")
+        # ── Query 1: messages table (current session) ──
+        msg_query = "SELECT session_key, role, content, timestamp, extra FROM messages WHERE 1=1"
+        msg_args: list[Any] = list(content_args)
 
+        if content_clause:
+            msg_query += f" {content_clause}"
         if start_dt:
-            query += " AND timestamp >= ?"
-            args.append(start_dt.isoformat())
-
+            msg_query += " AND timestamp >= ?"
+            msg_args.append(start_dt.isoformat())
         if end_dt:
-            query += " AND timestamp <= ?"
-            args.append(end_dt.isoformat())
-
-        query += " ORDER BY timestamp DESC LIMIT ?"
-        args.append(limit)
+            msg_query += " AND timestamp <= ?"
+            msg_args.append(end_dt.isoformat())
+        msg_query += " ORDER BY timestamp DESC LIMIT ?"
+        msg_args.append(limit)
 
         with self._conn_access() as conn:
-            rows = conn.execute(query, args).fetchall()
+            rows = conn.execute(msg_query, msg_args).fetchall()
 
         for session_key, role, content, timestamp, extra in rows:
             if extra:
@@ -434,7 +451,35 @@ class NanobotDB:
                 "timestamp": timestamp,
             })
 
-        return results
+        # ── Query 2: history table (past archived sessions) ──
+        hist_query = "SELECT timestamp, content FROM history WHERE 1=1"
+        hist_args: list[Any] = list(content_args)
+
+        if content_clause:
+            hist_query += f" {content_clause}"
+        if start_dt:
+            hist_query += " AND timestamp >= ?"
+            hist_args.append(start_dt.isoformat())
+        if end_dt:
+            hist_query += " AND timestamp <= ?"
+            hist_args.append(end_dt.isoformat())
+        hist_query += " ORDER BY timestamp DESC LIMIT ?"
+        hist_args.append(limit)
+
+        with self._conn_access() as conn:
+            hist_rows = conn.execute(hist_query, hist_args).fetchall()
+
+        for timestamp, content in hist_rows:
+            results.append({
+                "session_key": "history",
+                "role": "condensed",
+                "content": content,
+                "timestamp": timestamp,
+            })
+
+        # Sort combined results newest-first, cap at limit
+        results.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+        return results[:limit]
 
     def close(self) -> None:
         with self._conn_access() as conn:

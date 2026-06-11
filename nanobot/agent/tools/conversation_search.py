@@ -12,17 +12,28 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 
 @tool_parameters(
     build_parameters_schema(
-        keyword=p("string", "Exact substring to match, case-insensitive"),
-        query=p("string", "Alias for keyword. Provide this or keyword."),
-        start=p("string", "Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive"),
-        end=p("string", "End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive"),
+        keyword=p(
+            "string",
+            "Character substring to match, case-insensitive. "
+            "Use | to OR multiple terms (e.g. 'deploy|rollback'). "
+            "This is NOT semantic search — it matches the literal characters.",
+        ),
+        query=p(
+            "string",
+            "Alias for keyword. Provide this or keyword.",
+        ),
+        start=p(
+            "string",
+            "Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive",
+        ),
+        end=p(
+            "string",
+            "End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive",
+        ),
     ),
 )
 class ConversationSearchTool(Tool):
-    """Search conversation history — find information from past conversation records.
-
-    Uses SQLite storage for persistent session history with keyword + date range filtering.
-    """
+    """Search conversation history via character substring matching (SQL LIKE)."""
 
     def __init__(self, store: MemoryStore):
         self._store = store
@@ -31,24 +42,34 @@ class ConversationSearchTool(Tool):
     read_only = True
 
     description = (
-        "**Purpose**: Search conversation history — find information from past conversation records.\n\n"
+        "**Purpose**: Search past conversation history by character substring matching "
+        "(SQL LIKE).  NOT semantic — matches the exact characters you type.\n\n"
         "**When to use**:\n"
         '- The user says "we discussed this before", "I mentioned it last time", "we did this earlier"\n'
         "- You feel like you've seen some information before but can't recall it clearly\n"
-        "- You need exact keyword matching against historical records\n\n"
+        "- You need to find a specific fact, error message, or topic from past sessions\n\n"
+        "**Search type: character substring (LIKE), NOT semantic**\n"
+        "- `keyword='deploy'` matches any message containing those characters: 'deployment', 'redeploy', 'deploying' etc.\n"
+        "- Does NOT understand synonyms or concepts — use memory_search_tool for semantic matching\n"
+        "- Use grep_tool on memory/ files if you need exact regex matching\n\n"
+        "**Multiple keywords (OR)**: separate with `|`\n"
+        "- `keyword='deploy|rollback'` matches messages containing 'deploy' OR 'rollback'\n"
+        "- Works with both keyword and query parameters\n"
+        "- Spaces around `|` are trimmed automatically\n\n"
         "**Difference from memory_search_tool**:\n"
-        "- memory_search_tool searches the knowledge base (semantic matching)\n"
-        "- conversation_search_tool searches conversation history (keyword substring match + time filter)\n\n"
+        "- memory_search_tool: **semantic similarity** (FAISS vectors) — understands concepts\n"
+        "- conversation_search_tool: **character substring** (SQL LIKE) — matches exact text\n\n"
+        "**Difference from framework_search_tool**:\n"
+        "- framework_search_tool: **semantic similarity** (FAISS vectors) — for authoritative rules\n"
+        "- conversation_search_tool: **character substring** (SQL LIKE) — for historical records\n\n"
         "**Parameters**:\n"
-        "- keyword — exact substring match, case-insensitive\n"
-        "- start/end — filter by time range (YYYY-MM-DD format)\n"
-        "- query — alias for keyword, provide this or keyword\n\n"
-        "**Note**:\n"
-        "- Does not search goal/event/lesson tables (use read_file_tool(\"tasks/TREE.md\") to check goal progress)\n"
-        "- Keywords use substring matching — 'deploy' will match 'deployment', 'deploying', etc.\n\n"
+        "- keyword — character substring(s) to match, case-insensitive. Use `|` for OR\n"
+        "- query — alias for keyword, provide this or keyword\n"
+        "- start — filter from this date inclusive (YYYY-MM-DD)\n"
+        "- end — filter to this date inclusive (YYYY-MM-DD)\n\n"
         "**Examples**:\n"
         "  conversation_search_tool(keyword='docker')\n"
-        "  conversation_search_tool(keyword='deployment issue', start='2026-01-01')\n"
+        "  conversation_search_tool(keyword='deploy|rollback', start='2026-01-01')\n"
         "  conversation_search_tool(query='error', start='2026-03-01', end='2026-03-15')"
     )
 
@@ -64,16 +85,23 @@ class ConversationSearchTool(Tool):
         if not search_text:
             return "Error: Provide keyword (or query) to search for."
 
+        # Split | for OR logic, used for MEMORY.md matching
+        or_terms = [t.strip().lower() for t in search_text.split("|") if t.strip()]
+        if not or_terms:
+            return "Error: Provide keyword (or query) to search for."
+
         results: list[dict[str, Any]] = []
 
-        # Search MEMORY.md first
+        # Search MEMORY.md — match if ANY or_term is found
         memory = self._store.read_memory()
-        if memory and search_text.lower() in memory.lower():
-            results.append({
-                "source": "memory",
-                "timestamp": "",
-                "content": memory[:2000],
-            })
+        if memory:
+            memory_lower = memory.lower()
+            if any(term in memory_lower for term in or_terms):
+                results.append({
+                    "source": "memory",
+                    "timestamp": "",
+                    "content": memory[:2000],
+                })
 
         # Search sessions via SQLite
         if self._store._db is not None:
