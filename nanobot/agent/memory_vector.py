@@ -281,23 +281,31 @@ class MemoryVectorIndex:
             logger.warning("FAISS not installed, cannot build vector index incrementally")
             return False
 
-        # Some FAISS versions don't support remove_ids on IndexIDMap — fall back to full rebuild
+        # IndexHNSWFlat (our default index type) does not support remove_ids.
+        # Try incremental update and fall back to full rebuild if it fails.
         try:
             return self._incremental_update(file_map, current_files, deleted, changed, new_files)
-        except Exception as e:
-            logger.exception("FAISS incremental update failed: {}, falling back to full rebuild", e)
-            file_texts: dict[str, str] = {}
-            for rel in current_files:
-                try:
-                    content = (self._memory_dir / rel).read_text(encoding="utf-8")
-                    if content.strip():
-                        file_texts[rel] = content
-                except Exception:
-                    logger.warning("Failed to re-read memory file {}", rel, exc_info=True)
-                    continue
-            if file_texts:
-                self.build_from_files(file_texts)
-            return True
+        except RuntimeError as e:
+            if "remove_ids not implemented" in str(e):
+                logger.info("FAISS remove_ids not supported by this index type, doing full rebuild")
+            else:
+                logger.warning("FAISS incremental update failed ({}), falling back to full rebuild", e)
+            return self._fallback_full_rebuild(current_files)
+
+    def _fallback_full_rebuild(self, current_files: dict[str, int]) -> bool:
+        """Re-read all memory files and rebuild the FAISS index from scratch."""
+        file_texts: dict[str, str] = {}
+        for rel in current_files:
+            try:
+                content = (self._memory_dir / rel).read_text(encoding="utf-8")
+                if content.strip():
+                    file_texts[rel] = content
+            except Exception:
+                logger.warning("Failed to re-read memory file {}", rel, exc_info=True)
+                continue
+        if file_texts:
+            self.build_from_files(file_texts)
+        return True
 
     def _incremental_update(
         self,
