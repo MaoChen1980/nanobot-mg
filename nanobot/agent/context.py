@@ -67,6 +67,7 @@ class ContextBuilder:
         self.workspace = workspace
         self.project_root = project_root
         self.timezone = timezone
+        self._workspace_path_str = workspace.expanduser().resolve().as_posix()
         self.memory = MemoryStore(workspace, db=db)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
         self._bootstrap_cache: dict[str, tuple[float, str | None]] = {}
@@ -135,7 +136,7 @@ class ContextBuilder:
             skills_summary=skills_section,
             runtime_context=runtime_context,
             # Workspace path — used by included templates (framework_core etc.)
-            workspace_path=self.workspace.expanduser().resolve().as_posix(),
+            workspace_path=self._workspace_path_str,
             # Framework config — used by framework_core.md via {% include %}
             max_iterations=self._framework_config.get("max_iterations", 200),
             context_window_tokens=self._framework_config.get("context_window_tokens", 200_000),
@@ -216,7 +217,7 @@ class ContextBuilder:
 
     def _get_identity(self, channel: str | None = None, include_vector_search: bool = True) -> str:
         """Get the core identity section."""
-        workspace_path = self.workspace.expanduser().resolve().as_posix()
+        workspace_path = self._workspace_path_str
         import shutil
 
         from nanobot.config.paths import get_data_dir
@@ -409,8 +410,7 @@ class ContextBuilder:
                 lines = lines[1:]
             index_text = "\n".join(lines).strip()
             if index_text:
-                mem_path = self.workspace.as_posix()
-                parts.append(f"# Memory - {mem_path}/memory/MEMORY.md\n\n{index_text}")
+                parts.append(f"# Memory - {self._workspace_path_str}/memory/MEMORY.md\n\n{index_text}")
 
         # Also inline key memory files so rules/preferences are visible without recall
         for name in ("system.md", "user.md"):

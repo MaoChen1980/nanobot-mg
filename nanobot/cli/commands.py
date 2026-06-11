@@ -34,7 +34,7 @@ if sys.platform == "win32":
         if kernel32.GetConsoleMode(h, ctypes.byref(mode)):
             kernel32.SetConsoleMode(h, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
     except Exception:
-        pass
+        logger.debug("Failed to enable Virtual Terminal Processing")
 
 import typer
 from loguru import logger
@@ -106,7 +106,7 @@ def _flush_pending_tty_input() -> None:
         termios.tcflush(fd, termios.TCIFLUSH)
         return
     except Exception:
-        pass
+        logger.debug("Failed to flush pending TTY input")
 
     try:
         while True:
@@ -136,7 +136,7 @@ def _restore_terminal() -> None:
                 if h and h != -1:
                     kernel32.SetConsoleMode(h, _SAVED_TERM_ATTRS[1])
             except Exception:
-                pass
+                logger.debug("Failed to restore Windows console mode")
         return
 
     try:
@@ -144,7 +144,7 @@ def _restore_terminal() -> None:
 
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, _SAVED_TERM_ATTRS)
     except Exception:
-        pass
+        logger.debug("Failed to restore terminal attributes")
 
 
 def _init_prompt_session() -> None:
@@ -169,7 +169,7 @@ def _init_prompt_session() -> None:
                     if kernel32.GetConsoleMode(h, ctypes.byref(mode)):
                         _SAVED_TERM_ATTRS = ("windows_console_mode", mode.value)
             except Exception:
-                pass
+                logger.debug("Failed to save Windows console mode")
 
     from nanobot.config.paths import get_cli_history_path
 

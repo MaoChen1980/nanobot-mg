@@ -4,7 +4,7 @@
 
 | When you need to... | Use | Why |
 |---|---|---|
-| 查找**框架文档、行为规则、约束** | `framework_search_tool` | framework/ 的 FAISS 索引——100% 准确，必须遵守 |
+| 查找**框架文档、行为规则、约束** | `framework_search_tool` | `{{ workspace_path }}/framework/` 的 FAISS 索引——100% 准确，必须遵守 |
 | 在代码、配置或文件中查找**精确关键词** | `grep_tool` | 支持正则、文件模式、行号 |
 | 对单个长文档或文件进行**语义搜索** | `search_text_tool` | 单个文本内的 embedding 相似度 |
 | 对整个 memory/knowledge base 进行**语义搜索** | `memory_search_tool` | 跨所有 memory 文件的 FAISS 向量索引 + 关键词增强 + 相关文件交叉引用 |

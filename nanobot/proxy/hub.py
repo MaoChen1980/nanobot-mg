@@ -291,7 +291,7 @@ class HubTCPServer:
             try:
                 await writer.wait_closed()
             except Exception:
-                logger.warning("Error closing proxy TCP writer")
+                logger.warning("Error closing proxy TCP writer", exc_info=True)
             # Cancel any in-flight route_message tasks — they're running on
             # a dead connection and would deliver responses into the void.
             for task in list(_pending_tasks):

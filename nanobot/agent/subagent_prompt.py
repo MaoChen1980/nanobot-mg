@@ -171,7 +171,7 @@ def build_subagent_prompt(
         if board_section:
             parts.append(board_section)
 
-    ws_path = workspace.as_posix()
+    ws_path = workspace.expanduser().resolve().as_posix()
 
     # 8. Thinking framework (three-phase task methodology)
     parts.append(render_template("agent/_snippets/think_framework.md"))
@@ -183,7 +183,7 @@ def build_subagent_prompt(
     parts.append(render_template("agent/_snippets/subagent_decisions.md", workspace_path=ws_path))
 
     # 11. Search tool selector
-    parts.append(render_template("agent/resolver.md"))
+    parts.append(render_template("agent/resolver.md", workspace_path=ws_path))
 
     # 12. Output schema (optional)
     if output_schema:

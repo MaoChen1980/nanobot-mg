@@ -578,7 +578,8 @@ class MemoryExtractor:
             f"## Existing skills\n\n{existing_text}"
         )
 
-        prompt = render_template("agent/extractor_skill_creator.md")
+        ws_path = self.store.workspace.expanduser().resolve().as_posix()
+        prompt = render_template("agent/extractor_skill_creator.md", workspace_path=ws_path)
         try:
             response = await chat_stream_with_retry(
                 messages=[
@@ -1335,6 +1336,7 @@ class MemoryExtractor:
     async def _cleanup_check(self, modified_files: list[str] | None = None) -> None:
         """Step 2b: LLM check SOUL.md/USER.md (and optionally modified topic files)
         for contradictions, duplicates, stale content."""
+        ws_path = self.store.workspace.expanduser().resolve().as_posix()
         soul_content = self.store.read_soul()
         user_content = self.store.read_user()
 
@@ -1362,7 +1364,7 @@ class MemoryExtractor:
                 messages=[
                     {
                         "role": "system",
-                        "content": render_template("agent/extractor_cleanup.md"),
+                        "content": render_template("agent/extractor_cleanup.md", workspace_path=ws_path),
                     },
                     {
                         "role": "user",

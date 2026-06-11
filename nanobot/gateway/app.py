@@ -108,7 +108,7 @@ class GatewayApplication:
             try:
                 restart_flag_path.unlink()
             except OSError:
-                pass
+                logger.debug("Failed to unlink restart flag")
             logger.info("Restart flag detected — restarting gateway services")
         logger.info("Gateway exited")
 
@@ -125,7 +125,7 @@ class GatewayApplication:
             if _stale_flag.exists():
                 _stale_flag.unlink()
         except OSError:
-            pass
+            logger.debug("Failed to unlink stale restart flag")
 
         display_host = "127.0.0.1" if self.config.gateway.host in {"0.0.0.0", "::"} else self.config.gateway.host
         url = f"http://{display_host}:{self.port}"
@@ -1067,38 +1067,38 @@ class GatewayApplication:
             try:
                 await self.agent.close_mcp()
             except Exception:
-                logger.debug("Error closing MCP connections during shutdown")
+                logger.warning("Error closing MCP connections during shutdown")
             self.agent.stop()
             try:
                 flushed = self.agent.sessions.flush_all()
                 if flushed:
                     logger.info("Shutdown: flushed {} session(s) to disk", flushed)
             except Exception:
-                logger.debug("Error flushing sessions during shutdown")
+                logger.warning("Error flushing sessions during shutdown")
         try:
             if self.heartbeat is not None:
                 self.heartbeat.stop()
         except Exception:
-            logger.debug("Error stopping heartbeat during shutdown")
+            logger.warning("Error stopping heartbeat during shutdown")
         try:
             if self.cron is not None:
                 self.cron.stop()
         except Exception:
-            logger.debug("Error stopping cron during shutdown")
+            logger.warning("Error stopping cron during shutdown")
         _t1 = time.monotonic()
         logger.info("SHUTDOWN_DBG: agent cleanup done in {:.1f}s", _t1 - _t0)
         try:
             if self.proxy_manager is not None:
                 await self.proxy_manager.stop()
         except Exception:
-            logger.debug("Error stopping proxy manager during shutdown")
+            logger.warning("Error stopping proxy manager during shutdown")
         _t2 = time.monotonic()
         logger.info("SHUTDOWN_DBG: proxy_manager.stop done in {:.1f}s (cum={:.1f}s)", _t2 - _t1, _t2 - _t0)
         try:
             if self.hub_server is not None:
                 await self.hub_server.stop()
         except Exception:
-            logger.debug("Error stopping hub server during shutdown")
+            logger.warning("Error stopping hub server during shutdown")
         _t3 = time.monotonic()
         logger.info("SHUTDOWN_DBG: hub_server.stop done in {:.1f}s (cum={:.1f}s)", _t3 - _t2, _t3 - _t0)
         if self.api_server is not None:
@@ -1106,7 +1106,7 @@ class GatewayApplication:
             try:
                 await self.api_server.shutdown()
             except Exception:
-                logger.debug("Error waiting for API server shutdown")
+                logger.warning("Error waiting for API server shutdown")
         _t4 = time.monotonic()
         logger.info("SHUTDOWN_DBG: api_server.shutdown done in {:.1f}s (cum={:.1f}s)", _t4 - _t3, _t4 - _t0)
 
@@ -1114,7 +1114,7 @@ class GatewayApplication:
             try:
                 self.nanobot_db.close()
             except Exception:
-                logger.debug("Error closing database during shutdown")
+                logger.warning("Error closing database during shutdown")
 
     # ------------------------------------------------------------------
     # Helpers (shared with CLI but kept here for self-containment)

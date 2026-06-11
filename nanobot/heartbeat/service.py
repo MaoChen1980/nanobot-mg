@@ -84,7 +84,7 @@ class HeartbeatService:
             try:
                 tree_content = tree_path.read_text(encoding="utf-8").strip()
             except Exception:
-                logger.warning("Failed to read task tree at {}", tree_path)
+                logger.warning("Failed to read task tree at {}", tree_path, exc_info=True)
 
         goal_block = tree_content if tree_content else "*(none — no active tasks)*"
 

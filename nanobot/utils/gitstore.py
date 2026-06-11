@@ -374,7 +374,7 @@ class GitStore:
             msg = f"revert: undo {commit}"
             return self.auto_commit(msg)
         except Exception:
-            logger.warning("Git revert failed for {}", commit)
+            logger.warning("Git revert failed for {}", commit, exc_info=True)
             return None
 
     @staticmethod

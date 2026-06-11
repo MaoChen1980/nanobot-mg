@@ -294,6 +294,15 @@ class ExecTool(Tool):
             capture_path = Path(capture_file) if capture_file else None
             capture_fh = None
             if capture_path:
+                if self.restrict_to_workspace and self.working_dir:
+                    try:
+                        cap_resolved = capture_path.expanduser().resolve()
+                        ws_root = Path(self.working_dir).expanduser().resolve()
+                    except Exception:
+                        logger.warning("Failed to resolve capture_file path")
+                        return "Error: capture_file path could not be resolved"
+                    if cap_resolved != ws_root and ws_root not in cap_resolved.parents:
+                        return "Error: capture_file path is outside the configured workspace"
                 capture_path.parent.mkdir(parents=True, exist_ok=True)
                 capture_fh = open(capture_path, "w", encoding="utf-8")
 

@@ -4,7 +4,7 @@ You are creating Skills that **reduce future decision cost**. Not all pending en
 
 You will receive:
 - Pending skill entries from `pending_skills.md`
-- A list of existing skills (name + description) already under `skills/`
+- A list of existing skills (name + description) already under `{{ workspace_path }}/skills/`
 
 ## Decision Gate — Is This Skill Worth Creating?
 

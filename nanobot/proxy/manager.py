@@ -314,8 +314,8 @@ class ProxyManager:
             logger.warning("Rejecting unsolicited proxy registration for {}", key)
             try:
                 writer.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to close rejected proxy writer: {}", e)
             return False
 
         # PID check: if we have a spawned process, only accept registration from it
@@ -329,8 +329,8 @@ class ProxyManager:
                 )
                 try:
                     writer.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to close stale proxy writer: {}", e)
                 return False
 
         # Close old connection if any
@@ -342,8 +342,8 @@ class ProxyManager:
             try:
                 if not old_writer.is_closing():
                     old_writer.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to close old TCP connection for proxy {}: {}", key, e)
             logger.debug("Proxy {}: closed old TCP connection", key)
 
         self._proxies[key].reader = reader
@@ -448,8 +448,8 @@ class ProxyManager:
             if proxy.writer and not proxy.writer.is_closing():
                 try:
                     proxy.writer.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to close proxy writer during stop_all: {}", e)
 
         # Step 2: brief concurrent window for proxies to self-exit,
         # then force-kill any that remain.
@@ -539,8 +539,8 @@ class ProxyManager:
             try:
                 if not proxy.writer.is_closing():
                     proxy.writer.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to close stale writer during proxy restart: {}", e)
             proxy.writer = None
             proxy.reader = None
         proxy.running = False
@@ -557,13 +557,13 @@ class ProxyManager:
                     capture_output=True,
                 )
             except Exception:
-                logger.warning("Failed to force-kill old proxy {} (pid={})", proxy.key, pid)
+                logger.warning("Failed to force-kill old proxy {} (pid={})", proxy.key, pid, exc_info=True)
         else:
             try:
                 old_process.terminate()
                 old_process.wait(timeout=3)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to terminate old proxy process {} (pid={}): {}", proxy.key, pid, e)
 
         new_process, proxy_output = self._create_proxy_process(
             proxy.channel, proxy.bot, proxy.config,
@@ -626,8 +626,8 @@ class ProxyManager:
             try:
                 if not proxy.writer.is_closing():
                     proxy.writer.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to close proxy writer during force-stop: {}", e)
         # Force-kill
         import platform
         pid = proxy.process.pid
@@ -641,6 +641,6 @@ class ProxyManager:
             else:
                 proxy.process.terminate()
                 proxy.process.wait(timeout=3)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to kill proxy {} (pid={}): {}", key, pid, e)
         logger.info("Stopped proxy {} (pid={})", key, pid)
