@@ -320,8 +320,8 @@ class EditFilesTool(_FsTool):
                 return danger_warning(
                     problem=f"{len(stale_edits)} file(s) have changed since last read:\n{stale_paths}",
                     risk="Editing stale files may undo changes or produce incorrect results",
-                    suggestion=f"Re-read the affected files with read_file_tool, then retry the edit, "
-                               f"or set danger_override=true if you are sure the edits are safe",
+                    suggestion=f"Re-read the affected files with read_file_tool to get current content, "
+                               f"back up if needed (git commit or save_stage_tool), then retry the edit",
                     tool_name="edit_files_tool",
                 )
 
@@ -337,7 +337,8 @@ class EditFilesTool(_FsTool):
                 return danger_warning(
                     problem=f"{len(destructive_edits)} edit(s) remove content without adding any:\n{destructive_paths}",
                     risk="Accidental content deletion — may cause data loss",
-                    suggestion="Verify the old_text is correct, or set danger_override=true if the edit is intentional",
+                    suggestion="Back up affected files first (git commit or save_stage_tool), "
+                               "then verify the old_text is correct before proceeding",
                     tool_name="edit_files_tool",
                 )
 

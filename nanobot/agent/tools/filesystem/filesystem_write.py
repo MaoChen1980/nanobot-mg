@@ -87,7 +87,8 @@ class WriteFileTool(_FsTool):
                     return danger_warning(
                         problem=reason,
                         risk="You may overwrite content you haven't verified — potential data loss",
-                        suggestion="Read the file first with read_file_tool to verify its contents, "
+                        suggestion="Back up the file first (git commit or save_stage_tool), "
+                                   "then read it with read_file_tool to verify its contents, "
                                    "or use edit_file_tool for targeted edits",
                         tool_name="write_file_tool",
                     )

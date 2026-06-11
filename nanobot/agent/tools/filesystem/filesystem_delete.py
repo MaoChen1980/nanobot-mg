@@ -50,7 +50,7 @@ class DeleteFileTool(_FsTool):
             return danger_warning(
                 problem=f"This will permanently delete {resolved.name}{size_str}",
                 risk="Permanent data loss — deleted files cannot be recovered",
-                suggestion="Ensure the file is backed up or no longer needed before proceeding",
+                suggestion="Back up the file first (e.g., git commit, save_stage_tool, or copy to a temp location) or confirm it's no longer needed before proceeding",
                 tool_name="delete_file_tool",
             )
 

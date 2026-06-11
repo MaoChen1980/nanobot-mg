@@ -131,7 +131,8 @@ def check_command_safety(
         return danger_warning(
             problem=f"Command matches a dangerous pattern: {command.strip()[:120]}",
             risk="Potential data loss, system damage, or security breach",
-            suggestion="Consider using dedicated file/edit/delete tools instead of raw shell commands",
+            suggestion="Consider using dedicated file/edit/delete tools instead of raw shell commands. "
+                       "If you must proceed, ensure you have a rollback plan (e.g., git commit first)",
             tool_name="exec_tool",
         )
 
