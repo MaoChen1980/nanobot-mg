@@ -15,7 +15,9 @@ if TYPE_CHECKING:
     build_parameters_schema(
         recipient=p("string", "Who to send to: 'main' (subagent→orchestrator) or 'subagent:<label>' (orchestrator→subagent)"),
         message=p("string", "The message content"),
-        priority=p("string", "Priority: info, suggestion, or blocker (only for recipient='main')"),
+        priority=p("string", "Priority: info, suggestion, or blocker (only for recipient='main')",
+            enum=["info", "suggestion", "blocker"],
+        ),
         required=["recipient", "message"],
     )
 )

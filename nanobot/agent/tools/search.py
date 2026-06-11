@@ -364,6 +364,7 @@ class GrepTool(_SearchTool):
                 },
                 "offset": {
                     "type": "integer",
+                    "default": 0,
                     "description": "Skip the first N results before applying head_limit",
                     "minimum": 0,
                     "maximum": 100000,

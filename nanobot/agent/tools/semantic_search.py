@@ -27,8 +27,8 @@ _MAX_TEXT_BYTES = 5 * 1024 * 1024  # 5 MB
         text=p("string", "Text content to search within (max 5 MB). Provide this or path."),
         path=p("string", "Absolute path to a file to read and search. Provide this or text."),
         k=p("integer", "Number of results to return (default 5)", minimum=1, maximum=20, default=5),
+        required=["query"],
     ),
-    required=["query"],
 )
 class SearchTextTool(Tool):
     """Search a block of text semantically."""
@@ -45,18 +45,28 @@ class SearchTextTool(Tool):
         self._allowed_dir = allowed_dir
 
     description = (
-        "**Purpose**: Semantically search for relevant passages in a given text or file without reading the entire document. Pass either text or path (not both).\n\n"
+        "**Purpose**: Semantically search for relevant passages in a given text or file "
+        "without reading the entire document. Pass either text or path (not both).\n\n"
+        "**Search type: semantic (vector embeddings), NOT pattern matching**\n"
+        "- Understands concepts and meaning — `query='timeout handling'` can find "
+        "passages about 'retry logic', 'deadline exceeded', or 'connection reset'\n"
+        "- Does NOT do substring/regex matching — use grep_file_tool for exact patterns\n\n"
         "**When to use**:\n"
-        "- 大概知道想要什么方向，但不确定具体关键词，用 grep 不知道搜什么的时候\n"
-        "- 比如新接手代码库想找「处理超时的逻辑」但不知道函数名叫什么\n"
-        "- 比如长文档里找「和安全性相关的部分」，安全可能写成了防护、鉴权、加密\n\n"
+        "- You know roughly what you're looking for but not the exact keywords or symbols\n"
+        "- You're exploring an unfamiliar codebase and want to find e.g. 'timeout handling' "
+        "without knowing the function name\n"
+        "- A long document covers many topics and you want to find passages related "
+        "to a specific concept (security, auth, encryption, etc.)\n\n"
         "**When NOT to use**:\n"
-        "- 已经知道具体关键词 → 用 grep\n"
-        "- 想从头到尾读文件 → 用 read_file_tool\n\n"
-        "**Query examples**:\n"
+        "- You already know the exact keyword or symbol → use grep_file_tool\n"
+        "- You want to read the entire file from start to finish → use read_file_tool\n\n"
+        "**Query tips**:\n"
+        "- Combine a concept with domain-specific terms for better results\n"
+        "- 2-5 specific words usually works better than a full sentence\n\n"
+        "**Examples**:\n"
         "  search_text_tool(query='error handling timeout logic', path='/src/main.py')\n"
         "  search_text_tool(query='authentication encryption security', text='...')\n"
-        "  search_text_tool(query='configuration setup initialization', path='/app/config.py')\n\n"
+        "  search_text_tool(query='configuration setup initialization', path='/app/config.py')\n"
     )
 
     async def execute(
@@ -80,12 +90,6 @@ class SearchTextTool(Tool):
                 return f"Cannot read file: {e}"
 
         if len(text.encode("utf-8")) > _MAX_TEXT_BYTES:
-            return (
-                f"text too large ({len(text)} chars / "
-                f"{len(text.encode('utf-8'))} bytes). "
-                f"Maximum is {_MAX_TEXT_BYTES // (1024 * 1024)} MB. "
-                "Try narrowing the input or using grep on part of it."
-            )
             return (
                 f"text too large ({len(text)} chars / "
                 f"{len(text.encode('utf-8'))} bytes). "

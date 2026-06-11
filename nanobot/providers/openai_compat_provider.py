@@ -505,6 +505,9 @@ class OpenAICompatProvider(LLMProvider):
         # across ALL messages, not just the last N.
         _validate_tool_sequence(result)
 
+        # Sanitize surrogates before they reach the HTTP client's UTF-8 encoder.
+        result = [LLMProvider._replace_surrogates(m) for m in result]
+
         return result
 
     # ------------------------------------------------------------------

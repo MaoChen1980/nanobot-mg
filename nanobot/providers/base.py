@@ -16,6 +16,11 @@ from loguru import logger
 
 from nanobot.utils.media_decode import image_placeholder_text
 
+# Regex matching lone surrogates (U+D800–U+DFFF) that crash UTF-8 encoding.
+# Python's UTF-8 encoder rejects unpaired surrogates, which can leak into
+# message content from tool results or user input on Windows.
+_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
+
 
 @dataclass
 class ToolCallRequest:
@@ -34,7 +39,7 @@ class ToolCallRequest:
             "type": "function",
             "function": {
                 "name": self.name,
-                "arguments": json.dumps(self.arguments, ensure_ascii=False),
+                "arguments": json.dumps(self.arguments, ensure_ascii=True),
             },
         }
         if self.extra_content:
@@ -250,6 +255,22 @@ class LLMProvider(ABC):
             if idx is not None and idx not in ordered_unique:
                 ordered_unique.append(idx)
         return ordered_unique
+
+    @staticmethod
+    def _replace_surrogates(value: Any) -> Any:
+        """Recursively replace lone surrogates with U+FFFD.
+
+        Python's UTF-8 encoder rejects unpaired surrogates (U+D800-U+DFFF),
+        which crashes HTTP clients when serializing request bodies.  Walk
+        through arbitrary nested message structures and sanitize all strings.
+        """
+        if isinstance(value, str):
+            return _SURROGATE_RE.sub("�", value)
+        if isinstance(value, list):
+            return [LLMProvider._replace_surrogates(v) for v in value]
+        if isinstance(value, dict):
+            return {k: LLMProvider._replace_surrogates(v) for k, v in value.items()}
+        return value
 
     @staticmethod
     def _sanitize_request_messages(

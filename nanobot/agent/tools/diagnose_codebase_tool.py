@@ -18,8 +18,8 @@ from nanobot.agent.tools.filesystem.filesystem_base import _FsTool
         path=p("string", "Absolute path to a file or directory to narrow the search scope. Required for code search — omit to get git history only."),
         max_results=p("integer", "Max grep results to show (default 20)", minimum=1, maximum=50, default=20),
         days=p("integer", "Days of git history to check (default 7)", minimum=1, maximum=90, default=7),
+        required=["error"],
     ),
-    required=["error"],
 )
 class DiagnoseTool(_FsTool):
     """Diagnose errors by searching code and checking recent changes."""

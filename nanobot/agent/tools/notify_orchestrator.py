@@ -14,7 +14,9 @@ if TYPE_CHECKING:
 @tool_parameters(
     build_parameters_schema(
         message=p("string", "The message to send to the Orchestrator"),
-        priority=p("string", "Priority: info, suggestion, or blocker"),
+        priority=p("string", "Priority: info, suggestion, or blocker",
+            enum=["info", "suggestion", "blocker"],
+        ),
         required=["message"],
     )
 )

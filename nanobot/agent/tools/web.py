@@ -109,7 +109,7 @@ def _format_results(query: str, items: list[dict[str, Any]], n: int) -> str:
 @tool_parameters(
     build_parameters_schema(
         query=p("string", "Search query — natural language question or keywords."),
-        count=p("integer", "Results to return (1-20, default 8)", minimum=1, maximum=20, default=8),
+        count=p("integer", "Results to return (1-10, default 5)", minimum=1, maximum=10, default=5),
         required=["query"],
     )
 )
@@ -123,7 +123,7 @@ class WebSearchTool(WebToolBase, Tool):
         "- When you need to look up unfamiliar information, latest news, or online documentation\n"
         "- When you need to find the latest technical solutions or best practices\n\n"
         "**Note**: Results come from search engines, 100% accuracy is not guaranteed. "
-        "Returns 8 results by default, up to 20 max."
+        "Returns 5 results by default, up to 10 max."
     )
 
     def __init__(self, config: WebSearchConfig | None = None, proxy: str | None = None, user_agent: str | None = None):
@@ -303,8 +303,8 @@ class WebSearchTool(WebToolBase, Tool):
             "default": "markdown",
             "description": "Output format: 'markdown' (default) — clean structured text preserving tables and code blocks; 'text' — raw text extraction with minimal formatting",
         },
-        maxChars=p("integer", "Max characters to extract (minimum 100, default 2000000). Pages exceeding this limit are truncated (~2MB of text). Typical pages are 10-40KB after extraction. Use smaller values (1000-5000) for quick previews to reduce token cost.",
-            minimum=100, default=2000000,
+        maxChars=p("integer", "Max characters to extract (minimum 100, default 100000). Pages exceeding this limit are truncated (~100KB of text). Typical pages are 10-40KB after extraction. Use smaller values (1000-5000) for quick previews to reduce token cost.",
+            minimum=100, default=100000,
         ),
         extract=p("string", "Optional regex — only lines matching this pattern are returned from the fetched text, with 1 line context before/after"),
         required=["url"],
@@ -319,10 +319,10 @@ class WebFetchTool(WebToolBase, Tool):
         "**Purpose**: Fetch URL content and extract readable text, with support for truncated previews and regex filtering.\n\n"
         "**When to use**:\n"
         "- When you already have a URL and need to fetch page content\n"
-        "- Unsure if the page content is useful → preview with `maxChars=1000` first, then decide whether to read in full (default 2000000)\n\n"
+        "- Unsure if the page content is useful → preview with `maxChars=1000` first, then decide whether to read in full (default 100000)\n\n"
         "**Note**: JS-heavy pages may not render completely.\n\n"
         "**Useful Parameters**:\n"
-        "- `maxChars` — controls the number of returned characters (default 2000000), small values for preview, large values for deep reading\n"
+        "- `maxChars` — controls the number of returned characters (default 100000), small values for preview, large values for deep reading\n"
         "- `format` — `markdown` (structured) or `text` (plain text)\n"
         "- `extract` — regex filtering, only returns matching lines"
     )

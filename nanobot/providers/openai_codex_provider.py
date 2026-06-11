@@ -39,6 +39,7 @@ class OpenAICodexProvider(LLMProvider):
         on_content_delta: Callable[[str], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         """Shared request logic for both chat() and chat_stream()."""
+        messages = LLMProvider._replace_surrogates(messages)
         model = model or self.default_model
         system_prompt, input_items = convert_messages(messages)
 

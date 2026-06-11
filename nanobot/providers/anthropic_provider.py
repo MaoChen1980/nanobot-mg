@@ -703,6 +703,7 @@ class AnthropicProvider(LLMProvider):
         stop_sequences: list[str] | None = None,
         extra_body: dict[str, Any] | None = None,
     ) -> LLMResponse:
+        messages = LLMProvider._replace_surrogates(messages)
         kwargs = self._build_kwargs(
             messages, tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,
@@ -734,6 +735,7 @@ class AnthropicProvider(LLMProvider):
         stop_sequences: list[str] | None = None,
         extra_body: dict[str, Any] | None = None,
     ) -> LLMResponse:
+        messages = LLMProvider._replace_surrogates(messages)
         kwargs = self._build_kwargs(
             messages, tools, model, max_tokens, temperature,
             reasoning_effort, tool_choice,

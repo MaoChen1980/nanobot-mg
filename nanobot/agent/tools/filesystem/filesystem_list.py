@@ -13,7 +13,7 @@ from .filesystem_base import _FsTool
         path=p("string", "Absolute path to a directory to list."),
         recursive=p("boolean", "Recursively list all files (default false)", default=False),
         max_entries=p("integer", "Maximum entries to return (default 400)",
-            minimum=1,
+            minimum=1, default=400,
         ),
         required=["path"],
     )

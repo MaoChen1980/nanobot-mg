@@ -111,7 +111,7 @@ def _commit_touches_path(repo, commit, rel_path: str) -> bool:
             "Be descriptive so you can tell stages apart later.",
         ),
     },
-    required=["path", "message"],
+    required=["path"],
 )
 class SaveStageTool(Tool):
     """Save the current state of your work as a named stage.

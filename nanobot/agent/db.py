@@ -261,7 +261,7 @@ class NanobotDB:
                 content = ""
             elif isinstance(content, (list, dict)):
                 extra["_content_is_json"] = True
-                content = json.dumps(content, ensure_ascii=False)
+                content = json.dumps(content, ensure_ascii=True)
             conn.execute(
                 "INSERT INTO messages (session_key, role, content, timestamp, extra) VALUES (?, ?, ?, ?, ?)",
                 (

@@ -36,6 +36,10 @@ from nanobot.config.paths import get_workspace_path
             "When user clicks a button, the label text is returned as their reply.",
             items=p("array", "", items=p("string", "Button label")),
         ),
+        message_id=p("string",
+            "Optional: message ID to reply to (threading). "
+            "Defaults to the current conversation message when targeting the same channel and chat.",
+        ),
         required=["content"],
     )
 )

@@ -246,7 +246,7 @@ class AgentRunner:
                     tc_id, spec.session_key or "default", exc,
                 )
                 if isinstance(result, dict):
-                    content = json.dumps(result, ensure_ascii=False)
+                    content = json.dumps(result, ensure_ascii=True)
                 elif not isinstance(result, str):
                     content = str(result)
                 else:
@@ -301,7 +301,7 @@ class AgentRunner:
                 if compress_event.replaced_raw and self._db is not None:
                     try:
                         self._db.append_history(
-                            content=json.dumps(compress_event.replaced_raw, ensure_ascii=False),
+                            content=json.dumps(compress_event.replaced_raw, ensure_ascii=True),
                             summary=compress_event.summary or "",
                         )
                     except Exception:
