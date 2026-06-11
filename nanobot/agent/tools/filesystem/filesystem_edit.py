@@ -143,6 +143,11 @@ class EditFileTool(_FsTool):
 
     description = (
         "**Purpose**: Modify file content via text matching or line number ranges.\n\n"
+        "**Prerequisite — Read the file first**:\n"
+        "You MUST read a file with read_file_tool before editing it. edit_file_tool checks whether the file\n"
+        "was read; if not, it returns a warning asking you to read first. This ensures you have the latest\n"
+        "content and can provide correct old_text or line numbers. Reading also lets the system detect\n"
+        "concurrent modifications via SHA256 hash verification.\n\n"
         "**Two Modes**:\n"
         "- **old_text/new_text** (default) — exact text match replacement, suitable for small replacements\n"
         "- **first_line/last_line** (line number range) — replace by line numbers, just pass the line numbers\n\n"
@@ -157,7 +162,7 @@ class EditFileTool(_FsTool):
         "- old_text appears multiple times and replace_all=false → shows line numbers for each match\n"
         "- File does not exist → returns error\n\n"
         "**Minimal Example**: edit_file_tool(path='main.py', first_line=42, last_line=45, new_text='def bar():')\n"
-        "→ Replaces lines 42-45 in the file with new content"
+        "→ First use read_file_tool to read the file, then call edit_file_tool with the correct line numbers"
     )
 
     @staticmethod
@@ -236,6 +241,13 @@ class EditFileTool(_FsTool):
                         msg += f"\n{self._find_in_file(fp, then_grep)}"
                     return msg
                 return self._file_not_found_msg(path, fp)
+
+            # Read-before-edit enforcement: must read file before editing
+            # Skip for create-file semantics (old_text="") — model isn't editing content
+            if old_text is not None and old_text != "":
+                read_warning = file_state.check_read(fp)
+                if read_warning:
+                    return read_warning
 
             # File size protection
             try:
@@ -366,6 +378,12 @@ class EditFileTool(_FsTool):
         fp = self._resolve(path)
         if not fp.exists():
             return self._file_not_found_msg(path, fp)
+
+        # Read-before-edit enforcement
+        read_warning = file_state.check_read(fp)
+        if read_warning:
+            return read_warning
+
         if path.endswith(".ipynb"):
             return "Error: This is a Jupyter notebook. Use the notebook_edit_tool instead of edit_file_tool."
 

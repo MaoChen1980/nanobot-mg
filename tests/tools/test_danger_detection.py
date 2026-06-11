@@ -370,6 +370,10 @@ async def test_edit_file_large_removal_override(tmp_path):
     orig = "hello " + "x" * 300 + " world"
     fp.write_text(orig)
 
+    # Read it first to satisfy file_state
+    from nanobot.agent.tools import file_state
+    file_state.record_read(fp)
+
     tool = EditFileTool(allowed_dir=tmp_path)
     result = await tool.execute(
         path=str(fp),
@@ -390,6 +394,10 @@ async def test_edit_file_small_removal_no_warning(tmp_path):
 
     fp = tmp_path / "edit.txt"
     fp.write_text("hello world")
+
+    # Read it first to satisfy file_state
+    from nanobot.agent.tools import file_state
+    file_state.record_read(fp)
 
     tool = EditFileTool(allowed_dir=tmp_path)
     result = await tool.execute(

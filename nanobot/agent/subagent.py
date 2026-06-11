@@ -276,7 +276,7 @@ class SubagentManager:
                 sub_result = SubagentResult(
                     task_id=task_id,
                     label=label,
-                    status="ok" if result.stop_reason in ("completed", "stop", "empty_final_response") else "error",
+                    status="ok" if result.stop_reason in ("completed", "stop", "empty_final_response", "tool_loop_breaker") else "error",
                     final_content=result.final_content,
                     tools_used=list(result.tools_used),
                     duration_s=duration_s,

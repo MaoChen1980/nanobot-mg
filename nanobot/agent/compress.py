@@ -62,6 +62,17 @@ _SUMMARY_PROMPT_TEMPLATE = (
     "- 踩过的坑和解决方案\n"
     "- 已验证不可行的路径及原因\n"
     "\n"
+    "## ⚠️ 必须保留的——重要且无法重新推导的信息\n"
+    "核心判断标准：**如果这个信息在未来还有用，且后面无法通过工具调用或推理重新得到，就必须保留。**\n"
+    "常见例子：\n"
+    "- 项目目录结构、文件布局、文件之间的引用关系（如：哪些文件是模块入口、测试文件在哪）\n"
+    "- glob_tool / list_directory_tool / read_file_tool 返回的文件路径列表和目录结构\n"
+    "- 已确认的文件绝对路径（不要只写「项目中有个配置文件」，要写全路径）\n"
+    "- 代码库中的关键符号位置（函数 X 在哪个文件的哪一行）\n"
+    "- 工具调用的返回样例（输出格式、结构），以便后面知道如何解析\n"
+    "- 需要外部系统返回才能知道的值：API 响应状态码、报错信息、实时的外部数据\n"
+    "- 用户明确提供的配置值、需求细节、偏好\n"
+    "\n"
     "## 一些可以考虑丢弃的方向（由你判断）\n"
     "- 后面的对话已不再使用的试错过程\n"
     "- 已被后续值替代的旧值\n"
@@ -432,15 +443,28 @@ def apply_compress_event(session: Session, event: CompressEvent, db=None) -> Non
     )
 
 
+_COMPRESSION_NOTICE = (
+    "\n\n---\n[Context compressed: earlier parts of the conversation were "
+    "summarized to fit the context window. Precise information such as "
+    "file paths, directory structures, tool outputs, or external data "
+    "may have been lost. If you need details to proceed, use the "
+    "appropriate input tools (read, search, exec, web, etc.) "
+    "to re-discover before acting.]\n---"
+)
+
+
 def make_summary_pair(summary: str, timestamp: str | None = None) -> list[dict]:
     """Create a synthetic user message carrying the compressed summary.
 
     A single user message ensures the conversation always starts with user
     (``user → assistant → user → assistant → …``).
+
+    A compression notice is prepended so the LLM knows context was reduced
+    and precise information (paths, structure) may need re-discovery.
     """
     msg = {
         "role": "user",
-        "content": summary,
+        "content": summary + _COMPRESSION_NOTICE,
         "status": "synthetic",
     }
     if timestamp:

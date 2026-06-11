@@ -1239,66 +1239,6 @@ class TestLogToolCall:
 # ===========================================================================
 
 
-class TestTrimToLastNTurns:
-    """Module-level _trim_to_last_n_turns."""
-
-    def test_keeps_last_two_turns(self):
-        from nanobot.agent.runner import _trim_to_last_n_turns
-        msgs = [
-            {"role": "system", "content": "sys"},
-            {"role": "user", "content": "q1"},
-            {"role": "assistant", "content": "a1", "tool_calls": [{"id": "tc1"}]},
-            {"role": "tool", "content": "r1", "tool_call_id": "tc1"},
-            {"role": "user", "content": "q2"},
-            {"role": "assistant", "content": "a2", "tool_calls": [{"id": "tc2"}]},
-            {"role": "tool", "content": "r2", "tool_call_id": "tc2"},
-            {"role": "user", "content": "q3"},
-            {"role": "assistant", "content": "a3", "tool_calls": [{"id": "tc3"}]},
-            {"role": "tool", "content": "r3", "tool_call_id": "tc3"},
-        ]
-        _trim_to_last_n_turns(msgs)
-        assert msgs[0]["role"] == "system"
-        # System + last 2 turns (each: user → assistant(tc) → tool) = 1 + 6 = 7
-        assert len(msgs) == 7
-        # First turn (q1+a1+r1) should be discarded
-        assert all(m["content"] != "q1" for m in msgs)
-        assert all(m["content"] != "a1" for m in msgs)
-
-    def test_keeps_system_prompt(self):
-        from nanobot.agent.runner import _trim_to_last_n_turns
-        msgs = [
-            {"role": "system", "content": "sys"},
-            {"role": "user", "content": "q"},
-            {"role": "assistant", "content": "a", "tool_calls": [{"id": "tc"}]},
-            {"role": "tool", "content": "r", "tool_call_id": "tc"},
-        ]
-        _trim_to_last_n_turns(msgs)
-        assert msgs[0]["role"] == "system"
-        assert msgs[0]["content"] == "sys"
-
-    def test_empty_or_no_system_returns_early(self):
-        from nanobot.agent.runner import _trim_to_last_n_turns
-        msgs: list = []
-        _trim_to_last_n_turns(msgs)
-        assert msgs == []
-
-        msgs2 = [{"role": "user", "content": "hi"}]
-        _trim_to_last_n_turns(msgs2)
-        assert len(msgs2) == 1
-
-    def test_fewer_turns_keeps_everything(self):
-        from nanobot.agent.runner import _trim_to_last_n_turns
-        msgs = [
-            {"role": "system", "content": "sys"},
-            {"role": "user", "content": "q"},
-            {"role": "assistant", "content": "a", "tool_calls": [{"id": "tc"}]},
-            {"role": "tool", "content": "r", "tool_call_id": "tc"},
-        ]
-        original_len = len(msgs)
-        _trim_to_last_n_turns(msgs)
-        assert len(msgs) == original_len
-
-
 class TestForceFinalResponse:
     """Module-level _force_final_response."""
 
@@ -1492,6 +1432,245 @@ async def test_check_tool_loop_non_param_errors_ignored():
     assert result is None
     assert state.count == 0
     assert state.tool_name == ""
+
+
+# ===========================================================================
+# Tool loop recovery — regression, integration, scenario tests
+# ===========================================================================
+
+
+class TestForceFinalResponseRegression:
+    """Regression tests for _force_final_response."""
+
+    def test_returns_text(self):
+        """Must return the same text that was appended."""
+        from nanobot.agent.runner import _force_final_response
+        msgs = [{"role": "user", "content": "hi"}]
+        text = "final answer"
+        result = _force_final_response(msgs, text)
+        assert result == text
+        assert msgs[-1]["content"] == text
+
+    def test_last_already_text_appends(self):
+        """If last msg is assistant without tool_calls, appends after it."""
+        from nanobot.agent.runner import _force_final_response
+        msgs = [{"role": "assistant", "content": "old text"}]
+        _force_final_response(msgs, "new text")
+        assert len(msgs) == 2
+        assert msgs[-1]["content"] == "new text"
+
+    def test_no_tool_calls_appends(self):
+        """No trailing tool calls or tool results — just append."""
+        from nanobot.agent.runner import _force_final_response
+        msgs = [{"role": "user", "content": "q"}]
+        _force_final_response(msgs, "done")
+        assert len(msgs) == 2
+        assert msgs[-1]["content"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_recovery_resets_on_valid_call():
+    """State machine resets when a valid (non-error) tool call occurs."""
+    from nanobot.agent.runner import AgentRunner, _ToolLoopState
+    from unittest.mock import PropertyMock
+
+    runner = AgentRunner(MagicMock())
+    state = _ToolLoopState()
+    tc = MagicMock()
+    type(tc).name = PropertyMock(return_value="test_tool")
+    ev_err = {"status": "error", "detail": "Invalid parameters for tool 'test_tool': missing x"}
+    ev_ok = {"status": "ok", "detail": "done"}
+
+    await runner._check_tool_loop(state, [tc], [ev_err], [], iteration=1)
+    await runner._check_tool_loop(state, [tc], [ev_err], [], iteration=2)
+    assert state.count == 2
+
+    result = await runner._check_tool_loop(state, [tc], [ev_ok], [], iteration=3)
+    assert result is None
+    assert state.count == 0
+    assert state.level == 0
+    assert state.tool_name == ""
+
+    await runner._check_tool_loop(state, [tc], [ev_err], [], iteration=4)
+    assert state.count == 1
+    assert state.level == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_recovery_mixed_valid_invalid():
+    """Runner with alternating valid/invalid calls completes normally."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+    from nanobot.agent.tools.base import Tool
+    from nanobot.agent.tools.registry import ToolRegistry
+
+    class NeedsParamTool(Tool):
+        name = "needs_param"
+        description = "requires x param"
+        read_only = False
+        _tool_parameters_schema = {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+            "required": ["x"],
+        }
+
+        async def execute(self, **kwargs):
+            return "done"
+
+    registry = ToolRegistry()
+    registry.register(NeedsParamTool())
+
+    provider = MagicMock()
+    call_count = 0
+
+    async def chat_fn(*, messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count % 2 == 0:
+            return LLMResponse(
+                content="ok", tool_calls=[],
+                usage={"prompt_tokens": 10, "completion_tokens": 5},
+            )
+        return LLMResponse(
+            content=None,
+            tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="needs_param", arguments={})],
+            usage={"prompt_tokens": 10, "completion_tokens": 5},
+        )
+
+    provider.chat_stream_with_retry = chat_fn
+    provider.chat_with_retry = chat_fn
+    llm_set_llm(provider, "test-model")
+
+    runner = AgentRunner(provider)
+    result = await runner.run(AgentRunSpec(
+        initial_messages=[{"role": "user", "content": "do stuff"}],
+        tools=registry,
+        model="test-model",
+        max_iterations=10,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    ))
+
+    assert result.stop_reason == "completed"
+    assert result.final_content == "ok"
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_recovery_full_integration():
+    """All 3 escalation levels: Invalid params -> assess_me -> compress -> force_stop."""
+    from unittest.mock import AsyncMock, patch
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+    from nanobot.agent.tools.base import Tool
+    from nanobot.agent.tools.registry import ToolRegistry
+
+    class NeedsParamTool(Tool):
+        name = "needs_param"
+        description = "requires x param"
+        read_only = False
+        _tool_parameters_schema = {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+            "required": ["x"],
+        }
+
+        async def execute(self, **kwargs):
+            return "done"
+
+    registry = ToolRegistry()
+    registry.register(NeedsParamTool())
+
+    provider = MagicMock()
+    call_count = 0
+
+    async def chat_fn(*, messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return LLMResponse(
+            content=None,
+            tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="needs_param", arguments={})],
+            usage={"prompt_tokens": 10, "completion_tokens": 5},
+        )
+
+    provider.chat_stream_with_retry = chat_fn
+    provider.chat_with_retry = chat_fn
+    llm_set_llm(provider, "test-model")
+
+    runner = AgentRunner(provider)
+
+    with patch("nanobot.agent.runner._run_assess_me", new_callable=AsyncMock,
+               return_value="Provide the required 'x' parameter"):
+        result = await runner.run(AgentRunSpec(
+            initial_messages=[{"role": "user", "content": "run tool"}],
+            tools=registry,
+            model="test-model",
+            max_iterations=30,
+            max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        ))
+
+    assert result.stop_reason == "tool_loop_breaker", (
+        f"Expected tool_loop_breaker, got {result.stop_reason}. "
+        f"call_count={call_count}, final_content={result.final_content!r}"
+    )
+    assert call_count >= 9, f"Expected >=9 LLM calls, got {call_count}"
+    assert "Tool calls failed" in (result.final_content or ""), (
+        f"Expected force_stop text, got {result.final_content!r}"
+    )
+    assert any("Provide the required" in m.get("content", "") for m in result.messages), (
+        "Expected assess_me injection in result.messages"
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_recovery_empty_assess_me():
+    """When assess_me returns empty, loop still escalates through all levels."""
+    from unittest.mock import AsyncMock, patch
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+    from nanobot.agent.tools.base import Tool
+    from nanobot.agent.tools.registry import ToolRegistry
+
+    class NeedsParamTool(Tool):
+        name = "needs_param"
+        description = "requires x param"
+        read_only = False
+        _tool_parameters_schema = {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+            "required": ["x"],
+        }
+
+        async def execute(self, **kwargs):
+            return "done"
+
+    registry = ToolRegistry()
+    registry.register(NeedsParamTool())
+
+    provider = MagicMock()
+    call_count = 0
+
+    async def chat_fn(*, messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return LLMResponse(
+            content=None,
+            tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="needs_param", arguments={})],
+            usage={"prompt_tokens": 10, "completion_tokens": 5},
+        )
+
+    provider.chat_stream_with_retry = chat_fn
+    provider.chat_with_retry = chat_fn
+    llm_set_llm(provider, "test-model")
+
+    runner = AgentRunner(provider)
+
+    with patch("nanobot.agent.runner._run_assess_me", new_callable=AsyncMock, return_value=""):
+        result = await runner.run(AgentRunSpec(
+            initial_messages=[{"role": "user", "content": "run tool"}],
+            tools=registry,
+            model="test-model",
+            max_iterations=30,
+            max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        ))
+
+    assert result.stop_reason == "tool_loop_breaker"
+    assert call_count >= 9
 
 
 async def test_tool_result_with_surrogate_does_not_crash():

@@ -39,9 +39,10 @@ class TestEditReadTracking:
         f = tmp_path / "a.py"
         f.write_text("hello world", encoding="utf-8")
         result = await edit_tool.execute(path=str(f), old_text="world", new_text="earth")
-        # Should still succeed but include a warning
-        assert "Successfully" in result
-        assert "not been read" in result.lower() or "warning" in result.lower()
+        # Should return early with a read-first warning, not edit the file
+        assert "not been read" in result.lower()
+        assert "Successfully" not in result
+        assert f.read_text() == "hello world"  # unchanged
 
     @pytest.mark.asyncio
     async def test_edit_succeeds_cleanly_after_read(self, read_tool, edit_tool, tmp_path):
@@ -62,8 +63,10 @@ class TestEditReadTracking:
         # External modification
         f.write_text("hello universe", encoding="utf-8")
         result = await edit_tool.execute(path=str(f), old_text="universe", new_text="earth")
-        assert "Successfully" in result
-        assert "modified" in result.lower() or "warning" in result.lower()
+        # Should return early with a re-read warning, not edit the file
+        assert "modified" in result.lower()
+        assert "Successfully" not in result
+        assert f.read_text() == "hello universe"  # unchanged
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ Write a compact status snapshot covering:
 3. **Gaps** — information still missing
 4. **Assumptions** — unverified beliefs driving the current approach
 5. **Blocker** — if the agent appears stuck, what is blocking it
-6. **Recovery** — what the agent should do differently on the next attempt. Be specific if the blocker is a repeated failure, empty response, or confusion about the task. If no blocker exists or progress is normal, write "N/A".
+6. **Recovery** — what the agent should do differently on the next attempt. Be specific if the blocker is a repeated failure, empty response, or confusion about the task. If insufficient information appears to be the root cause (wrong assumptions, missing context, stale data), recommend supplementing information sources via input tools (read, search, grep, exec, web, etc.). If no blocker exists or progress is normal, write "N/A".
 7. **Thinking patterns** — is the agent circling, ignoring alternatives, showing confirmation bias, or overconfident in one hypothesis?
 
 {% if verify %}

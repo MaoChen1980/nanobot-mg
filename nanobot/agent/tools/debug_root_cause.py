@@ -179,9 +179,12 @@ class DebugRootCauseTool(Tool):
             "what exactly should the agent examine?",
             "",
             "## Important",
-            "- Do NOT suggest specific tool calls (grep, read, exec, etc.) — the agent "
+            "- Do NOT prescribe specific tool names (grep, read, exec, etc.) — the agent "
             "will decide which tools to use based on your direction",
-            "- Focus on WHAT to investigate, not HOW to investigate it",
+            "- Focus on WHAT information to examine, not which tool to use for it",
+            "- If missing information may be the root cause, guide the agent toward "
+            "relevant information sources (files, configs, logs, API responses, external data) ",
+            "in your investigation directions — let it decide the specific tools",
         ]
 
         if problem:

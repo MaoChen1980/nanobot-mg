@@ -508,21 +508,32 @@ class AgentRunner:
                                 iteration, _tool_loop_state.tool_name,
                             )
                     elif recovery_action == "compress":
-                        _trim_to_last_n_turns(messages, keep_turns=2)
+                        tool_name = _tool_loop_state.tool_name
                         logger.info(
-                            "Tool loop recovery: trimmed to last 2 turns "
+                            "Tool loop recovery: injecting info-reminder "
                             "(iteration {}, tool={})",
-                            iteration, _tool_loop_state.tool_name,
+                            iteration, tool_name,
                         )
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                f"[Tool call errors detected: consecutive failures on '{tool_name}'.\n"
+                                "This is often caused by missing information — "
+                                "wrong arguments, file paths, or context gaps.\n"
+                                "Use input tools to gather what you need "
+                                "before retrying.]"
+                            ),
+                        })
                     elif recovery_action == "force_stop":
-                        _force_final_response(
+                        final_content = _force_final_response(
                             messages,
-                            "工具连续调用出错，请检查参数后重试。",
+                            "Tool calls failed repeatedly with parameter validation errors. "
+                            "Please check arguments and retry.",
                         )
-                        final_content = messages[-1]["content"] if messages else "工具调用连续出错"
                         stop_reason = "tool_loop_breaker"
                         context.final_content = final_content
                         context.stop_reason = stop_reason
+                        context.error = final_content
                         await hook.after_iteration(context)
                         break
                 continue
@@ -888,24 +899,6 @@ class AgentRunner:
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)
     _backfill_missing_tool_results = staticmethod(backfill_missing_tool_results)
 
-
-def _trim_to_last_n_turns(messages: list[dict], keep_turns: int = 2) -> None:
-    """Keep system prompt + last N assistant-tool exchanges, discard the rest."""
-    if not messages or messages[0].get("role") != "system":
-        return
-    assistant_indices = []
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].get("role") == "assistant" and messages[i].get("tool_calls"):
-            assistant_indices.append(i)
-            if len(assistant_indices) >= keep_turns:
-                break
-    if not assistant_indices:
-        return
-    cutoff = assistant_indices[-1]
-    if cutoff > 1:
-        cutoff -= 1  # include preceding user message
-    new = messages[:1] + messages[cutoff:]
-    messages[:] = new
 
 
 def _force_final_response(messages: list[dict], text: str) -> str:

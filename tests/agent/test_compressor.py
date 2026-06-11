@@ -425,7 +425,8 @@ class TestMakeSummaryPair:
         pair = Compressor.make_summary_pair("my summary")
         assert len(pair) == 1
         assert pair[0]["role"] == "user"
-        assert pair[0]["content"] == "my summary"
+        assert pair[0]["content"].startswith("my summary")
+        assert "[Context compressed:" in pair[0]["content"]
         assert pair[0]["status"] == "synthetic"
 
     def test_with_timestamp(self):
@@ -434,7 +435,7 @@ class TestMakeSummaryPair:
 
     def test_empty_summary(self):
         pair = Compressor.make_summary_pair("")
-        assert pair[0]["content"] == ""
+        assert "[Context compressed:" in pair[0]["content"]
 
     def test_no_timestamp_omits_key(self):
         pair = Compressor.make_summary_pair("test")
