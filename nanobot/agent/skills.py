@@ -116,6 +116,14 @@ class SkillsLoader:
         if self._list_cache is None or sig != self._list_cache_sig:
             self._list_cache = self._refresh_skills_list()
             self._list_cache_sig = sig
+            logger.info(
+                "Skills loaded: {} total (builtin={}, workspace={})",
+                len(self._list_cache),
+                sum(1 for s in self._list_cache if s.get("source") == "builtin"),
+                sum(1 for s in self._list_cache if s.get("source") == "workspace"),
+            )
+            for s in self._list_cache:
+                logger.info("  SKILL: {} ({})", s["name"], s.get("source", "?"))
 
         if filter_unavailable:
             return [skill for skill in self._list_cache if self._check_requirements(self._get_skill_meta(skill["name"]))]
