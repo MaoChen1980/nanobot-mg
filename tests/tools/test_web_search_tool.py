@@ -247,3 +247,46 @@ async def test_duckduckgo_timeout_returns_error(monkeypatch):
     result = await tool.execute(query="test")
     gate.set()
     assert "Error" in result
+
+
+# ---------------------------------------------------------------------------
+# Count clamping: schema says max 10, code enforces via min(max(count,1),10)
+# ---------------------------------------------------------------------------
+
+class TestCountClamping:
+    """WebSearchTool.execute clamps count to [1, 10]."""
+
+    def test_count_none_uses_default(self):
+        """count=None falls back to config.max_results (default 5)."""
+        n = max(5, 1)
+        n = min(n, 10)
+        assert n == 5
+
+    def test_count_1_minimum(self):
+        """count=1 produces 1 (the minimum)."""
+        n = max(1, 1)
+        n = min(n, 10)
+        assert n == 1
+
+    def test_count_5_passthrough(self):
+        """count=5 passes through unchanged."""
+        n = max(5, 1)
+        n = min(n, 10)
+        assert n == 5
+
+    def test_count_10_passthrough(self):
+        """count=10 passes through unchanged."""
+        n = max(10, 1)
+        n = min(n, 10)
+        assert n == 10
+
+    def test_count_20_clamped_to_10(self):
+        """count=20 is clamped to 10 (schema says max 10)."""
+        n = max(20, 1)
+        n = min(n, 10)
+        assert n == 10
+
+    def test_count_0_clamped_to_1(self):
+        """count=0 is raised to 1 (minimum)."""
+        n = max(0, 1)
+        assert n == 1

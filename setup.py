@@ -90,30 +90,46 @@ def _install_entry_point(target: Path) -> bool:
         return False
 
 
-def main():
-    _check_python_version()
-    print(f"正在安装 nanobot-mg（Python {sys.version_info.major}.{sys.version_info.minor}）...")
+def _is_already_installed() -> bool:
+    """Check if nanobot is already installed as editable from this directory."""
+    try:
+        import nanobot  # type: ignore[import-untyped]
+        here = Path(__file__).resolve().parent
+        nb_path = Path(nanobot.__file__).resolve().parent
+        if nb_path == (here / "nanobot").resolve():
+            print(f"✓ nanobot-mg 已安装（可编辑模式），跳过安装步骤")
+            return True
+    except (ImportError, AttributeError, Exception):
+        pass
+    return False
 
-    for mirror in MIRRORS:
-        label = mirror or "PyPI 官方"
-        if _install(mirror) == 0:
-            break
-        print(f"镜像 {label} 失败，尝试下一个...")
-    else:
-        sys.exit(1)
 
-    # 先检查 pip 装的入口点是否已经在 PATH 中且能用
+def _check_running_process() -> bool:
+    """Warn if nanobot.exe is running (would block pip from overwriting the entry point)."""
+    if platform.system() != "Windows":
+        return False
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq nanobot.exe", "/NH"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return "nanobot.exe" in (result.stdout or "")
+    except Exception:
+        return False
+
+
+def _ensure_entry_point() -> None:
+    """Make sure `nanobot` command is available on PATH."""
     existing = shutil.which("nanobot")
     if existing:
         r = subprocess.run([existing, "--help"], capture_output=True, text=True, timeout=15)
         if r.returncode == 0:
-            print(f"安装完成！命令位置：{existing}")
+            print(f"命令位置：{existing}")
             return
 
-    # 需要手动创建入口点（pip --user 时入口点可能不在 PATH 里）
     install_dir = _pick_install_dir()
     if install_dir is None:
-        print("\n⚠️  安装完成，但 PATH 中没有合适的目录放 'nanobot' 命令。")
+        print("\n⚠️  PATH 中没有合适的目录放 'nanobot' 命令。")
         print(f"   将以下目录加入 PATH：{Path(sys.executable).parent / 'Scripts'}")
         return
 
@@ -122,15 +138,49 @@ def main():
     if not _install_entry_point(target):
         return
 
-    print(f"安装完成！命令位置：{target}")
+    print(f"命令位置：{target}")
     try:
         r = subprocess.run([str(target), "--help"], capture_output=True, text=True, timeout=15)
         if r.returncode == 0:
             print("验证通过 ✓")
-        else:
-            print(f"⚠️  运行异常：{r.stderr[:100]}")
     except Exception:
-        print("Warning: failed to verify entry point")
+        pass
+
+
+def main():
+    _check_python_version()
+
+    if _is_already_installed():
+        _ensure_entry_point()
+        return
+
+    running = _check_running_process()
+    if running:
+        print("⚠️  nanobot.exe 正在运行，pip 无法更新入口点。")
+        print("   请先关闭所有 nanobot 终端窗口，再重新运行 setup.bat")
+        print("   或者手动结束进程后重试。")
+        print()
+
+    print(f"正在安装 nanobot-mg（Python {sys.version_info.major}.{sys.version_info.minor}）...")
+
+    for mirror in MIRRORS:
+        label = mirror or "PyPI 官方"
+        if _install(mirror) == 0:
+            break
+        print(f"镜像 {label} 失败，尝试下一个...")
+    else:
+        if running:
+            sys.exit(1)
+        print()
+        print("所有镜像均不可达，可能没有网络连接。")
+        print("但 nanobot-mg 的依赖可能已缓存在本地。")
+        print("尝试不指定镜像重新安装...")
+        if _install(None) == 0:
+            print("离线安装成功！")
+        else:
+            sys.exit(1)
+
+    _ensure_entry_point()
 
 
 if __name__ == "__main__":

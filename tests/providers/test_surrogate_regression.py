@@ -321,3 +321,217 @@ class TestSurrogateScenarios:
         entries = list(hist.load_history_strings())
         assert len(entries) == 1
         assert "\ud800" not in entries[0]
+
+
+# ── Additional scenario tests ──────────────────────────────────────────
+
+
+class TestDbSurrogateHandling:
+    """NanobotDB handles surrogates gracefully in json.dumps calls."""
+
+    def test_insert_tool_call_with_surrogate_content(self, tmp_path):
+        from nanobot.agent.db import NanobotDB
+        db = NanobotDB(tmp_path / "surr_test.db")
+        try:
+            db.insert_tool_call(
+                "s1", iteration=1, turn=1,
+                tool_name="exec_tool",
+                params={"cmd": "test"},
+                result="hello \ud800 world",
+                success=True,
+            )
+            rows = db.query_tool_calls(limit=1)
+            assert len(rows) == 1
+            assert "\ud800" not in rows[0]["result"]
+        finally:
+            db.close()
+
+    def test_insert_tool_call_with_surrogate_params(self, tmp_path):
+        from nanobot.agent.db import NanobotDB
+        db = NanobotDB(tmp_path / "surr_params.db")
+        try:
+            db.insert_tool_call(
+                "s1", iteration=1, turn=1,
+                tool_name="exec_tool",
+                params={"cmd": "test \udfff"},
+                result="ok",
+                success=True,
+            )
+            rows = db.query_tool_calls(limit=1)
+            assert len(rows) == 1
+        finally:
+            db.close()
+
+    def test_append_history_with_surrogate(self, tmp_path):
+        from nanobot.agent.db import NanobotDB
+        db = NanobotDB(tmp_path / "surr_hist.db")
+        try:
+            db.append_history("history with \ud800 at position 42")
+            entries = db.read_entries()
+            assert len(entries) == 1
+        finally:
+            db.close()
+
+    def test_complex_tool_result_with_mixed_surrogates(self, tmp_path):
+        """Dict result with surrogates at multiple nesting levels."""
+        from nanobot.agent.db import NanobotDB
+        db = NanobotDB(tmp_path / "surr_complex.db")
+        try:
+            result = {
+                "status": "error",
+                "message": "command failed with \ud800 at offset 42",
+                "details": {"stderr": "line1\nline2 with \udfff\n"},
+                "items": ["a", "b", "item with \ud800 here"],
+            }
+            db.insert_tool_call(
+                "s1", iteration=1, turn=1,
+                tool_name="exec_tool",
+                params={"cmd": "test"},
+                result=str(result),
+                success=False,
+                error="surrogate error",
+            )
+            rows = db.query_tool_calls(limit=1)
+            assert len(rows) == 1
+            assert rows[0]["success"] == 0
+        finally:
+            db.close()
+
+
+class TestSafeFileHistoryEdgeCases:
+    """Additional edge cases for SafeFileHistory surrogate handling."""
+
+    def test_entirely_surrogate_string(self, tmp_path):
+        from nanobot.cli.commands import SafeFileHistory
+        hist = SafeFileHistory(str(tmp_path / "hist_all_surr"))
+        hist.store_string("𐏿\ud800")
+        entries = list(hist.load_history_strings())
+        assert len(entries) == 1
+        surr_count = sum(1 for c in entries[0] if c == "\ud800" or c == "\udfff")
+        assert surr_count == 0
+
+    def test_surrogate_scattered_across_long_string(self, tmp_path):
+        from nanobot.cli.commands import SafeFileHistory
+        hist = SafeFileHistory(str(tmp_path / "hist_long"))
+        text = "A" * 50000 + "\ud800" + "B" * 50000 + "\udfff"
+        hist.store_string(text)
+        entries = list(hist.load_history_strings())
+        assert len(entries) == 1
+        assert "\ud800" not in entries[0]
+        assert "\udfff" not in entries[0]
+
+    def test_multiple_surrogates_in_single_string(self, tmp_path):
+        from nanobot.cli.commands import SafeFileHistory
+        hist = SafeFileHistory(str(tmp_path / "hist_multi"))
+        hist.store_string("a\ud800b\ud800c\udfffd\udfffe")
+        entries = list(hist.load_history_strings())
+        assert len(entries) == 1
+        assert "\ud800" not in entries[0]
+        assert "\udfff" not in entries[0]
+
+
+class TestReplaceSurrogatesEdgeCases:
+    """Extreme edge cases for _replace_surrogates."""
+
+    def test_deeply_nested_structure(self):
+        """Dict nested 10+ levels with surrogates at every level."""
+        nested = {"l1": {"l2": {"l3": {"l4": {"l5": {
+            "text": "deep \ud800",
+            "items": [
+                {"sub": "also \udfff"},
+                [1, 2, {"deep": "\ud800"}],
+            ],
+        }}}}}}
+        result = LLMProvider._replace_surrogates(nested)
+        result_str = str(result)
+        assert "\ud800" not in result_str
+        assert "\udfff" not in result_str
+
+    def test_mixed_list_types(self):
+        """List with surrogates, ints, Nones, bools."""
+        data = ["\ud800", 42, None, True, {"key": "\udfff"}, [1, "\ud800", 3]]
+        result = LLMProvider._replace_surrogates(data)
+        assert result[0] != "\ud800"
+        assert result[1] == 42
+        assert result[2] is None
+        assert result[3] is True
+
+    def test_json_safe_after_deep_sanitize(self):
+        """After _replace_surrogates, json.dumps never crashes on any structure."""
+        data = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "hello \ud800"},
+                {"type": "image_url", "image_url": {"url": "data:img"}, "_meta": {"path": "\udfff"}},
+            ],
+            "extra": {"a": [1, "\ud800", {"b": "\udfff"}]},
+        }
+        cleaned = LLMProvider._replace_surrogates(data)
+        json.dumps(cleaned, ensure_ascii=False).encode("utf-8")
+
+    def test_surrogate_at_every_boundary(self):
+        """Surrogates at positions 0, len-1, and everywhere in between."""
+        text = "\ud800" + "normal" * 100 + "\udfff"
+        text = text[:1000]
+        result = LLMProvider._replace_surrogates(text)
+        assert "\ud800" not in result
+        assert "\udfff" not in result
+        assert result == "�" + "normal" * 100 + "�"
+
+    def test_cyclic_reference_no_infinite_loop(self):
+        """Dict with self-reference doesn't cause infinite recursion."""
+        data: dict = {"key": "value"}
+        data["self"] = data
+        with pytest.raises(RecursionError):
+            LLMProvider._replace_surrogates(data)
+
+    def test_empty_list_and_dict(self):
+        assert LLMProvider._replace_surrogates([]) == []
+        assert LLMProvider._replace_surrogates({}) == {}
+
+
+class TestProviderSurrogateIntegration:
+    """Integration: surrogate handling through full provider pipelines."""
+
+    def test_openai_compat_full_pipeline_safe(self):
+        """Messages → _sanitize_empty_content → _sanitize_messages → json-safe."""
+        from unittest.mock import patch
+        with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
+            from nanobot.providers.openai_compat_provider import OpenAICompatProvider
+            provider = OpenAICompatProvider()
+            import copy
+            messages = [
+                {"role": "user", "content": "hello \ud800 world"},
+                {"role": "assistant", "content": None, "tool_calls": [
+                    {"id": "tc_1", "type": "function", "function": {"name": "fn", "arguments": "{}"}},
+                ]},
+                {"role": "tool", "tool_call_id": "tc_1", "content": "result with \udfff"},
+            ]
+            step1 = LLMProvider._sanitize_empty_content(copy.deepcopy(messages))
+            step2 = provider._sanitize_messages(step1)
+            json.dumps(step2, ensure_ascii=False).encode("utf-8")
+
+    def test_anthropic_surrogate_nested_content_blocks(self):
+        """Anthropic-style nested content blocks with surrogates."""
+        from unittest.mock import patch
+        with patch("anthropic.AsyncAnthropic"):
+            from nanobot.providers.anthropic_provider import AnthropicProvider
+            provider = AnthropicProvider()
+            messages = [
+                {"role": "user", "content": [
+                    {"type": "text", "text": "first \ud800 block"},
+                    {"type": "text", "text": "second \udfff block"},
+                    {"type": "text", "text": "clean text"},
+                ]},
+                {"role": "assistant", "content": "response with \ud800"},
+            ]
+            cleaned = LLMProvider._replace_surrogates(messages)
+            for msg in cleaned:
+                c = msg.get("content")
+                if isinstance(c, str):
+                    assert "\ud800" not in c
+                elif isinstance(c, list):
+                    for block in c:
+                        if isinstance(block, dict) and "text" in block:
+                            assert "\ud800" not in block["text"]
+            json.dumps(cleaned, ensure_ascii=False).encode("utf-8")

@@ -115,3 +115,45 @@ class TestToolCallLogTool:
         result = await tool.execute(session_key="s2", limit=5)
         assert "❌" in result
         assert "[ERROR: Permission denied]" in result
+
+
+class TestToolCallLogLimitClamping:
+    """ToolCallLogTool.execute clamps limit to [1, 100]."""
+
+    @pytest.mark.asyncio
+    async def test_limit_default_20(self, db):
+        """Default limit of 20 is used when no limit is passed."""
+        for i in range(25):
+            db.insert_tool_call(
+                "s1", iteration=1, turn=i,
+                tool_name="read_file_tool",
+                params={"path": f"file_{i}.txt"},
+                result=f"content_{i}",
+                success=True,
+            )
+        tool = ToolCallLogTool(db=db)
+        result = await tool.execute(session_key="s1")
+        assert result.count("✅") == 20
+
+    @pytest.mark.asyncio
+    async def test_limit_50(self, db):
+        for i in range(60):
+            db.insert_tool_call(
+                "s2", iteration=1, turn=i,
+                tool_name="exec_tool", params={}, result=f"r{i}", success=True,
+            )
+        tool = ToolCallLogTool(db=db)
+        result = await tool.execute(session_key="s2", limit=50)
+        assert result.count("✅") == 50
+
+    @pytest.mark.asyncio
+    async def test_limit_150_clamped_to_100(self, db):
+        """limit=150 is clamped to 100 by min(limit, 100)."""
+        for i in range(120):
+            db.insert_tool_call(
+                "s3", iteration=1, turn=i,
+                tool_name="exec_tool", params={}, result=f"r{i}", success=True,
+            )
+        tool = ToolCallLogTool(db=db)
+        result = await tool.execute(session_key="s3", limit=150)
+        assert result.count("✅") == 100

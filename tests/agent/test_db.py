@@ -130,3 +130,69 @@ class TestDbInit:
         _db = NanobotDB(db_path)
         _db.close()
         assert db_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Surrogate handling in json.dumps
+# ---------------------------------------------------------------------------
+
+class TestSurrogateSerialization:
+    """insert_tool_call and save_session handle surrogate-carrying content."""
+
+    def test_insert_tool_call_surrogate_result_string(self, db):
+        db.insert_tool_call(
+            "s1", iteration=1, turn=1,
+            tool_name="exec_tool", params={},
+            result="normal prefix \ud800 suffix",
+            success=True,
+        )
+        rows = db.query_tool_calls(limit=1)
+        assert len(rows) == 1
+
+    def test_insert_tool_call_surrogate_at_start(self, db):
+        db.insert_tool_call(
+            "s1", iteration=1, turn=1,
+            tool_name="exec_tool", params={},
+            result="\ud800 starts here",
+            success=True,
+        )
+        rows = db.query_tool_calls(limit=1)
+        assert len(rows) == 1
+
+    def test_insert_tool_call_high_surrogate(self, db):
+        db.insert_tool_call(
+            "s1", iteration=1, turn=1,
+            tool_name="exec_tool", params={},
+            result="high \udfff end",
+            success=True,
+        )
+        rows = db.query_tool_calls(limit=1)
+        assert len(rows) == 1
+
+    def test_save_session_with_surrogate_in_content(self, db):
+        s = Session(key="ch:surr_test")
+        s.add_message("user", "hello \ud800 world")
+        db.save_session(s)
+        loaded = db.load_session("ch:surr_test")
+        assert loaded is not None
+        assert len(loaded.messages) == 1
+
+    def test_save_session_with_list_content_surrogate(self, db):
+        """List content with surrogates does not crash."""
+        s = Session(key="ch:surr_list")
+        content = [
+            {"type": "text", "text": "normal"},
+            {"type": "text", "text": "bad \ud800"},
+        ]
+        s.add_message("user", content)
+        db.save_session(s)
+        loaded = db.load_session("ch:surr_list")
+        assert loaded is not None
+        assert len(loaded.messages) == 1
+
+    def test_save_session_with_dict_content_surrogate(self, db):
+        s = Session(key="ch:surr_dict")
+        s.add_message("user", {"custom": "data with \ud800"})
+        db.save_session(s)
+        loaded = db.load_session("ch:surr_dict")
+        assert loaded is not None
