@@ -181,6 +181,10 @@ class AzureOpenAIProvider(LLMProvider):
                 reasoning_content=reasoning_content,
             )
         except Exception as e:
+            try:
+                await stream.close()
+            except Exception:
+                pass
             return self._handle_error(e)
 
     def get_default_model(self) -> str:

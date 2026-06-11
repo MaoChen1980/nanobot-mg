@@ -274,6 +274,17 @@ async def summarize_turns(
                     continue
             return ""
 
+        if resp.finish_reason == "error":
+            logger.warning(
+                "Summary attempt {}/6 failed (LLM error): {}",
+                attempt + 1,
+                (resp.content or "")[:200],
+            )
+            if attempt < 5:
+                await asyncio.sleep(10)
+                continue
+            return ""
+
         summary = (resp.content or "").strip()
         logger.info("Summarized {} turns ({} chars)", len(current_turns), len(summary))
         return summary or "(no context to preserve)"

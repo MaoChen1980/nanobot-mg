@@ -218,4 +218,7 @@ class DebugRootCauseTool(Tool):
             logger.warning("debug_root_cause LLM call failed: {}", e)
             return f"Error: LLM call failed — {e}"
 
+        if resp.finish_reason == "error":
+            logger.warning("debug_root_cause LLM error response: {}", (resp.content or "")[:200])
+            return "问题太难，目前没有结论"
         return (resp.content or "").strip() or "问题太难，目前没有结论"

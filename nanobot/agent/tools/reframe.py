@@ -11,6 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
@@ -130,4 +132,7 @@ class ReframeTool(Tool):
         except Exception as e:
             return f"Error: LLM call failed — {e}"
 
+        if resp.finish_reason == "error":
+            logger.warning("reframe LLM error response: {}", (resp.content or "")[:200])
+            return "问题太难，目前没有结论"
         return (resp.content or "").strip() or "问题太难，目前没有结论"

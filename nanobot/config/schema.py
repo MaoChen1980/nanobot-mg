@@ -170,12 +170,12 @@ class AgentDefaults(Base):
     provider: str = (
         "auto"  # Provider name (e.g. "anthropic", "openrouter") or "auto" for auto-detection
     )
-    max_tokens: int = 20_000
+    max_tokens: int = 40_000
     context_window_tokens: int = 160_000
     context_block_limit: Optional[int] = None
     temperature: float = 0.1
     max_tool_iterations: int = 200
-    max_tool_result_chars: int = 32_000
+    max_tool_result_chars: int = 8_000
     provider_retry_mode: Literal["standard", "persistent"] = "persistent"
     reasoning_effort: Optional[str] = "high"  # low / medium / high / max / adaptive - enables LLM thinking mode
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"

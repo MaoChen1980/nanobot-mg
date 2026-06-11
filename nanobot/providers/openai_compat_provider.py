@@ -1230,7 +1230,7 @@ class OpenAICompatProvider(LLMProvider):
         error_name = e.__class__.__name__.lower()
         if "timeout" in error_name:
             error_kind = "timeout"
-        elif "connection" in error_name:
+        elif "connection" in error_name or "protocol" in error_name:
             error_kind = "connection"
 
         return {
@@ -1471,6 +1471,12 @@ class OpenAICompatProvider(LLMProvider):
                 error_kind="timeout",
             )
         except Exception as e:
+            # Close the stream so the underlying httpx connection is
+            # properly released back to the pool (or discarded if broken).
+            try:
+                await stream.close()
+            except Exception:
+                pass
             return self._handle_error(e, spec=self._spec, api_base=self.api_base)
 
     def get_default_model(self) -> str:
