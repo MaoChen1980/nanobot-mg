@@ -158,7 +158,7 @@ class EditFileTool(_FsTool):
         "If the file has changed, the tool includes a warning in the result (does not affect edit execution).\n\n"
         "**Limitations**:\n"
         "- Does not support cross-file find-and-replace\n"
-        "- Text matching tolerates whitespace differences but cannot span function/class reorganizations\n\n"
+        "- Text matching is exact (no fuzzy or whitespace-tolerant matching)\n\n"
         "**Error Handling**:\n"
         "- old_text not found → shows diff to help locate\n"
         "- old_text appears multiple times and replace_all=false → shows line numbers for each match\n"

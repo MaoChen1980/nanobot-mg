@@ -79,7 +79,7 @@ class CronTool(Tool):
         self._test_mode: ContextVar[bool] = ContextVar("cron_test_mode", default=False)
         self._dry_run: ContextVar[bool] = ContextVar("cron_dry_run", default=False)
         self._progress_callback: ContextVar[callable | None] = ContextVar("cron_progress_cb", default=None)
-        self._execution_log: ContextVar[list[str]] = ContextVar("cron_exec_log", default=list)
+        self._execution_log: ContextVar[list[str]] = ContextVar("cron_exec_log", default=[])
 
     def set_context(
         self, channel: str, chat_id: str,
@@ -436,21 +436,12 @@ class CronTool(Tool):
             if dry_run:
                 steps.append("  [Mode] Dry run - result will not be delivered")
 
-# Override deliver based on dry_run - with safety check
+            # Save original deliver for restoration after test
+            original_deliver = getattr(job.payload, "deliver", True)
             if dry_run:
                 try:
                     if hasattr(job.payload, "deliver"):
                         job.payload.deliver = False
-                    else:
-                        # payload is not a proper object - convert it safely
-                        job.payload = type("Payload", (), {
-                            "deliver": False,
-                            "message": str(getattr(job.payload, "message", "")),
-                            "channel": str(getattr(job.payload, "channel", "cli")),
-                            "to": str(getattr(job.payload, "to", "direct")),
-                            "channel_meta": {},
-                            "session_key": str(getattr(job.payload, "session_key", "")),
-                        })()
                 except Exception:
                     pass  # ignore errors, job will run anyway
 
@@ -470,6 +461,13 @@ class CronTool(Tool):
                 return "\n".join(steps)
 
             finally:
+                # Restore original deliver value if it was changed for dry run
+                if dry_run and original_deliver is not None:
+                    try:
+                        if hasattr(job.payload, "deliver"):
+                            job.payload.deliver = original_deliver
+                    except Exception:
+                        pass
                 self._progress_callback.set(old_callback)
                 self._test_mode.reset(test_token)
                 self._dry_run.reset(dry_run_token)

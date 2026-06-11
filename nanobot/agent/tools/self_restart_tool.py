@@ -21,7 +21,7 @@ class SelfRestartTool(Tool):
     """Restart nanobot framework."""
 
     name = "self_restart_tool"
-    description = "Restart the nanobot framework. No parameters."
+    description = "Request a framework restart (gateway performs the actual restart on next iteration). No parameters."
 
     async def execute(self, **kwargs: Any) -> str:
         try:

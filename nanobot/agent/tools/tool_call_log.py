@@ -47,6 +47,7 @@ class ToolCallLogTool(Tool):
         success: bool | None = None,
         min_result_size: int | None = None,
         limit: int = 20,
+        **kwargs: Any,
     ) -> str:
         limit = min(limit, 100)
         rows = self._db.query_tool_calls(

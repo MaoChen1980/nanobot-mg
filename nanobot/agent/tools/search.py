@@ -208,6 +208,8 @@ class GlobTool(_SearchTool):
         **kwargs: Any,
     ) -> str:
         try:
+            if not path:
+                return "Error: `path` is required — provide an absolute path."
             root = self._resolve(path)
             if not root.exists():
                 return f"Error: Path not found: {path} — use glob_tool to locate it first"

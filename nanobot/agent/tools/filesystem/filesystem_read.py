@@ -29,7 +29,7 @@ from nanobot.utils.media_decode import build_image_content_blocks, detect_image_
 
 @tool_parameters(
     build_parameters_schema(
-        path=p("string", "Absolute path to a file to read. Supports text files, PDFs (pages param), and images (rendered as Markdown)."),
+        path=p("string", "Absolute path to a file to read. Supports text files, PDFs (pages param), images (rendered as Markdown), and Office documents (.docx/.xlsx/.pptx)."),
         mode=p("string", "Reading mode: 'full' (outputs numbered lines) or 'overview' (previews structure via headings/sections without reading the whole file). Use overview when unsure what a file contains.",
             enum=["full", "overview"], default="full",
         ),
@@ -40,7 +40,7 @@ from nanobot.utils.media_decode import build_image_content_blocks, detect_image_
         limit=p("integer", "Maximum number of lines to read",
             minimum=1, default=2000,
         ),
-        pages=p("string", "Page range for PDF files, e.g. '1-5' (default: all, max 20 pages)"),
+        pages=p("string", "Page range for PDF files, e.g. '1-5' (default: first 20 pages, max 20 pages)"),
         required=["path"],
     )
 )

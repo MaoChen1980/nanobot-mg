@@ -96,9 +96,9 @@ class ExploreModuleTool(_FsTool):
             if not fp.exists():
                 return f"Error: Path not found: {path}"
             if fp.is_file():
-                return self._explore_file(fp)
+                return self._explore_file(fp, show_refs=show_refs)
             if fp.is_dir():
-                return self._explore_directory(fp, max_level)
+                return self._explore_directory(fp, max_level, show_refs=show_refs)
             return f"Error: Not a file or directory: {path}"
         except PermissionError as e:
             return f"Error: {e}"
