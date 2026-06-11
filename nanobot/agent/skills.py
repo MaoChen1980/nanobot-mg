@@ -175,11 +175,17 @@ class SkillsLoader:
         Returns:
             Formatted skills content.
         """
-        parts = [
-            f"### Skill: {name}\n\n{self._strip_frontmatter(markdown)}\n\n--- End: {name} ---"
-            for name in skill_names
-            if (markdown := self.load_skill(name))
-        ]
+        loaded: list[str] = []
+        parts: list[str] = []
+        for name in skill_names:
+            markdown = self.load_skill(name)
+            if markdown:
+                loaded.append(name)
+                parts.append(
+                    f"### Skill: {name}\n\n{self._strip_frontmatter(markdown)}\n\n--- End: {name} ---"
+                )
+        if loaded:
+            logger.info("Skills injected into context: {}", loaded)
         return "\n\n".join(parts)
 
     def build_skills_summary(self, exclude: set[str] | None = None) -> str:
