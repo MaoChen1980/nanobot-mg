@@ -1,6 +1,7 @@
 """Memory vector index using FAISS for retrieval.
 
-Supports incremental indexing via IndexIDMap and file_map.json change tracking.
+Supports incremental indexing via IndexFlatIP + IndexIDMap with
+file_map.json change tracking.
 """
 
 from __future__ import annotations
@@ -166,7 +167,7 @@ class MemoryVectorIndex:
         *file_texts* maps relative source paths (e.g. ``conversations/index.md``)
         to their full text content.
 
-        Uses IndexIDMap for compatibility with future incremental builds.
+        Uses IndexIDMap so incremental updates can add/remove by ID.
         """
         self._chunks = []
         self._index = None
@@ -197,9 +198,8 @@ class MemoryVectorIndex:
         embeddings = self._model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
         dim = embeddings.shape[1]
-        hnsw = faiss.IndexHNSWFlat(dim, 32, faiss.METRIC_INNER_PRODUCT)
-        hnsw.hnsw.ef_construction = 80
-        self._index = faiss.IndexIDMap(hnsw)
+        flat = faiss.IndexFlat(dim, faiss.METRIC_INNER_PRODUCT)
+        self._index = faiss.IndexIDMap(flat)
 
         ids = np.arange(len(chunks), dtype=np.int64)
         self._index.add_with_ids(np.array(embeddings, dtype=np.float32), ids)
@@ -281,15 +281,10 @@ class MemoryVectorIndex:
             logger.warning("FAISS not installed, cannot build vector index incrementally")
             return False
 
-        # IndexHNSWFlat (our default index type) does not support remove_ids.
-        # Try incremental update and fall back to full rebuild if it fails.
         try:
             return self._incremental_update(file_map, current_files, deleted, changed, new_files)
-        except RuntimeError as e:
-            if "remove_ids not implemented" in str(e):
-                logger.info("FAISS remove_ids not supported by this index type, doing full rebuild")
-            else:
-                logger.warning("FAISS incremental update failed ({}), falling back to full rebuild", e)
+        except Exception:
+            logger.warning("Incremental update failed, falling back to full rebuild")
             return self._fallback_full_rebuild(current_files)
 
     def _fallback_full_rebuild(self, current_files: dict[str, int]) -> bool:
@@ -495,7 +490,7 @@ class MemoryVectorIndex:
 
         query_vec = self._model.encode([query], normalize_embeddings=True)
 
-        # Set ef_search for HNSW
+        # Configure approximate search params if the index type supports them
         import faiss
         inner = faiss.downcast_index(self._index.index)
         if hasattr(inner, "hnsw"):
@@ -647,9 +642,8 @@ class MemoryVectorIndex:
                     for i in range(ntotal):
                         loaded_index.reconstruct(i, embs[i])
                     ids = np.arange(ntotal, dtype=np.int64)
-                    hnsw = faiss.IndexHNSWFlat(d, 32, faiss.METRIC_INNER_PRODUCT)
-                    hnsw.hnsw.ef_construction = 80
-                    idmap = faiss.IndexIDMap(hnsw)
+                    flat = faiss.IndexFlat(d, faiss.METRIC_INNER_PRODUCT)
+                    idmap = faiss.IndexIDMap(flat)
                     idmap.add_with_ids(embs, ids)
                     self._index = idmap
                     self.save()
