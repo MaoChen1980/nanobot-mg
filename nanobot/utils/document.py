@@ -41,7 +41,7 @@ SUPPORTED_EXTENSIONS: set[str] = {
     ".webp",
 }
 
-_MAX_TEXT_LENGTH = 200_000
+_MAX_TEXT_LENGTH = 500_000
 
 # Format groups for MarkItDown routing
 _MARKITDOWN_FORMATS: set[str] = {

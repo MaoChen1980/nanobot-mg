@@ -34,7 +34,7 @@ class AnalyzeTool(_FsTool):
         "- You want to find specific types of content (errors, warnings) — pass a keyword\n\n"
     )
 
-    MAX_TEXT_SIZE = 500_000
+    MAX_TEXT_SIZE = 10_000_000
 
     async def execute(
         self,

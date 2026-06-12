@@ -47,7 +47,7 @@ from nanobot.utils.media_decode import build_image_content_blocks, detect_image_
 class ReadFileTool(_FsTool):
     """Read file contents with optional line-based pagination."""
 
-    _MAX_CHARS = 128_000
+    _MAX_CHARS = 256_000
     _DEFAULT_LIMIT = 2000
     _MAX_PDF_PAGES = 20
 
@@ -94,10 +94,10 @@ class ReadFileTool(_FsTool):
             if fp.suffix.lower() in {".docx", ".xlsx", ".pptx"}:
                 return self._read_office_doc(fp)
 
-            raw = fp.read_bytes()
-            if not raw:
+            if fp.stat().st_size == 0:
                 return f"(Empty file: {path})"
 
+            raw = fp.read_bytes()
             mime = detect_image_mime(raw) or mimetypes.guess_type(path)[0]
             if mime and mime.startswith("image/"):
                 return build_image_content_blocks(raw, mime, str(fp), f"(Image file: {path})")

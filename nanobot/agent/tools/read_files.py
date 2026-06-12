@@ -32,7 +32,7 @@ class ReadFilesTool(_FsTool):
 
     name = "read_files_tool"
     read_only = True
-    _MAX_FILE_BYTES = 2_000_000
+    _MAX_FILE_BYTES = 10_000_000
 
     description = (
         "**Purpose**: Batch read multiple files matching a glob pattern — one call replaces glob+read loops.\n\n"

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 _SESSION_KEY_RE = re.compile(r"[^a-zA-Z0-9_.-]")
 _SANITIZE_MAX_LEN = 64
 
-_ANALYSIS_MAX_CHARS = 200_000  # Max chars of .pt content sent to analysis LLM
+_ANALYSIS_MAX_CHARS = 500_000  # Max chars of .pt content sent to analysis LLM
 
 _TS_RE = re.compile(r"<!--ts:(\d+(?:\.\d+)?)-->")  # embedded timestamp in memory files
 

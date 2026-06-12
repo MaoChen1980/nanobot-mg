@@ -68,11 +68,11 @@ class TestExtractText:
         """Test that large text files are truncated."""
         txt_file = tmp_path / "large.txt"
         # Create content larger than _MAX_TEXT_LENGTH
-        content = "x" * 300_000
+        content = "x" * 600_000
         txt_file.write_text(content, encoding="utf-8")
 
         result = extract_text(txt_file)
-        assert len(result) < 300_000
+        assert len(result) < len(content)
         assert "(truncated," in result
         assert "chars total)" in result
 
