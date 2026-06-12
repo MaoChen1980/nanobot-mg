@@ -60,6 +60,11 @@ class SelfTool(Tool):
         "__wrapped__", "__closure__",
     })
 
+    # Common names → actual attr mappings (so LLM can use intuitive names)
+    _ALIASES: dict[str, str] = {
+        "shell": "exec_config",       # agent asks for "shell", attr is exec_config
+    }
+
     # Sub-field names that are sensitive regardless of parent path
     _SENSITIVE_NAMES = frozenset({
         "api_key", "secret", "password", "token", "credential",
@@ -154,6 +159,9 @@ class SelfTool(Tool):
 
     def _resolve_path(self, path: str) -> tuple[Any, str | None]:
         parts = path.split(".")
+        # Apply alias for the top-level name
+        if parts and parts[0] in self._ALIASES:
+            parts[0] = self._ALIASES[parts[0]]
         obj = self._loop
         for part in parts:
             if part in self._DENIED_ATTRS or part.startswith("__"):
@@ -293,7 +301,8 @@ class SelfTool(Tool):
         if not key:
             return self._inspect_all()
         top = key.split(".")[0]
-        if top in self._DENIED_ATTRS or top.startswith("__"):
+        check_top = self._ALIASES.get(top, top)
+        if check_top in self._DENIED_ATTRS or check_top.startswith("__"):
             return f"Error: '{top}' is not accessible"
         obj, err = self._resolve_path(key)
         if err:
@@ -306,7 +315,8 @@ class SelfTool(Tool):
                 return self._format_value(self._loop._runtime_vars[key], key)
             return f"Error: {err}"
         # Guard against mock auto-generated attributes
-        if "." not in key and not _has_real_attr(self._loop, key):
+        check_key = self._ALIASES.get(top, top)
+        if "." not in key and not _has_real_attr(self._loop, check_key):
             if key in self._loop._runtime_vars:
                 return self._format_value(self._loop._runtime_vars[key], key)
             return f"Error: '{key}' not found"
@@ -359,10 +369,11 @@ class SelfTool(Tool):
         if err := self._validate_key(key):
             return err
         top = key.split(".")[0]
-        if top in self.BLOCKED or top in self._DENIED_ATTRS or top.startswith("__") or top.lower() in self._SENSITIVE_NAMES:
+        resolved_top = self._ALIASES.get(top, top)
+        if resolved_top in self.BLOCKED or resolved_top in self._DENIED_ATTRS or resolved_top.startswith("__") or resolved_top.lower() in self._SENSITIVE_NAMES:
             self._audit("modify", f"BLOCKED {key}")
             return f"Error: '{key}' is protected and cannot be modified"
-        if top in self.READ_ONLY:
+        if resolved_top in self.READ_ONLY:
             self._audit("modify", f"READ_ONLY {key}")
             return f"Error: '{key}' is read-only and cannot be modified"
         if "." in key:

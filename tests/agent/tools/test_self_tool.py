@@ -132,6 +132,39 @@ class TestInspectSingleKey:
         assert "not found" in result
 
 
+    @pytest.mark.asyncio
+    async def test_inspect_alias_shell_resolves_to_exec_config(self):
+        """shell alias should resolve to exec_config."""
+        loop = _make_mock_loop()
+        tool = _make_tool(loop)
+        result = await tool.execute(action="check", key="shell")
+        assert "exec_config" in result or "ExecToolConfig" in result
+
+    @pytest.mark.asyncio
+    async def test_inspect_alias_shell_dot_path(self):
+        """shell alias should support dot-path navigation."""
+        loop = _make_mock_loop()
+        loop.exec_config = MagicMock()
+        loop.exec_config.timeout = 120
+        tool = _make_tool(loop)
+        result = await tool.execute(action="check", key="shell.timeout")
+        assert "120" in result
+
+    @pytest.mark.asyncio
+    async def test_modify_alias_shell_blocked_read_only(self):
+        """shell alias resolves to READ_ONLY exec_config — set should be blocked."""
+        tool = _make_tool()
+        result = await tool.execute(action="set", key="shell", value=MagicMock())
+        assert "read-only" in result
+
+    @pytest.mark.asyncio
+    async def test_modify_alias_shell_dot_path_blocked_read_only(self):
+        """shell alias dot-path set should also be blocked."""
+        tool = _make_tool()
+        result = await tool.execute(action="set", key="shell.timeout", value=120)
+        assert "read-only" in result
+
+
 # ---------------------------------------------------------------------------
 # check — dot-path navigation
 # ---------------------------------------------------------------------------
