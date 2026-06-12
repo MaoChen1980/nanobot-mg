@@ -247,6 +247,9 @@ class AgentLoop:
         self._session_dispatch: dict[str, _SessionDispatchState] = {}
         self._background_tasks: list[asyncio.Task] = []
         self._session_locks: dict[str, asyncio.Lock] = {}
+        self._session_lock_last_used: dict[str, float] = {}  # for LRU pruning
+        self._session_lock_prune_counter = 0
+        self._MAX_SESSION_LOCKS = 10000
         # NANOBOT_MAX_CONCURRENT_REQUESTS: <=0 means unlimited (default).
         _max = int(os.environ.get("NANOBOT_MAX_CONCURRENT_REQUESTS", "0"))
         self._concurrency_gate: asyncio.Semaphore | None = (
@@ -297,6 +300,27 @@ class AgentLoop:
     @property
     def _active_tasks(self) -> dict[str, list[asyncio.Task]]:
         return {k: v.tasks for k, v in self._session_dispatch.items()}
+
+    # -- Public API for command handlers -----------------------------------
+
+    @property
+    def last_usage(self) -> dict[str, int]:
+        """Token usage from the most recent provider call."""
+        return self._last_usage
+
+    @property
+    def start_time(self) -> float:
+        """Monotonic timestamp of when this loop was started."""
+        return self._start_time
+
+    @property
+    def active_tasks(self) -> dict[str, list[asyncio.Task]]:
+        """Active asyncio tasks grouped by session key."""
+        return self._active_tasks
+
+    async def cancel_active_tasks(self, key: str) -> int:
+        """Cancel and await all active tasks and subagents for *key*."""
+        return await self._cancel_active_tasks(key)
 
     # ------------------------------------------------------------------
     # Retry / backoff helpers
@@ -513,7 +537,28 @@ class AgentLoop:
         acquire this lock before mutating session state to prevent races
         with the active dispatch task.
         """
+        self._session_lock_last_used[session_key] = time.time()
         return self._session_locks.setdefault(session_key, asyncio.Lock())
+
+    def _prune_session_locks(self) -> None:
+        """Remove session locks not in active dispatch when over capacity.
+
+        Prevents unbounded growth of _session_locks when many unique
+        session_keys pass through over the lifetime of the process.
+        Active dispatch sessions (tracked in _session_dispatch) are
+        always preserved.
+        """
+        if len(self._session_locks) <= self._MAX_SESSION_LOCKS:
+            return
+        now = time.time()
+        stale_threshold = now - 3600  # 1 hour idle
+        for key in list(self._session_locks.keys()):
+            if key in self._session_dispatch:
+                continue
+            last_used = self._session_lock_last_used.get(key, 0)
+            if last_used < stale_threshold:
+                del self._session_locks[key]
+                self._session_lock_last_used.pop(key, None)
 
     def _get_session_key_for_chat(self, chat_id: str, channel: str) -> str:
         """Derive session_key from chat_id and channel for observe toggle commands.
@@ -909,6 +954,7 @@ class AgentLoop:
         if session_key != msg.session_key:
             msg = dataclasses.replace(msg, session_key_override=session_key)
         lock = self._session_locks.setdefault(session_key, asyncio.Lock())
+        self._session_lock_last_used[session_key] = time.time()
 
         # Register a pending queue so follow-up messages for this session are
         # routed here (mid-turn injection) instead of spawning a new task.
@@ -927,6 +973,12 @@ class AgentLoop:
         # the task entry from state.tasks, but the stale _SessionDispatchState
         # itself must be removed here.
         self._session_dispatch.pop(session_key, None)
+
+        # Periodic session-lock LRU pruning (every 100 dispatches)
+        self._session_lock_prune_counter += 1
+        if self._session_lock_prune_counter >= 100:
+            self._session_lock_prune_counter = 0
+            self._prune_session_locks()
 
         # Proactive subagent check: after dispatch, if subagents still
         # running for this session, inject a check so the agent actively

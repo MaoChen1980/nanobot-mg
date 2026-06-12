@@ -53,12 +53,14 @@ class WecomProxyChannel(BaseProxyChannel):
                 return
 
             self._chat_frames[chat_id] = frame
+            if len(self._chat_frames) > 2000:
+                try:
+                    del self._chat_frames[next(iter(self._chat_frames))]
+                except StopIteration:
+                    pass
 
             msg_data = self.build_message(sender_id, chat_id, content, msg_id)
-            response = self.send_to_hub(msg_data)
-
-            if response and response.success and response.content:
-                self._enqueue_send({"frame": frame, "content": response.content})
+            self.send_to_hub(msg_data)
 
         except Exception as e:
             logger.error("WeCom proxy message handler error: {}", e)

@@ -62,6 +62,12 @@ class TestInboundMessage:
         )
         assert msg.session_key == "custom:key"
 
+    def test_timestamp_is_utc_aware(self):
+        from datetime import timezone
+        msg = InboundMessage(channel="t", sender_id="u", chat_id="c", content="")
+        assert msg.timestamp.tzinfo is not None
+        assert msg.timestamp.tzinfo == timezone.utc
+
 
 class TestOutboundMessage:
     def test_outbound_to_hub_response(self):

@@ -58,10 +58,7 @@ class MSTeamsProxyChannel(BaseProxyChannel):
             }
 
             msg_data = self.build_message(sender_id, conversation_id, text.strip(), activity_id)
-            response = self.send_to_hub(msg_data)
-
-            if response and response.success and response.content:
-                self._enqueue_send({"chat_id": conversation_id, "content": response.content})
+            self.send_to_hub(msg_data)
 
         except Exception as e:
             logger.error("MSTeams proxy handler error: {}", e)

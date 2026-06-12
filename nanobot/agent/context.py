@@ -458,11 +458,14 @@ class ContextBuilder:
                 parts.append(f"# Memory - {self._workspace_path_str}/memory/MEMORY.md\n\n{index_text}")
 
         # Also inline key memory files so rules/preferences are visible without recall (cached by mtime)
+        MAX_MEMORY_CHARS = 2000
         for name in ("system.md", "user.md"):
             fpath = memory_dir / name
             text = self._cached_read_text(fpath)
             if text:
                 text = text.strip()
+                if len(text) > MAX_MEMORY_CHARS:
+                    text = text[:MAX_MEMORY_CHARS] + "\n\n... (truncated, see file in memory/)"
                 heading = name.replace(".md", "").title()
                 parts.append(f"### {heading}\n\n{text}")
 

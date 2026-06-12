@@ -69,10 +69,7 @@ class QQProxyChannel(BaseProxyChannel):
                 return
 
             msg_data = self.build_message(user_id, chat_id, content, data.id, media=media)
-            response = await self.async_send_to_hub(msg_data)
-
-            if response and response.success and response.content:
-                self._enqueue_send({"chat_id": chat_id, "is_group": is_group, "content": response.content})
+            await self.async_send_to_hub(msg_data)
 
         except Exception as e:
             logger.error("QQ proxy message handler error: {}", e)

@@ -100,15 +100,7 @@ class SlackProxyChannel(BaseProxyChannel):
             return
 
         msg_data = self.build_message(sender_id, chat_id, text, req.envelope_id or f"{chat_id}:{time.time()}", media=media or [])
-        response = await self.async_send_to_hub(msg_data)
-
-        if response and response.success and (response.content or response.media):
-            enqueue_item: dict[str, Any] = {"chat_id": chat_id}
-            if response.content:
-                enqueue_item["content"] = response.content
-            if response.media:
-                enqueue_item["media"] = response.media
-            self._enqueue_send(enqueue_item)
+        await self.async_send_to_hub(msg_data)
 
     def start(self) -> None:
         """Run the Slack Socket Mode connection."""

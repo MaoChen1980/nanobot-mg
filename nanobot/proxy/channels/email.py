@@ -341,15 +341,7 @@ class EmailProxyChannel(BaseProxyChannel):
                         msg_id = str(time.time())
 
                     msg_data = self.build_message(sender, sender, content, msg_id, media=item.get("media", []))
-                    response = self.send_to_hub(msg_data)
-
-                    if response and response.success and response.content:
-                        self._enqueue_send({
-                            "to": sender,
-                            "content": response.content,
-                            "subject": f"Re: {subject}" if subject else None,
-                            "in_reply_to": message_id or None,
-                        })
+                    self.send_to_hub(msg_data)
             except Exception as e:
                 logger.error("Email poll loop error: {}", e)
 

@@ -19,7 +19,7 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage | None:
     """Cancel all active tasks and subagents for the session."""
     loop = ctx.loop
     msg = ctx.msg
-    total = await loop._cancel_active_tasks(msg.session_key)
+    total = await loop.cancel_active_tasks(msg.session_key)
 
     if total == 0 and msg.metadata.get("_stop_redispatch"):
         # Re-dispatched /stop after cancellation — let it fall through
@@ -63,7 +63,7 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
     """Build an outbound status message for a session."""
     loop = ctx.loop
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
-    ctx_est = loop._last_usage.get("prompt_tokens", 0)
+    ctx_est = loop.last_usage.get("prompt_tokens", 0)
 
     # Fetch web search provider usage (best-effort, never blocks the response)
     search_usage_text: str | None = None
@@ -78,7 +78,7 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
             search_usage_text = usage.format()
     except Exception:
         logger.debug("Failed to fetch search usage for /status")  # Never let usage fetch break /status
-    active_tasks = loop._active_tasks.get(ctx.key, [])
+    active_tasks = loop.active_tasks.get(ctx.key, [])
     task_count = sum(1 for t in active_tasks if not t.done())
     try:
         task_count += loop.subagents.get_running_count_by_session(ctx.key)
@@ -89,7 +89,7 @@ async def cmd_status(ctx: CommandContext) -> OutboundMessage:
         chat_id=ctx.msg.chat_id,
         content=build_status_content(
             version=__version__, model=loop.model,
-            start_time=loop._start_time, last_usage=loop._last_usage,
+            start_time=loop.start_time, last_usage=loop.last_usage,
             context_window_tokens=loop.context_window_tokens,
             session_msg_count=len(session.messages),
             context_tokens_estimate=ctx_est,
@@ -114,7 +114,7 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage | None:
     if msg.metadata.get("_new_redispatch"):
         return None
 
-    cancelled = await loop._cancel_active_tasks(ctx.key)
+    cancelled = await loop.cancel_active_tasks(ctx.key)
 
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
 

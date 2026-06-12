@@ -345,6 +345,9 @@ class ExecTool(Tool):
                     except asyncio.CancelledError:
                         await self._kill_process(process)
                         raise
+                    except Exception:
+                        await self._kill_process(process)
+                        raise
                     # Normal completion: fall through to post-processing
                     await process.wait()
                     stderr_bytes = await process.stderr.read() if process.stderr else b""

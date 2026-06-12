@@ -47,7 +47,7 @@ class SelfRestartTool(Tool):
         errors: list[str] = []
         for py_path in sorted(pkg_root.rglob("*.py")):
             try:
-                compile(py_path.read_text(encoding="utf-8"), py_path.name, "exec")
+                compile(py_path.read_bytes(), py_path.name, "exec")
             except SyntaxError as exc:
                 rel = py_path.relative_to(pkg_root.parent)
                 errors.append(f"  {rel}: {exc}")

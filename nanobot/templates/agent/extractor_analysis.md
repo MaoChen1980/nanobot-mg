@@ -126,6 +126,8 @@ Skill 是一条事后总结出来的**捷径**。LLM 走了一次完整的路径
 
 一条记录有价值但不符合 skill 标准，用 `pattern`（单次技术操作）或 `knowledge`（事实性知识）。
 
+> **注意：** 创建 skill 时的最终过滤在 `extractor_skill_creator.md`，那里的门控逻辑与此处互补——"Non-obvious"≈"不记就会绕路"，"Not duplicative"≈"有增量价值"的另一种表达。
+
 ---
 
 ## 3. User Profile — 用户信息收集 (输出为 preference → USER.md)

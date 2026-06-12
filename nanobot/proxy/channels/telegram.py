@@ -58,15 +58,7 @@ class TelegramProxyChannel(BaseProxyChannel):
                 return
 
             msg_data = self.build_message(sender_id, chat_id, content, msg_id, media=media_paths)
-            response = await self.async_send_to_hub(msg_data)
-
-            if response and response.success and (response.content or response.media):
-                enqueue_item: dict[str, Any] = {"chat_id": chat_id}
-                if response.content:
-                    enqueue_item["content"] = response.content
-                if response.media:
-                    enqueue_item["media"] = response.media
-                self._enqueue_send(enqueue_item)
+            await self.async_send_to_hub(msg_data)
 
         except Exception as e:
             logger.error("Telegram proxy handler error: {}", e)

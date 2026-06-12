@@ -118,10 +118,7 @@ class WeixinProxyChannel(BaseProxyChannel):
                                     logger.warning("WeChat download file error: {}", e)
 
                         msg_data = self.build_message(sender_id, chat_id, content, msg_id, media=media_items)
-                        response = self.send_to_hub(msg_data)
-
-                        if response and response.success and response.content:
-                            self._enqueue_send({"chat_id": chat_id, "content": response.content})
+                        self.send_to_hub(msg_data)
             except Exception as e:
                 logger.warning("WeChat poll error: {}", e)
             time.sleep(3)

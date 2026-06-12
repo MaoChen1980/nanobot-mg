@@ -62,10 +62,7 @@ class DiscordProxyChannel(BaseProxyChannel):
                 return
 
             msg_data = self.build_message(sender_id, channel_id, content, msg_id, media=media)
-            response = self.send_to_hub(msg_data)
-
-            if response and response.success and response.content:
-                self._enqueue_send({"chat_id": channel_id, "content": response.content})
+            self.send_to_hub(msg_data)
 
         except Exception as e:
             logger.error("Discord proxy message handler error: {}", e)

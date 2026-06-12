@@ -398,7 +398,7 @@ class FeishuProxyChannel(BaseProxyChannel):
 
             original_name = getattr(resp, "file_name", None) or ""
             if original_name:
-                local_path = tmp_dir / original_name
+                local_path = tmp_dir / pathlib.Path(original_name).name
                 # deduplicate: append counter if filename already exists
                 if local_path.exists():
                     stem = local_path.stem

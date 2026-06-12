@@ -58,15 +58,7 @@ class MochatProxyChannel(BaseProxyChannel):
                 group_id = event_payload.get("groupId", "")
 
                 msg_data = self.build_message(author, target_id, content, message_id)
-                response = self.send_to_hub(msg_data)
-
-                if response and response.success and response.content:
-                    self._enqueue_send({
-                        "target_id": target_id,
-                        "content": response.content,
-                        "reply_to": message_id,
-                        "group_id": group_id,
-                    })
+                self.send_to_hub(msg_data)
 
         except Exception as e:
             logger.error("Mochat proxy event handler error: {}", e)
