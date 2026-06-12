@@ -1,6 +1,10 @@
 ---
 name: github
-description: Trigger when the user asks to check pull requests, review CI status, list issues or workflow runs, search code on GitHub, or query the GitHub API. Requires gh CLI with GitHub authentication.
+description: >
+  管理 GitHub 仓库的 PR、Issue、CI、代码搜索。
+  当用户要求查看 PR、检查 CI 状态、列出 Issue、搜索代码、运行 workflow、调用 GitHub API 时，必须优先使用此 Skill。
+  关键词：PR、pull request、CI、GitHub、issue、workflow、代码搜索、gh。
+  即使用户没有明确说"用 gh 命令"，只要涉及 GitHub 上的任何操作，都应触发。
 version: 0.1.0
 ---
 
@@ -55,11 +59,16 @@ Interact with GitHub using the `gh` CLI. When not inside a git directory, always
    gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.title)"'
    ```
 
+9. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 - Run `gh pr checks <number> --repo owner/repo` and confirm it returns check results without errors
 - Run `gh api repos/owner/repo/pulls/55 --jq '.title'` and verify a non-empty title string is returned
 - Run `gh --version` to confirm the CLI is installed and authenticated
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -67,5 +76,3 @@ Interact with GitHub using the `gh` CLI. When not inside a git directory, always
 - **Authentication**: `gh` must be authenticated via `gh auth login` before use. Unauthenticated requests return a 401 error
 - **JSON output**: Not all subcommands support `--json`; fall back to `gh api` for unsupported endpoints
 - **Pagination**: Large result sets are paginated by default; use `--paginate` with `gh api` or `--limit 0` for full results
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

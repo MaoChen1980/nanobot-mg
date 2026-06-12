@@ -47,6 +47,16 @@ A verified multi-step workflow. Structure:
 
 ## Example
 <Concrete usage example>
+
+## Verification
+<Verifiable success criteria — what to check after execution to confirm the skill worked correctly>
+
+## Pitfalls
+<Known issues, edge cases, platform-specific notes>
+
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 ```
 
 ### Avoidance Skill — "What NOT to do / When to give up"
@@ -58,6 +68,9 @@ A pitfall that appeared repeatedly — knowing when to skip saves as much cost a
 
 ## Verification
 <How to confirm this is actually the trap — what to check>
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Decision
 <If confirmed, what to do: skip, abandon, or switch approach. Be explicit about the decision rule.>
@@ -87,10 +100,27 @@ A system tool or self-written script that needs install/uninstall/usage document
 
 ## Example
 <Concrete usage example with expected output>
+
+## Verification
+<How to confirm the tool is correctly installed and working — e.g. exit code 0 from version check, expected output from test command>
+
+## Pitfalls
+<Known issues, platform-specific notes, edge cases>
+
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 ```
 
 ### Rules for content (all types):
-- **Frontmatter**: only `name` and `description` — the description is the trigger, make it precise
+- **Frontmatter**: 描述使用三段式触发格式：
+  ```
+  [功能概述]。
+  当用户[场景1]、[场景2]、[场景3]时，必须使用此 Skill。
+  关键词：[关键词1]、[关键词2]、[关键词3]。
+  即使用户没有明确说'[精确术语]'，只要涉及[相关概念]，都应触发。
+  ```
+- **Must include `## Verification` section** with verifiable success criteria and self-optimization as last item
 - **Keep under 2000 words** — concise and actionable
 - **Information gathering is mandatory** — every skill must describe what context to check before taking action
 - **Reference real tools**: grep_tool, glob_tool, read_file_tool, write_file_tool, spawn_tool, web_search_tool, etc.
@@ -104,7 +134,7 @@ Output as JSON:
     {
       "name": "kebab-case-name",
       "type": "execution|avoidance|tool",
-      "description": "Precise one-line description — when to trigger this skill",
+      "description": "三段式触发描述。[功能]。当用户[场景1]、[场景2]时，必须使用此 Skill。关键词：[关键词]。即使用户没有明确说'[术语]'，只要涉及[概念]，都应触发。",
       "content": "---\nname: kebab-case-name\ndescription: ...\n---\n\n# Title\n\nBody..."
     }
   ]

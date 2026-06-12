@@ -1,6 +1,10 @@
 ---
 name: cron
-description: Trigger when user requests reminders, recurring tasks, or one-shot notifications. Use for "remind me in X minutes", "check every hour", "notify me when done", "schedule daily report", or any time-based delayed action. Also triggers on session startup for durable tasks.
+description: >
+  管理定时任务和提醒。
+  当用户要求设置提醒、定时任务、周期通知、一次性通知、或说"每隔 X 分钟/小时/天"时，必须使用此 Skill。
+  关键词：提醒、定时、每天、每隔、cron、schedule、remind、通知、延期。
+  即使用户没有明确说"设置 cron"，只要涉及未来某个时间执行操作，都应触发。
 version: 0.1.0
 ---
 
@@ -63,12 +67,17 @@ Use the `cron` tool to schedule reminders or recurring tasks.
    cron(action="remove", job_id="abc123")
    ```
 
+5. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 - After `cron(action="add")`: confirm no errors returned; optionally verify with `cron(action="list")`
 - After `cron(action="remove")`: run list to confirm the job is gone
 - For timezone-specific schedules: verify the `tz` parameter matches the user's IANA timezone
 - For one-shot tasks: confirm the ISO datetime is in the future
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -76,7 +85,3 @@ Use the `cron` tool to schedule reminders or recurring tasks.
 - For one-shot tasks, compute the ISO datetime relative to the current time — do not hardcode.
 - `every_seconds` and `cron_expr`/`at` are mutually exclusive — use only one schedule parameter per job.
 - One-time jobs auto-delete after firing; no manual cleanup needed.
-
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

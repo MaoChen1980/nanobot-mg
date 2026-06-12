@@ -22,7 +22,11 @@ ALLOWED_RESOURCES = {"scripts", "references", "assets"}
 
 SKILL_TEMPLATE = """---
 name: {skill_name}
-description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+description: >
+  [TODO: 功能概述]。
+  当用户[TODO: 场景1]、[TODO: 场景2]、[TODO: 场景3]时，必须使用此 Skill。
+  关键词：[TODO: 关键词1]、[TODO: 关键词2]、[TODO: 关键词3]。
+  即使用户没有明确说'[TODO: 精确术语]'，只要涉及[TODO: 相关概念]，都应触发。
 always: false
 ---
 
@@ -72,6 +76,18 @@ Delete this entire "Structuring This Skill" section when done - it's just guidan
 
 Create only the resource directories this skill actually needs. Delete this section if no resources are required.
 
+## Verification
+
+- [TODO: 执行后可验证的成功标准——例如：命令返回 exit code 0、输出中包含预期内容、文件生成且格式正确]
+
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
+
+## Resources (optional)
+
+Create only the resource directories this skill actually needs. Delete this section if no resources are required.
+
 ### scripts/
 Executable code (Python/Bash/etc.) that can be run directly to perform specific operations.
 
@@ -109,7 +125,9 @@ Files not intended to be loaded into context, but rather used within the output 
 
 ---
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 """
 
 EXAMPLE_SCRIPT = '''#!/usr/bin/env python3

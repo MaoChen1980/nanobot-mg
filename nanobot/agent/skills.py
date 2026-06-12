@@ -21,9 +21,10 @@ _STRIP_SKILL_FRONTMATTER = re.compile(
 )
 
 _SELF_OPTIMIZATION_FOOTER = (
-    "\n---\n\n"
-    "**Self-optimization**: After using this skill, improve it based on what you learned "
-    "— fix bugs, simplify steps, add edge cases, enhance verification.\n"
+    "\n"
+    "- **Self-optimization**: 此 Skill 可自我进化。\n"
+    "  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug\n"
+    "  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准\n"
 )
 
 

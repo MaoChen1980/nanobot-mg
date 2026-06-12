@@ -1,6 +1,10 @@
 ---
 name: intent-alignment
-description: Trigger when the user's request is vague, ambiguous, or missing key details. Use for multi-step tasks, report writing, fuzzy requirements where assumptions could be wrong. Essential when audience, purpose, or root goal is not explicitly stated and needs clarification. Do NOT load for simple, well-defined queries.
+description: >
+  澄清模糊、不完整、有歧义的需求。
+  当用户请求缺少关键细节、有多重理解方式、需要写方案或报告、或用户只说了一个模糊目标时，应优先使用此 Skill。
+  关键词：需求澄清、对齐、你是指、什么意思、需求不明确、目标不清晰、前提假设。
+  即使用户没有明确说"帮我理清需求"，只要你发现需求有歧义，都应触发。
 version: 0.1.0
 ---
 
@@ -44,12 +48,17 @@ version: 0.1.0
    - Complex tasks: must wait for user confirmation before starting
    - Execution can be paused at any time
 
+5. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 - Did you confirm understanding **before** acting? (Mandatory check)
 - Did you paraphrase in your own words instead of repeating the user's words?
 - For complex tasks: did you wait for explicit user confirmation before starting execution?
 - Did you probe deeper intent (audience, purpose, constraints), not just surface-level details?
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -108,4 +117,3 @@ User: Wait, change this
 You: OK, pausing. What do you want to change?
 ```
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

@@ -1,6 +1,10 @@
 ---
 name: multi-question-answering
-description: Trigger when the user presents multiple-choice or A/B questions in a single prompt, asks numbered questions, or connects choices with "or" / "还是". Use for survey-style prompts, binary decisions, and multi-part questions requiring compact answer format. Provides concise responses with numbers or letters instead of full sentences. Do NOT load for open-ended questions or single-option queries.
+description: >
+  高效回答多选、A/B、编号问题。
+  当用户在一个 prompt 中提出多个选择题、A/B 问题、带选项的问题、用"还是"/"or"连接的选择时，必须使用此 Skill。
+  关键词：多选、A/B、哪个、还是、or、选择题、选项、编号问题。
+  即使用户没有明确说"多项选择"，只要一个消息中包含多个独立问题，都应触发。
 version: 0.1.0
 ---
 
@@ -26,12 +30,17 @@ version: 0.1.0
 
 4. **Respond Concisely** — Provide only the selected option (number or letter). No extra explanation or commentary.
 
+5. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 - Did you respond with only the option identifier (number/letter) without extra commentary?
 - Did all questions receive a corresponding answer?
 - Is the answer format correct for the question type (A/B vs. numbered)?
 - If the question uses "yes/no + option" format, did you include both parts?
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -60,4 +69,3 @@ Answer: **"2"** (second option, the day after)
 - No need to explain which option was selected; directly provide the number/letter
 - If the user explicitly specifies options, confirm with a simple "okay"
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

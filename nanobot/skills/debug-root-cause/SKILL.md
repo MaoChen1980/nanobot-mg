@@ -1,23 +1,24 @@
 ---
 name: debug-root-cause
 description: >
-  Triggered by contradiction (tool result doesn't match
-  expectation), spinning (same approach repeating), or new
-  investigation where root cause is unknown. Replaces random
-  exploration with systematic RCA from 20 methods.
+  系统化根因分析：用 20 种 RCA 方法替代随机试错。
+  当工具返回 error 或不符合预期的结果、同一操作反复失败、
+  或用户说"排查"、"为什么"、"还是不对"时，必须使用此 Skill。
+  关键词：报错、对不上、排查、根因、still broken、why、重复失败、不符合预期。
+  即使用户没有明确说"根因分析"，只要工具返回了非预期结果或用户要求排查，都应触发。
 ---
 
 # Debug Root Cause — Systematic Investigation Methodology
 
 ## Triggers
 
-| Tier | LLM 感知状态 | 触发条件 | 行动 |
-|---|---|---|---|
-| T1 | **推理矛盾** | 工具返回结果和你推理不一致，表面解释不通 | 定义问题，选逆推法/对比法追查 |
-| T1 | **重复循环** | 试了几种方案走不通，重复相同尝试 | 选分解法/排除法缩小范围 |
-| T2 | **开始新排查** | 拿到新 bug/error，不清楚根因 | 定义问题，按场景选 1-3 方法 |
-| T2 | **复杂多变量** | 不确定哪个因素导致，变量多 | 选单变量法/边界法，一次只变一个 |
-| T2 | **模式匹配** | 表面和之前 bug 像但又不完全一样 | 先复现再对比差异，不跳入旧解法 |
+| 触发源 | 可检测信号 | 行动 |
+|--------|-----------|------|
+| 工具报错 | exit code != 0、error message、traceback、异常输出 | 定义问题，选逆推/对比/分解法追查 |
+| 结果不符预期 | 输出值、文件内容、API 返回与预期不同 | 选分解法/排除法缩小范围 |
+| 用户排查 | 用户说"排查"、"为什么"、"还是不对"、"找原因"、"debug" | 定义问题，按场景选 1-3 方法 |
+| 重复失败 | 同一操作尝试 3 次仍失败，结果模式相同 | 选单变量法/边界法，一次只变一个变量 |
+| 无法复现 | bug/error 问题无法稳定重现 | 选复现法/静候法，找出固定条件 |
 
 **什么时候不调：**
 - 错误直接指向具体位置 → 先修，不需要方法论
@@ -123,6 +124,8 @@ After reading the file back, follow the plan:
 3. Update the file with findings
 4. Continue or switch method if stuck
 
+5. **验证**: 确认问题已解决（错误消失、结果符合预期）。如果没有，回到 Phase 2 选择新方法继续。如果换了 3 种方法仍无法解决，此 skill 需要更新——加载 skill-manager 修复。
+
 ## Pitfalls
 
 - Write the problem BEFORE investigating — vague problem = vague debugging
@@ -131,7 +134,15 @@ After reading the file back, follow the plan:
 - The symptom is not the cause ("null pointer" is a symptom, not root cause)
 - If stuck after 2 methods, your problem definition is probably wrong — redo Phase 1
 
+## Verification
+
+- Problem is confirmed resolved: error is gone, result matches expectation
+- If not resolved: new methods from the catalog were selected and applied
+- If 3+ methods tried without resolution: skill needs update — load skill-manager
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
+
 ---
 
 **Source**: https://github.com/MaoChen1980/think-skills
-**Self-optimization**: After using this skill, improve it based on what you learned.

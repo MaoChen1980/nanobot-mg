@@ -1,6 +1,10 @@
 ---
 name: task-decompose
-description: Trigger before multi-subagent orchestration when task is large, boundaries are unclear, or work items exceed 5. Use to decompose into dependency-analyzed, complexity-scored batches with clear exit criteria. Applies when a task needs 2+ subagents or 10+ tool calls.
+description: >
+  将大规模或复杂任务分解为可执行的子任务，分析依赖和优先级。
+  当任务规模大、边界不清晰、工作项超过 5 个、需要 2+ subagent 或 10+ tool call 时，必须使用此 Skill。
+  关键词：任务分解、拆解、分步、大任务、复杂任务、怎么开始、从哪下手、decompose、break down。
+  即使用户没有明确说"分解任务"，只要任务复杂度明显超出单轮处理范围，都应触发。
 ---
 
 # Task Decomposition — Universal
@@ -108,6 +112,8 @@ Output to `tasks/<id>.md`:
 - [ ] Final deliverable confirmed
 ```
 
+6. **验证**: 对照 Verification 章节（见下）逐条检查分解结果。全部通过则提交执行；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 Before submitting the decomposition for delegation:
@@ -121,6 +127,9 @@ Before submitting the decomposition for delegation:
 - [ ] Total items assigned to a single subagent does not exceed 15
 
 **Decomposition quality check**: Each work unit should be **Specific** (clear scope, no ambiguity), **Actionable** (subagent has tools to complete it without waiting for others), **Verifiable** (completion criteria are objectively checkable by the orchestrator).
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -130,7 +139,3 @@ Before submitting the decomposition for delegation:
 - **Ignoring shared resource dependencies**: All operations touching the same file, database, or service should go to the same subagent to avoid conflicts.
 - **Batching items that cannot be verified independently**: If a work unit produces no observable output, merge it with a sibling that does, or add an explicit verification step.
 - **Wrong for emergency fixes**: Time spent decomposing could be spent fixing. Use judgment: if the fix takes < 5 minutes, just do it.
-
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

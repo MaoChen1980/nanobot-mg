@@ -1,6 +1,15 @@
 ---
 name: skill-manager
-description: Creates, patches, and removes skills by recognizing reusable patterns. Operates through standard file tools — reads and writes SKILL.md files. Use when a skill has incorrect steps, after complex tasks, or when you discover a repeatable workflow.
+description: >
+  管理技能库的增删改查，是技能自我进化的核心工具。
+  当以下情况发生时，必须使用此 Skill：
+  - 刚执行完一个 skill，发现步骤有误或 Verification 不通过
+  - 完成了一个复杂任务，发现了可复用的工作流或模式
+  - 用户说"把这个做成 skill"、"更新这个 skill"、"删掉这个 skill"
+  - MEMORY.md 中有 pending_skills 未处理
+  - 发现某个 skill 的描述或步骤已过时
+  关键词：创建 skill、更新 skill、修复 skill、删除 skill、skill 不对、skill 过时、模式复用、提炼 skill、pending_skills、自我进化。
+  即使用户没有明确要求"管理 skill"，在执行完任何 skill 后发现可改进之处时，都应主动触发。
 version: 0.1.0
 ---
 
@@ -109,14 +118,20 @@ workspace/skills/<name>/
 ---
 name: skill-name           # 连字符命名法，小写
 description: >
-  Trigger signal — when to load this skill. Include specific scenarios,
-  file types, task types. NOT the goal or full instructions.
-  Keep it short — ~250 chars, hard max 1024.
+  [功能概述]。
+  当用户[场景1]、[场景2]、[场景3]时，必须使用此 Skill。
+  关键词：[关键词1]、[关键词2]、[关键词3]。
+  即使用户没有明确说'[精确术语]'，只要涉及[相关概念]，都应触发。
 always: false
 ---
 ```
 
-**关键**：`description` 是 **trigger 信号**，只回答"什么时候该加载"​，不写 goal 和步骤细节。LLM 在 skills_summary 只看这一行来决定是否 `read_file`。**简短、准确。**
+**关键**：`description` 是 **trigger 信号**，必须使用三段式格式：
+1. **功能** — 一句话概述 skill 做什么
+2. **场景** — 列举用户说/做什么时触发，结尾加"必须使用此 Skill"
+3. **关键词 + 隐含触发** — 让不精确的描述也能匹配
+
+LLM 在 skills_summary 只看这一行来决定是否 `read_file`。**简短、准确、推动性强。**
 
 ### 核心原则：Trigger → Action → Goal
 
@@ -205,6 +220,12 @@ python {baseDir}/scripts/quick_validate.py workspace/skills/<name>
 - `references/hermes_triggers.md` — 完整的 Hermes 触发条件参考
 - `references/ab_test_reference.md` — A/B 测试执行指南
 
----
+## Verification
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.
+- Skill was created/updated following the correct procedure (Trigger → Action → Goal)
+- `quick_validate.py` was run and passed
+- For new skills: skill appeared correctly in skills index with specific description
+- For patches: the targeted fix addressed the issue without side effects
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准

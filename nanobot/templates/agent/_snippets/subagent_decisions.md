@@ -164,7 +164,7 @@ skill 有两种操作：**创建**（新 skill）和 **更新**（改已有 skil
 
 #### 更新 skill
 
-**trigger:** 加载了某个 skill，执行后对照其 Verification 章节检查未通过（步骤不可行、结果不符合预期）
+**trigger:** 加载了某个 skill，执行步骤时最后一步 Verification 检查未通过（步骤不可行、结果不符合预期）
 
 **action:**
 1. 读回该 skill 的原始内容

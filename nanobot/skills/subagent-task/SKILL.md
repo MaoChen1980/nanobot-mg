@@ -1,6 +1,10 @@
 ---
 name: subagent-task
-description: Trigger when orchestrating 2+ subagents for parallel work — use for batch spawning with unified verification template, per-batch pivot on failure, cross-agent conflict detection, and result consolidation. Apply when work items are independent and can be parallelized.
+description: >
+  编排 2 个以上 subagent 并行工作，管理批量创建、冲突检测、结果合并。
+  当任务包含多个独立工作项、需要并行执行、需要批量 spawn subagent 时，必须使用此 Skill。
+  关键词：subagent、并行、多 agent、批量、独立任务、编排、spawn、合并结果、并发。
+  即使用户没有明确说"subagent"，只要任务包含可独立并行的子任务，都应触发。
 ---
 
 # Subagent Task Orchestration — Universal
@@ -137,6 +141,8 @@ When multiple subagents run in parallel, check for:
 - [x] Work report written
 ```
 
+6. **验证**: 对照 Verification 章节（见下）逐条检查所有批次。全部通过则完成；有不通过的批次则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 For each batch, verify the following before proceeding:
@@ -153,6 +159,9 @@ For each batch, verify the following before proceeding:
 - Set verification criteria before spawning, not during verification
 - Pivot is normal behavior, not failure — stopping in time is better than pushing blindly
 - The subagent's final text response is the only delivery artifact — file delivery alone is not completion
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -163,7 +172,3 @@ For each batch, verify the following before proceeding:
 - **Subagent stops to ask for user decision**: Do not guess. Report to user and wait. Guessing produces wrong results silently.
 - **Wrong for single subagent tasks**: If 1 subagent suffices, do not use this framework — just do it directly.
 - **Wrong for real-time interaction**: Subagent spawn-and-wait cycles take time. Not suitable for interactive/hotfix scenarios.
-
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

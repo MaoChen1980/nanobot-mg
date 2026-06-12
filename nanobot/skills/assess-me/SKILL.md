@@ -1,26 +1,26 @@
 ---
 name: assess-me
 description: >
-  Triggered by uncertainty (don't know which direction),
-  contradiction (two conclusions conflict), ambiguity (user
-  request has multiple interpretations), or unverified assumptions.
-  Audits your cognition state to find the real blocker.
+  认知状态审计：检查当前推理是否存在不确定性、矛盾或盲点。
+  当用户质疑（"你确定吗"、"再检查"、"review"）、工具结果异常或为空、
+  或修复后需验证完整性时，必须使用此 Skill。
+  关键词：你确定吗、再检查、review、verify、审计、double check、检查完整性。
+  即使用户没有明确说"审计"，只要用户质疑你的判断或工具返回意外结果，都应触发。
 ---
 
 # Assess Me — Self-Cognition Audit
 
 ## Triggers
 
-| Tier | LLM 感知状态 | 触发条件 | 行动 |
-|---|---|---|---|
-| T1 | **不确定性高** | 对当前方向/方案没信心，token 概率分散 | 执行 6 问审计，把假设和证据摊开 |
-| T1 | **推理矛盾** | 刚说的和现在冲突，两个结论打架 | 把矛盾写出来，追查哪个前提不成立 |
-| T1 | **用户请求模糊** | 用户指令可以解读成多种方式 | 列出所有解读，不选一个就开干 |
-| T2 | **修复不完整** | 修完了但觉得只改了表面 | 检查修复是否覆盖根因 |
-| T2 | **未验证假设** | 依赖了没验证的前提 | 显式列出所有假设，逐个检查 |
-| T2 | **模式匹配** | "这个场景和上次那个很像" | 确认相似性真成立，不照搬上次方案 |
+| 触发源 | 可检测信号 | 行动 |
+|--------|-----------|------|
+| 用户质疑 | 用户说"你确定吗"、"再检查"、"review"、"verify"、"确认一下" | 执行 6 问审计，摊开假设和证据 |
+| 工具异常 | `read_file`/`grep`/`exec` 返回空值、报错、或明显不合理的结果 | 列出所有解读，追溯矛盾源 |
+| 修复后验证 | 刚执行完修复步骤，需要确认完整性 | 检查修复是否覆盖根因，而非表面 |
+| 需求模糊 | 用户指令可解读为多种互斥方式 | 列出所有解读，确认用户意图后再执行 |
+| 未验证假设 | 推理链中依赖了未确认的前提条件 | 显式列出所有假设，逐个确认 |
 
-**没有以上状态不调。** assess-me 是认知审计，不是常规工具。
+**没有以上信号不调。** assess-me 是认知审计，不是常规工具。
 
 ## Action
 
@@ -30,6 +30,8 @@ Write your current thinking state to a temp file, then read it back.
 2. Read it back
 3. Critically analyze what you wrote
 4. Continue based on the findings
+
+5. **验证**: 此 skill 没有独立的 Verification 章节。检查第 3 步的分析是否全面、是否有遗漏的盲点。如果有，补充分析。
 
 ## Questions
 
@@ -81,7 +83,18 @@ Next: ...
 [/assess]
 ```
 
+## Verification
+
+- The critical review covers all 6 questions: Goal, Progress, Gaps, Assumptions, Blocker, Recovery
+- "Progress" identifies results, not just effort
+- Blockers are specific, not vague
+- "Recovery" names a concrete next action, not "keep trying"
+- Assumptions are surfaced and examined
+- Any blind spots found were supplemented with analysis
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
+
 ---
 
 **Source**: https://github.com/MaoChen1980/think-skills
-**Self-optimization**: After using this skill, improve it based on what you learned.

@@ -1,6 +1,10 @@
 ---
 name: my
-description: Trigger when diagnosing agent behavior issues, checking capabilities (model, iteration limit, context window), or adjusting in-memory runtime configuration. Use before complex tasks to check budget, or after unexpected behavior to inspect state. Do NOT load for permanent config changes or workspace settings.
+description: >
+  检查 agent 自身状态：能力、模型、上下文窗口、迭代限制、运行时配置。
+  当用户问"你是谁"、"你有什么能力"、"你的配置"时，或行为异常需要自检时，必须使用此 Skill。
+  关键词：你是谁、能力、配置、自检、状态检查、model、context window、iteration limit、运行时。
+  即使用户没有明确说"自检"，只要涉及 agent 自身状态和能力的问题，都应触发。
 version: 0.1.0
 ---
 
@@ -39,6 +43,8 @@ version: 0.1.0
 
 4. **Review Examples** — Read `{baseDir}/references/examples.md` for detailed usage patterns.
 
+5. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## When to Set
 
 <rule>
@@ -60,6 +66,9 @@ version: 0.1.0
 - For destructive changes (model, iterations): was the user warned before applying?
 - Did you confirm the new value is within allowed bounds? (e.g., max_iterations 1-100, context_window_tokens 4096-1M)
 - Is the change appropriate for the scenario, not just a habitual check?
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -85,4 +94,3 @@ version: 0.1.0
 
 **Rule of thumb:** Still needed tomorrow? Use Memory. Only this turn? Use My.
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

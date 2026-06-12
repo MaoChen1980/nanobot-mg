@@ -1,6 +1,10 @@
 ---
 name: tmux
-description: Trigger when the user needs to SSH, run interactive CLI programs, enter passwords, start REPLs, or manage persistent terminal sessions. Supports shell, cmd, and any tool needing isolated terminal I/O.
+description: >
+  管理交互式终端会话，支持 SSH、REPL、密码输入等需要持久终端的场景。
+  当用户需要 SSH 连接、运行交互式程序、输入密码、启动 REPL、或要求"在后台运行"时，必须使用此 Skill。
+  关键词：SSH、终端、交互、密码、REPL、tmux、session、持久运行、后台。
+  即使用户没有明确说"开一个 tmux"，只要涉及需要持续运行的命令行操作，都应触发。
 version: 0.1.0
 ---
 
@@ -98,12 +102,17 @@ Use tmux for any CLI task that requires a real terminal — it provides a true P
    - Kill all sessions on a socket: `tmux -S "$SOCKET" list-sessions -F '#{session_name}' | xargs -r -n1 tmux -S "$SOCKET" kill-session -t`
    - Kill the server (removes everything on the socket): `tmux -S "$SOCKET" kill-server`
 
+9. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 - Run `tmux -S "$SOCKET" list-sessions` to confirm the session was created
 - Run `tmux -S "$SOCKET" list-panes -a` to inspect all panes and their status
 - Run `tmux -S "$SOCKET" capture-pane -p -J -t "$SESSION":0.0 -S -200` and verify output contains expected text
 - For agent orchestration, confirm each agent session is running with `tmux -S "$SOCKET" list-sessions`
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -113,5 +122,3 @@ Use tmux for any CLI task that requires a real terminal — it provides a true P
 - **Socket path convention**: Default socket is `"$SOCKET_DIR/nanobot.sock"` using `NANOBOT_TMUX_SOCKET_DIR`. Override via `NANOBOT_TMUX_SOCKET_DIR` environment variable. Use `find-sessions.sh` scripts to discover sessions — run `{baseDir}/scripts/find-sessions.sh -S "$SOCKET"` for current socket or `{baseDir}/scripts/find-sessions.sh --all` to scan all sockets
 - **Session naming**: Keep names short and avoid spaces. Check existing sessions with `tmux -S "$SOCKET" list-sessions`
 - **Detaching from attach**: When monitoring via `attach`, press `Ctrl+b d` to detach without killing the session
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

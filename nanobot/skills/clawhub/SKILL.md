@@ -1,6 +1,10 @@
 ---
 name: clawhub
-description: Trigger when user wants to discover, search, install, list, or update community skills from the public ClawHub registry. Use when asked "find me a skill for X", "install skill Y", "search for skills", "list available skills", or "update/upgrade skills".
+description: >
+  从 ClawHub 社区仓库发现、搜索、安装、列出、更新技能。
+  当用户要求安装 skill、搜索 skill、查看可用 skill、升级 skill 时，必须使用此 Skill。
+  关键词：安装 skill、搜索 skill、skill 市场、clawhub、社区 skill、技能仓库、可用 skill。
+  即使用户没有明确说"clawhub"，只要涉及从外部获取或管理技能，都应触发。
 version: 0.1.0
 ---
 
@@ -38,12 +42,17 @@ Public skill registry for AI agents. Search via natural language (vector search)
    npx --yes clawhub@latest list --workdir ~/.nanobot/workspace
    ```
 
+5. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 - After search: confirm results contain relevant skill names and descriptions
 - After install: verify the skill appears in `ls ~/.nanobot/workspace/skills/`
 - After update: run the list command to confirm updated versions are shown
 - Remind user to start a new session to load a newly installed skill
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -52,7 +61,3 @@ Public skill registry for AI agents. Search via natural language (vector search)
 - Login (`npx --yes clawhub@latest login`) is only needed for publishing skills
 - `--workdir ~/.nanobot/workspace` is critical — without it, the skill installs to the current directory instead of the nanobot workspace
 - After installation, the user must start a new session to load the skill
-
----
-
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.

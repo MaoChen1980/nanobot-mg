@@ -1,6 +1,10 @@
 ---
 name: summarize
-description: Trigger when the user asks to summarize a URL, web page, or local file; transcribe a YouTube video; or extract key points from content. Also use for "what's this link about?" or similar requests.
+description: >
+  总结 URL、网页、本地文件、YouTube 视频的内容，提取关键点。
+  当用户要求总结一个链接、网页、文件，或说"这个链接是什么"、"TLDR"时，必须使用此 Skill。
+  关键词：总结、摘要、概括、TLDR、summarize、extract key points。
+  即使用户没有明确说"给我总结"，只要提供了外部内容源并要求提取信息，都应触发。
 version: 0.1.0
 ---
 
@@ -57,12 +61,17 @@ Fast CLI for summarizing URLs, local files, and YouTube links.
    { "model": "openai/gpt-5.2" }
    ```
 
+8. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
+
 ## Verification
 
 - The command exits with code 0 and prints a summary or transcript to stdout
 - For YouTube URLs, output contains either a transcript or a summarization of the video
 - For URLs with `--extract-only`, output contains the full extracted text content
 - When using `--json`, output is valid JSON
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 
 ## Pitfalls
 
@@ -72,4 +81,3 @@ Fast CLI for summarizing URLs, local files, and YouTube links.
 - **Apify for YouTube**: If YouTube caption extraction fails, the tool falls back to Apify when `APIFY_API_TOKEN` is set. Without it, YouTube extraction may return limited results
 - **brew-only install**: The `summarize` CLI is only available via Homebrew. On Linux, install Homebrew first or use an alternative tool
 
-**Self-optimization**: After using this skill, improve it based on what you learned — fix bugs, simplify steps, add edge cases, enhance verification.
