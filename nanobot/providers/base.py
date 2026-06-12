@@ -99,8 +99,8 @@ _SYNTHETIC_USER_CONTENT = "(conversation continued)"
 class LLMProvider(ABC):
     """Base class for LLM providers."""
 
-    _CHAT_RETRY_DELAYS = (5, 15, 30, 60)
-    _STANDARD_RETRY_DELAYS = (5, 15, 30)
+    _CHAT_RETRY_DELAYS = (5, 15, 30, 60, 60, 60, 60, 60, 60, 60)
+    _STANDARD_RETRY_DELAYS = (5, 15, 30, 30, 30, 30, 30, 30, 30, 30)
     _PERSISTENT_MAX_DELAY = 60
     _PERSISTENT_IDENTICAL_ERROR_LIMIT = 10
     _RATE_LIMIT_RETRY_SECONDS = 120

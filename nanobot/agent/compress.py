@@ -244,17 +244,17 @@ async def summarize_turns(
                 chat_stream_with_retry(
                     [{"role": "user", "content": prompt}],
                 ),
-                timeout=120,
+                timeout=30,
             )
         except asyncio.TimeoutError:
             logger.warning("Summary attempt {}/6 timed out (120s)", attempt + 1)
-            if attempt < 5:
+            if attempt < 9:
                 await asyncio.sleep(10)
                 continue
             return ""
         except Exception as e:
             logger.exception("Summary attempt {}/6 failed (network): {}", attempt + 1, e)
-            if attempt < 5:
+            if attempt < 9:
                 await asyncio.sleep(10)
                 continue
             return ""
@@ -263,14 +263,14 @@ async def summarize_turns(
 
         if _is_overflow(resp):
             logger.warning("Summary overflow on attempt {}/6, reducing content", attempt + 1)
-            if attempt < 5 and len(current_turns) > 1:
+            if attempt < 9 and len(current_turns) > 1:
                 mid = len(current_turns) // 2
                 current_turns = current_turns[mid:]
                 if current_future and len(current_future) > 1:
                     mid_future = len(current_future) // 2
                     current_future = current_future[mid_future:]
                 continue
-            if attempt < 5 and len(current_turns) == 1:
+            if attempt < 9 and len(current_turns) == 1:
                 msg = current_turns[0]
                 content = msg.get("content", "")
                 if isinstance(content, str) and len(content) > 200:
@@ -295,7 +295,7 @@ async def summarize_turns(
                 attempt + 1,
                 (resp.content or "")[:200],
             )
-            if attempt < 5:
+            if attempt < 9:
                 await asyncio.sleep(10)
                 continue
             return ""
@@ -306,7 +306,7 @@ async def summarize_turns(
                 attempt + 1,
                 resp.finish_reason,
             )
-            if attempt < 5:
+            if attempt < 9:
                 await asyncio.sleep(10)
                 continue
             return ""
