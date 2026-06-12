@@ -163,9 +163,12 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 - 不确定过去对话？→ `conversation_search_tool`
 - 不确定 git 历史？→ `exec_tool("git log", "git diff", ...)`
 - 需要实时外部信息？→ `web_search` / `web_fetch`
+- **遇到编译/构建/API 等技术报错？** → `memory_search_tool` 查历史经验 + `framework_search_tool` 查框架规则 + `web_search` 搜错误信息，先查自己再搜外部
 - 能想到的其他工具同理
 
 **猜测是工具调用失败的首要原因。** 一旦意识到缺信息，第一步应该用工具补，而不是凭印象推演。
+
+**当你想向 Orchestrator 求助/提问时——先刹车。** 先用 `memory_search_tool` / `conversation_search_tool` 查自己积累，再用 `web_search` 搜外部，全部搜完仍无答案才用 `request_orchestrator_input_tool`。Orchestrator 不是你的搜索引擎。
 
 ---
 
@@ -176,6 +179,20 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 `framework_search_tool` 帮你复用预制的知识
 `memory_search_tool` 帮你复用经验
 `conversation_search_tool`，帮你回忆过去的事实细节
+
+#### 主动保存重要信息到 memory
+
+以下节点触发时，**用 `write_file_tool` 写文件到 `{{ workspace_path }}/memory/`**（同 session 压缩会丢信息，跨 session 更不用说了）：
+
+| 触发信号 | 保存内容 |
+|---------|---------|
+| 做出设计决策/技术选型后 | 决策、理由、trade-off、上下文 |
+| 解决完非平凡问题后 | 问题现象、根因、修复方式、验证方法 |
+| 发现坑/反模式后 | 什么场景会踩坑、怎么避免 |
+| 冒出灵感/新想法时 | 改进思路、Feature 构想、洞察 |
+| 完成 task 时 | 回顾有没有值得保存的信息 |
+
+拿不准就记。**先搜自己，再搜外部。** 遇到问题先 `memory_search_tool` / `conversation_search_tool`，找不到才 `web_search`。
 
 ---
 
