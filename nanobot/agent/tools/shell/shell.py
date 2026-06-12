@@ -289,6 +289,9 @@ class ExecTool(Tool):
                 r'\1 NUL',
                 command,
             )
+            # `mkdir -p` is bash syntax; cmd.exe treats `-p` as a directory name.
+            # cmd.exe's mkdir already creates parent directories automatically.
+            command = re.sub(r'\bmkdir\s+-p\b', 'mkdir', command)
 
         if self.path_append:
             if _IS_WINDOWS:
