@@ -1,13 +1,27 @@
 ---
 name: debug-root-cause
 description: >
-  Run this when any tool returns an error, debugging stalls,
-  or you're starting a new investigation.
-  Replaces random exploration with systematic RCA methodology.
-  Choose 1-3 methods from 20 and apply step by step.
+  Triggered by contradiction (tool result doesn't match
+  expectation), spinning (same approach repeating), or new
+  investigation where root cause is unknown. Replaces random
+  exploration with systematic RCA from 20 methods.
 ---
 
 # Debug Root Cause — Systematic Investigation Methodology
+
+## Triggers
+
+| Tier | LLM 感知状态 | 触发条件 | 行动 |
+|---|---|---|---|
+| T1 | **推理矛盾** | 工具返回结果和你推理不一致，表面解释不通 | 定义问题，选逆推法/对比法追查 |
+| T1 | **重复循环** | 试了几种方案走不通，重复相同尝试 | 选分解法/排除法缩小范围 |
+| T2 | **开始新排查** | 拿到新 bug/error，不清楚根因 | 定义问题，按场景选 1-3 方法 |
+| T2 | **复杂多变量** | 不确定哪个因素导致，变量多 | 选单变量法/边界法，一次只变一个 |
+| T2 | **模式匹配** | 表面和之前 bug 像但又不完全一样 | 先复现再对比差异，不跳入旧解法 |
+
+**什么时候不调：**
+- 错误直接指向具体位置 → 先修，不需要方法论
+- 你清楚问题在哪 → 浪费时间
 
 ## Action
 
