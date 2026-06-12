@@ -112,11 +112,7 @@ class SystemMessageHandler:
             max_iterations=self._loop.max_iterations,
         )
         if is_subagent:
-            # Inject two messages so the LLM sees a natural self-reminder +
-            # directive sequence, all API-compliant (assistant→user→response).
-            # These messages are ephemeral — not persisted to session.
             history = list(history)
-            history.append({"role": "assistant", "content": "spawn subagent 之后我需要干什么？"})
             history.append({"role": "user", "content": f"Subagent 返回了结果。\n\n{msg.content.strip()}\n\n记住原始任务目标，所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、检查 team_board.md、处理/更新最新任务状态，有必要的话调整任务、添加新的 subagent、或 cancel 不需要的 subagent。\n\n请继续按计划推进。"})
             current_message = ""
         else:
@@ -202,10 +198,9 @@ class UserMessageHandler:
         # Stage 1: session preparation (checkpoint restore & history loading)
         session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
 
-        # Stage 1a: proactive check → inject two-message pattern for API-compliant delivery
+        # Stage 1a: proactive check
         if msg.metadata.get("proactive_check"):
             history = list(history)
-            history.append({"role": "assistant", "content": "spawn subagent 之后我需要干什么？"})
             history.append({"role": "user", "content": msg.content})
             msg = dataclasses.replace(msg, content="")
 

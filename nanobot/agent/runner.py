@@ -368,7 +368,7 @@ class AgentRunner:
                 await hook.before_execute_tools(context)
                 tool_calls = hook.filter_tool_calls(context, tool_calls)
                 if not tool_calls:
-                    messages.append(build_assistant_message(response.content or ""))
+                    messages.pop()  # No tools to execute, remove assistant with stale tool_calls
                     continue
 
                 (results, new_events, fatal_error, was_interrupted,
@@ -397,30 +397,7 @@ class AgentRunner:
                         messages.append(tool_message)
                         completed_tool_results.append(tool_message)
 
-                    # 2. Build closing assistant — facts only, no intent guidance
-                    pending_names = [tc.name for tc in tool_calls[executed_count:]]
-                    parts = []
-                    is_tool_failure = isinstance(fatal_error, RuntimeError) and executed_count > 0
-                    if is_tool_failure:
-                        failed_name = tool_calls[executed_count - 1].name
-                        success_names = [tc.name for tc in tool_calls[:executed_count - 1]]
-                        if success_names:
-                            parts.append("、".join(success_names) + " 已完成")
-                        parts.append(f"{failed_name} 失败")
-                    elif executed_count > 0:
-                        parts.append("、".join(tc.name for tc in tool_calls[:executed_count]) + " 已完成")
-                    if pending_names:
-                        parts.append("、".join(pending_names) + " 已推迟")
-                    if saved_injections:
-                        parts.append("你插入了新消息，我会优先响应并做出合适安排。")
-                    closing_text = "。".join(parts)
-
-                    # Preserve original assistant text content (Scenario 2)
-                    orig_content = assistant_message.get("content", "") or ""
-                    if orig_content.strip():
-                        closing_text = orig_content + "\n\n" + closing_text
-
-                    # 3. Strip unexecuted tool_calls from original assistant (1b/1c)
+                    # 2. Strip unexecuted tool_calls from original assistant
                     #    Create a NEW dict to avoid mutating session.messages references
                     if executed_count < len(tool_calls):
                         if executed_count == 0:
@@ -436,14 +413,18 @@ class AgentRunner:
                             messages[asst_idx] = new_msg
                             assistant_message = new_msg
 
-                    # 4. Append closing assistant → legal ... → assistant → user
-                    messages.append(build_assistant_message(closing_text))
-
-                    # 5. Append saved user injections after the closing assistant
+                    # 3. Merge saved user messages into the last user message
                     if saved_injections:
-                        messages.extend(saved_injections)
+                        for i in range(len(messages) - 1, -1, -1):
+                            if messages[i].get("role") == "user":
+                                new_parts = [m.get("content", "") for m in saved_injections if m.get("content")]
+                                if new_parts:
+                                    head = messages[i]["content"]
+                                    sep = "\n\n---\n[以下为新消息]\n" if head.strip() else ""
+                                    messages[i]["content"] = head + sep + "\n".join(new_parts)
+                                break
                         logger.info(
-                            "Injected {} saved follow-up message(s) after interruption ({}/{})",
+                            "Merged {} follow-up message(s) into last user message ({}/{})",
                             len(saved_injections), injection_cycles, _MAX_INJECTION_CYCLES,
                         )
 
@@ -532,8 +513,7 @@ class AgentRunner:
                     elif recovery_action == "force_stop":
                         final_content = _force_final_response(
                             messages,
-                            "Tool calls failed repeatedly with parameter validation errors. "
-                            "Please check arguments and retry.",
+                            "工具调用因参数校验错误反复失败，请检查参数后重试。",
                         )
                         stop_reason = "tool_loop_breaker"
                         context.final_content = final_content
@@ -698,9 +678,10 @@ class AgentRunner:
                         retry_callback=spec.retry_wait_callback,
                         config=backoff_cfg,
                     )
-                    messages.append(build_assistant_message(
-                        "[My previous response was blocked by content safety. I'll reformulate and try again.]"
-                    ))
+                    messages.append({
+                        "role": "user",
+                        "content": "[你的上一条回复因安全审查被拦截，请换一种方式表达。]",
+                    })
                     # Run assess_me before reformulation — the model may not
                     # realize its response was blocked; assess_me reframes its
                     # intention for the retry
@@ -828,12 +809,9 @@ class AgentRunner:
     def _append_final_message(messages: list[dict[str, Any]], content: str | None) -> None:
         if not content:
             return
-        if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
-            if messages[-1].get("content") == content:
-                return
-            messages[-1] = build_assistant_message(content)
+        if messages and messages[-1].get("role") == "user" and messages[-1].get("content") == content:
             return
-        messages.append(build_assistant_message(content))
+        messages.append({"role": "user", "content": content})
 
     async def _check_tool_loop(
         self,
@@ -896,9 +874,9 @@ class AgentRunner:
 
     @staticmethod
     def _append_model_error_placeholder(messages: list[dict[str, Any]]) -> None:
-        if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
+        if messages and messages[-1].get("role") == "user" and messages[-1].get("content") == _PERSISTED_MODEL_ERROR_PLACEHOLDER:
             return
-        messages.append(build_assistant_message(_PERSISTED_MODEL_ERROR_PLACEHOLDER))
+        messages.append({"role": "user", "content": _PERSISTED_MODEL_ERROR_PLACEHOLDER})
 
     # Backward compatibility — delegate to module functions
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)
@@ -912,5 +890,5 @@ def _force_final_response(messages: list[dict], text: str) -> str:
         messages.pop()
     while messages and messages[-1].get("role") == "tool":
         messages.pop()
-    messages.append(build_assistant_message(text))
+    messages.append({"role": "user", "content": text})
     return text

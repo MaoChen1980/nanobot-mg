@@ -11,8 +11,7 @@ from nanobot.utils.document import stringify_text_blocks
 _MAX_REPEAT_EXTERNAL_LOOKUPS = 2
 
 EMPTY_FINAL_RESPONSE_MESSAGE = (
-    "I completed the tool steps but couldn't produce a final answer. "
-    "Please try again or narrow the task."
+    "已执行工具步骤但未能生成最终答案。请重试或将任务拆成更小的步骤。"
 )
 
 FINALIZATION_RETRY_WITH_ASSESS = (

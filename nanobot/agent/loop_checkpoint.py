@@ -114,8 +114,8 @@ def restore_pending_user_turn(session: Any) -> bool:
     if session.messages and session.messages[-1].get("role") == "user":
         session.messages.append(
             {
-                "role": "assistant",
-                "content": "Error: Task interrupted before a response was generated.",
+                "role": "user",
+                "content": "[任务在生成回复前被中断。]",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
