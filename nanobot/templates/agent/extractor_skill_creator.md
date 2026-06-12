@@ -14,7 +14,9 @@ Skill is a form of memory. Memory has storage and retrieval costs. A skill is wo
    
    *Counter-example*: "1+1=2" — so obvious no one needs to memorize it. Similarly, trivial workflows that any capable agent would reproduce correctly every time do not need a skill.
 
-2. **Clear external trigger** — The trigger must come from an external signal: user keywords, message type, tool result, cron cycle, page structure. If the trigger requires the LLM to spontaneously "remember" to use it during idle reflection, it is NOT a valid trigger — skip.
+2. **Trigger must be an external signal** — The LLM won't spontaneously recall skills at the right moment. The trigger must come from something the LLM **sees or hears**: user says specific keywords, message contains specific type, tool returns specific result, cron fires, page structure matches, error output matches a pattern.
+
+   If the trigger is vague ("when optimizing", "when writing Python", "when needed"), the skill will sit unread. Skip it.
 
 3. **Clear context dependency** — Skills only work in specific information contexts. If you can't describe what context is needed before the shortcut/avoidance applies, the skill is too vague.
 
@@ -29,7 +31,7 @@ A verified multi-step workflow. Structure:
 
 ```markdown
 ## When to Use
-<What specific situation or signal triggers this skill>
+<Detectable external trigger: specific user keywords, message type, tool result pattern, cron event. Bad: "when optimizing" → Good: "when user says 'optimize' or tool result shows latency >1s">
 
 ## Information Context
 <What information do you need before using this skill? What files, env state, or user input must you check first?>
@@ -52,7 +54,7 @@ A pitfall that appeared repeatedly — knowing when to skip saves as much cost a
 
 ```markdown
 ## When to Suspect
-<What warning signs trigger this avoidance pattern>
+<Detectable trigger: repeated failure with same error, tool returns unexpected format, user reports "still broken" after fix. Bad: "when things go wrong" → Good: "when same test fails 3 times with same assertion">
 
 ## Verification
 <How to confirm this is actually the trap — what to check>
@@ -72,7 +74,7 @@ A system tool or self-written script that needs install/uninstall/usage document
 
 ```markdown
 ## When to Use
-<What situation or signal triggers using this tool>
+<Detectable trigger: tool name appearing in user message, specific error output, or known task type. Bad: "when needed" → Good: "when user mentions 'ffmpeg' or error contains 'no such file'">
 
 ## Install
 <Install command or procedure — pip install / npm install -g / brew install / manual setup>
