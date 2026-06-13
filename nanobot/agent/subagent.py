@@ -85,6 +85,7 @@ class SubagentManager:
         timezone: str | None = None,
         project_root: Path | None = None,
         memory_store: Any | None = None,
+        context_builder: Any | None = None,
     ):
         self.provider = provider
         self.workspace = workspace
@@ -99,6 +100,7 @@ class SubagentManager:
         self.timezone = timezone
         self.db = db
         self._memory_store = memory_store
+        self._context_builder = context_builder
         self.runner = AgentRunner(provider, db=db)
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._task_statuses: dict[str, SubagentStatus] = {}
@@ -256,6 +258,7 @@ class SubagentManager:
                     injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
                     session_key=origin["session_key"],
+                    instructions=self._context_builder.build_instructions_section(for_subagent=True) if self._context_builder else None,
                 ))
 
                 # Save conversation snapshot for MemoryExtractor

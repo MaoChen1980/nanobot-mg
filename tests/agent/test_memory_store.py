@@ -40,3 +40,30 @@ class TestMemoryStoreBasicIO:
         ctx = store.get_memory_context()
         assert "Long-term Memory" in ctx
         assert "important fact" in ctx
+
+
+class TestMemoryStoreRules:
+    def test_read_rules_returns_empty_when_missing(self, store):
+        assert store.read_rules() == ""
+
+    def test_write_and_read_rules(self, store):
+        store.write_rules("must check builds before commit")
+        assert store.read_rules() == "must check builds before commit"
+
+    def test_write_rules_overwrites(self, store):
+        store.write_rules("old rule")
+        store.write_rules("new rule")
+        assert store.read_rules() == "new rule"
+
+    def test_rules_file_property(self, store):
+        assert store.rules_file == store.workspace / "RULES.md"
+
+    def test_rules_file_written_to_disk(self, store):
+        store.write_rules("no hardcoded secrets")
+        assert store.rules_file.exists()
+        text = store.rules_file.read_text(encoding="utf-8")
+        assert text == "no hardcoded secrets"
+
+    def test_read_rules_via_read_file(self, store):
+        store.write_rules("rule from read_file")
+        assert store.read_file(store.rules_file) == "rule from read_file"

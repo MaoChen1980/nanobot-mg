@@ -180,35 +180,144 @@ def test_subagent_result_does_not_create_consecutive_assistant_messages(tmp_path
 def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
     """Skills with always=true appear in Active Skills but NOT in the skills index.
 
+    Skills summary moved to build_instructions_section() (injected into last
+    user message). Active Skills section stays in system prompt.
     When no skill has always:true (current state), the Active Skills section
     is absent entirely — which is correct behaviour.
     """
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
-    prompt = builder.build_system_prompt()
+    # Skills summary is now in instructions (last user message), not system prompt
+    instructions = builder.build_instructions_section()
 
     # Skills should appear in the summary index
-    assert "## Available Skills" in prompt
+    assert "## Available Skills" in instructions
     # Verify "my" skill is listed in the index (always: false)
-    assert "**my**" in prompt
+    assert "**my**" in instructions
 
-    # Active Skills section: only present when there ARE always:true skills
+    # Active Skills section: only present in system prompt when there ARE always:true skills
+    prompt = builder.build_system_prompt()
     always_skills = builder.skills.get_always_skills()
     if always_skills:
         assert "# Active Skills" in prompt
         # those skills appear in Active Skills
         for skill_name in always_skills:
             assert f"### Skill: {skill_name}" in prompt
-        # but NOT in the skills index below
-        skills_section = prompt.split("## Available Skills\n", 1)
+        # but NOT in the skills index in instructions
+        skills_section = instructions.split("## Available Skills\n", 1)
         if len(skills_section) > 1:
-            index_text = skills_section[1].split("\n\n---")[0]
+            sep = "\n\n###" if "\n\n###" in skills_section[1] else "\n\n"
+            index_text = skills_section[1].split(sep)[0]
             for skill_name in always_skills:
                 assert f"**{skill_name}**" not in index_text
     else:
         # No always:true skills → Active Skills section absent
         assert "# Active Skills" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# _build_instructions_section
+# ---------------------------------------------------------------------------
+
+
+def test_instructions_includes_rules_when_file_exists(tmp_path) -> None:
+    """RULES.md content appears in instructions section."""
+    workspace = _make_workspace(tmp_path)
+    rules_file = workspace / "RULES.md"
+    rules_file.write_text("必ずテストを実行してからコミットする", encoding="utf-8")
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section()
+    assert "## Rules" in instructions
+    assert "必ずテストを実行してからコミットする" in instructions
+
+
+def test_instructions_no_rules_section_when_file_missing(tmp_path) -> None:
+    """No RULES.md → no ## Rules section."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section()
+    assert "## Rules" not in instructions
+
+
+def test_instructions_no_rules_section_when_file_empty(tmp_path) -> None:
+    """Empty RULES.md → no ## Rules section."""
+    workspace = _make_workspace(tmp_path)
+    (workspace / "RULES.md").write_text("   \n\n  ", encoding="utf-8")
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section()
+    assert "## Rules" not in instructions
+
+
+def test_instructions_contains_output_rules_for_orchestrator(tmp_path) -> None:
+    """Orchestrator instructions include output_rules snippet."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section(for_subagent=False)
+    assert "### Output Rules" in instructions
+    assert "写代码先计划" in instructions
+
+
+def test_instructions_contains_output_rules_subagent(tmp_path) -> None:
+    """Subagent instructions include output_rules_subagent snippet."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section(for_subagent=True)
+    assert "### Output Rules" in instructions
+    assert "send_message_tool" in instructions  # subagent-specific
+    assert "写代码先计划" not in instructions  # orchestrator-only
+
+
+def test_instructions_orchestrator_excludes_orchestration_guide_for_subagent(tmp_path) -> None:
+    """Subagent should NOT get orchestration_guide."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    subagent_instructions = builder.build_instructions_section(for_subagent=True)
+    assert "### Orchestration Guide" not in subagent_instructions
+
+
+def test_instructions_orchestrator_includes_orchestration_guide(tmp_path) -> None:
+    """Orchestrator should get orchestration_guide."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section(for_subagent=False)
+    assert "### Orchestration Guide" in instructions
+
+
+def test_instructions_orchestrator_includes_skills_summary(tmp_path) -> None:
+    """Orchestrator instructions include Available Skills."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section(for_subagent=False)
+    assert "## Available Skills" in instructions
+
+
+def test_instructions_subagent_includes_skills_summary(tmp_path) -> None:
+    """Subagent instructions should include Available Skills (same as orchestrator)."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    subagent_instructions = builder.build_instructions_section(for_subagent=True)
+    assert "Available Skills" in subagent_instructions
+
+
+def test_instructions_always_includes_core_snippets(tmp_path) -> None:
+    """Core snippets present in both orchestrator and subagent instructions."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section(for_subagent=False)
+    subagent_instructions = builder.build_instructions_section(for_subagent=True)
+    # Verify common sections exist
+    assert "think" in instructions.lower()
+    assert "think" in subagent_instructions.lower()
+
+
+def test_instructions_for_subagent_skips_orchestration_guide(tmp_path) -> None:
+    """Combined check: subagent instructions skip orchestration guide."""
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    instructions = builder.build_instructions_section(for_subagent=True)
+    assert "Orchestration Guide" not in instructions
+    assert "Available Skills" in instructions  # subagents now get skills too
 
 
 def test_template_memory_md_is_skipped(tmp_path) -> None:

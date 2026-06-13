@@ -149,12 +149,6 @@ class ContextBuilder:
         if always_skills:
             always_content = self.skills.format_skills_for_context(always_skills)
 
-        skills_summary = self.skills.build_skills_summary(exclude=set(always_skills))
-        if skills_summary:
-            skills_section = render_template("agent/skills_section.md", skills_summary=skills_summary)
-        else:
-            skills_section = None
-
         result = render_template(
             "agent/system_prompt.md",
             identity=identity,
@@ -163,7 +157,6 @@ class ContextBuilder:
             workflows=workflow_routing or None,
             framework_search=framework_search,
             always_skills=always_content,
-            skills_summary=skills_section,
             runtime_context=runtime_context,
             # Workspace path — used by included templates (framework_core etc.)
             workspace_path=self._workspace_path_str,
@@ -216,6 +209,67 @@ class ContextBuilder:
             "框架会自动检测 content 中的工具名并触发重试。\n"
         )
         return "\n".join(lines)
+
+    def build_instructions_section(self, *, for_subagent: bool = False) -> str:
+        """Build instructions block (prepended to last user message, near generation point).
+
+        These are directive/procedural rules that LLMs treat as instructions
+        when placed immediately before the user message, rather than as
+        reference material in the system prompt.
+
+        When *for_subagent* is True, uses subagent-specific snippets and
+        skips orchestrator-only content (orchestration_guide).
+        """
+        sections: list[str] = []
+
+        # Rules from RULES.md — extracted instruction-type findings
+        rules_text = self.memory.read_rules().strip()
+        if rules_text:
+            sections.append(f"## Rules\n\n{rules_text}")
+
+        # Static instruction snippets loaded from template files
+        # Edit these files to change instruction content (no Python changes needed)
+        if for_subagent:
+            snippet_names = [
+                "external_content_safety",
+                "output_rules_subagent",
+                "think_triggers",
+                "search_tool_selector",
+                "operating_principles_subagent",
+                "meta_learning",
+                "skill_refinement",
+            ]
+        else:
+            snippet_names = [
+                "external_content_safety",
+                "output_rules",
+                "think_triggers",
+                "search_tool_selector",
+                "operating_principles",
+                "orchestration_guide",
+                "meta_learning",
+                "skill_refinement",
+            ]
+        for name in snippet_names:
+            content = render_template(
+                f"agent/_instructions/{name}.md",
+                workspace_path=self._workspace_path_str,
+            )
+            if content.strip():
+                sections.append(content)
+
+        # Skills summary — dynamically built from skills system
+        always_skills = self.skills.get_always_skills()
+        skills_summary = self.skills.build_skills_summary(exclude=set(always_skills))
+        if skills_summary:
+            sections.append(
+                "### Available Skills\n\n"
+                "以下 skills 扩展了你的能力。当用户输入匹配某个 skill 的描述时，"
+                "必须优先加载该 skill——用 read_file_tool 阅读其 SKILL.md 并按步骤执行。\n\n"
+                f"{skills_summary}"
+            )
+
+        return "\n\n".join(sections)
 
     @staticmethod
     def _shift_headings(text: str, offset: int = 1) -> str:

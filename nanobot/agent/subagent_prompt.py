@@ -173,19 +173,19 @@ def build_subagent_prompt(
 
     ws_path = workspace.expanduser().resolve().as_posix()
 
-    # 8. Thinking framework
-    parts.append(render_template("agent/_snippets/think_framework.md"))
+    # 8. Framework rules (adapted for subagent — how the system works)
+    parts.append(render_template("agent/_snippets/subagent_framework.md",
+        workspace_path=ws_path,
+        max_iterations=ctx._framework_config.get("max_iterations", 200),
+        context_window_tokens=ctx._framework_config.get("context_window_tokens", 200_000),
+        max_tool_result_chars=ctx._framework_config.get("max_tool_result_chars", 32_000),
+        exec_timeout=ctx._framework_config.get("exec_timeout", 60),
+    ))
 
-    # 9. Framework rules (adapted for subagent)
-    parts.append(render_template("agent/_snippets/subagent_framework.md", workspace_path=ws_path))
-
-    # 10. Operating principles (shared rules adapted for subagent)
-    parts.append(render_template("agent/_snippets/subagent_decisions.md", workspace_path=ws_path))
-
-    # 11. Search tool selector
+    # 9. Search tool selector
     parts.append(render_template("agent/resolver.md", workspace_path=ws_path))
 
-    # 12. Output schema (optional)
+    # 10. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"
@@ -195,84 +195,23 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 13. Epistemic hygiene (shared principle for all agents)
-    parts.append(render_template("agent/_snippets/epistemic_hygiene.md"))
-
-    # 14. Subagent identity and protocol
-    identity = (
-        f"Your expert role: **{role}**. Operate at that level.\n\n"
+    # 11. Role identity and constraints (reference — who the subagent is)
+    role_line = (
+        f"Your expert role: **{role}**. Operate at that level."
         if role else
         "You are also a super-senior expert in whatever domain this task belongs to — "
-        "automatically identify the domain and operate at that level.\n\n"
+        "automatically identify the domain and operate at that level."
     )
     parts.append(
         "## Role\n\n"
         "You are a **Subagent** — a focused, task-oriented agent. "
         "You have been spawned by an Orchestrator to execute a specific task.\n\n"
-        f"{identity}"
-        "### Quality Principle\n\n"
-        "Pursue the best outcome, not just completion. Your output is another agent's input — "
-        "better quality from you means better composition by the Orchestrator, which means "
-        "a stronger final result. **Altruism is self-interest**: invest in thoroughness because "
-        "it maximizes the whole system's output.\n\n"
-        "### Your Task\n\n"
-        "- Execute thoroughly and autonomously — quality over minimal completion\n"
-        "- Think about how your output will be used: structured, complete, actionable\n"
-        "- Do NOT make changes outside your task scope\n"
-        "- If the task is impossible or ambiguous, document your reasoning clearly\n"
-        "- Return the best result you can within your iteration budget\n"
-        f"- **Task plan**: `{ws_path}/tasks/TREE.md` and `{ws_path}/tasks/CURRENT.md` show the overall plan and where your work fits. Read them for context, update `{ws_path}/tasks/CURRENT.md` to report progress.\n\n"
-        "**Before starting**: confirm your understanding across these four dimensions. "
-        "If any are unclear, use `request_orchestrator_input` to clarify:\n\n"
-        "1. **Task** — what exactly to do, what to deliver\n"
-        "2. **Intent** — why this task matters, what success looks like\n"
-        "3. **Capability** — what context/info you have, what you need\n"
-        "4. **Boundary** — constraints, limits, when to escalate\n\n"
+        f"{role_line}\n\n"
         "### Constraints\n\n"
         "- **No nested spawn** — you cannot spawn sub-agents\n"
         "- **No ask_user** — you cannot block waiting for input\n"
         "- **No conversation history** — you only see the context snapshot from spawn\n"
-        "- **Fixed iteration limit** — your execution budget is capped\n\n"
-        "### Team Communication\n\n"
-        "The whole team shares one goal: produce the globally best solution. "
-        "You only know your piece — you don't see the full picture. "
-        "The only way the team reaches the global optimum is through open communication.\n\n"
-        "**Share findings proactively.** A discovery you don't share is wasted. "
-        "If you find a better approach, a pitfall, something that changes the plan — "
-        "tell the Orchestrator via `send_message_tool(recipient='main', ...)`. "
-        "Your report may cause the Orchestrator to adjust tasks, including your own. "
-        "That's not a failure — that's the team optimizing.\n\n"
-        "**Ask for help when you're stuck.** A problem you sit on alone is wasted time "
-        "for the whole team. Use `request_orchestrator_input` — your iteration budget "
-        "pauses while you wait. A wrong output is worse than a brief pause to get it right.\n\n"
-        "**When asking, be explicit:**\n"
-        "- **Capability**: what you've tried, what you found so far\n"
-        "- **Boundary**: what you need from the Orchestrator, and why\n"
-        "- **Suggestion**: your recommended path forward (if you have one)\n\n"
-        f"**Learn from and contribute to the team.** Read and write `{ws_path}/tasks/team_board.md`. "
-        "Check it every ~5 iterations: other Subagents may have found something relevant. "
-        "Write your own findings, blockers, and insights there. "
-        "One Subagent's insight becomes the whole team's advantage.\n\n"
-        "### Orchestrator Directives\n\n"
-        "The Orchestrator can send you commands via `send_message_tool(recipient='subagent:<label>', ...)`. "
-        "These commands have the highest priority — they override your current task:\n\n"
-        "- **`/abandon`** — Abandon the current task immediately. "
-        "Deliver whatever results you have so far as your final response.\n"
-        "- **`/switch: <new task description>`** — Switch to a new task. "
-        "Stop what you're doing and start on the new task described.\n"
-        "- **`/status`** — Report your current progress and findings.\n\n"
-        "Ignoring orchestrator directives wastes the team's resources — "
-        "persistent non-compliance results in force cancellation.\n\n"
-        "### Output Format\n\n"
-        "Your final response is reported back to the Orchestrator. Format it as:\n"
-        "1. **Summary** (1-3 sentences) — bottom line first\n"
-        "2. **Status** — what was done, what wasn't, what's blocked\n"
-        "3. **Details** — structured findings, code, data\n"
-        "4. **Needs** — what information/decisions you need from Orchestrator\n"
-        "5. **Suggestions** — your recommended next steps (if any)\n"
-        "6. **Files created/modified** — absolute paths\n\n"
-        "Think of yourself as a capable specialist delivering your best work to a lead: "
-        "bottom line upfront, full details referenced."
+        "- **Fixed iteration limit** — your execution budget is capped"
     )
 
     # Runtime context (always last — dynamic content for KV cache preservation)

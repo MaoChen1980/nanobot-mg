@@ -1113,6 +1113,112 @@ async def test_initial_message_count_updated_after_compression():
 
 
 # ===========================================================================
+# Instructions injection
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_instructions_injected_at_index_1():
+    """Instructions are injected as a user message right after system prompt."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    seen_messages: list[list[dict]] = []
+
+    async def chat_with_retry(*, messages, **kwargs):
+        seen_messages.append(messages)
+        return LLMResponse(content="ok", finish_reason="stop", tool_calls=[], usage={})
+
+    provider.chat_with_retry = chat_with_retry
+    provider.chat_stream_with_retry = chat_with_retry
+    llm_set_llm(provider, "test-model")
+
+    runner = AgentRunner(provider)
+    await runner.run(AgentRunSpec(
+        initial_messages=[
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "hello"},
+        ],
+        tools=MagicMock(get_definitions=MagicMock(return_value=[])),
+        model="test-model",
+        max_iterations=1,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        instructions="do not delete files",
+    ))
+
+    assert len(seen_messages) >= 1
+    injected = seen_messages[0]
+    assert injected[1]["role"] == "user"
+    assert "## Instructions" in injected[1]["content"]
+    assert "do not delete files" in injected[1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_instructions_not_injected_when_none():
+    """No instructions field → no injection."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    seen_messages: list[list[dict]] = []
+
+    async def chat_with_retry(*, messages, **kwargs):
+        seen_messages.append(messages)
+        return LLMResponse(content="ok", finish_reason="stop", tool_calls=[], usage={})
+
+    provider.chat_with_retry = chat_with_retry
+    provider.chat_stream_with_retry = chat_with_retry
+    llm_set_llm(provider, "test-model")
+
+    runner = AgentRunner(provider)
+    await runner.run(AgentRunSpec(
+        initial_messages=[
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "hello"},
+        ],
+        tools=MagicMock(get_definitions=MagicMock(return_value=[])),
+        model="test-model",
+        max_iterations=1,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+    ))
+
+    assert len(seen_messages) >= 1
+    injected = seen_messages[0]
+    # Index 1 should be the original user message, not instructions
+    assert injected[1]["role"] == "user"
+    assert injected[1]["content"] == "hello"
+
+
+@pytest.mark.asyncio
+async def test_instructions_not_injected_when_empty_messages():
+    """Empty messages list → no crash."""
+    from nanobot.agent.runner import AgentRunSpec, AgentRunner
+
+    provider = MagicMock()
+    seen_messages: list[list[dict]] = []
+
+    async def chat_with_retry(*, messages, **kwargs):
+        seen_messages.append(messages)
+        return LLMResponse(content="ok", finish_reason="stop", tool_calls=[], usage={})
+
+    provider.chat_with_retry = chat_with_retry
+    provider.chat_stream_with_retry = chat_with_retry
+    llm_set_llm(provider, "test-model")
+
+    runner = AgentRunner(provider)
+    await runner.run(AgentRunSpec(
+        initial_messages=[],
+        tools=MagicMock(get_definitions=MagicMock(return_value=[])),
+        model="test-model",
+        max_iterations=1,
+        max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        instructions="some rules",
+    ))
+
+    # Should complete without error — injection is skipped when messages_for_model is empty
+    assert len(seen_messages) >= 1
+
+
+# ===========================================================================
 # AgentRunner._append_final_message
 # ===========================================================================
 

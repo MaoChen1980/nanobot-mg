@@ -42,8 +42,9 @@ class MemoryStore:
         self.memory_file = self.memory_dir / "MEMORY.md"
         self.soul_file = workspace / "SOUL.md"
         self.user_file = workspace / "USER.md"
+        self.rules_file = workspace / "RULES.md"
         self._git = GitStore(workspace, tracked_files=[
-            "SOUL.md", "USER.md",
+            "SOUL.md", "USER.md", "RULES.md",
         ])
         self.vector_index = MemoryVectorIndex(self.memory_dir)
         if not self.vector_index.load() and self.list_memory_files():
@@ -94,6 +95,12 @@ class MemoryStore:
 
     def write_user(self, content: str) -> None:
         self.user_file.write_text(content, encoding="utf-8")
+
+    def read_rules(self) -> str:
+        return self.read_file(self.rules_file)
+
+    def write_rules(self, content: str) -> None:
+        self.rules_file.write_text(content, encoding="utf-8")
 
     def get_memory_context(self) -> str:
         long_term = self.read_memory()

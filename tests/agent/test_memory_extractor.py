@@ -632,6 +632,42 @@ class TestWriteCleanupAndRebuildByType:
         assert "**" not in text
 
     @pytest.mark.asyncio
+    async def test_instruction_written_to_rules_md(self, extractor: MemoryExtractor) -> None:
+        """instruction type finding → written to RULES.md."""
+        result = await extractor._write_cleanup_and_rebuild(
+            [_make_finding(ftype="instruction", content="必ずテストを実行してからコミットする", topic="")]
+        )
+        assert result is not None
+        rules_file = extractor.store.rules_file
+        assert rules_file.exists()
+        text = rules_file.read_text(encoding="utf-8")
+        assert "必ずテストを実行してからコミットする" in text
+        assert "<!--ts:" in text
+
+    @pytest.mark.asyncio
+    async def test_instruction_appended_to_existing_rules_md(self, extractor: MemoryExtractor) -> None:
+        """Existing RULES.md content preserved when adding new instruction."""
+        rules_file = extractor.store.rules_file
+        rules_file.parent.mkdir(parents=True, exist_ok=True)
+        rules_file.write_text("# Rules\n\n- old rule<!--ts:100.0-->\n\n---\n\n*更新: 2026-01-01*\n", encoding="utf-8")
+        await extractor._write_cleanup_and_rebuild(
+            [_make_finding(ftype="instruction", content="新しいルール", topic="", ts="2026-06-01T00:00:00")]
+        )
+        text = rules_file.read_text(encoding="utf-8")
+        assert "old rule" in text
+        assert "新しいルール" in text
+
+    @pytest.mark.asyncio
+    async def test_instruction_without_topic_is_valid(self, extractor: MemoryExtractor) -> None:
+        """instruction type does not require topic (unlike knowledge)."""
+        result = await extractor._write_cleanup_and_rebuild(
+            [_make_finding(ftype="instruction", content="no hardcoded secrets", topic="")]
+        )
+        assert result is not None
+        text = extractor.store.rules_file.read_text(encoding="utf-8")
+        assert "no hardcoded secrets" in text
+
+    @pytest.mark.asyncio
     async def test_skill_written_to_pending_skills(self, extractor: MemoryExtractor) -> None:
         await extractor._write_cleanup_and_rebuild(
             [_make_finding(ftype="skill", content="useful skill", topic="", name="my-skill")]

@@ -340,6 +340,12 @@ class MemoryExtractor:
                     "content": paragraph, "ts": ts_num, "pinned": pinned,
                 })
 
+            elif ftype == "instruction":
+                rel_path = "RULES.md"
+                memory_state.setdefault(rel_path, []).append({
+                    "content": paragraph, "ts": ts_num, "pinned": pinned,
+                })
+
             elif ftype == "tool_script":
                 self._pending_tool_scripts.append(finding)
 
@@ -359,7 +365,7 @@ class MemoryExtractor:
         for rel_path, entries in memory_state.items():
             content_lines: list[str] = []
             existing_paragraphs: list[dict[str, Any]] = []
-            full_path = self.store.user_file if rel_path == "user.md" else self.store.memory_dir / rel_path
+            full_path = self.store.rules_file if rel_path == "RULES.md" else self.store.user_file if rel_path == "user.md" else self.store.memory_dir / rel_path
             full_path.parent.mkdir(parents=True, exist_ok=True)
 
             if full_path.exists():

@@ -237,6 +237,7 @@ class AgentLoop:
             timezone=self.context.timezone,
             project_root=self.project_root,
             memory_store=self.context.memory,
+            context_builder=self.context,
         )
         self._running = False
         self._last_subagent_check: dict[str, _SubagentCheckState] = {}
@@ -699,6 +700,9 @@ class AgentLoop:
 
             return items
 
+        # Build instructions for runner-level injection (fresh before every LLM call)
+        instructions = self.context.build_instructions_section()
+
         result = await self.runner.run(AgentRunSpec(
             initial_messages=initial_messages,
             tools=self.tools,
@@ -725,6 +729,7 @@ class AgentLoop:
             max_overflow_retries=self.max_retries,
             assess_me_callback=self._make_retry_assess_callback(session),
             previous_summary=getattr(session, "_last_summary", None),
+            instructions=instructions,
         ))
         if result.overflow_summary:
             session._last_summary = result.overflow_summary

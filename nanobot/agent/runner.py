@@ -114,6 +114,7 @@ class AgentRunSpec:
     # Signature: async (messages: list[dict]) -> bool (True if injected)
     assess_me_callback: Any | None = None
     previous_summary: str | None = None
+    instructions: str | None = None  # injected into last user msg before each LLM call
 
 
 @dataclass(slots=True)
@@ -301,6 +302,12 @@ class AgentRunner:
             await hook.before_iteration(context)
             logger.info("RUN_DBG: before_llm_call (iter={})", iteration)
             messages_for_model = hook.before_llm_call(context, messages_for_model)
+
+            # Inject instructions right after system prompt — always index 1,
+            # never competes with real user messages, no sequence disruption.
+            if spec.instructions and messages_for_model:
+                messages_for_model.insert(1, {"role": "user", "content": f"## Instructions\n\n{spec.instructions}"})
+
             logger.info("RUN_DBG: request_model start (iter={}, msgs={})", iteration, len(messages_for_model))
             response, compress_event = await request_model(spec, messages_for_model, hook, context)
             logger.info("RUN_DBG: request_model done (iter={}, finish={}, tools={})",
