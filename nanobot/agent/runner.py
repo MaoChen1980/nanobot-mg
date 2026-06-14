@@ -305,8 +305,20 @@ class AgentRunner:
 
             # Inject instructions right after system prompt — always index 1,
             # never competes with real user messages, no sequence disruption.
+            # NOTE: messages_for_model may BE the messages list (when
+            # strip_bypassed_tool_messages finds nothing to strip), so we
+            # must REPLACE stale instructions rather than inserting — a bare
+            # insert(1, ...) would mutate the source list and accumulate
+            # duplicates across iterations.
             if spec.instructions and messages_for_model:
-                messages_for_model.insert(1, {"role": "user", "content": f"## Instructions\n\n{spec.instructions}"})
+                instr = {"role": "user", "content": f"## Instructions\n\n{spec.instructions}"}
+                if (len(messages_for_model) > 1
+                        and messages_for_model[1].get("role") == "user"
+                        and isinstance(messages_for_model[1].get("content"), str)
+                        and messages_for_model[1]["content"].startswith("## Instructions")):
+                    messages_for_model[1] = instr
+                else:
+                    messages_for_model.insert(1, instr)
 
             logger.info("RUN_DBG: request_model start (iter={}, msgs={})", iteration, len(messages_for_model))
             response, compress_event = await request_model(spec, messages_for_model, hook, context)
