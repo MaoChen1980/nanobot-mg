@@ -21,7 +21,7 @@ For the project overview, install guide, and general docs map, see the root
 ## Layout
 
 ```text
-webui/                 source tree (this directory)
+nanobot/web/           source tree (this directory)
 nanobot/web/dist/      build output served by the gateway
 ```
 
@@ -56,7 +56,7 @@ nanobot gateway
 In another terminal:
 
 ```bash
-cd webui
+cd nanobot/web
 bun install            # npm install also works
 bun run dev
 ```
@@ -75,7 +75,7 @@ NANOBOT_API_URL=http://127.0.0.1:9000 bun run dev
 ## Build for packaged runtime
 
 ```bash
-cd webui
+cd nanobot/web
 bun run build
 ```
 
@@ -88,7 +88,7 @@ wheel contains the current WebUI assets.
 ## Test
 
 ```bash
-cd webui
+cd nanobot/web
 bun run test
 ```
 

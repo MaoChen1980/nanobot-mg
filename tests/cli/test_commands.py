@@ -1414,7 +1414,7 @@ def test_gateway_health_endpoint_binds_and_serves_expected_responses(
     from starlette.testclient import TestClient
     from nanobot.api.server import create_app as make_api_app
 
-    index_html = tmp_path / "webui" / "index.html"
+    index_html = tmp_path / "nanobot" / "web" / "index.html"
     index_html.parent.mkdir(parents=True)
     index_html.write_text("<html>test</html>")
     api_app = make_api_app(str(index_html), proxy_manager=MagicMock())

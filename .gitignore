@@ -13,7 +13,7 @@
 # Test & coverage
 # Windows
 # macOS
-# webui (monorepo frontend)
+# nanobot/web (frontend)
 *.code-workspace
 *.cover
 *.egg
@@ -81,7 +81,7 @@ temp/
 tmp/
 uv.lock
 venv/
-webui/.vite/
-webui/coverage/
-webui/dist/
-webui/node_modules/
+nanobot/web/.vite/
+nanobot/web/coverage/
+nanobot/web/dist/
+nanobot/web/node_modules/

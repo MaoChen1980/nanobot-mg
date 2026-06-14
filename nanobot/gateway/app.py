@@ -34,10 +34,10 @@ def _looks_like_traceback(line: str) -> bool:
 
 
 def _find_webui_index() -> Path:
-    """Locate webui/index.html — try source checkout, then installed locations."""
+    """Locate nanobot/web/index.html — try source checkout, then installed locations."""
     candidates = [
-        Path(__file__).parent.parent.parent / "webui" / "index.html",
-        Path.cwd() / "webui" / "index.html",
+        Path(__file__).parent.parent / "web" / "index.html",
+        Path.cwd() / "nanobot" / "web" / "index.html",
     ]
     for p in candidates:
         resolved = p.resolve()
