@@ -103,3 +103,23 @@ def test_self_findings_included_in_build_messages(tmp_path):
     assert "Self-Evolution Findings" in system_content
     assert "abc123" in system_content
     assert "self_bug" in system_content
+
+
+# ---------------------------------------------------------------------------
+# Instructions section (build_instructions_section)
+# ---------------------------------------------------------------------------
+
+
+def test_subagent_instructions_includes_escalation(tmp_path):
+    """subagent_escalation.md is loaded in for_subagent=True instructions."""
+    builder = _make_builder(tmp_path)
+    result = builder.build_instructions_section(for_subagent=True)
+    assert "Progress Reporting & Escalation" in result
+    assert "notify_orchestrator_tool" in result
+
+
+def test_subagent_escalation_absent_for_main_agent(tmp_path):
+    """Escalation snippet should NOT appear in main agent instructions."""
+    builder = _make_builder(tmp_path)
+    result = builder.build_instructions_section(for_subagent=False)
+    assert "Progress Reporting & Escalation" not in result

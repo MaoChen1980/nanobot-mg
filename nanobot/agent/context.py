@@ -223,6 +223,7 @@ class ContextBuilder:
                 "think_triggers",
                 "search_tool_selector",
                 "operating_principles_subagent",
+                "subagent_escalation",
                 "meta_learning",
                 "skill_refinement",
             ]
