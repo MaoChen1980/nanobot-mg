@@ -22,13 +22,6 @@
 
 {% endif %}
 
-{% if always_skills %}
-════════
-# Active Skills
-
-{{ always_skills }}
-{% endif %}
-
 
 
 

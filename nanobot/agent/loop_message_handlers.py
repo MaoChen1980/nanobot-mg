@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
+import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -141,6 +143,7 @@ class SystemMessageHandler:
 class UserMessageHandler:
     def __init__(self, loop):
         self._loop = loop
+        self._skill_creation_inflight: set[str] = set()
 
     async def handle(self, msg, session_key, on_progress, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None):
 
@@ -381,6 +384,72 @@ class UserMessageHandler:
                 )
         except Exception as e:
             logger.warning("debug_root_cause chain call failed: {}", e)
+
+        # Detect skill creation opportunity from assess_me output
+        if "值得创建 skill" in result:
+            dedup_key = hashlib.md5(result.encode()).hexdigest()
+            if dedup_key not in self._skill_creation_inflight:
+                self._skill_creation_inflight.add(dedup_key)
+                task = asyncio.create_task(self._spawn_skill_creator(result))
+                task.add_done_callback(
+                    lambda t: (
+                        self._skill_creation_inflight.discard(dedup_key),
+                        logger.error("Skill creation failed: {}", t.exception())
+                        if t.exception() else None,
+                    )
+                )
+                logger.info("assess_me detected reusable pattern — spawning skill creation")
+            else:
+                logger.info("Skill creation already in-flight for this pattern — skipping")
+
+    async def _spawn_skill_creator(self, assess_result: str) -> None:
+        """Spawn a background agent to create/update skill from assess_me observation."""
+        from nanobot.agent.runner import AgentRunSpec, AgentRunner
+        from nanobot.agent.tools.registry import ToolRegistry
+        from nanobot.agent.tools.filesystem import ReadFileTool, WriteFileTool, EditFileTool
+        from nanobot.agent.tools.search import GlobTool, GrepTool
+        from nanobot.agent.tools.shell import ExecTool
+        from nanobot.utils.prompt_templates import render_template
+
+        logger.info("Skill creation: building agent for assess_me observation")
+
+        # Minimal tool set for skill creation
+        tools = ToolRegistry()
+        tools.register(ReadFileTool(workspace=self._loop.workspace))
+        tools.register(WriteFileTool(workspace=self._loop.workspace))
+        tools.register(EditFileTool(workspace=self._loop.workspace))
+        tools.register(GlobTool(workspace=self._loop.workspace))
+        tools.register(GrepTool(workspace=self._loop.workspace))
+        if self._loop.exec_config and self._loop.exec_config.enable:
+            tools.register(ExecTool(
+                working_dir=str(self._loop.workspace),
+                timeout=self._loop.exec_config.timeout,
+            ))
+
+        system_prompt = render_template(
+            "agent/_instructions/skill_creation.md",
+            assess_result=assess_result,
+            workspace_path=self._loop.workspace.as_posix(),
+        )
+
+        spec = AgentRunSpec(
+            initial_messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": assess_result},
+            ],
+            tools=tools,
+            model=self._loop.model,
+            max_iterations=10,
+            max_tool_result_chars=self._loop.max_tool_result_chars,
+        )
+
+        runner = AgentRunner(self._loop.provider, db=self._loop._db)
+        result = await runner.run(spec)
+
+        if result.final_content:
+            logger.info("Skill creation agent completed: {}", result.final_content[:200])
+        else:
+            logger.info("Skill creation agent completed with no output")
 
     async def _dispatch_command(self, msg, session, key):
         """Run command dispatch, return result if handled."""

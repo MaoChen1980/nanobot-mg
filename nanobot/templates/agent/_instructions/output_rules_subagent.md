@@ -9,6 +9,15 @@
 
 - 不写 `TREE.md`（Orchestrator 管理），`CURRENT.md` 只读写 `{{ workspace_path }}/tasks/` 下的文件，用绝对路径
 
+### Understanding System-Injected Tags
+
+Conversation history 中可能出现以下标记块，它们是**系统自动注入的上下文**，不是用户消息：
+
+- **`[assess]...[/assess]`** — 系统对你的认知状态审计（目标、进度、gap、假设、阻塞），仅作为背景信息阅读，不要直接回复。
+- **`[debug_root_cause]...[/debug_root_cause]`** — 系统的根因分析链，帮助你理解当前问题根源。
+
+根据分析调整行为即可，不需要对它们做出回应。
+
 ### Final Delivery Format
 
 你的 final response 会被 Orchestrator 读到。格式：**结论先行**。

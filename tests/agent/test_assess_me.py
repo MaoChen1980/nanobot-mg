@@ -701,3 +701,176 @@ class TestAssessMeTemplate:
         # The formatted conversation should appear in the prompt
         assert "check this" in content
         assert "Thinking patterns" in content
+
+
+# =========================================================================
+# Skill creation trigger — "值得创建 skill" detection + dedup
+# =========================================================================
+
+
+class TestSkillCreationTrigger:
+    """Test '值得创建 skill' triggers background skill-creation sub-runner.
+
+    Regression tests covering:
+    - Detection of the trigger marker in assess_me output
+    - Inflight dedup (same result -> no duplicate spawn)
+    - Distinct results spawn independently
+    - No marker -> no spawn
+    """
+
+    def _make_handler(self):
+        from nanobot.agent.loop import AgentLoop
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+
+        loop = MagicMock(spec=AgentLoop)
+        return UserMessageHandler(loop)
+
+    def _make_msgs(self, n_assistants: int) -> list[dict]:
+        """Build alternating user/assistant messages with *n_assistants* assistant turns."""
+        msgs: list[dict] = []
+        for i in range(n_assistants):
+            msgs.append({"role": "user", "content": f"msg {i}"})
+            msgs.append({"role": "assistant", "content": f"resp {i}"})
+        return msgs
+
+    @pytest.mark.asyncio
+    async def test_trigger_spawns_skill_creation(self) -> None:
+        """'值得创建 skill' in assess_me result -> spawns skill creation."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(10)
+        history = session.format_history()
+
+        with (
+            patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess,
+            patch("nanobot.agent.tools.debug_root_cause.DebugRootCauseTool") as mock_dcr,
+            patch.object(handler, "_spawn_skill_creator", new_callable=AsyncMock) as mock_spawn,
+        ):
+            mock_assess.return_value = "值得创建 skill: verify-api-response"
+            dcr_instance = MagicMock()
+            dcr_instance.execute = AsyncMock(return_value="root cause analysis")
+            mock_dcr.return_value = dcr_instance
+
+            await handler._maybe_assess(session, history)
+
+            mock_assess.assert_called_once()
+            mock_spawn.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dedup_same_result_skips_duplicate(self) -> None:
+        """Same '值得创建 skill' result twice -> only one spawn (inflight dedup)."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(10)
+        history = session.format_history()
+
+        with (
+            patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess,
+            patch("nanobot.agent.tools.debug_root_cause.DebugRootCauseTool") as mock_dcr,
+            patch.object(handler, "_spawn_skill_creator", new_callable=AsyncMock) as mock_spawn,
+        ):
+            mock_assess.return_value = "值得创建 skill: verify-api-response"
+            dcr_instance = MagicMock()
+            dcr_instance.execute = AsyncMock(return_value="analysis")
+            mock_dcr.return_value = dcr_instance
+
+            # First call -- should spawn
+            await handler._maybe_assess(session, history)
+            assert mock_spawn.call_count == 1
+
+            # Second call with same handler + same result -> dedup
+            await handler._maybe_assess(session, history)
+            assert mock_spawn.call_count == 1  # not incremented
+
+    @pytest.mark.asyncio
+    async def test_different_result_allows_new_spawn(self) -> None:
+        """Different '值得创建 skill' results -> each spawns independently."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(10)
+        history = session.format_history()
+
+        with (
+            patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess,
+            patch("nanobot.agent.tools.debug_root_cause.DebugRootCauseTool") as mock_dcr,
+            patch.object(handler, "_spawn_skill_creator", new_callable=AsyncMock) as mock_spawn,
+        ):
+            dcr_instance = MagicMock()
+            dcr_instance.execute = AsyncMock(return_value="analysis")
+            mock_dcr.return_value = dcr_instance
+
+            # First pattern
+            mock_assess.return_value = "值得创建 skill: verify-api-response"
+            await handler._maybe_assess(session, history)
+            assert mock_spawn.call_count == 1
+
+            # Second pattern (different) -- should spawn separately
+            mock_assess.return_value = "值得创建 skill: check-tool-before-assuming"
+            await handler._maybe_assess(session, history)
+            assert mock_spawn.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_marker_does_not_spawn(self) -> None:
+        """Normal assess_me output without '值得创建 skill' -> no spawn."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()
+        session = Session(key="test")
+        session.messages = self._make_msgs(10)
+        history = session.format_history()
+
+        with (
+            patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess,
+            patch("nanobot.agent.tools.debug_root_cause.DebugRootCauseTool") as mock_dcr,
+            patch.object(handler, "_spawn_skill_creator", new_callable=AsyncMock) as mock_spawn,
+        ):
+            mock_assess.return_value = "agent is on track, no reusable patterns found"
+            dcr_instance = MagicMock()
+            dcr_instance.execute = AsyncMock(return_value="analysis")
+            mock_dcr.return_value = dcr_instance
+
+            await handler._maybe_assess(session, history)
+
+            mock_spawn.assert_not_called()
+
+
+# =========================================================================
+# Skill creation template -- integration check
+# =========================================================================
+
+
+class TestSkillCreationTemplate:
+    """Verify the skill_creation.md template renders correctly."""
+
+    def test_renders_with_assess_result(self) -> None:
+        """Template renders with assess_me output and workspace path."""
+        from nanobot.utils.prompt_templates import render_template
+
+        assess_result = "值得创建 skill: verify-api-response"
+        content = render_template(
+            "agent/_instructions/skill_creation.md",
+            assess_result=assess_result,
+            workspace_path="/tmp/workspace",
+        )
+        assert assess_result in content
+        assert "## Action" in content
+        assert "## Verification" in content
+        assert "skills/" in content
+
+    def test_renders_with_empty_result(self) -> None:
+        """Template renders with empty assess_me result (edge case)."""
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/_instructions/skill_creation.md",
+            assess_result="",
+            workspace_path="/tmp/workspace",
+        )
+        assert "## Action" in content
+        assert "## Verification" in content

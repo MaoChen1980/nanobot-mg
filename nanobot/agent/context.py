@@ -139,17 +139,11 @@ class ContextBuilder:
 
         bootstrap = self._load_bootstrap_files()
 
-        always_content = None
-        always_skills = self.skills.get_always_skills()
-        if always_skills:
-            always_content = self.skills.format_skills_for_context(always_skills)
-
         result = render_template(
             "agent/system_prompt.md",
             identity=identity,
             tools=tools,
             bootstrap=bootstrap or None,
-            always_skills=always_content,
             runtime_context=runtime_context,
             # Workspace path — used by included templates (framework_core etc.)
             workspace_path=self._workspace_path_str,
@@ -251,9 +245,15 @@ class ContextBuilder:
             if content.strip():
                 sections.append(content)
 
-        # Skills summary — dynamically built from skills system
-        always_skills = self.skills.get_always_skills()
-        skills_summary = self.skills.build_skills_summary(exclude=set(always_skills))
+        # Always-skills — full content, always injected near generation point
+        always_skills_names = self.skills.get_always_skills()
+        if always_skills_names:
+            always_content = self.skills.format_skills_for_context(always_skills_names)
+            if always_content:
+                sections.append(f"## Active Skills\n\n{always_content}")
+
+        # Available skills summary — dynamically built, excludes always-skills
+        skills_summary = self.skills.build_skills_summary(exclude=set(always_skills_names))
         if skills_summary:
             sections.append(
                 "### Available Skills\n\n"
