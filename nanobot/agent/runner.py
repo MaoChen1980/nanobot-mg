@@ -157,6 +157,8 @@ class AgentRunner:
     def __init__(self, provider: LLMProvider, db=None):
         self.provider = provider
         self._db = db
+        self._assess_responses = 0  # periodic assess_me counter (local to this run)
+        self._last_assess_at = 0
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
         """Drain pending injections. Returns normalized user messages."""
@@ -350,6 +352,14 @@ class AgentRunner:
             # The model can re-read with read_file_tool if needed.
             if response.finish_reason != "error":
                 strip_image_blocks(messages)
+                # Periodic self-assessment — fire at milestones (every 10 responses)
+                # within this run, not just at user-message boundaries.
+                if spec.assess_me_callback is not None:
+                    self._assess_responses += 1
+                    count = self._assess_responses
+                    if count % 10 == 0 and count != self._last_assess_at:
+                        self._last_assess_at = count
+                        await spec.assess_me_callback(messages)
             raw_usage = usage_dict(response.usage)
             context.response = response
             context.usage = dict(raw_usage)
@@ -788,6 +798,11 @@ class AgentRunner:
             )
             if drained_after_max_iterations:
                 had_injections = True
+
+        # End-of-loop self-assessment — let the LLM re-evaluate its output
+        # before returning. Only fires when at least one response was generated.
+        if spec.assess_me_callback is not None and self._assess_responses > 0:
+            await spec.assess_me_callback(messages)
 
         return AgentRunResult(
             final_content=final_content,

@@ -337,13 +337,10 @@ class UserMessageHandler:
         if compress_triggered:
             trigger = True
 
-        # (2) Interval trigger — count LLM turns, not user messages
+        # (2) Interval trigger — count LLM turns (persistent counter, survives compression)
         # Dense tool-call sequences need periodic direction checks too
         if not trigger:
-            assistant_count = sum(
-                1 for m in session.messages
-                if m.get("role") == "assistant"
-            )
+            assistant_count = session.metadata.get("assistant_turn_count", 0)
             if assistant_count > 0 and assistant_count % _DEFAULT_ASSESS_INTERVAL == 0:
                 trigger = True
 
@@ -534,8 +531,17 @@ class UserMessageHandler:
         # Lifecycle: cap, clear checkpoints, save
         self._loop.lifecycle.finalize(session)
 
-        # .pt save: every N turns, using session assistant count (persists across restarts)
-        assistant_count = sum(1 for m in session.messages if m.get("role") == "assistant")
+        # Track persistent assistant turn count (survives compression)
+        new_assistant_msgs = sum(
+            1 for m in all_msgs[save_skip:]
+            if m.get("role") == "assistant"
+        )
+        session.metadata["assistant_turn_count"] = (
+            session.metadata.get("assistant_turn_count", 0) + new_assistant_msgs
+        )
+
+        # .pt save: every N turns, using persistent counter (not session.messages scan)
+        assistant_count = session.metadata.get("assistant_turn_count", 0)
         if assistant_count > 0 and assistant_count % self._loop._pt_save_interval == 0:
             MemoryExtractor.save_prompt_snapshot(all_msgs, self._loop.prompts_dir, session.key)
 
