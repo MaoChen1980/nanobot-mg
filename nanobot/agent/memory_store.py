@@ -50,14 +50,6 @@ class MemoryStore:
         if not self.vector_index.load() and self.list_memory_files():
             logger.info("No vector index found — building from existing memory/ files")
             self.build_vector_index()
-        self.framework_index = MemoryVectorIndex(
-            workspace / "framework",
-            index_dir=".framework_index",
-        )
-        if not self.framework_index.load() and self._list_framework_files():
-            logger.info("No framework index found — building from existing framework/ files")
-            self.build_framework_index()
-
         self.tasks_dir = workspace / "tasks"
         if self.tasks_dir.is_dir():
             self.tasks_index = MemoryVectorIndex(self.tasks_dir, index_dir=".tasks_index")
@@ -138,22 +130,6 @@ class MemoryStore:
     def build_vector_index(self) -> None:
         """Rebuild the FAISS vector index (incremental if index exists)."""
         self.vector_index.build_incremental()
-
-    # -- framework index -------------------------------------------------------
-
-    def _list_framework_files(self) -> list[Path]:
-        """Return all .md files under framework/ (excluding .framework_index/)."""
-        path = self.workspace / "framework"
-        if not path.exists():
-            return []
-        return sorted(
-            p for p in path.rglob("*.md")
-            if ".framework_index" not in p.parts
-        )
-
-    def build_framework_index(self) -> None:
-        """Rebuild the FAISS index from all framework/ docs (incremental if exists)."""
-        self.framework_index.build_incremental()
 
     def _list_tasks_files(self) -> list[Path]:
         """Return all .md files under tasks/ (excluding .tasks_index/)."""

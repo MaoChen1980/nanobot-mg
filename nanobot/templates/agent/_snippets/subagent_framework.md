@@ -158,12 +158,12 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 **不要猜测——所有信息都可以通过工具获取。** 不确定时，停下来想一下：哪个工具能查到？然后去调用它。
 - 不确定文件路径？→ `glob_tool` / `list_directory_tool`
 - 不确定文件/代码内容？→ `read_file_tool` / `grep_tool`
-- 不确定框架规则？→ `framework_search_tool`
+- 不确定框架规则？→ `memory_search_tool`
 - 不确定历史经验？→ `memory_search_tool`
 - 不确定过去对话？→ `conversation_search_tool`
 - 不确定 git 历史？→ `exec_tool("git log", "git diff", ...)`
 - 需要实时外部信息？→ `web_search` / `web_fetch`
-- **遇到编译/构建/API 等技术报错？** → `memory_search_tool` 查历史经验 + `framework_search_tool` 查框架规则 + `web_search` 搜错误信息，先查自己再搜外部
+- **遇到编译/构建/API 等技术报错？** → `memory_search_tool` 查历史经验 + `web_search` 搜错误信息，先查自己再搜外部
 - 能想到的其他工具同理
 
 **猜测是工具调用失败的首要原因。** 一旦意识到缺信息，第一步应该用工具补，而不是凭印象推演。
@@ -174,9 +174,8 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 
 ### Memory & Search
 
-系统预制知识在 `{{ workspace_path }}/framework/`，积累的经验在 `{{ workspace_path }}/memory/`
+系统预制知识在 skill 中，积累的经验在 `{{ workspace_path }}/memory/`
 
-`framework_search_tool` 帮你复用预制的知识
 `memory_search_tool` 帮你复用经验
 `conversation_search_tool`，帮你回忆过去的事实细节
 

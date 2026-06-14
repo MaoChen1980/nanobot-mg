@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-06-12T02:01:57+0800
+Last scanned: 2026-06-14T00:49:36+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~85,063
+- **Approx LOC**: ~85,898
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 353 | ~84,775 |
+| Python | 357 | ~85,610 |
 | Shell | 5 | ~288 |
 
 ## Directory Structure
@@ -59,58 +59,6 @@ E:\claude\nanobot-mg/
     websocket.md (12KB)
   hooks/
     write_commit.py (1KB)
-  htmlcov/
-    class_index.html (176KB)
-    coverage_html_cb_188fc9a4.js (26KB)
-    favicon_32_cb_c827f16f.png (2KB)
-    function_index.html (792KB)
-    index.html (67KB)
-    keybd_closed_cb_900cfef5.png (9KB)
-    status.json (50KB)
-    style_cb_5c747636.css (16KB)
-    z_044999b8d57beec1_context_monitor_py.html (29KB)
-    z_103c4cb70cffb2bf___init___py.html (5KB)
-    z_103c4cb70cffb2bf_commands_py.html (289KB)
-    z_103c4cb70cffb2bf_models_py.html (12KB)
-    z_103c4cb70cffb2bf_stream_py.html (42KB)
-    z_1c95568a7da6306e___init___py.html (14KB)
-    z_1c95568a7da6306e_base_py.html (134KB)
-    z_1c95568a7da6306e_dingtalk_py.html (53KB)
-    z_1c95568a7da6306e_discord_py.html (33KB)
-    z_1c95568a7da6306e_email_py.html (101KB)
-    z_1c95568a7da6306e_feishu_py.html (71KB)
-    z_1c95568a7da6306e_matrix_py.html (29KB)
-    z_1c95568a7da6306e_mochat_py.html (53KB)
-    z_1c95568a7da6306e_msteams_py.html (47KB)
-    z_1c95568a7da6306e_qq_py.html (39KB)
-    z_1c95568a7da6306e_slack_py.html (42KB)
-    z_1c95568a7da6306e_telegram_py.html (27KB)
-    z_1c95568a7da6306e_wecom_py.html (44KB)
-    z_1c95568a7da6306e_weixin_py.html (31KB)
-    z_1c95568a7da6306e_whatsapp_py.html (34KB)
-    z_23016e8c0543b570___init___py.html (6KB)
-    z_23016e8c0543b570_shell_py.html (134KB)
-    z_23a983ab569fbb05___init___py.html (12KB)
-    z_23a983ab569fbb05_filesystem_base_py.html (68KB)
-    z_23a983ab569fbb05_filesystem_delete_py.html (14KB)
-    z_23a983ab569fbb05_filesystem_edit_py.html (136KB)
-    z_23a983ab569fbb05_filesystem_list_py.html (29KB)
-    z_23a983ab569fbb05_filesystem_move_py.html (17KB)
-    z_23a983ab569fbb05_filesystem_py.html (11KB)
-    z_23a983ab569fbb05_filesystem_read_py.html (75KB)
-    z_23a983ab569fbb05_filesystem_write_py.html (53KB)
-    z_2dd4f172d28b84fb___init___py.html (9KB)
-    z_2dd4f172d28b84fb_mcp_py.html (175KB)
-    z_46fe87dc44cfcd65___init___py.html (5KB)
-    z_477139fb4fad4b27___init___py.html (6KB)
-    z_477139fb4fad4b27_service_py.html (180KB)
-    z_477139fb4fad4b27_types_py.html (28KB)
-    z_4db81ad4f7e72d50___init___py.html (5KB)
-    z_4db81ad4f7e72d50_server_py.html (96KB)
-    z_4ecd4a9d8c162d06___init___py.html (15KB)
-    z_4ecd4a9d8c162d06_anthropic_provider_py.html (193KB)
-    z_4ecd4a9d8c162d06_azure_openai_provider_py.html (56KB)
-    ... (108 more)
   images/
     GitHub_README.png (188KB)
     nanobot_arch.png (490KB)
@@ -140,7 +88,6 @@ E:\claude\nanobot-mg/
         edit_files.py (19KB)
         explore_module.py (19KB)
         file_state.py (7KB)
-        framework_search.py (4KB)
         list_subagents.py (1KB)
         memory_search.py (7KB)
         message.py (8KB)
@@ -167,38 +114,38 @@ E:\claude\nanobot-mg/
         tool_call_log.py (3KB)
         web.py (23KB)
       __init__.py (584B)
-      assess_me.py (3KB)
-      compress.py (19KB)
-      compressor.py (6KB)
-      context.py (39KB)
+      assess_me.py (4KB)
+      compress.py (21KB)
+      compressor.py (7KB)
+      context.py (42KB)
       context_vars.py (981B)
       db.py (23KB)
       hook.py (6KB)
       llm_context.py (2KB)
-      loop.py (60KB)
+      loop.py (63KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (779B)
       loop_dispatch.py (7KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (22KB)
+      loop_message_handlers.py (24KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (68KB)
-      memory_store.py (10KB)
+      memory_extractor.py (69KB)
+      memory_store.py (11KB)
       memory_vector.py (25KB)
       message_pipe.py (6KB)
       project_scanner.py (21KB)
       runner.py (42KB)
-      runner_constants.py (582B)
+      runner_constants.py (566B)
       runner_context.py (6KB)
       runner_execution.py (8KB)
       runner_injection.py (5KB)
       runner_llm.py (6KB)
       runner_retry.py (4KB)
-      skills.py (12KB)
+      skills.py (13KB)
       subagent.py (25KB)
-      subagent_prompt.py (13KB)
+      subagent_prompt.py (8KB)
       subagent_status.py (2KB)
       subagent_tools.py (4KB)
     api/

@@ -29,18 +29,6 @@
 {{ always_skills }}
 {% endif %}
 
-{% if workflows %}
-════════
-# Workflow
-{{ workflows }}
-{% endif %}
-
-
-{% if framework_search %}
-════════
-{{ framework_search }}
-
-{% endif %}
 
 
 

@@ -260,49 +260,6 @@ def test_self_findings_empty_when_missing(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _build_workflow_routing caching
-# ---------------------------------------------------------------------------
-
-
-def test_workflow_routing_cached(tmp_path):
-    """Repeated call returns cached result."""
-    builder = _make_builder(tmp_path)
-    wf_dir = tmp_path / "workspace" / "framework" / "workflows"
-    wf_dir.mkdir(parents=True, exist_ok=True)
-    (wf_dir / "test-workflow.md").write_text(
-        "# Test Workflow\n\nDo something.", encoding="utf-8"
-    )
-
-    w1 = builder._build_workflow_routing()
-    assert "test-workflow" in w1
-
-    w2 = builder._build_workflow_routing()
-    assert w1 is w2
-
-
-def test_workflow_routing_no_dir_returns_empty(tmp_path):
-    """No workflows/ directory returns empty."""
-    builder = _make_builder(tmp_path)
-    result = builder._build_workflow_routing()
-    assert result == ""
-
-
-def test_workflow_routing_skips_non_md(tmp_path):
-    """Non-.md files in workflows/ are ignored."""
-    builder = _make_builder(tmp_path)
-    wf_dir = tmp_path / "workspace" / "framework" / "workflows"
-    wf_dir.mkdir(parents=True, exist_ok=True)
-    (wf_dir / "readme.txt").write_text("Not a workflow.", encoding="utf-8")
-    (wf_dir / "real-workflow.md").write_text(
-        "# Real\n\nDescription.", encoding="utf-8"
-    )
-
-    result = builder._build_workflow_routing()
-    assert "readme" not in result
-    assert "real-workflow" in result
-
-
-# ---------------------------------------------------------------------------
 # Integration: build_system_prompt cascade
 # ---------------------------------------------------------------------------
 
@@ -386,7 +343,6 @@ def test_empty_workspace_no_crash(tmp_path):
     assert builder._build_current_context_section() == ""
     assert builder._build_self_findings_section() == ""
     assert builder._build_memory_section() == ""
-    assert builder._build_workflow_routing() == ""
     bootstrap = builder._load_bootstrap_files()
     assert isinstance(bootstrap, str)
 

@@ -4,7 +4,7 @@
 
 | When you need to... | Use | Search type | Why |
 |---|---|---|---|---|
-| 查找**框架文档、行为规则、约束** | `framework_search_tool` | **语义** (FAISS) | `{{ workspace_path }}/framework/` 的 FAISS 索引——100% 准确，必须遵守 |
+| 查找**行为规则、约束、知识** | `memory_search_tool` | **语义** (FAISS) | `{{ workspace_path }}/memory/` 的 FAISS 索引——语义匹配积累的知识 |
 | 在代码、配置或文件中查找**精确关键词** | `grep_tool` | **正则/字符** | 支持正则、文件模式、行号 |
 | 对单个长文档或文件进行**语义搜索** | `search_text_tool` | **语义** (embedding) | 单个文本内的 embedding 相似度 |
 | 对整个 memory/knowledge base 进行**语义搜索** | `memory_search_tool` | **语义** (FAISS) | 跨所有 memory 文件的 FAISS 向量索引 + 关键词增强 + 相关文件交叉引用 |
@@ -12,18 +12,15 @@
 
 **Decision flow:**
 
-1. 需要理解 framework 规则/约束？→ `framework_search_tool`（语义）
-2. 需要**精确**匹配（代码、已知术语、标识符）？→ `grep_tool`（字符/正则）
-3. 需要在已有特定文档中进行**语义匹配**？→ `search_text_tool`（语义）
-4. 需要在积累的知识中进行**语义匹配**？→ `memory_search_tool`（语义）
-5. 需要查找过去对话中**特定的文本/事实**？→ `conversation_search_tool`（字符子串 LIKE）
+1. 需要**精确**匹配（代码、已知术语、标识符）？→ `grep_tool`（字符/正则）
+2. 需要在已有特定文档中进行**语义匹配**？→ `search_text_tool`（语义）
+3. 需要在积累的知识中进行**语义匹配**？→ `memory_search_tool`（语义）
+4. 需要查找过去对话中**特定的文本/事实**？→ `conversation_search_tool`（字符子串 LIKE）
 
 **Query patterns — match section heading granularity, use specific terms:**
 
 | Tool | Good query | Why it works |
 |------|-----------|-------------|
-| `framework_search_tool` | `turn lifecycle end turn rules` | 匹配 `## Ending a Turn` 章节 |
-| `framework_search_tool` | `subagent spawn_tool maximum count` | 技术术语触发关键词增强 |
 | `memory_search_tool` | `android build gradle apk config` | 匹配 `## 构建工具` 章节 |
 | `memory_search_tool` | `memory extraction consolidation` | 自然短语匹配章节粒度 |
 | `search_text_tool` | `"subagent orchestration"` | 精确短语用引号包裹 |

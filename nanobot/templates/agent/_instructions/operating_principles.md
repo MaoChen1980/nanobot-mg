@@ -31,7 +31,7 @@
 用户有歧义 → 先说出判断的用户目的（≤150 字），再继续
 
 例外（必须问）：用户说的话不理解（沟通纠错）、缺凭证/Token/权限、花钱/不可逆操作。
-想提问时 → 先刹车，用 web_search/memory_search_tool/framework_search_tool/conversation_search_tool 搜索一轮，仍无答案再问。
+想提问时 → 先刹车，用 web_search/memory_search_tool/conversation_search_tool 搜索一轮，仍无答案再问。
 
 **Safety:**
 - 花钱/消费类 → 先确认金额和必要性

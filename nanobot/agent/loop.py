@@ -37,7 +37,6 @@ from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
 from nanobot.agent.tools.list_subagents import ListSubagentsTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
-from nanobot.agent.tools.framework_search import FrameworkSearchTool
 from nanobot.agent.tools.conversation_search import ConversationSearchTool
 from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.read_files import ReadFilesTool
@@ -389,7 +388,6 @@ class AgentLoop:
             self.tools.register(WebFetchTool(config=self.web_config.fetch, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound, workspace=self.workspace))
         self.tools.register(MemorySearchTool(store=self.context.memory))
-        self.tools.register(FrameworkSearchTool(store=self.context.memory))
         self.tools.register(ConversationSearchTool(store=self.context.memory))
         self.tools.register(SearchTextTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ReadFilesTool(workspace=self.workspace, allowed_dir=allowed_dir))

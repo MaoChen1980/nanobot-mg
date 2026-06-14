@@ -27,7 +27,6 @@ from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
 from nanobot.agent.tools.assess_me_tool import AssessMeTool
 from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
-from nanobot.agent.tools.framework_search import FrameworkSearchTool
 from nanobot.agent.tools.conversation_search import ConversationSearchTool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
@@ -74,7 +73,6 @@ def build_subagent_tools(
     # --- memory / framework / conversation search ---
     if memory_store is not None:
         tools.register(MemorySearchTool(store=memory_store))
-        tools.register(FrameworkSearchTool(store=memory_store))
         tools.register(ConversationSearchTool(store=memory_store))
 
     # --- web ---

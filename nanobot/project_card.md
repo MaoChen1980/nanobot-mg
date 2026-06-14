@@ -53,7 +53,6 @@ E:\claude\nanobot-mg\nanobot/
       edit_files.py (17KB)
       explore_module.py (19KB)
       file_state.py (7KB)
-      framework_search.py (3KB)
       list_subagents.py (1KB)
       memory_search.py (6KB)
       message.py (8KB)
