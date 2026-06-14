@@ -98,6 +98,7 @@ class AgentRunSpec:
     session_key: str | None = None
     context_window_tokens: int | None = None
     history_token_limit: int | None = None
+    compress_trigger_tokens: int | None = None
     context_block_limit: int | None = None
     provider_retry_mode: str = "standard"
     progress_callback: Any | None = None
@@ -843,9 +844,12 @@ class AgentRunner:
     def _append_final_message(messages: list[dict[str, Any]], content: str | None) -> None:
         if not content:
             return
-        if messages and messages[-1].get("role") == "user" and messages[-1].get("content") == content:
+        if messages and messages[-1].get("content") == content:
             return
-        messages.append({"role": "user", "content": content})
+        if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
+            messages[-1]["content"] = content
+            return
+        messages.append({"role": "assistant", "content": content})
 
     async def _check_tool_loop(
         self,

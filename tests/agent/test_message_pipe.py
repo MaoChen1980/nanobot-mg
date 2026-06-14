@@ -69,6 +69,29 @@ class TestMessagePipeComplete:
         assert compressed is None
         provider.chat_with_retry.assert_awaited_once()
 
+    async def test_no_preflight_compression_with_large_messages(self):
+        """Pre-flight compression removed; large messages pass through
+        without triggering _compress (only 400 overflow triggers it)."""
+        pipe = MessagePipe()
+        provider = MagicMock()
+        provider.chat_with_retry = AsyncMock(return_value=_make_success_response("ok"))
+        llm_set_llm(provider, "test-model")
+
+        messages = [{"role": "system", "content": "sys"}]
+        for i in range(50):
+            messages.append({"role": "user", "content": f"q{i}"})
+            messages.append({"role": "assistant", "content": f"a{i}"})
+
+        result, compressed = await pipe.complete(
+            messages=messages,
+            budget=10_000,  # tiny budget, many messages — no pre-flight
+            model="test-model",
+        )
+
+        assert result.content == "ok"
+        assert compressed is None
+        provider.chat_with_retry.assert_awaited_once()
+
     async def test_retries_on_overflow(self):
         pipe = MessagePipe()
         provider = MagicMock()

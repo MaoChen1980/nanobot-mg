@@ -38,3 +38,47 @@ class TestPublicAPI:
         result = await AgentLoop.cancel_active_tasks(loop, "test_key")
         assert result == 3
         loop._cancel_active_tasks.assert_awaited_once_with("test_key")
+
+
+class TestCompressTriggerDefault:
+    """compress_trigger_tokens defaults to history_token_limit × 1.5."""
+
+    def test_default_derived_from_history_token_limit(self, tmp_path):
+        from nanobot.bus.queue import MessageBus
+
+        provider = MagicMock()
+        provider.get_default_model.return_value = "test-model"
+        loop = AgentLoop(
+            bus=MessageBus(), provider=provider,
+            workspace=tmp_path, model="test-model",
+            history_token_limit=50_000,
+            compress_trigger_tokens=None,
+        )
+        assert loop._compress_trigger_tokens == 75_000  # 50_000 × 1.5
+
+    def test_default_uses_config_value_when_provided(self, tmp_path):
+        from nanobot.bus.queue import MessageBus
+
+        provider = MagicMock()
+        provider.get_default_model.return_value = "test-model"
+        loop = AgentLoop(
+            bus=MessageBus(), provider=provider,
+            workspace=tmp_path, model="test-model",
+            history_token_limit=50_000,
+            compress_trigger_tokens=99_999,
+        )
+        assert loop._compress_trigger_tokens == 99_999
+
+    def test_default_with_no_args_falls_back_to_config_defaults(self, tmp_path):
+        from nanobot.bus.queue import MessageBus
+        from nanobot.config.schema import AgentDefaults
+
+        provider = MagicMock()
+        provider.get_default_model.return_value = "test-model"
+        loop = AgentLoop(
+            bus=MessageBus(), provider=provider,
+            workspace=tmp_path, model="test-model",
+        )
+        defaults = AgentDefaults()
+        expected = int(defaults.history_token_limit * 1.5)
+        assert loop._compress_trigger_tokens == expected

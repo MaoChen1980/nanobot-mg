@@ -187,15 +187,15 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
-        self._compress_trigger_tokens = (
-            compress_trigger_tokens
-            if compress_trigger_tokens is not None
-            else defaults.compress_trigger_tokens
-        )
         self._history_token_limit = (
             history_token_limit
             if history_token_limit is not None
             else defaults.history_token_limit
+        )
+        self._compress_trigger_tokens = (
+            compress_trigger_tokens
+            if compress_trigger_tokens is not None
+            else int(self._history_token_limit * 1.5)
         )
         self.project_root = project_root
         self._extra_hooks: list[AgentHook] = hooks or []
@@ -714,6 +714,7 @@ class AgentLoop:
             session_key=session.key if session else None,
             context_window_tokens=self.context_window_tokens,
             history_token_limit=self._history_token_limit,
+            compress_trigger_tokens=self._compress_trigger_tokens,
             context_block_limit=self.context_block_limit,
             provider_retry_mode=self.provider_retry_mode,
             progress_callback=on_progress,

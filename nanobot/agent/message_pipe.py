@@ -16,7 +16,6 @@ from loguru import logger
 
 from nanobot.agent.compressor import CompressEvent, Compressor
 from nanobot.agent.llm_context import chat_stream_with_retry, chat_with_retry
-from nanobot.utils.helpers import estimate_prompt_tokens
 
 
 _HAS_CONTEXT_WINDOW_MARKERS = (
@@ -62,22 +61,6 @@ class MessagePipe:
         """
         compress_event: CompressEvent | None = None
 
-        # Pre-flight: estimate tokens and compress proactively when well over
-        # budget. Avoids an expensive API round-trip just to get a 400 error.
-        if budget is not None and len(messages) > 3:
-            estimated = estimate_prompt_tokens(messages)
-            threshold = max(budget * 3 // 2, budget + 10_000)
-            if estimated > threshold:
-                logger.warning(
-                    "Pre-flight compression: ~{} tokens (budget={}, threshold={}), "
-                    "compressing proactively...",
-                    estimated, budget, threshold,
-                )
-                messages, event = await self._compress(
-                    messages, budget=budget, previous_summary=previous_summary,
-                )
-                compress_event = event
-
         for attempt in range(self.MAX_RETRIES + 1):
             response = await chat_with_retry(messages=messages, **kwargs)
             if not _is_overflow(response):
@@ -109,22 +92,6 @@ class MessagePipe:
         *compress_event* 携带压缩结果，否则为 ``None``。
         """
         compress_event: CompressEvent | None = None
-
-        # Pre-flight: estimate tokens and compress proactively when well over
-        # budget. Avoids an expensive API round-trip just to get a 400 error.
-        if budget is not None and len(messages) > 3:
-            estimated = estimate_prompt_tokens(messages)
-            threshold = max(budget * 3 // 2, budget + 10_000)
-            if estimated > threshold:
-                logger.warning(
-                    "Pre-flight compression: ~{} tokens (budget={}, threshold={}), "
-                    "compressing proactively...",
-                    estimated, budget, threshold,
-                )
-                messages, event = await self._compress(
-                    messages, budget=budget, previous_summary=previous_summary,
-                )
-                compress_event = event
 
         for attempt in range(self.MAX_RETRIES + 1):
             response = await chat_stream_with_retry(

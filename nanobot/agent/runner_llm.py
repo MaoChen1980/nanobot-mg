@@ -54,7 +54,7 @@ async def request_model(
     pipe_kwargs = {k: v for k, v in kwargs.items() if k != "messages"}
     coro = _message_pipe.complete_stream(
         messages=messages,
-        budget=spec.history_token_limit,
+        budget=spec.compress_trigger_tokens or spec.history_token_limit,
         previous_summary=spec.previous_summary,
         on_content_delta=_stream,
         on_reasoning_delta=_reasoning,
@@ -115,7 +115,7 @@ async def request_finalization_retry(
     pipe_kwargs = {k: v for k, v in kwargs.items() if k != "messages"}
     response, _ = await _message_pipe.complete(
         messages=retry_messages,
-        budget=spec.history_token_limit,
+        budget=spec.compress_trigger_tokens or spec.history_token_limit,
         previous_summary=spec.previous_summary,
         **pipe_kwargs,
     )
