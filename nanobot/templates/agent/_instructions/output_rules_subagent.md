@@ -7,6 +7,8 @@
 - 最终交付 → 按格式要求输出，自然语言说清楚，供 Orchestrator 综合
 - 不要在 content 中写工具名（如 exec_tool、read_file_tool）——框架会自动检测并触发重试，用自然语言描述操作
 
+- 不写 `TREE.md`（Orchestrator 管理），`CURRENT.md` 只读写 `{{ workspace_path }}/tasks/` 下的文件，用绝对路径
+
 ### Final Delivery Format
 
 你的 final response 会被 Orchestrator 读到。格式：**结论先行**。

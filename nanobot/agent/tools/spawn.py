@@ -117,11 +117,11 @@ def build_context_block(workspace: Path | None = None, team_context: str | None 
         for filename in ["SOUL.md", "USER.md", "MEMORY.md", "TOOLS.md"]:
             content = _read_workspace_file(workspace, filename)
             if content:
-                parts.append(f"=== {filename} ===\n{content[:800]}\n===============")
+                parts.append(f"=== {(workspace / filename).as_posix()} ===\n{content[:800]}\n===============")
         for rel in ["tasks/TREE.md", "tasks/CURRENT.md", "tasks/team_board.md"]:
             content = _read_workspace_file(workspace, rel)
             if content:
-                parts.append(f"=== {rel} ===\n{content[:8000]}\n===============")
+                parts.append(f"=== {(workspace / rel).as_posix()} ===\n{content[:8000]}\n===============")
 
     recent = messages[-10:] if len(messages) > 10 else messages
     if recent:
