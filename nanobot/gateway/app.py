@@ -272,6 +272,7 @@ class GatewayApplication:
             agent_loop=self.agent,
             interval_s=hb_cfg.interval_s,
             enabled=hb_cfg.enabled,
+            min_interval_s=hb_cfg.min_interval_s,
         )
 
     def _wire_callbacks(self) -> None:

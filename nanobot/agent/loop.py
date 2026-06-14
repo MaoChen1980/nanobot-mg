@@ -1321,6 +1321,7 @@ class AgentLoop:
         on_stream: Callable[[str], Awaitable[None]] | None = None,
         on_stream_end: Callable[..., Awaitable[None]] | None = None,
         pending_queue: asyncio.Queue | None = None,
+        ephemeral: bool = False,
     ) -> OutboundMessage | None:
         """Process a message directly and return the outbound payload."""
         from nanobot.agent.context_vars import _current_inbound
@@ -1330,6 +1331,7 @@ class AgentLoop:
             channel=channel, sender_id="user", chat_id=chat_id,
             content=content, media=media or [], metadata=metadata or {},
             session_key_override=session_key,
+            ephemeral=ephemeral,
         )
         _current_inbound.set(msg)
         self._current_session_key = session_key

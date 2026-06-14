@@ -248,6 +248,7 @@ class HeartbeatConfig(Base):
 
     enabled: bool = True
     interval_s: int = 30 * 60  # 30 minutes
+    min_interval_s: int = 30  # minimum spacing between beats (cooldown)
     keep_recent_messages: int = 8
 
 
