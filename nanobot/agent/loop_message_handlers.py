@@ -361,14 +361,20 @@ class UserMessageHandler:
 
         # (2) Interval trigger — count LLM requests (persistent counter, survives compression)
         # Dense tool-call sequences need periodic direction checks too
+        # Uses threshold check (>=) instead of exact multiple because
+        # llm_request_count jumps by batching (total_llm_requests per turn),
+        # often skipping exact multiples.
         if not trigger:
             llm_count = session.metadata.get("llm_request_count", 0)
             assess_interval = self._loop.assess_interval
-            if llm_count > 0 and llm_count % assess_interval == 0:
+            last_assess = session.metadata.get("_last_assess_llm_count", 0)
+            if llm_count > 0 and (llm_count - last_assess) >= assess_interval:
                 trigger = True
 
         if not trigger:
             return
+
+        session.metadata["_last_assess_llm_count"] = session.metadata.get("llm_request_count", 0)
 
         logger.info("CT_DBG: assess_me call start")
         try:

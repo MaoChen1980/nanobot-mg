@@ -203,8 +203,10 @@ class TestMaybeAssess:
             )
 
     @pytest.mark.asyncio
-    async def test_no_trigger_just_past_interval(self) -> None:
-        """llm_request_count == 11 (just past 10, 11%10=1) → no trigger."""
+    async def test_triggers_when_past_interval_threshold(self) -> None:
+        """llm_request_count - last_assess >= assess_interval → triggers.
+        Uses threshold (>=) instead of exact multiple (%) because the counter
+        jumps by batching and often skips exact multiples."""
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
@@ -213,8 +215,11 @@ class TestMaybeAssess:
         history = session.format_history()
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = "analysis"
             await handler._maybe_assess(session, history)
-            mock_assess.assert_not_called()
+
+            mock_assess.assert_called_once()
+            assert session.metadata.get("_last_assess_llm_count") == 11
 
     @pytest.mark.asyncio
     async def test_compress_triggers_regardless_of_count(self) -> None:
@@ -926,6 +931,7 @@ class TestSkillCreationTrigger:
             assert mock_spawn.call_count == 1
 
             # Second pattern (different) -- should spawn separately
+            session.metadata["llm_request_count"] = 20  # cross threshold again
             mock_assess.return_value = "值得创建 skill: check-tool-before-assuming"
             await handler._maybe_assess(session, history)
             assert mock_spawn.call_count == 2
