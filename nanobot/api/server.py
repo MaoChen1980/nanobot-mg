@@ -304,6 +304,14 @@ async def handle_config_update(request: Request) -> Response:
     except Exception as e:
         logger.exception("Config validation failed on update")
         return JSONResponse({"error": f"Validation failed: {e}"}, status_code=400)
+    finally:
+        # Hot-reload config into running gateway services
+        gateway = getattr(request.app.state, 'gateway', None)
+        if gateway:
+            try:
+                gateway.reload_config()
+            except Exception:
+                logger.exception("Config hot-reload failed")
 
 
 async def handle_provider_models(request: Request) -> Response:

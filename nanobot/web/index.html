@@ -331,7 +331,7 @@
   <div class="footer-actions">
     <button type="button" onclick="showShutdownModal()" style="color:var(--danger)">Shutdown</button>
     <button type="button" onclick="showRestartModal()">Restart</button>
-    <button type="button" class="primary" onclick="save()">Save</button>
+    <button type="button" class="primary" onclick="save()">Apply</button>
   </div>
 </div>
 
@@ -1179,6 +1179,30 @@ function applyEdit(obj, path, value) {
   else cur[last] = value;
 }
 
+// Paths that can be hot-reloaded without restart
+const HOT_RELOAD_PATHS = new Set([
+  'agents.defaults.assess_interval',
+  'agents.defaults.history_token_limit',
+  'agents.defaults.compress_trigger_tokens',
+  'agents.defaults.context_window_tokens',
+  'agents.defaults.context_block_limit',
+  'agents.defaults.max_tool_result_chars',
+  'agents.defaults.max_tool_iterations',
+  'agents.defaults.provider_retry_mode',
+  'agents.defaults.model',
+  'agents.defaults.provider',
+  'agents.defaults.max_tokens',
+  'agents.defaults.temperature',
+  'agents.defaults.reasoning_effort',
+]);
+
+function needsRestart(changedPaths) {
+  for (const p of changedPaths) {
+    if (!HOT_RELOAD_PATHS.has(p)) return true;
+  }
+  return false;
+}
+
 // ── Save ───────────────────────────────────────────────────────────────────────
 async function save() {
   const btn = document.querySelector('.footer button');
@@ -1188,9 +1212,12 @@ async function save() {
 
   // Collect all edits from form
   const edited = JSON.parse(JSON.stringify(config));
+  const changedPaths = [];
   document.querySelectorAll('input[data-path], select[data-path]').forEach(el => {
+    const path = el.dataset.path;
     let val = el.type === 'checkbox' ? (el.checked ? 'true' : 'false') : el.value;
-    applyEdit(edited, el.dataset.path, val);
+    applyEdit(edited, path, val);
+    changedPaths.push(path);
   });
 
   try {
@@ -1207,7 +1234,12 @@ async function save() {
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
     config = edited;
     original = JSON.parse(JSON.stringify(config));
-    showRestartModal();
+    if (needsRestart(changedPaths)) {
+      showRestartModal();
+    } else {
+      msg.className = 'msg ok';
+      msg.textContent = 'Configuration applied successfully.';
+    }
   } catch(e) {
     msg.className = 'msg err';
     msg.textContent = e.name === 'AbortError' ? 'Request timed out' : e.message;

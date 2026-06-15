@@ -995,6 +995,29 @@ class GatewayApplication:
             except Exception:
                 logger.exception("_consume_outbound: unexpected error processing outbound message, continuing")
 
+    def reload_config(self) -> None:
+        """Reload config from disk and apply hot-reloadable settings to running services."""
+        from nanobot.config.loader import load_config
+
+        new_config = load_config()
+        if self.agent is not None:
+            d = new_config.agents.defaults
+            loop = self.agent
+            loop.assess_interval = d.assess_interval
+            loop._history_token_limit = d.history_token_limit
+            loop._compress_trigger_tokens = (
+                d.compress_trigger_tokens
+                if d.compress_trigger_tokens is not None
+                else int(d.history_token_limit * 1.5)
+            )
+            loop.context_window_tokens = d.context_window_tokens
+            loop.context_block_limit = d.context_block_limit
+            loop.max_tool_result_chars = d.max_tool_result_chars
+            loop.max_iterations = d.max_tool_iterations
+            loop.provider_retry_mode = d.provider_retry_mode
+        self.config = new_config
+        logger.info("Config hot-reloaded from disk")
+
     async def _run_api_server(self, host: str, api_port: int) -> None:
         """Run the settings server via uvicorn on the gateway port."""
         import uvicorn
@@ -1004,6 +1027,7 @@ class GatewayApplication:
         api_app = make_api_app(
             webui_index, proxy_manager=self.proxy_manager
         )
+        api_app.state.gateway = self
 
         config = uvicorn.Config(
             api_app,
