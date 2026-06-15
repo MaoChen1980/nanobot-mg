@@ -16,6 +16,7 @@ from nanobot.agent.assess_me import (
     _ASSESSMENT_PREFIX,
     _ASSESSMENT_SUFFIX,
     build_assessment_message,
+    is_assessment_message,
 )
 from nanobot.agent.assess_me import assess_me as _run_assess_me
 from nanobot.agent.context_vars import _current_messages_for_subagent
@@ -660,6 +661,9 @@ class AgentRunner:
                     if recovery_action == "assess_me":
                         assess_text = await _run_assess_me(messages)
                         if assess_text:
+                            for i in range(len(messages) - 1, -1, -1):
+                                if is_assessment_message(messages[i]):
+                                    messages.pop(i)
                             messages.append(build_assessment_message(assess_text))
                             had_injections = True
                             logger.info(

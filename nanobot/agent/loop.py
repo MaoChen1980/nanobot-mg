@@ -787,6 +787,10 @@ class AgentLoop:
                 return False
             if not result:
                 return False
+            # Keep at most one assess_me message — remove all stale ones before injecting new
+            for i in range(len(messages) - 1, -1, -1):
+                if is_assessment_message(messages[i]):
+                    messages.pop(i)
             messages.append(build_assessment_message(result))
 
             # Chain: assess_me → debug_root_cause
@@ -799,6 +803,10 @@ class AgentLoop:
                 logger.info("debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
                 # Don't inject error messages as analysis
                 if dcr_result and not dcr_result.startswith("Error:"):
+                    # Keep at most one DRC message — remove all stale ones before injecting new
+                    for i in range(len(messages) - 1, -1, -1):
+                        if is_debug_root_cause_message(messages[i]):
+                            messages.pop(i)
                     messages.append(build_debug_root_cause_message(dcr_result))
                     logger.info("debug_root_cause injected")
             except Exception:
