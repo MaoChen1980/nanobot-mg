@@ -130,7 +130,8 @@ class TestMaybeAssess:
         from nanobot.agent.loop_message_handlers import UserMessageHandler
 
         loop = MagicMock()
-        loop._db = None  # no DB → default interval
+        loop._db = None
+        loop.assess_interval = 10  # default from config schema
         return UserMessageHandler(loop)
 
     @pytest.mark.asyncio
@@ -291,14 +292,13 @@ class TestMaybeAssess:
             mock_assess.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_maybe_assess_db_assess_interval(self) -> None:
-        """DB-stored assess_interval overrides the default 10."""
+    async def test_maybe_assess_config_assess_interval(self) -> None:
+        """Config assess_interval overrides the default 10."""
         from nanobot.agent.loop_message_handlers import UserMessageHandler
         from nanobot.session.manager import Session
 
         loop = MagicMock()
-        loop._db = MagicMock()
-        loop._db.get_metadata.return_value = "5"
+        loop.assess_interval = 5
         handler = UserMessageHandler(loop)
 
         session = Session(key="test")
@@ -311,7 +311,6 @@ class TestMaybeAssess:
             await handler._maybe_assess(session, history)
 
             mock_assess.assert_called_once()
-            loop._db.get_metadata.assert_called_with("assess_interval")
 
     @pytest.mark.asyncio
     async def test_maybe_assess_db_interval_skips_when_no_db(self) -> None:
@@ -835,6 +834,7 @@ class TestSkillCreationTrigger:
 
         loop = MagicMock()
         loop._db = None
+        loop.assess_interval = 10
         return UserMessageHandler(loop)
 
     def _make_msgs(self, n_assistants: int) -> list[dict]:

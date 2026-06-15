@@ -84,6 +84,7 @@ class Nanobot:
             disabled_skills=defaults.disabled_skills,
             tools_config=config.tools,
             pt_save_interval=defaults.extractor.save_interval,
+            assess_interval=defaults.assess_interval,
         )
         return cls(loop)
 

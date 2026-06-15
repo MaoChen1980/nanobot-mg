@@ -190,6 +190,7 @@ class AgentDefaults(Base):
     )  # Target token count after compression
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
     self_review: SelfReviewConfig = Field(default_factory=SelfReviewConfig)
+    assess_interval: int = Field(default=10, ge=1)
 
 
 class AgentsConfig(Base):

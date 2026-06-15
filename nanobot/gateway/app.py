@@ -242,6 +242,7 @@ class GatewayApplication:
             disabled_skills=self.config.agents.defaults.disabled_skills,
             compress_trigger_tokens=self.config.agents.defaults.compress_trigger_tokens,
             history_token_limit=self.config.agents.defaults.history_token_limit,
+            assess_interval=self.config.agents.defaults.assess_interval,
             tools_config=self.config.tools,
             pt_save_interval=self.config.agents.defaults.extractor.save_interval,
             provider_snapshot_loader=load_provider_snapshot,

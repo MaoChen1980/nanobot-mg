@@ -632,6 +632,7 @@ def agent(
         disabled_skills=config.agents.defaults.disabled_skills,
         tools_config=config.tools,
         pt_save_interval=config.agents.defaults.extractor.save_interval,
+        assess_interval=config.agents.defaults.assess_interval,
     )
     restart_notice = consume_restart_notice_from_env()
     if restart_notice and should_show_cli_restart_notice(restart_notice, session_id):

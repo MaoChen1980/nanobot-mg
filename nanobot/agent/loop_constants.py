@@ -15,6 +15,5 @@ _DEFAULT_RETRY_BACKOFF_MULTIPLIER = 2.0
 _DEFAULT_RETRY_BACKOFF_JITTER = 0.1
 
 # ----------------------------------------------------------------------
-# AssessMe defaults
+# AssessMe defaults (moved to AgentDefaults schema)
 # ----------------------------------------------------------------------
-_DEFAULT_ASSESS_INTERVAL = 10  # every N LLM assistant turns

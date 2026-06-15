@@ -161,6 +161,7 @@ class AgentLoop:
         pt_save_interval: int = 30,
         compress_trigger_tokens: int | None = None,
         history_token_limit: int | None = None,
+        assess_interval: int | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig, ToolsConfig, WebToolsConfig
 
@@ -205,6 +206,7 @@ class AgentLoop:
             if compress_trigger_tokens is not None
             else int(self._history_token_limit * 1.5)
         )
+        self.assess_interval = assess_interval if assess_interval is not None else defaults.assess_interval
         self.project_root = project_root
         self._extra_hooks: list[AgentHook] = hooks or []
         self._extra_hooks.extend(self._discover_hooks())

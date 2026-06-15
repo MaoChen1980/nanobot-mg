@@ -346,7 +346,6 @@ class UserMessageHandler:
 
     async def _maybe_assess(self, session, history, compress_triggered: bool = False) -> None:
         """Check assess_me trigger conditions and inject if needed."""
-        from nanobot.agent.loop_constants import _DEFAULT_ASSESS_INTERVAL
         logger.info("STAGE_DBG: _maybe_assess entry (compress_triggered={})", compress_triggered)
         from nanobot.agent.assess_me import (
             assess_me,
@@ -364,8 +363,7 @@ class UserMessageHandler:
         # Dense tool-call sequences need periodic direction checks too
         if not trigger:
             llm_count = session.metadata.get("llm_request_count", 0)
-            assess_interval_str = self._loop._db.get_metadata("assess_interval") if self._loop._db else None
-            assess_interval = max(int(assess_interval_str), 1) if assess_interval_str else _DEFAULT_ASSESS_INTERVAL
+            assess_interval = self._loop.assess_interval
             if llm_count > 0 and llm_count % assess_interval == 0:
                 trigger = True
 

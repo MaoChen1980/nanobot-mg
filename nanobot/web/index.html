@@ -485,6 +485,11 @@ function renderAgent() {
       ${field('interval_h', 'Interval (h)', a.extractor.interval_h, 'number', 'agents.defaults.extractor.interval_h')}
       ${field('save_interval', 'Save Interval (turns)', a.extractor.save_interval, 'number', 'agents.defaults.extractor.save_interval')}
     </div>
+    <div class="card">
+      <div class="card-header">Assessment</div>
+      ${field('assess_interval', 'Assess Interval', a.assess_interval, 'number', 'agents.defaults.assess_interval')}
+      <div class="row"><label></label><span class="hint">Trigger assess_me every N LLM requests (default: 10).</span></div>
+    </div>
   `;
   loadModelsForProvider(a.provider, a.model);
 }
