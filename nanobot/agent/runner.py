@@ -212,14 +212,8 @@ class AgentRunner:
             if len(turns) <= 1:
                 return initial_msg_count, overflow_summary
 
-            # Keep the first turn (original user task) verbatim — never compress it
-            first_turn = turns[0]
-            remaining = turns[1:]
-            if not remaining:
-                return initial_msg_count, overflow_summary
-
             to_compress, to_keep = Compressor.split_by_budget(
-                remaining, budget=spec.history_token_limit, min_keep=1,
+                turns, budget=spec.history_token_limit, min_keep=1,
             )
             if not to_compress:
                 return initial_msg_count, overflow_summary
@@ -233,9 +227,7 @@ class AgentRunner:
                 return initial_msg_count, overflow_summary
 
             n_compressed = sum(len(t) for t in to_compress)
-            # compressed messages start after first_turn in the rest slice
-            first_turn_len = len(first_turn)
-            compressed_raw = messages[rest_start + first_turn_len:rest_start + first_turn_len + n_compressed]
+            compressed_raw = messages[rest_start:rest_start + n_compressed]
 
             if self._db is not None and compressed_raw:
                 try:
@@ -248,7 +240,6 @@ class AgentRunner:
 
             result = [system_prompt]
             result.extend(event.synthetic_pair)
-            result.extend(first_turn)  # original task preserved verbatim
             for turn in to_keep:
                 result.extend(turn)
             messages[:] = result
@@ -256,7 +247,7 @@ class AgentRunner:
             new_overflow_summary = event.summary or overflow_summary
             logger.info(
                 "Proactive compression: compressed {} messages into {} synthetic, "
-                "kept first-turn + {} recent turns (total now {} msgs, summary={})",
+                "kept {} turns (total now {} msgs, summary={})",
                 n_compressed, len(event.synthetic_pair), len(to_keep),
                 len(messages), bool(event.summary),
             )
