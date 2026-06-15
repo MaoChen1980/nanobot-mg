@@ -410,7 +410,7 @@ class UserMessageHandler:
             dedup_key = hashlib.md5(result.encode()).hexdigest()
             if dedup_key not in self._skill_creation_inflight:
                 self._skill_creation_inflight.add(dedup_key)
-                task = asyncio.create_task(self._spawn_skill_creator(result))
+                task = asyncio.create_task(self._spawn_skill_creator(result, session_key=session.key))
                 task.add_done_callback(
                     lambda t: (
                         self._skill_creation_inflight.discard(dedup_key),
@@ -422,7 +422,7 @@ class UserMessageHandler:
             else:
                 logger.info("Skill creation already in-flight for this pattern — skipping")
 
-    async def _spawn_skill_creator(self, assess_result: str) -> None:
+    async def _spawn_skill_creator(self, assess_result: str, session_key: str | None = None) -> None:
         """Spawn a background agent to create/update skill from assess_me observation."""
         from nanobot.agent.runner import AgentRunner, AgentRunSpec
         from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
@@ -461,6 +461,7 @@ class UserMessageHandler:
             model=self._loop.model,
             max_iterations=10,
             max_tool_result_chars=self._loop.max_tool_result_chars,
+            session_key=session_key,
         )
 
         runner = AgentRunner(self._loop.provider, db=self._loop._db)

@@ -722,9 +722,19 @@ class ContextBuilder:
         _t_log = time.time()
         user_content = self._build_user_content(current_message, media)
         if messages[-1].get("role") == current_role:
-            last = dict(messages[-1])
-            last["content"] = self._merge_message_content(last.get("content"), user_content)
-            messages[-1] = last
+            # Don't merge into framework-injected assessment/debug_root_cause messages —
+            # those are background context injected by _maybe_assess. Merging the real
+            # user message into them makes the LLM treat the assessment as user input.
+            from nanobot.agent.assess_me import (
+                is_assessment_message,
+                is_debug_root_cause_message,
+            )
+            if is_assessment_message(messages[-1]) or is_debug_root_cause_message(messages[-1]):
+                messages.append({"role": current_role, "content": user_content})
+            else:
+                last = dict(messages[-1])
+                last["content"] = self._merge_message_content(last.get("content"), user_content)
+                messages[-1] = last
         else:
             messages.append({"role": current_role, "content": user_content})
 
