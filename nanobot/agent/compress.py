@@ -260,11 +260,11 @@ async def summarize_turns(
                 chat_stream_with_retry(
                     [{"role": "user", "content": prompt}],
                 ),
-                timeout=30,
+                timeout=120,
             )
         except asyncio.TimeoutError:
             logger.warning("Summary attempt {}/6 timed out (120s)", attempt + 1)
-            if attempt < 9:
+            if attempt < 5:
                 await asyncio.sleep(10)
                 continue
             return ""
