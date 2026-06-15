@@ -494,7 +494,8 @@ class AgentRunner:
                         self._pt_responses = 0
                         try:
                             from nanobot.agent.memory_extractor import MemoryExtractor
-                            MemoryExtractor.save_prompt_snapshot(messages, spec.prompts_dir, spec.session_key)
+                            path = MemoryExtractor.save_prompt_snapshot(messages, spec.prompts_dir, spec.session_key)
+                            logger.info("Saved .pt snapshot: {} ({} msgs, session={})", path.name, len(messages), spec.session_key)
                         except Exception:
                             logger.exception("Failed to save .pt snapshot (session={})", spec.session_key)
                 # Periodic self-assessment — fire at milestones (every assess_interval responses)

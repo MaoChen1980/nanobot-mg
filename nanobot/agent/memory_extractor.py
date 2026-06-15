@@ -1621,5 +1621,5 @@ class MemoryExtractor:
         path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        logger.debug("Saved .pt: {}", filename)
+        logger.info("Saved .pt: {} ({} msgs, session={})", filename, len(messages), session_key)
         return path
