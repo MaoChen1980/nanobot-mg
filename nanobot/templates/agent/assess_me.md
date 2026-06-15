@@ -71,6 +71,7 @@ Output as a bullet list. Be factual — base each mark only on what actually app
 - No fluff, no praise, no greetings
 - If information is insufficient, write "N/A" for that section
 - **关键约束：** 你的输出会被注入到对话历史中。不要输出主模型不在上下文中无法使用的内容（如「建议问用户要 X」— 用户不在这个对话里）。所有建议必须指向主模型可以在当前上下文中执行的动作。
+- **禁止推给用户或主模型决策：** 发现问题需要修复时，直接输出修复方式（做什么、改哪个文件），不要列出多个方案让下游选择。assess_me 的输出就是执行指令，主模型读到会直接执行。只有当修复方式完全依赖外部信息（如业务需求、用户意图）且上下文无法推断时，才标注"需确认"，但仍需给出当前信息下的最佳方案。
 
 ## Conversation
 

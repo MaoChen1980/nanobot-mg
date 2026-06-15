@@ -856,10 +856,9 @@ class AgentRunner:
             if drained_after_max_iterations:
                 had_injections = True
 
-        # End-of-loop self-assessment — let the LLM re-evaluate its output
-        # before returning. Only fires when at least one response was generated.
+        # End-of-loop self-assessment — fire-and-forget, doesn't block return
         if spec.assess_me_callback is not None and self._assess_responses > 0:
-            await self._run_assess_callback(spec, messages)
+            asyncio.create_task(self._run_assess_callback(spec, messages))
 
         return AgentRunResult(
             final_content=final_content,
