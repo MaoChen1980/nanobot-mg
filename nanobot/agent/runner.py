@@ -170,6 +170,90 @@ class AgentRunner:
         self._assess_responses = 0  # periodic assess_me counter (local to this run)
         self._last_assess_at = 0
 
+    async def _maybe_compress_messages(
+        self,
+        spec: AgentRunSpec,
+        messages: list[dict],
+        initial_msg_count: int,
+        overflow_summary: str | None,
+    ) -> tuple[int, str | None]:
+        """Proactively compress messages if total tokens exceed compress_trigger_tokens.
+
+        Returns (updated_initial_msg_count, updated_overflow_summary).
+        Never raises: all exceptions caught, original values returned on failure.
+        """
+        if spec.compress_trigger_tokens is None or spec.history_token_limit is None:
+            return initial_msg_count, overflow_summary
+        if len(messages) <= 2:
+            return initial_msg_count, overflow_summary
+
+        from nanobot.agent.compressor import Compressor
+        from nanobot.utils.helpers import estimate_message_tokens
+
+        try:
+            total_tokens = sum(estimate_message_tokens(m) for m in messages)
+            if total_tokens <= spec.compress_trigger_tokens:
+                return initial_msg_count, overflow_summary
+
+            system_prompt = messages[0]
+            _has_instr = (
+                len(messages) > 1
+                and messages[1].get("role") == "user"
+                and isinstance(messages[1].get("content"), str)
+                and messages[1]["content"].startswith("## Instructions")
+            )
+            rest_start = 2 if _has_instr else 1
+            rest = messages[rest_start:]
+
+            turns = Compressor.split_turns(rest)
+            if len(turns) <= 1:
+                return initial_msg_count, overflow_summary
+
+            to_compress, to_keep = Compressor.split_by_budget(
+                turns, budget=spec.history_token_limit, min_keep=1,
+            )
+            if not to_compress:
+                return initial_msg_count, overflow_summary
+
+            prev_summary = overflow_summary or spec.previous_summary
+            event = await Compressor.compress(
+                to_compress, to_keep,
+                previous_summary=prev_summary,
+            )
+            if not event.synthetic_pair:
+                return initial_msg_count, overflow_summary
+
+            n_compressed = sum(len(t) for t in to_compress)
+            compressed_raw = messages[rest_start:rest_start + n_compressed]
+
+            if self._db is not None and compressed_raw:
+                try:
+                    self._db.append_history(
+                        content=json.dumps(compressed_raw, ensure_ascii=True),
+                        summary=event.summary or "",
+                    )
+                except Exception:
+                    logger.exception("Failed to persist proactively-compressed messages to history")
+
+            result = [system_prompt]
+            result.extend(event.synthetic_pair)
+            for turn in to_keep:
+                result.extend(turn)
+            messages[:] = result
+
+            new_overflow_summary = event.summary or overflow_summary
+            logger.info(
+                "Proactive compression: compressed {} messages into {} synthetic, "
+                "kept {} turns (total now {} msgs, summary={})",
+                n_compressed, len(event.synthetic_pair), len(to_keep),
+                len(messages), bool(event.summary),
+            )
+            return len(messages), new_overflow_summary
+
+        except Exception:
+            logger.exception("Proactive compression failed (session={})", spec.session_key or "default")
+            return initial_msg_count, overflow_summary
+
     async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 120) -> bool:
         """Run assess_me_callback with timeout protection.
 
@@ -179,7 +263,17 @@ class AgentRunner:
         if spec.assess_me_callback is None:
             return False
         try:
-            return await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
+            logger.debug(
+                "assess_me_callback start (session_key={})",
+                spec.session_key,
+            )
+            injected = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
+            if injected:
+                logger.info(
+                    "assess_me_callback injected (session_key={})",
+                    spec.session_key,
+                )
+            return injected
         except asyncio.TimeoutError:
             logger.warning(
                 "assess_me_callback timed out (session_key={})",
@@ -305,6 +399,11 @@ class AgentRunner:
                 "Runner iteration {} t={:.1f}s model={} task={}",
                 iteration, time.monotonic(), spec.model, spec.session_key or "?",
             )
+            # --- PROACTIVE COMPRESSION ---
+            initial_msg_count, _overflow_summary = await self._maybe_compress_messages(
+                spec, messages, initial_msg_count, _overflow_summary,
+            )
+            # --- END PROACTIVE COMPRESSION ---
             try:
                 messages_for_model = strip_bypassed_tool_messages(messages)
                 messages_for_model = drop_orphan_tool_results(messages_for_model)
@@ -813,27 +912,16 @@ class AgentRunner:
             context.stop_reason = stop_reason
             await hook.after_iteration(context)
 
-            # Doubt assess_me — inject a self-check before finalizing so the
-            # LLM can reconsider its answer. Only fires when there's room for
-            # at least one more iteration (otherwise the doubt wastes the last
-            # available slot). If already doubted this response cycle, break
-            # normally (LLM decided to stand by its answer).
+            # End-of-loop assessment — run assess_me to give the LLM a chance to
+            # reconsider its output. If assess_me injects analysis, the LLM reads it
+            # on the next iteration and decides whether to continue or stop. If
+            # assess_me times out, break normally.
             if not _doubt_injected and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _doubt_injected = True
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        f"{_ASSESSMENT_PREFIX}\n"
-                        "你确定这个输出没问题？请再次审视你的回答是否完整、准确，"
-                        "是否遗漏了关键信息或工具调用。\n\n"
-                        "如果你认为你的回答已经完善，可以直接输出最终答案。\n"
-                        "如果需要补充信息或修正，请使用工具。"
-                        f"{_ASSESSMENT_SUFFIX}"
-                    ),
-                })
+                await self._run_assess_callback(spec, messages, timeout=60)
                 logger.info(
-                    "Doubt assess_me injected for {} (iter={})",
-                    spec.session_key or "default", iteration,
+                    "End-of-loop assess done (iter={}, session={})",
+                    iteration, spec.session_key or "default",
                 )
                 continue
             break
@@ -856,8 +944,9 @@ class AgentRunner:
             if drained_after_max_iterations:
                 had_injections = True
 
-        # End-of-loop self-assessment — fire-and-forget, doesn't block return
-        if spec.assess_me_callback is not None and self._assess_responses > 0:
+        # End-of-loop self-assessment — fire-and-forget for next-turn context.
+        # Skip if the synchronous end-of-loop assess already ran (replaces obsolete doubt).
+        if not _doubt_injected and spec.assess_me_callback is not None and self._assess_responses > 0:
             asyncio.create_task(self._run_assess_callback(spec, messages))
 
         return AgentRunResult(

@@ -162,30 +162,33 @@ class DebugRootCauseTool(Tool):
         conversation = format_conversation(messages)
 
         lines = [
-            "You are a root-cause analysis expert. Your task is to read the conversation below "
-            "and recommend the most effective investigation method.",
+            "You are a root-cause analysis debug helper. Something went wrong — the agent "
+            "may be stuck, making mistakes, or hitting errors. Read the conversation and "
+            "output concrete investigation steps for the agent to execute.",
             "",
             "## Available Methods",
             _RCA_METHODS.strip(),
             "",
             "## Output Format",
-            "Return two sections in your response:",
+            "Return a single **执行计划 (Execution Plan)** section with concrete steps "
+            "the agent should take to investigate. Each step must be directly actionable:",
             "",
-            "**Recommended methods**: List applicable methods ordered by recommendation priority "
-            "(most effective first). You may also suggest investigation methods beyond the 20 listed "
-            "above if they better fit the problem — describe what they are and why they apply.",
+            "1. What to do — the specific action (read what file, grep what pattern, compare "
+            "   what values, test what hypothesis)",
+            "2. What to look for — the specific evidence, patterns, or values of interest",
+            "3. What conclusion to draw from each possible outcome",
             "",
-            "**Investigation directions**: For each recommended method, give specific things to "
-            "look for, comparisons to make, hypotheses to test, or state to examine. Be concrete — "
-            "what exactly should the agent examine?",
+            "Do NOT include background analysis, methodology descriptions, or multiple options.",
             "",
             "## Important",
-            "- Do NOT prescribe specific tool names (grep, read, exec, etc.) — the agent "
-            "will decide which tools to use based on your direction",
-            "- Focus on WHAT information to examine, not which tool to use for it",
-            "- If missing information may be the root cause, guide the agent toward "
-            "relevant information sources (files, configs, logs, API responses, external data) ",
-            "in your investigation directions — let it decide the specific tools",
+            "- Your job is to investigate and analyze, not to implement. Do NOT modify the "
+            "original task, do NOT write code, do NOT approve completion",
+            "- Each step must guide the agent toward the root cause — what to read, what to "
+            "compare, what to check. The agent still does its own reasoning",
+            "- If the problem is clear: output what the agent should examine to confirm the root cause",
+            "- If the problem is unclear: output steps to narrow it down",
+            "- If the fix is obvious from the evidence: output the evidence, let the agent decide the fix",
+            "- Only one plan per response. No alternatives.",
         ]
 
         if problem:
