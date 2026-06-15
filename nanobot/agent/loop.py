@@ -790,12 +790,15 @@ class AgentLoop:
             # Chain: assess_me → debug_root_cause
             try:
                 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+                logger.info("debug_root_cause call start")
                 dcr = DebugRootCauseTool()
                 dcr.set_context(messages)
                 dcr_result = await dcr.execute(problem=result)
+                logger.info("debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
                 # Don't inject error messages as analysis
                 if dcr_result and not dcr_result.startswith("Error:"):
                     messages.append(build_debug_root_cause_message(dcr_result))
+                    logger.info("debug_root_cause injected")
             except Exception:
                 pass
 

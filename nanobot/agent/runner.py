@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import field
@@ -168,6 +169,23 @@ class AgentRunner:
         self._db = db
         self._assess_responses = 0  # periodic assess_me counter (local to this run)
         self._last_assess_at = 0
+
+    async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 120) -> bool:
+        """Run assess_me_callback with timeout protection.
+
+        Returns the callback's return value (True if assessment was injected).
+        Returns False on timeout or if no callback is configured.
+        """
+        if spec.assess_me_callback is None:
+            return False
+        try:
+            return await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "assess_me_callback timed out (session_key={})",
+                spec.session_key,
+            )
+            return False
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
         """Drain pending injections. Returns normalized user messages."""
@@ -372,7 +390,7 @@ class AgentRunner:
                     count = self._assess_responses
                     if (count - self._last_assess_at) >= spec.assess_interval:
                         self._last_assess_at = count
-                        await spec.assess_me_callback(messages)
+                        await self._run_assess_callback(spec, messages)
             raw_usage = usage_dict(response.usage)
             context.response = response
             context.usage = dict(raw_usage)
@@ -592,7 +610,7 @@ class AgentRunner:
                     # Run assess_me between retries — the model may need to
                     # re-orient before its next attempt at the same context
                     if spec.assess_me_callback is not None:
-                        await spec.assess_me_callback(messages)
+                        await self._run_assess_callback(spec, messages)
                     await hook.after_iteration(context)
                     continue
                 logger.warning(
@@ -602,7 +620,7 @@ class AgentRunner:
                 await hook.on_stream_end(context, resuming=False)
                 assess_injected = False
                 if spec.assess_me_callback is not None:
-                    assess_injected = await spec.assess_me_callback(messages) or False
+                    assess_injected = await self._run_assess_callback(spec, messages)
                     messages_for_model = strip_bypassed_tool_messages(messages)
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
@@ -632,7 +650,7 @@ class AgentRunner:
                     # output may leave the model mid-thought; assess_me helps
                     # it re-establish context before continuing
                     if spec.assess_me_callback is not None:
-                        await spec.assess_me_callback(messages)
+                        await self._run_assess_callback(spec, messages)
                     await hook.on_stream_end(context, resuming=True)
                     messages.append(build_assistant_message(
                         clean,
@@ -729,12 +747,12 @@ class AgentRunner:
                     # realize its response was blocked; assess_me reframes its
                     # intention for the retry
                     if spec.assess_me_callback is not None:
-                        await spec.assess_me_callback(messages)
+                        await self._run_assess_callback(spec, messages)
                     empty_content_retries = 0
                     retry_ctx.llm_request_state.record_success()
                     continue
                 if spec.assess_me_callback is not None:
-                    assess_injected = await spec.assess_me_callback(messages) or False
+                    assess_injected = await self._run_assess_callback(spec, messages)
                     messages_for_model = strip_bypassed_tool_messages(messages)
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
@@ -841,7 +859,7 @@ class AgentRunner:
         # End-of-loop self-assessment — let the LLM re-evaluate its output
         # before returning. Only fires when at least one response was generated.
         if spec.assess_me_callback is not None and self._assess_responses > 0:
-            await spec.assess_me_callback(messages)
+            await self._run_assess_callback(spec, messages)
 
         return AgentRunResult(
             final_content=final_content,
