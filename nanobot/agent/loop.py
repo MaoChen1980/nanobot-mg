@@ -208,6 +208,7 @@ class AgentLoop:
         )
         self.assess_interval = assess_interval if assess_interval is not None else defaults.assess_interval
         self.project_root = project_root
+        self._skill_creation_inflight: set[str] = set()
         self._extra_hooks: list[AgentHook] = hooks or []
         self._extra_hooks.extend(self._discover_hooks())
 
@@ -736,6 +737,7 @@ class AgentLoop:
             backoff_config=backoff_cfg,
             max_llm_retries=self.max_retries,
             max_overflow_retries=self.max_retries,
+            assess_interval=self.assess_interval,
             assess_me_callback=self._make_retry_assess_callback(session),
             previous_summary=getattr(session, "_last_summary", None),
             instructions=instructions,
@@ -763,21 +765,111 @@ class AgentLoop:
                 result.total_llm_requests)
 
     def _make_retry_assess_callback(self, session: Session | None):
-        """Build assess_me callback for runner retry paths."""
+        """Build assess_me callback for runner retry paths.
+
+        Handles: assess_me → inject → debug_root_cause chain → skill creation.
+        """
         if session is None:
             return None
+        loop = self  # capture loop ref for inner use
 
         async def _cb(messages: list[dict]) -> bool:
-            from nanobot.agent.assess_me import assess_me, build_assessment_message
+            from nanobot.agent.assess_me import (
+                assess_me,
+                build_assessment_message,
+                build_debug_root_cause_message,
+            )
             try:
                 result = await assess_me(messages)
             except Exception:
                 return False
-            if result:
-                messages.append(build_assessment_message(result))
-                return True
-            return False
+            if not result:
+                return False
+            messages.append(build_assessment_message(result))
+
+            # Chain: assess_me → debug_root_cause
+            try:
+                from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+                dcr = DebugRootCauseTool()
+                dcr.set_context(messages)
+                dcr_result = await dcr.execute(problem=result)
+                # Don't inject error messages as analysis
+                if dcr_result and not dcr_result.startswith("Error:"):
+                    messages.append(build_debug_root_cause_message(dcr_result))
+            except Exception:
+                pass
+
+            # Detect skill creation opportunity
+            if "值得创建 skill" in result:
+                import hashlib
+                dedup_key = hashlib.md5(result.encode()).hexdigest()
+                if dedup_key not in loop._skill_creation_inflight:
+                    loop._skill_creation_inflight.add(dedup_key)
+                    task = asyncio.create_task(
+                        loop._spawn_skill_creator(result, session_key=session.key if session else None),
+                    )
+                    task.add_done_callback(
+                        lambda t: (
+                            loop._skill_creation_inflight.discard(dedup_key),
+                            logger.error("Skill creation failed: {}", t.exception())
+                            if t.exception() else None,
+                        )
+                    )
+                    logger.info("assess_me detected reusable pattern — spawning skill creation")
+                else:
+                    logger.info("Skill creation already in-flight for this pattern — skipping")
+
+            return True
         return _cb
+
+    async def _spawn_skill_creator(self, assess_result: str, session_key: str | None = None) -> None:
+        """Spawn a background agent to create/update skill from assess_me observation."""
+        from nanobot.agent.runner import AgentRunner, AgentRunSpec
+        from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
+        from nanobot.agent.tools.registry import ToolRegistry
+        from nanobot.agent.tools.search import GlobTool, GrepTool
+        from nanobot.agent.tools.shell import ExecTool
+        from nanobot.utils.prompt_templates import render_template
+
+        logger.info("Skill creation: building agent for assess_me observation")
+
+        tools = ToolRegistry()
+        tools.register(ReadFileTool(workspace=self.workspace))
+        tools.register(WriteFileTool(workspace=self.workspace))
+        tools.register(EditFileTool(workspace=self.workspace))
+        tools.register(GlobTool(workspace=self.workspace))
+        tools.register(GrepTool(workspace=self.workspace))
+        if self.exec_config and self.exec_config.enable:
+            tools.register(ExecTool(
+                working_dir=str(self.workspace),
+                timeout=self.exec_config.timeout,
+            ))
+
+        system_prompt = render_template(
+            "agent/_instructions/skill_creation.md",
+            assess_result=assess_result,
+            workspace_path=self.workspace.as_posix(),
+        )
+
+        spec = AgentRunSpec(
+            initial_messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": assess_result},
+            ],
+            tools=tools,
+            model=self.model,
+            max_iterations=10,
+            max_tool_result_chars=self.max_tool_result_chars,
+            session_key=session_key,
+        )
+
+        runner = AgentRunner(self.provider, db=self._db)
+        result = await runner.run(spec)
+
+        if result.final_content:
+            logger.info("Skill creation agent completed: {}", result.final_content[:200])
+        else:
+            logger.info("Skill creation agent completed with no output")
 
     async def run(self) -> None:
         """Run the agent loop, dispatching messages as tasks to stay responsive to /stop."""

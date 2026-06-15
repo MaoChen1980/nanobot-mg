@@ -119,6 +119,7 @@ class AgentRunSpec:
     # AssessMe: called when retry/error thresholds are crossed
     # Signature: async (messages: list[dict]) -> bool (True if injected)
     assess_me_callback: Any | None = None
+    assess_interval: int = 10  # periodic assess trigger: (response_count - last) >= interval
     previous_summary: str | None = None
     instructions: str | None = None  # injected into last user msg before each LLM call
 
@@ -363,12 +364,13 @@ class AgentRunner:
             # The model can re-read with read_file_tool if needed.
             if response.finish_reason != "error":
                 strip_image_blocks(messages)
-                # Periodic self-assessment — fire at milestones (every 10 responses)
+                # Periodic self-assessment — fire at milestones (every assess_interval responses)
                 # within this run, not just at user-message boundaries.
+                # Uses threshold (>=) instead of exact multiple (%) so batch jumps don't skip.
                 if spec.assess_me_callback is not None:
                     self._assess_responses += 1
                     count = self._assess_responses
-                    if count % 10 == 0 and count != self._last_assess_at:
+                    if (count - self._last_assess_at) >= spec.assess_interval:
                         self._last_assess_at = count
                         await spec.assess_me_callback(messages)
             raw_usage = usage_dict(response.usage)

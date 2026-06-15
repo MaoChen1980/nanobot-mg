@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-06-14T00:49:36+0800
+Last scanned: 2026-06-15T20:30:37+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~85,898
+- **Approx LOC**: ~86,735
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 357 | ~85,610 |
+| Python | 359 | ~86,447 |
 | Shell | 5 | ~288 |
 
 ## Directory Structure
@@ -115,33 +115,33 @@ E:\claude\nanobot-mg/
         web.py (23KB)
       __init__.py (584B)
       assess_me.py (4KB)
-      compress.py (21KB)
+      compress.py (22KB)
       compressor.py (7KB)
-      context.py (42KB)
+      context.py (38KB)
       context_vars.py (981B)
       db.py (23KB)
       hook.py (6KB)
       llm_context.py (2KB)
       loop.py (63KB)
       loop_checkpoint.py (6KB)
-      loop_constants.py (779B)
+      loop_constants.py (749B)
       loop_dispatch.py (7KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (24KB)
+      loop_message_handlers.py (29KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (69KB)
-      memory_store.py (11KB)
+      memory_extractor.py (68KB)
+      memory_store.py (10KB)
       memory_vector.py (25KB)
       message_pipe.py (6KB)
       project_scanner.py (21KB)
-      runner.py (42KB)
+      runner.py (45KB)
       runner_constants.py (566B)
       runner_context.py (6KB)
       runner_execution.py (8KB)
       runner_injection.py (5KB)
-      runner_llm.py (6KB)
+      runner_llm.py (7KB)
       runner_retry.py (4KB)
       skills.py (13KB)
       subagent.py (25KB)
@@ -175,13 +175,12 @@ E:\claude\nanobot-mg/
     project_card.md (4KB)
   tasks/
   tests/
-  webui/
   CONTRIBUTING.md (4KB)
   docker-compose.yml (1KB)
   Dockerfile (2KB)
   entrypoint.sh (443B)
   LICENSE (1KB)
-  project_card.md (13KB)
+  project_card.md (11KB)
   pyproject.toml (5KB)
   README.md (7KB)
   README_en.md (5KB)
@@ -278,7 +277,7 @@ trim_trailing_whitespace = false
 # Test & coverage
 # Windows
 # macOS
-# webui (monorepo frontend)
+# nanobot/web (frontend)
 *.code-workspace
 *.cover
 *.egg

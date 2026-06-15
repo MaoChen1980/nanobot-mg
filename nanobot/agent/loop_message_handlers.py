@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
-import hashlib
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -146,7 +145,6 @@ class SystemMessageHandler:
 class UserMessageHandler:
     def __init__(self, loop):
         self._loop = loop
-        self._skill_creation_inflight: set[str] = set()
 
     async def handle(self, msg, session_key, on_progress, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None):
 
@@ -220,7 +218,6 @@ class UserMessageHandler:
             "CT_DBG: stage=entry, hist_tokens={}, trigger={}, limit={}",
             _hist_tokens, self._loop._compress_trigger_tokens, self._loop._history_token_limit,
         )
-        _compress_happened = False
         if _hist_tokens > self._loop._compress_trigger_tokens:
             from nanobot.agent.compress import (
                 MIN_KEEP_TURNS,
@@ -238,11 +235,6 @@ class UserMessageHandler:
             logger.info("CT_DBG: apply_compress_event start")
             apply_compress_event(session, event, db=self._loop._db)
             logger.info("CT_DBG: apply_compress_event done")
-            _compress_happened = True
-
-        # Stage 1.5b: assess_me triggers — interval + compression
-        await self._maybe_assess(session, history, compress_triggered=_compress_happened)
-        logger.info("STAGE_DBG: _maybe_assess done")
 
         # Stage 2: tool context
         self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
@@ -343,140 +335,6 @@ class UserMessageHandler:
 
         channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id))
         return session, pending, history, channel, chat_id, key
-
-    async def _maybe_assess(self, session, history, compress_triggered: bool = False) -> None:
-        """Check assess_me trigger conditions and inject if needed."""
-        logger.info("STAGE_DBG: _maybe_assess entry (compress_triggered={})", compress_triggered)
-        from nanobot.agent.assess_me import (
-            assess_me,
-            build_assessment_message,
-            build_debug_root_cause_message,
-        )
-
-        trigger = False
-
-        # (1) Compression auto-trigger
-        if compress_triggered:
-            trigger = True
-
-        # (2) Interval trigger — count LLM requests (persistent counter, survives compression)
-        # Dense tool-call sequences need periodic direction checks too
-        # Uses threshold check (>=) instead of exact multiple because
-        # llm_request_count jumps by batching (total_llm_requests per turn),
-        # often skipping exact multiples.
-        if not trigger:
-            llm_count = session.metadata.get("llm_request_count", 0)
-            assess_interval = self._loop.assess_interval
-            last_assess = session.metadata.get("_last_assess_llm_count", 0)
-            if llm_count > 0 and (llm_count - last_assess) >= assess_interval:
-                trigger = True
-
-        if not trigger:
-            return
-
-        session.metadata["_last_assess_llm_count"] = session.metadata.get("llm_request_count", 0)
-
-        logger.info("CT_DBG: assess_me call start")
-        try:
-            result = await assess_me(history)
-        except Exception as e:
-            logger.warning("CT_DBG: assess_me call failed: {}", e)
-            return
-        logger.info("CT_DBG: assess_me call done (result_len={})", len(result) if result else 0)
-
-        if not result:
-            logger.info("assess_me returned empty — LLM had no conclusion, skipping injection")
-            return
-
-        history.append(build_assessment_message(result))
-        logger.info(
-            "CT_DBG: assess_me injected (compress={}, session={}, history={} msgs)",
-            compress_triggered, session.key, len(history),
-        )
-
-        # Chain: assess_me returned → feed result as problem to debug_root_cause
-        logger.info("CT_DBG: debug_root_cause call start")
-        try:
-            from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
-            dcr = DebugRootCauseTool()
-            dcr.set_context(history)
-            dcr_result = await dcr.execute(problem=result)
-            logger.info("CT_DBG: debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
-            if dcr_result:
-                history.append(build_debug_root_cause_message(dcr_result))
-                logger.info(
-                    "debug_root_cause injected (session={}, history={} msgs)",
-                    session.key, len(history),
-                )
-        except Exception as e:
-            logger.warning("debug_root_cause chain call failed: {}", e)
-
-        # Detect skill creation opportunity from assess_me output
-        if "值得创建 skill" in result:
-            dedup_key = hashlib.md5(result.encode()).hexdigest()
-            if dedup_key not in self._skill_creation_inflight:
-                self._skill_creation_inflight.add(dedup_key)
-                task = asyncio.create_task(self._spawn_skill_creator(result, session_key=session.key))
-                task.add_done_callback(
-                    lambda t: (
-                        self._skill_creation_inflight.discard(dedup_key),
-                        logger.error("Skill creation failed: {}", t.exception())
-                        if t.exception() else None,
-                    )
-                )
-                logger.info("assess_me detected reusable pattern — spawning skill creation")
-            else:
-                logger.info("Skill creation already in-flight for this pattern — skipping")
-
-    async def _spawn_skill_creator(self, assess_result: str, session_key: str | None = None) -> None:
-        """Spawn a background agent to create/update skill from assess_me observation."""
-        from nanobot.agent.runner import AgentRunner, AgentRunSpec
-        from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
-        from nanobot.agent.tools.registry import ToolRegistry
-        from nanobot.agent.tools.search import GlobTool, GrepTool
-        from nanobot.agent.tools.shell import ExecTool
-        from nanobot.utils.prompt_templates import render_template
-
-        logger.info("Skill creation: building agent for assess_me observation")
-
-        # Minimal tool set for skill creation
-        tools = ToolRegistry()
-        tools.register(ReadFileTool(workspace=self._loop.workspace))
-        tools.register(WriteFileTool(workspace=self._loop.workspace))
-        tools.register(EditFileTool(workspace=self._loop.workspace))
-        tools.register(GlobTool(workspace=self._loop.workspace))
-        tools.register(GrepTool(workspace=self._loop.workspace))
-        if self._loop.exec_config and self._loop.exec_config.enable:
-            tools.register(ExecTool(
-                working_dir=str(self._loop.workspace),
-                timeout=self._loop.exec_config.timeout,
-            ))
-
-        system_prompt = render_template(
-            "agent/_instructions/skill_creation.md",
-            assess_result=assess_result,
-            workspace_path=self._loop.workspace.as_posix(),
-        )
-
-        spec = AgentRunSpec(
-            initial_messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": assess_result},
-            ],
-            tools=tools,
-            model=self._loop.model,
-            max_iterations=10,
-            max_tool_result_chars=self._loop.max_tool_result_chars,
-            session_key=session_key,
-        )
-
-        runner = AgentRunner(self._loop.provider, db=self._loop._db)
-        result = await runner.run(spec)
-
-        if result.final_content:
-            logger.info("Skill creation agent completed: {}", result.final_content[:200])
-        else:
-            logger.info("Skill creation agent completed with no output")
 
     async def _dispatch_command(self, msg, session, key):
         """Run command dispatch, return result if handled."""
