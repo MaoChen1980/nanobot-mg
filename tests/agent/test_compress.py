@@ -394,9 +394,10 @@ class TestApplyCompressEvent:
     # -- helpers ------------------------------------------------------------
 
     def _make_session(self, messages: list[dict]) -> MagicMock:
-        session = MagicMock(spec=["messages", "key"])
+        session = MagicMock(spec=["messages", "key", "metadata"])
         session.messages = messages
         session.key = "test-key"
+        session.metadata = {}
         return session
 
     def _event(self, session, keep_start: int, summary: str = "") -> CompressEvent:

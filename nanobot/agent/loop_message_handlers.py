@@ -14,10 +14,10 @@ if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
 from nanobot.agent.context import ContextState
-from nanobot.bus.events import OutboundMessage
-from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.agent.memory_extractor import MemoryExtractor
 from nanobot.agent.tools.message import MessageTool
+from nanobot.bus.events import OutboundMessage
+from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 
 _STALE_MESSAGE_MINUTES = 20
 
@@ -30,7 +30,7 @@ def _has_stale_duplicate(session, message_id: str) -> bool:
     """
     if not message_id:
         return False
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=_STALE_MESSAGE_MINUTES)
     for i in range(len(session.messages) - 1, -1, -1):
         role = session.messages[i].get("role")
@@ -88,7 +88,9 @@ class SystemMessageHandler:
         )
         if hist_tokens > self._loop._compress_trigger_tokens:
             from nanobot.agent.compress import (
-                apply_compress_event, compress_session, MIN_KEEP_TURNS,
+                MIN_KEEP_TURNS,
+                apply_compress_event,
+                compress_session,
             )
 
             logger.info("CT_DBG: compress_session start (sysmsg)")
@@ -127,7 +129,8 @@ class SystemMessageHandler:
             current_role="user",
             context_state=cs,
         )
-        final_content, _, all_msgs, stop_reason, _, initial_msg_count = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
+        final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
+        session.metadata["llm_request_count"] = session.metadata.get("llm_request_count", 0) + _total_llm_requests
         if is_subagent and self._loop._persist_subagent_followup(session, msg):
             self._loop.sessions.save(session)
         self._loop._append_turn_to_session(session, all_msgs, initial_msg_count if is_subagent else initial_msg_count - 1)
@@ -220,7 +223,9 @@ class UserMessageHandler:
         _compress_happened = False
         if _hist_tokens > self._loop._compress_trigger_tokens:
             from nanobot.agent.compress import (
-                apply_compress_event, compress_session, MIN_KEEP_TURNS,
+                MIN_KEEP_TURNS,
+                apply_compress_event,
+                compress_session,
             )
 
             logger.info("CT_DBG: compress_session start")
@@ -261,7 +266,7 @@ class UserMessageHandler:
 
         # Stage 6: run agent loop
         logger.info("STAGE_DBG: entering _run_agent_loop")
-        final_content, _, all_msgs, stop_reason, had_injections, initial_msg_count = await self._loop._run_agent_loop(
+        final_content, _, all_msgs, stop_reason, had_injections, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(
             initial_messages,
             on_progress=on_progress_final,
             on_stream=on_stream,
@@ -284,7 +289,7 @@ class UserMessageHandler:
             # but still clear any runtime checkpoint the loop may have set.
             self._loop.lifecycle.finalize_ephemeral(session)
         else:
-            await self._finalize_turn(session, all_msgs, initial_msg_count, user_persisted_early, final_content)
+            await self._finalize_turn(session, all_msgs, initial_msg_count, user_persisted_early, final_content, _total_llm_requests)
 
         # Stage 8: build outbound response
         return self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)
@@ -314,6 +319,20 @@ class UserMessageHandler:
         # Format full history (no budget-based truncation)
         history = session.format_history(include_timestamps=True, timezone=self._loop.context.timezone)
 
+        # Crash recovery: if session was loaded from DB with a summary, inject it
+        # at the front of history so the LLM knows the compressed context.
+        # Use a persisted metadata key to detect re-injection across DB reloads.
+        last_summary = getattr(session, '_last_summary', None)
+        if (last_summary
+            and not getattr(session, '_summary_injected', False)
+            and session.metadata.get("_summary_injected_key") != last_summary):
+            from nanobot.agent.compress import make_summary_pair
+            summary_msgs = make_summary_pair(last_summary)
+            history = summary_msgs + history
+            session._summary_injected = True
+            session.metadata["_summary_injected_key"] = last_summary
+            logger.info("Crash recovery summary injected for session {}", key)
+
         # Log what format_history actually returned
         hist_tokens = sum(estimate_message_tokens(m) for m in history) if history else 0
         hist_turns = sum(1 for m in history if m.get("role") == "assistant")
@@ -329,7 +348,11 @@ class UserMessageHandler:
         """Check assess_me trigger conditions and inject if needed."""
         from nanobot.agent.loop_constants import _DEFAULT_ASSESS_INTERVAL
         logger.info("STAGE_DBG: _maybe_assess entry (compress_triggered={})", compress_triggered)
-        from nanobot.agent.assess_me import assess_me, build_assessment_message, build_debug_root_cause_message
+        from nanobot.agent.assess_me import (
+            assess_me,
+            build_assessment_message,
+            build_debug_root_cause_message,
+        )
 
         trigger = False
 
@@ -337,11 +360,13 @@ class UserMessageHandler:
         if compress_triggered:
             trigger = True
 
-        # (2) Interval trigger — count LLM turns (persistent counter, survives compression)
+        # (2) Interval trigger — count LLM requests (persistent counter, survives compression)
         # Dense tool-call sequences need periodic direction checks too
         if not trigger:
-            assistant_count = session.metadata.get("assistant_turn_count", 0)
-            if assistant_count > 0 and assistant_count % _DEFAULT_ASSESS_INTERVAL == 0:
+            llm_count = session.metadata.get("llm_request_count", 0)
+            assess_interval_str = self._loop._db.get_metadata("assess_interval") if self._loop._db else None
+            assess_interval = max(int(assess_interval_str), 1) if assess_interval_str else _DEFAULT_ASSESS_INTERVAL
+            if llm_count > 0 and llm_count % assess_interval == 0:
                 trigger = True
 
         if not trigger:
@@ -401,9 +426,9 @@ class UserMessageHandler:
 
     async def _spawn_skill_creator(self, assess_result: str) -> None:
         """Spawn a background agent to create/update skill from assess_me observation."""
-        from nanobot.agent.runner import AgentRunSpec, AgentRunner
+        from nanobot.agent.runner import AgentRunner, AgentRunSpec
+        from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
         from nanobot.agent.tools.registry import ToolRegistry
-        from nanobot.agent.tools.filesystem import ReadFileTool, WriteFileTool, EditFileTool
         from nanobot.agent.tools.search import GlobTool, GrepTool
         from nanobot.agent.tools.shell import ExecTool
         from nanobot.utils.prompt_templates import render_template
@@ -519,7 +544,7 @@ class UserMessageHandler:
         """Add user message to session before the loop runs (persisted at finalize)."""
         return self._loop.lifecycle.persist_user_message(session, msg, pending_ask_id)
 
-    async def _finalize_turn(self, session, all_msgs, initial_msgs_count, user_persisted_early, final_content):
+    async def _finalize_turn(self, session, all_msgs, initial_msgs_count, user_persisted_early, final_content, total_llm_requests=0):
         """Save turn, enforce file cap, clear recovery state."""
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE
@@ -528,8 +553,11 @@ class UserMessageHandler:
         save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
         self._loop._append_turn_to_session(session, all_msgs, save_skip)
 
-        # Lifecycle: cap, clear checkpoints, save
-        self._loop.lifecycle.finalize(session)
+        # Track persistent LLM request count (survives compression)
+        if total_llm_requests:
+            session.metadata["llm_request_count"] = (
+                session.metadata.get("llm_request_count", 0) + total_llm_requests
+            )
 
         # Track persistent assistant turn count (survives compression)
         new_assistant_msgs = sum(
@@ -544,6 +572,9 @@ class UserMessageHandler:
         assistant_count = session.metadata.get("assistant_turn_count", 0)
         if assistant_count > 0 and assistant_count % self._loop._pt_save_interval == 0:
             MemoryExtractor.save_prompt_snapshot(all_msgs, self._loop.prompts_dir, session.key)
+
+        # Lifecycle: cap, clear checkpoints, save (persists metadata including counters)
+        self._loop.lifecycle.finalize(session)
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
         """Format the final OutboundMessage for the user."""

@@ -85,6 +85,13 @@ _SUMMARY_PROMPT_TEMPLATE = (
     "\n"
     "关键原则：同一类信息，只保留最晚的那个版本。\n"
     "\n"
+    "## ⛔ 摘要退化防护（极其重要）\n"
+    "每次压缩都是一次**提炼合并**，不是重新总结。必须防止「抽象化退化」：\n"
+    "- 具体信息保持具体：文件路径、参数名、配置值、函数名、错误码等专有名词在新摘要中要保持同样的具体程度，不要模糊成「相关配置」「某些文件」「一些参数」\n"
+    "- 旧摘要中已有的具体信息必须保留在新摘要中，不要因为它在旧摘要中出现过就认为「可以省略」\n"
+    "- 新摘要的信息密度不得低于旧摘要：如果旧摘要写了 5 个要点，新摘要不能只剩 3 个。宁可冗余，不要丢失\n"
+    "- 如果旧摘要中有某个信息你判断不再需要了，用**后面的对话**来验证，而不是因为它「旧」就丢弃\n"
+    "\n"
     "## 输出要求\n"
     "你的输出是一个**新摘要**，不是对旧对话的简单罗列。\n"
     "- 提取有用的事实、决策、配置、约定\n"
@@ -486,6 +493,7 @@ def apply_compress_event(session: Session, event: CompressEvent, db=None) -> Non
     session.messages[:] = kept
     if event.summary:
         session._last_summary = event.summary
+        session.metadata.pop("_summary_injected_key", None)
     logger.info(
         "Compressed session {}: dropped {} messages, kept {}",
         session.key, len(event.replaced_raw), len(kept),

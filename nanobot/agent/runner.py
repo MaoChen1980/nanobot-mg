@@ -11,8 +11,12 @@ from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.assess_me import (
+    _ASSESSMENT_PREFIX,
+    _ASSESSMENT_SUFFIX,
+    build_assessment_message,
+)
 from nanobot.agent.assess_me import assess_me as _run_assess_me
-from nanobot.agent.assess_me import build_assessment_message
 from nanobot.agent.context_vars import _current_messages_for_subagent
 from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.agent.tools.registry import ToolRegistry
@@ -77,6 +81,7 @@ from .runner_llm import (
     usage_dict,
 )
 
+
 @dataclass(slots=True)
 class AgentRunSpec:
     """Configuration for a single agent execution."""
@@ -140,6 +145,8 @@ class AgentRunResult:
     initial_message_count: int = 0
     # Non-None when overflow compression occurred during this run
     overflow_summary: str | None = None
+    # Total LLM API calls made during this run (includes retries)
+    total_llm_requests: int = 0
 
 
 @dataclass(slots=True)
@@ -236,6 +243,8 @@ class AgentRunner:
         had_injections = False
         injection_cycles = 0
         total_retry_count = 0
+        _llm_request_count = 0
+        _doubt_injected = False
         _tool_loop_state = _ToolLoopState()
 
         _current_messages_for_subagent.set(messages)
@@ -325,6 +334,7 @@ class AgentRunner:
 
             logger.info("RUN_DBG: request_model start (iter={}, msgs={})", iteration, len(messages_for_model))
             response, compress_event = await request_model(spec, messages_for_model, hook, context)
+            _llm_request_count += 1
             logger.info("RUN_DBG: request_model done (iter={}, finish={}, tools={})",
                         iteration, response.finish_reason, len(response.tool_calls))
             # If MessagePipe compressed due to overflow, sync the compressed
@@ -596,6 +606,7 @@ class AgentRunner:
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
                     messages_for_model = split_thinking_messages(messages_for_model)
                 response = await request_finalization_retry(spec, messages_for_model, has_assessment=assess_injected)
+                _llm_request_count += 1
                 retry_usage = usage_dict(response.usage)
                 accumulate_usage(usage, retry_usage)
                 raw_usage = merge_usage(raw_usage, retry_usage)
@@ -727,6 +738,7 @@ class AgentRunner:
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
                     messages_for_model = split_thinking_messages(messages_for_model)
                     response = await request_finalization_retry(spec, messages_for_model, has_assessment=assess_injected)
+                    _llm_request_count += 1
                     retry_usage = usage_dict(response.usage)
                     accumulate_usage(usage, retry_usage)
                     raw_usage = merge_usage(raw_usage, retry_usage)
@@ -780,6 +792,30 @@ class AgentRunner:
             context.final_content = final_content
             context.stop_reason = stop_reason
             await hook.after_iteration(context)
+
+            # Doubt assess_me — inject a self-check before finalizing so the
+            # LLM can reconsider its answer. Only fires when there's room for
+            # at least one more iteration (otherwise the doubt wastes the last
+            # available slot). If already doubted this response cycle, break
+            # normally (LLM decided to stand by its answer).
+            if not _doubt_injected and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
+                _doubt_injected = True
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"{_ASSESSMENT_PREFIX}\n"
+                        "你确定这个输出没问题？请再次审视你的回答是否完整、准确，"
+                        "是否遗漏了关键信息或工具调用。\n\n"
+                        "如果你认为你的回答已经完善，可以直接输出最终答案。\n"
+                        "如果需要补充信息或修正，请使用工具。"
+                        f"{_ASSESSMENT_SUFFIX}"
+                    ),
+                })
+                logger.info(
+                    "Doubt assess_me injected for {} (iter={})",
+                    spec.session_key or "default", iteration,
+                )
+                continue
             break
 
         else:
@@ -818,6 +854,7 @@ class AgentRunner:
             retry_summary=retry_ctx.summary(),
             initial_message_count=initial_msg_count,
             overflow_summary=_overflow_summary,
+            total_llm_requests=_llm_request_count,
         )
 
     def _log_tool_call(

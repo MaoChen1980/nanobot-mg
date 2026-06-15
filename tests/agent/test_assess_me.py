@@ -14,7 +14,6 @@ from nanobot.agent.assess_me import (
     is_assessment_message,
 )
 
-
 # =========================================================================
 # format_conversation
 # =========================================================================
@@ -120,35 +119,28 @@ class TestBuildAssessmentMessage:
 
 
 class TestMaybeAssess:
-    """Test _maybe_assess triggers correctly with assistant_count.
+    """Test _maybe_assess triggers correctly with llm_request_count.
 
-    The interval trigger should fire based on LLM assistant turns, not user
-    messages — so dense tool-call sequences get periodic direction checks.
+    The interval trigger should fire based on the persistent LLM request counter
+    (session.metadata["llm_request_count"]), not message list scanning — so
+    dense tool-call sequences get periodic direction checks.
     """
 
     def _make_handler(self):
-        from nanobot.agent.loop import AgentLoop
         from nanobot.agent.loop_message_handlers import UserMessageHandler
 
-        loop = MagicMock(spec=AgentLoop)
+        loop = MagicMock()
+        loop._db = None  # no DB → default interval
         return UserMessageHandler(loop)
 
-    def _make_msgs(self, n_assistants: int) -> list[dict]:
-        """Build alternating user/assistant messages with *n_assistants* assistant turns."""
-        msgs: list[dict] = []
-        for i in range(n_assistants):
-            msgs.append({"role": "user", "content": f"msg {i}"})
-            msgs.append({"role": "assistant", "content": f"resp {i}"})
-        return msgs
-
     @pytest.mark.asyncio
-    async def test_no_trigger_when_few_assistants(self) -> None:
-        """assistant_count < interval (10) → no trigger."""
+    async def test_no_trigger_when_count_below_interval(self) -> None:
+        """llm_request_count < interval (10) → no trigger."""
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = self._make_msgs(4)  # 4 assistant, 8 total
+        session.metadata["llm_request_count"] = 4
         history = session.format_history()
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
@@ -157,12 +149,11 @@ class TestMaybeAssess:
 
     @pytest.mark.asyncio
     async def test_no_trigger_on_first_turn(self) -> None:
-        """assistant_count == 0 → no trigger (clean session)."""
+        """llm_request_count == 0 → no trigger (clean session, skip guard)."""
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = []
         history = session.format_history()
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
@@ -171,12 +162,12 @@ class TestMaybeAssess:
 
     @pytest.mark.asyncio
     async def test_trigger_at_interval(self) -> None:
-        """assistant_count % 10 == 0 → trigger assess_me."""
+        """llm_request_count % 10 == 0 → trigger assess_me."""
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = self._make_msgs(10)  # 10 assistant, 20 total
+        session.metadata["llm_request_count"] = 10
         history = session.format_history()
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
@@ -192,12 +183,12 @@ class TestMaybeAssess:
 
     @pytest.mark.asyncio
     async def test_trigger_at_multiple_of_interval(self) -> None:
-        """assistant_count == 20 also triggers (next multiple)."""
+        """llm_request_count == 20 also triggers (next multiple)."""
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = self._make_msgs(20)
+        session.metadata["llm_request_count"] = 20
         history = session.format_history()
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
@@ -212,12 +203,12 @@ class TestMaybeAssess:
 
     @pytest.mark.asyncio
     async def test_no_trigger_just_past_interval(self) -> None:
-        """assistant_count == 11 (just past 10, 11%10=1) → no trigger."""
+        """llm_request_count == 11 (just past 10, 11%10=1) → no trigger."""
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = self._make_msgs(11)
+        session.metadata["llm_request_count"] = 11
         history = session.format_history()
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
@@ -226,12 +217,11 @@ class TestMaybeAssess:
 
     @pytest.mark.asyncio
     async def test_compress_triggers_regardless_of_count(self) -> None:
-        """compress_triggered=True fires even with 0 assistants."""
+        """compress_triggered=True fires even with 0 llm_request_count."""
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = []
         history = session.format_history()
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
@@ -247,7 +237,7 @@ class TestMaybeAssess:
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = self._make_msgs(10)
+        session.metadata["llm_request_count"] = 10
         history = session.format_history()
         original_len = len(history)
 
@@ -264,7 +254,7 @@ class TestMaybeAssess:
 
         handler = self._make_handler()
         session = Session(key="test")
-        session.messages = self._make_msgs(10)
+        session.metadata["llm_request_count"] = 10
         history = session.format_history()
         original_len = len(history)
 
@@ -275,17 +265,19 @@ class TestMaybeAssess:
             assert len(history) == original_len, "history unchanged after exception"
 
     @pytest.mark.asyncio
-    async def test_only_assistant_count_matters_not_user_count(self) -> None:
-        """Many user messages but few assistant → no trigger.
+    async def test_llm_count_matters_not_user_count(self) -> None:
+        """High user message count but low llm_request_count → no trigger.
 
-        This is the key behavioral change: dense user messages without
-        corresponding LLM turns should not trigger assess_me.
+        The mechanism is: llm_request_count tracks persistent LLM API calls,
+        not message types. So dense user messages without corresponding LLM
+        calls should not trigger assess_me.
         """
         from nanobot.session.manager import Session
 
         handler = self._make_handler()
         session = Session(key="test")
-        # 15 user messages but only 5 assistant responses
+        # 15 user messages but only 5 llm_request_count
+        session.metadata["llm_request_count"] = 5
         msgs: list[dict] = []
         for i in range(15):
             msgs.append({"role": "user", "content": f"msg {i}"})
@@ -297,6 +289,128 @@ class TestMaybeAssess:
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
             await handler._maybe_assess(session, history)
             mock_assess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_maybe_assess_db_assess_interval(self) -> None:
+        """DB-stored assess_interval overrides the default 10."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = MagicMock()
+        loop._db = MagicMock()
+        loop._db.get_metadata.return_value = "5"
+        handler = UserMessageHandler(loop)
+
+        session = Session(key="test")
+        # llm_request_count=5 should trigger with interval=5, but not with default=10
+        session.metadata["llm_request_count"] = 5
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = "analysis at 5"
+            await handler._maybe_assess(session, history)
+
+            mock_assess.assert_called_once()
+            loop._db.get_metadata.assert_called_with("assess_interval")
+
+    @pytest.mark.asyncio
+    async def test_maybe_assess_db_interval_skips_when_no_db(self) -> None:
+        """No DB (loop._db is None) → falls back to default 10, llm_count=5 doesn't trigger."""
+        from nanobot.session.manager import Session
+
+        handler = self._make_handler()  # _db = None
+        session = Session(key="test")
+        session.metadata["llm_request_count"] = 5
+        history = session.format_history()
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            await handler._maybe_assess(session, history)
+            mock_assess.assert_not_called()
+
+
+# =========================================================================
+# _finalize_turn — llm_request_count persistence
+# =========================================================================
+
+
+class TestFinalizeTurn:
+    """Test _finalize_turn correctly persists llm_request_count in session metadata."""
+
+    def _make_loop(self):
+        from nanobot.agent.loop import AgentLoop
+
+        loop = MagicMock(spec=AgentLoop)
+        loop.lifecycle = MagicMock()
+        loop._pt_save_interval = 999  # never trigger .pt save in tests
+        return loop
+
+    @pytest.mark.asyncio
+    async def test_accumulates_llm_request_count(self) -> None:
+        """total_llm_requests=5 → session.metadata['llm_request_count'] == 5."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        all_msgs = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]
+
+        await handler._finalize_turn(session, all_msgs, 0, False, "hi", total_llm_requests=5)
+
+        assert session.metadata.get("llm_request_count") == 5
+
+    @pytest.mark.asyncio
+    async def test_accumulates_multiple_times(self) -> None:
+        """Multiple finalize calls accumulate llm_request_count."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        all_msgs = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]
+
+        await handler._finalize_turn(session, all_msgs, 0, False, "hi", total_llm_requests=3)
+        await handler._finalize_turn(session, all_msgs, 0, False, "hi again", total_llm_requests=2)
+
+        assert session.metadata.get("llm_request_count") == 5
+
+    @pytest.mark.asyncio
+    async def test_zero_total_does_not_change_count(self) -> None:
+        """total_llm_requests=0 → count unchanged."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        session.metadata["llm_request_count"] = 10
+        all_msgs = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]
+
+        await handler._finalize_turn(session, all_msgs, 0, False, "hi", total_llm_requests=0)
+
+        assert session.metadata.get("llm_request_count") == 10
+
+    @pytest.mark.asyncio
+    async def test_assistant_turn_count_still_tracked(self) -> None:
+        """_finalize_turn also tracks assistant_turn_count alongside llm_request_count."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        all_msgs = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "first"},
+            {"role": "user", "content": "follow-up"},
+            {"role": "assistant", "content": "second"},
+        ]
+
+        await handler._finalize_turn(session, all_msgs, 1, False, "second", total_llm_requests=3)
+
+        assert session.metadata.get("llm_request_count") == 3
+        assert session.metadata.get("assistant_turn_count") == 2
 
 
 # =========================================================================
@@ -648,35 +762,40 @@ class TestRunnerAssessMeSpec:
 
 
 class TestAssessMeTemplate:
-    """Verify the assess_me.md template includes the new Thinking patterns field."""
+    """Verify the assess_me.md template includes all required sections."""
 
-    def test_includes_thinking_patterns(self) -> None:
+    def _render(self, **kwargs: Any) -> str:
         from nanobot.utils.prompt_templates import render_template
+        return render_template("agent/assess_me.md", **kwargs)
 
-        content = render_template(
-            "agent/assess_me.md",
+    def _section_names(self) -> list[str]:
+        return [
+            "有用信息盘点",
+            "信息缺口",
+            "假设检查",
+            "进度与状态",
+            "未来方向",
+            "思维模式",
+            "可复用模式",
+        ]
+
+    def test_includes_all_sections(self) -> None:
+        content = self._render(
             conversation="user: hello\nassistant: hi",
             verify="",
         )
-        assert "Thinking patterns" in content, (
-            "Template should include the Thinking patterns field"
-        )
+        for section in self._section_names():
+            assert section in content, (
+                f"Template should include section: {section}"
+            )
 
     def test_renders_without_verify(self) -> None:
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/assess_me.md",
-            conversation="user: hello",
-        )
-        assert "Thinking patterns" in content
+        content = self._render(conversation="user: hello")
+        assert "有用信息盘点" in content
         assert "Items to Verify" not in content
 
     def test_renders_with_verify(self) -> None:
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/assess_me.md",
+        content = self._render(
             conversation="user: hello",
             verify="Claim A is true\nClaim B is false",
         )
@@ -685,22 +804,15 @@ class TestAssessMeTemplate:
         assert "Claim B is false" in content
 
     def test_renders_from_assess_me_function(self) -> None:
-        """Integration: assess_me() renders template with Thinking patterns."""
+        """Integration: assess_me() renders template with conversation."""
         from nanobot.agent.assess_me import format_conversation
 
         conv = format_conversation([
             {"role": "user", "content": "check this"},
         ])
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/assess_me.md",
-            conversation=conv,
-            verify="",
-        )
-        # The formatted conversation should appear in the prompt
+        content = self._render(conversation=conv, verify="")
         assert "check this" in content
-        assert "Thinking patterns" in content
+        assert "有用信息盘点" in content
 
 
 # =========================================================================
@@ -719,10 +831,10 @@ class TestSkillCreationTrigger:
     """
 
     def _make_handler(self):
-        from nanobot.agent.loop import AgentLoop
         from nanobot.agent.loop_message_handlers import UserMessageHandler
 
-        loop = MagicMock(spec=AgentLoop)
+        loop = MagicMock()
+        loop._db = None
         return UserMessageHandler(loop)
 
     def _make_msgs(self, n_assistants: int) -> list[dict]:
@@ -740,6 +852,7 @@ class TestSkillCreationTrigger:
 
         handler = self._make_handler()
         session = Session(key="test")
+        session.metadata["llm_request_count"] = 10
         session.messages = self._make_msgs(10)
         history = session.format_history()
 
@@ -765,6 +878,7 @@ class TestSkillCreationTrigger:
 
         handler = self._make_handler()
         session = Session(key="test")
+        session.metadata["llm_request_count"] = 10
         session.messages = self._make_msgs(10)
         history = session.format_history()
 
@@ -793,6 +907,7 @@ class TestSkillCreationTrigger:
 
         handler = self._make_handler()
         session = Session(key="test")
+        session.metadata["llm_request_count"] = 10
         session.messages = self._make_msgs(10)
         history = session.format_history()
 
@@ -822,6 +937,7 @@ class TestSkillCreationTrigger:
 
         handler = self._make_handler()
         session = Session(key="test")
+        session.metadata["llm_request_count"] = 10
         session.messages = self._make_msgs(10)
         history = session.format_history()
 

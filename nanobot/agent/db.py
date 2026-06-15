@@ -102,6 +102,7 @@ class NanobotDB:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     metadata TEXT NOT NULL DEFAULT '{}',
+                    summary TEXT DEFAULT '',
                     last_consolidated INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS messages (
@@ -122,6 +123,11 @@ class NanobotDB:
     def _migrate_schema(self) -> None:
         """Apply backward-compatible schema migrations for existing databases."""
         with self._conn_access() as conn:
+            # Add summary column to sessions table (v1 -> v2)
+            try:
+                conn.execute("ALTER TABLE sessions ADD COLUMN summary TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass  # column already exists
             conn.commit()
 
     @property
@@ -236,17 +242,19 @@ class NanobotDB:
 
     def save_session(self, session: "Session") -> None:
         """Full save: upsert session metadata, delete and re-insert all messages."""
+        summary = getattr(session, '_last_summary', None) or ""
         with self._conn_access() as conn:
             with conn:
                 conn.execute(
                     """INSERT OR REPLACE INTO sessions
-                       (key, created_at, updated_at, metadata)
-                       VALUES (?, ?, ?, ?)""",
+                       (key, created_at, updated_at, metadata, summary)
+                       VALUES (?, ?, ?, ?, ?)""",
                     (
                         session.key,
                         session.created_at.isoformat(),
                         session.updated_at.isoformat(),
                         json.dumps(session.metadata),
+                        summary,
                     ),
                 )
                 conn.execute("DELETE FROM messages WHERE session_key = ?", (session.key,))
@@ -281,12 +289,12 @@ class NanobotDB:
 
         with self._conn_access() as conn:
             row = conn.execute(
-                "SELECT created_at, updated_at, metadata FROM sessions WHERE key = ?",
+                "SELECT created_at, updated_at, metadata, summary FROM sessions WHERE key = ?",
                 (key,),
             ).fetchone()
             if row is None:
                 return None
-            created_at, updated_at, metadata_json = row
+            created_at, updated_at, metadata_json, summary_str = row
             try:
                 metadata = json.loads(metadata_json)
             except json.JSONDecodeError:
@@ -319,13 +327,15 @@ class NanobotDB:
         except ValueError:
             logger.warning("Corrupt session timestamps for {}", key)
             return None
-        return Session(
+        session = Session(
             key=key,
             messages=messages,
             created_at=created,
             updated_at=updated,
             metadata=metadata,
         )
+        session._last_summary = summary_str or None
+        return session
 
     def list_sessions(self) -> list[dict[str, Any]]:
         with self._conn_access() as conn:
@@ -365,7 +375,7 @@ class NanobotDB:
         if len(terms) == 1:
             return "AND LOWER(content) LIKE ?", [f"%{terms[0]}%"]
         if len(terms) > 1:
-            clauses = [f"LOWER(content) LIKE ?" for _ in terms]
+            clauses = ["LOWER(content) LIKE ?" for _ in terms]
             return f"AND ({' OR '.join(clauses)})", [f"%{t}%" for t in terms]
         return "", []
 

@@ -12,80 +12,88 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from loguru import logger
 
+from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
 from nanobot.agent.context import ContextBuilder
+from nanobot.agent.context_vars import _current_debug_enabled
 from nanobot.agent.hook import AgentHook, CompositeHook
+from nanobot.agent.loop_hook import _LoopHook
 from nanobot.agent.memory import MemoryExtractor
 from nanobot.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunner, AgentRunSpec
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
 from nanobot.agent.subagent import SubagentManager
+from nanobot.agent.tools.analyze_tool import AnalyzeTool
+from nanobot.agent.tools.assess_me_tool import AssessMeTool
+from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
+from nanobot.agent.tools.check_subagent import CheckSubagentTool
+from nanobot.agent.tools.conversation_search import ConversationSearchTool
 from nanobot.agent.tools.cron import CronTool
-from nanobot.agent.tools.filesystem import DeleteFileTool, EditFileTool, ListDirTool, MoveFileTool, ReadFileTool, WriteFileTool
+from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+from nanobot.agent.tools.diagnose_codebase_tool import DiagnoseTool
+from nanobot.agent.tools.edit_files import EditFilesTool
+from nanobot.agent.tools.explore_module import ExploreModuleTool
+from nanobot.agent.tools.filesystem import (
+    DeleteFileTool,
+    EditFileTool,
+    ListDirTool,
+    MoveFileTool,
+    ReadFileTool,
+    WriteFileTool,
+)
+from nanobot.agent.tools.list_subagents import ListSubagentsTool
+from nanobot.agent.tools.memory_search import MemorySearchTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.notebook import NotebookEditTool
+from nanobot.agent.tools.read_files import ReadFilesTool
+from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.registry import ToolRegistry
+from nanobot.agent.tools.respond_to_subagent import RespondToSubagentTool
+from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.self import SelfTool
+from nanobot.agent.tools.self_restart_tool import SelfRestartTool
+from nanobot.agent.tools.semantic_search import SearchTextTool
+from nanobot.agent.tools.send_message import SendMessageTool
 from nanobot.agent.tools.shell import ExecTool
-
-from nanobot.agent.tools.edit_files import EditFilesTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.spawn_many import SpawnManyTool
-from nanobot.agent.tools.respond_to_subagent import RespondToSubagentTool
-from nanobot.agent.tools.send_message import SendMessageTool
-from nanobot.agent.tools.check_subagent import CheckSubagentTool
-from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
-from nanobot.agent.tools.list_subagents import ListSubagentsTool
+from nanobot.agent.tools.stage import RestoreStageTool, SaveStageTool, ShowStagesTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
-from nanobot.agent.tools.memory_search import MemorySearchTool
-from nanobot.agent.tools.conversation_search import ConversationSearchTool
-from nanobot.agent.tools.semantic_search import SearchTextTool
-from nanobot.agent.tools.read_files import ReadFilesTool
-from nanobot.agent.tools.explore_module import ExploreModuleTool
-from nanobot.agent.tools.stage import SaveStageTool, ShowStagesTool, RestoreStageTool
-from nanobot.agent.tools.analyze_tool import AnalyzeTool
-from nanobot.agent.tools.diagnose_codebase_tool import DiagnoseTool
-from nanobot.agent.tools.scan_project import ScanProjectTool
-from nanobot.agent.tools.self_restart_tool import SelfRestartTool
-from nanobot.agent.tools.reframe import ReframeTool
-from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
-from nanobot.agent.tools.assess_me_tool import AssessMeTool
-from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
-from nanobot.agent.context_vars import _current_debug_enabled
 from nanobot.command import CommandContext, CommandRouter, register_builtin_commands
 from nanobot.config.schema import AgentDefaults
 from nanobot.providers.base import LLMProvider
 from nanobot.providers.factory import ProviderSnapshot
-from nanobot.session.manager import Session, SessionManager
 from nanobot.session.lifecycle import SessionLifecycle
+from nanobot.session.manager import Session, SessionManager
 from nanobot.utils.document import separate_and_extract_media
-from nanobot.utils.media_decode import image_placeholder_text
 from nanobot.utils.helpers import truncate_text as truncate_text_fn
+from nanobot.utils.media_decode import image_placeholder_text
+
+from .loop_checkpoint import (
+    RecoveryManager,
+    checkpoint_message_key,
+    clear_pending_user_turn,
+    clear_runtime_checkpoint,
+    mark_pending_user_turn,
+    restore_and_clear_checkpoint,
+    restore_pending_user_turn,
+    set_runtime_checkpoint,
+)
 
 # Import from split modules
 from .loop_constants import (
     _DEFAULT_MAX_RETRIES,
     _DEFAULT_RETRY_BACKOFF_INITIAL,
+    _DEFAULT_RETRY_BACKOFF_JITTER,
     _DEFAULT_RETRY_BACKOFF_MAX,
     _DEFAULT_RETRY_BACKOFF_MULTIPLIER,
-    _DEFAULT_RETRY_BACKOFF_JITTER,
-    _RUNTIME_CHECKPOINT_KEY,
     _PENDING_USER_TURN_KEY,
+    _RUNTIME_CHECKPOINT_KEY,
 )
-from .loop_mcp import connect_mcp as _connect_mcp, close_mcp as _close_mcp
-from nanobot.agent.loop_hook import _LoopHook
-from .loop_checkpoint import (
-    checkpoint_message_key,
-    set_runtime_checkpoint,
-    clear_runtime_checkpoint,
-    mark_pending_user_turn,
-    clear_pending_user_turn,
-    restore_and_clear_checkpoint,
-    restore_pending_user_turn,
-)
-from .loop_checkpoint import RecoveryManager
 from .loop_dispatch import DispatchManager
+from .loop_mcp import close_mcp as _close_mcp
+from .loop_mcp import connect_mcp as _connect_mcp
 from .loop_message_handlers import SystemMessageHandler, UserMessageHandler
 
 if TYPE_CHECKING:
@@ -585,7 +593,7 @@ class AgentLoop:
         metadata: dict[str, Any] | None = None,
         session_key: str | None = None,
         pending_queue: asyncio.Queue | None = None,
-    ) -> tuple[str | None, list[str], list[dict], str, bool]:
+    ) -> tuple[str | None, list[str], list[dict], str, bool, int, int]:
         logger.info("RUN_DBG: _run_agent_loop start ({} messages)", len(initial_messages))
         """Run the agent iteration loop.
 
@@ -732,6 +740,7 @@ class AgentLoop:
         ))
         if result.overflow_summary:
             session._last_summary = result.overflow_summary
+            session.metadata.pop("_summary_injected_key", None)
         # Track total retries and token usage across this turn
         self.retry_count += result.retry_count
         self._last_usage = result.usage
@@ -748,7 +757,8 @@ class AgentLoop:
 
         await hook.after_turn()
         return (result.final_content, result.tools_used, result.messages,
-                result.stop_reason, result.had_injections, result.initial_message_count)
+                result.stop_reason, result.had_injections, result.initial_message_count,
+                result.total_llm_requests)
 
     def _make_retry_assess_callback(self, session: Session | None):
         """Build assess_me callback for runner retry paths."""
