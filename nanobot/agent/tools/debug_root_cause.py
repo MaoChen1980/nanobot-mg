@@ -166,6 +166,10 @@ class DebugRootCauseTool(Tool):
             "may be stuck, making mistakes, or hitting errors. Read the conversation and "
             "output concrete investigation steps for the agent to execute.",
             "",
+            "**注意：你的输出是过程性内容（process），不是任务目标本身。** "
+            "你在诊断问题，不是在推进原始任务。你的输出在未来上下文压缩时应当被识别为过程性内容。"
+            "不要让调试过程掩盖了原始任务目标。",
+            "",
             "## Available Methods",
             _RCA_METHODS.strip(),
             "",

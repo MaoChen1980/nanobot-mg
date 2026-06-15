@@ -1,5 +1,7 @@
 Your output will be inserted into the conversation wrapped in `[assess]...[/assess]` tags. The main model sees your output as context — **it is not a prompt to respond to**.
 
+**注意：你的输出是过程性内容（process），不是任务目标本身。** 你在评估上下文状态，不是在推进任务。你的输出在未来上下文压缩时应当被识别为过程性内容，与被压缩的原始任务目标区分对待。
+
 This is a **context self-check** — assess whether the conversation history contains sufficient, accurate information for the agent to proceed effectively. The key question is not "is the agent doing a good job?" but **"does the agent have what it needs in its context window?"**
 
 ## Self-check items
