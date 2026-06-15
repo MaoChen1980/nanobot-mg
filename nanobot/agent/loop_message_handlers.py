@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
 from nanobot.agent.context import ContextState
-from nanobot.agent.memory_extractor import MemoryExtractor
+
 from nanobot.agent.tools.message import MessageTool
 from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
@@ -430,11 +430,6 @@ class UserMessageHandler:
         session.metadata["assistant_turn_count"] = (
             session.metadata.get("assistant_turn_count", 0) + new_assistant_msgs
         )
-
-        # .pt save: every N turns, using persistent counter (not session.messages scan)
-        assistant_count = session.metadata.get("assistant_turn_count", 0)
-        if assistant_count > 0 and assistant_count % self._loop._pt_save_interval == 0:
-            MemoryExtractor.save_prompt_snapshot(all_msgs, self._loop.prompts_dir, session.key)
 
         # Lifecycle: cap, clear checkpoints, save (persists metadata including counters)
         self._loop.lifecycle.finalize(session)

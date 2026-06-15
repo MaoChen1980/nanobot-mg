@@ -123,6 +123,8 @@ class AgentRunSpec:
     assess_interval: int = 10  # periodic assess trigger: (response_count - last) >= interval
     previous_summary: str | None = None
     instructions: str | None = None  # injected into last user msg before each LLM call
+    prompts_dir: Path | None = None  # save .pt snapshots in runner loop
+    pt_save_interval: int = 30  # .pt snapshot: every N LLM responses
 
 
 @dataclass(slots=True)
@@ -169,6 +171,7 @@ class AgentRunner:
         self._db = db
         self._assess_responses = 0  # periodic assess_me counter (local to this run)
         self._last_assess_at = 0
+        self._pt_responses = 0  # periodic .pt snapshot counter (local to this run)
 
     async def _maybe_compress_messages(
         self,
@@ -484,6 +487,17 @@ class AgentRunner:
                 # Periodic self-assessment — fire at milestones (every assess_interval responses)
                 # within this run, not just at user-message boundaries.
                 # Uses threshold (>=) instead of exact multiple (%) so batch jumps don't skip.
+                # .pt snapshot — every N LLM responses (independent counter)
+                if spec.prompts_dir is not None and spec.session_key:
+                    self._pt_responses += 1
+                    if self._pt_responses >= spec.pt_save_interval:
+                        self._pt_responses = 0
+                        try:
+                            from nanobot.agent.memory_extractor import MemoryExtractor
+                            MemoryExtractor.save_prompt_snapshot(messages, spec.prompts_dir, spec.session_key)
+                        except Exception:
+                            logger.exception("Failed to save .pt snapshot (session={})", spec.session_key)
+                # Periodic self-assessment — fire at milestones (every assess_interval responses)
                 if spec.assess_me_callback is not None:
                     self._assess_responses += 1
                     count = self._assess_responses

@@ -741,6 +741,8 @@ class AgentLoop:
             assess_me_callback=self._make_retry_assess_callback(session),
             previous_summary=getattr(session, "_last_summary", None),
             instructions=instructions,
+            prompts_dir=self.prompts_dir,
+            pt_save_interval=self._pt_save_interval,
         ))
         if result.overflow_summary:
             session._last_summary = result.overflow_summary
