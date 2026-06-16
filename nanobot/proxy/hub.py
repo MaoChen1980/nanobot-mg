@@ -465,8 +465,10 @@ class HubTCPServer:
                     logger.info("Stopped session {} via /stop", session_key)
                     try:
                         await task  # wait for full unwind
-                    except (asyncio.CancelledError, Exception):
+                    except asyncio.CancelledError:
                         pass
+                    except Exception:
+                        logger.exception("Unexpected error awaiting cancelled session task")
                 # Process /stop through LLM so it can update TREE.md
                 # and confirm with the user over this proxy connection.
                 asyncio.create_task(self._deliver_stop_response(

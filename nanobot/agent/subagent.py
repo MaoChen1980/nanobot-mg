@@ -422,8 +422,10 @@ class SubagentManager:
         task.cancel()
         try:
             await task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception:
+            logger.exception("Unexpected error awaiting cancelled subagent task")
         return f"Subagent '{label}' cancelled."
 
     def get_status(self, task_id: str) -> SubagentStatus | None:

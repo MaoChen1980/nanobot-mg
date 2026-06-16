@@ -114,7 +114,7 @@ class ReframeTool(Tool):
                     text = project_card.read_text(encoding="utf-8", errors="replace")
                     lines.append(text[:2000])
                 except Exception:
-                    pass
+                    logger.exception("Failed to read project_card.md")
 
         lines += [
             "",

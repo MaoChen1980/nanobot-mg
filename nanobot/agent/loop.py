@@ -784,6 +784,7 @@ class AgentLoop:
             try:
                 result = await assess_me(messages)
             except Exception:
+                logger.exception("assess_me failed")
                 return False
             if not result:
                 return False
@@ -810,7 +811,7 @@ class AgentLoop:
                     messages.append(build_debug_root_cause_message(dcr_result))
                     logger.info("debug_root_cause injected")
             except Exception:
-                pass
+                logger.exception("debug_root_cause failed")
 
             # Detect skill creation opportunity
             if "值得创建 skill" in result:

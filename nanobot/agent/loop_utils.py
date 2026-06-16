@@ -6,6 +6,8 @@ import asyncio
 import re
 from typing import TYPE_CHECKING, Any
 
+from loguru import logger
+
 
 if TYPE_CHECKING:
     pass
@@ -64,7 +66,9 @@ async def cancel_active_tasks(loop: Any, key: str) -> int:
     for t in tasks:
         try:
             await t
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception:
+            logger.exception("Unexpected error during task cancellation in cancel_active_tasks")
     sub_cancelled = await loop.subagents.cancel_by_session(key)
     return cancelled + sub_cancelled
