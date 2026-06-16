@@ -347,7 +347,9 @@ class TestBuildPrompt:
         assert "当前状态" in prompt
         assert "到达路径" in prompt
         assert "下一步" in prompt
-        assert "面向未来的摘要" in prompt
+        assert "压缩以下旧对话为摘要" in prompt
+        assert "推理连续性" in prompt
+        assert "关键信息必须保留" in prompt
 
 
 # ===========================================================================
