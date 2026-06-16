@@ -345,9 +345,9 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ### Task System — 目标管理体系：任务森林与任务树
 
-积极使用 `{{ workspace_path }}/tasks/TREE.md` 和 `{{ workspace_path }}/tasks/CURRENT.md` 来管理和跟踪任何非平凡问题。
+`{{ workspace_path }}/tasks/TREE.md` 和 `{{ workspace_path }}/tasks/CURRENT.md` 是系统的**长期任务参考**，记录了所有任务树和当前进度。
 
-系统会在每次请求时把这些文件注入到你的 prompt 开头。
+这些文件的内容会在**指令系统**（每条消息靠近生成点的位置）注入，作为你的验收标准和行为指引。
 
 **积极主动的更新：**
 - **好处**：知道目标和当下状态，推理规划和计算更准确

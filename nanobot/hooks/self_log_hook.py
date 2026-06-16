@@ -63,18 +63,32 @@ class SelfLogHook(AgentHook):
             if self._is_empty_result(r)
         )
 
-        # Count discomfort signals in tool results
+        # Count discomfort signals in tool results (with tool name for precision)
         discomfort_signals = []
-        for r in context.tool_results or []:
+        for i, r in enumerate(context.tool_results or []):
             signal = self._detect_discomfort(r)
             if signal:
-                discomfort_signals.append(signal)
+                tool_name = ""
+                if context.tool_calls and i < len(context.tool_calls):
+                    tool_name = context.tool_calls[i].name
+                discomfort_signals.append({"pattern": signal, "tool": tool_name})
 
         # Basic usage stats
         usage = context.usage or {}
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
+
+        # Aggregate duration from tool results (each result dict may contain duration_ms)
+        duration_sec = 0.0
+        for r in context.tool_results or []:
+            if isinstance(r, dict) and r.get("duration_ms"):
+                duration_sec += r["duration_ms"] / 1000.0
+            elif hasattr(r, "duration_ms") and r.duration_ms:
+                duration_sec += r.duration_ms / 1000.0
+
+        # cost_usd: runner should set context.cost_usd; fallback to 0 until then
+        cost_usd = getattr(context, "cost_usd", 0.0) or 0.0
 
         entry = {
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -87,6 +101,8 @@ class SelfLogHook(AgentHook):
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "total_tokens": total_tokens,
+            "duration_sec": round(duration_sec, 3),
+            "cost_usd": round(cost_usd, 6),
             "has_error": context.error is not None,
             "has_final_content": context.final_content is not None,
             "message_count": len(context.messages),

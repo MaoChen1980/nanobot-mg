@@ -263,6 +263,25 @@ class ContextBuilder:
                 f"{skills_summary}"
             )
 
+        # Current task tree — injected as verification standard (not reference)
+        # Re-injected every iteration via instructions, immune to compression.
+        if not for_subagent:
+            task_tree = self._build_task_tree_section()
+            current_ctx = self._build_current_context_section()
+            task_parts: list[str] = []
+            if task_tree:
+                task_parts.append(task_tree)
+            if current_ctx:
+                task_parts.append(current_ctx)
+            if task_parts:
+                sections.append(
+                    "## 当前任务与验收标准\n\n"
+                    "以下是你当前的任务目标和进度，请用它作为最终验证标准来检查自己的工作。\n"
+                    "**每次完成一个步骤后，检查它是否真正推进了根任务目标。**\n"
+                    "如果你发现自己在做与根任务无关的事情，停下来重新规划。\n\n"
+                    + "\n\n".join(task_parts)
+                )
+
         return "\n\n".join(sections)
 
     @staticmethod
@@ -676,21 +695,8 @@ class ContextBuilder:
         if memory_section:
             session_parts.append(memory_section)
 
-        _t_log = time.time()
-        state_block = self._build_task_tree_section()
-        _elapsed = (time.time() - _t_log) * 1000
-        if _elapsed > 50:
-            logger.info("build_messages: _build_task_tree_section took {:.0f}ms", _elapsed)
-        if state_block:
-            session_parts.append(f"# Current State — what to focus on and what has happened\n\n{state_block}")
-
-        _t_log = time.time()
-        current_block = self._build_current_context_section()
-        _elapsed = (time.time() - _t_log) * 1000
-        if _elapsed > 50:
-            logger.info("build_messages: _build_current_context_section took {:.0f}ms", _elapsed)
-        if current_block:
-            session_parts.append(current_block)
+        # TREE.md and CURRENT.md are injected via build_instructions_section()
+        # (message index 1, close to generation point) as verification standards.
 
         _t_log = time.time()
         findings_block = self._build_self_findings_section()
