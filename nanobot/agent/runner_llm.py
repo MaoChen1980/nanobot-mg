@@ -61,9 +61,9 @@ async def request_model(
         **pipe_kwargs,
     )
 
-    if timeout_s is None:
-        return await coro
     try:
+        if timeout_s is None:
+            return await coro
         return await asyncio.wait_for(coro, timeout=timeout_s)
     except asyncio.TimeoutError:
         from nanobot.providers.base import LLMResponse
@@ -71,6 +71,14 @@ async def request_model(
             content=f"Error calling LLM: timed out after {timeout_s:g}s",
             finish_reason="error",
             error_kind="timeout",
+        ), None
+    except Exception:
+        from nanobot.providers.base import LLMResponse
+        logger.exception("LLM request failed with unhandled exception")
+        return LLMResponse(
+            content="Error calling LLM: internal error",
+            finish_reason="error",
+            error_kind="api_error",
         ), None
 
 
