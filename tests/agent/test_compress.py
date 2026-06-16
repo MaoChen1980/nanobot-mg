@@ -343,9 +343,11 @@ class TestBuildPrompt:
 
     def test_guidelines_in_prompt(self):
         prompt = _build_prompt([{"role": "user", "content": "x"}], [])
-        assert "task" in prompt
-        assert "你正在总结" in prompt
-        assert "方向" in prompt
+        assert "目标" in prompt
+        assert "当前状态" in prompt
+        assert "到达路径" in prompt
+        assert "下一步" in prompt
+        assert "面向未来的摘要" in prompt
 
 
 # ===========================================================================
