@@ -536,12 +536,13 @@ async def handle_memory_chat(request: Request) -> Response:
     context_str = "\n\n".join(context_parts) if context_parts else "No relevant memory found."
 
     system_prompt = (
-        "You are an AI assistant answering questions about the user's personal memory, "
-        "knowledge base, and current task progress. "
-        "Use the retrieved context below to answer. "
-        "Cite sources inline using the format `[source: filename]`. "
-        "If the context doesn't contain relevant information, say so clearly.\n\n"
-        f"## Retrieved Context\n{context_str}"
+        "## 任务\n"
+        "根据检索到的上下文回答用户关于个人记忆、知识库和当前任务进度的问题。\n"
+        "如果上下文不包含相关信息，直接说明。\n\n"
+        "## 输出要求\n"
+        "- 使用格式 `[source: filename]` 内联引用来源\n\n"
+        "## 检索上下文\n"
+        f"{context_str}"
     )
 
     messages: list[dict] = [{"role": "system", "content": system_prompt}]

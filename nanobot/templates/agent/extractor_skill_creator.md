@@ -1,30 +1,42 @@
-You are creating Skills that **reduce future decision cost**. Not all pending entries deserve to be skills — be ruthless.
+## 任务
+判断 pending_skills.md 中的条目是否值得创建为正式 skill，并输出完整的 skill 内容。
 
-**CRITICAL: DO NOT analyze_tool or justify each entry.** The entries below are already vetted candidates — just decide Yes/No and output the JSON. Save every token for the skill content itself. Any analysis in your output is wasted — only the JSON matters.
+不要分析或证明每个条目——候选已通过初步筛选，只需 Yes/No 决策后输出 JSON。
 
-You will receive:
-- Pending skill entries from `pending_skills.md`
-- A list of existing skills (name + description) already under `{{ workspace_path }}/skills/`
+## 输出要求
 
-## Decision Gate — Is This Skill Worth Creating?
+输出以下 JSON，不要多余文字：
 
-Skill is a form of memory. Memory has storage and retrieval costs. A skill is worth it **only if**:
+```json
+{
+  "skills": [
+    {
+      "name": "kebab-case-name",
+      "type": "execution|avoidance|tool",
+      "description": "三段式触发描述。[功能]。当用户[场景1]、[场景2]时，必须使用此 Skill。关键词：[关键词]。即使用户没有明确说'[术语]'，只要涉及[概念]，都应触发。",
+      "content": "---\nname: kebab-case-name\ndescription: ...\n---\n\n# Title\n\nBody..."
+    }
+  ]
+}
+```
 
-1. **Non-obvious** — Without this skill, the agent would not reliably do the right thing. Not because steps are "hard", but because the pattern is easy to overlook, easy to get wrong, or encodes experience the agent can't infer from first principles.
-   
-   *Counter-example*: "1+1=2" — so obvious no one needs to memorize it. Similarly, trivial workflows that any capable agent would reproduce correctly every time do not need a skill.
+## 输入
 
-2. **Trigger must be an external signal** — The LLM won't spontaneously recall skills at the right moment. The trigger must come from something the LLM **sees or hears**: user says specific keywords, message contains specific type, tool returns specific result, cron fires, page structure matches, error output matches a pattern.
+- Pending skill 条目 — 来自 `pending_skills.md`
+- 已有 skill 列表（name + description）— 来自 `{{ workspace_path }}/skills/`
 
-   If the trigger is vague ("when optimizing", "when writing Python", "when needed"), the skill will sit unread. Skip it.
+## 决策门控
 
-3. **Clear context dependency** — Skills only work in specific information contexts. If you can't describe what context is needed before the shortcut/avoidance applies, the skill is too vague.
+Skill 是一种记忆。记忆有存储和检索成本。以下条件**全部**满足才创建：
 
-4. **Not duplicative** — If an existing skill already covers the same workflow, skip.
+1. **Non-obvious** — 没有此 skill，agent 不会可靠地做对
+2. **Trigger 必须是外部信号** — 用户关键词、消息类型、工具返回、cron、页面结构、错误输出。模糊 trigger → 跳过
+3. **Clear context dependency** — 必须能描述该 skill 需要什么信息上下文
+4. **Not duplicative** — 已有 skill 已覆盖 → 跳过
 
-**Note — Tool entries:** Entries tagged with Install/Uninstall/Usage come from the tool discovery pipeline. They represent tools/scripts available on the system. These are **always worth creating** as "tool" type skills — the cost is documenting install/uninstall/usage so it can be reused across sessions and machines.
+**Tool 条目：** 带有 Install/Uninstall/Usage 标记的工具发现条目，**总是值得创建**为 tool 类型。
 
-## Three Types of Skill
+## Skill 类型
 
 ### Execution Skill — "What to do"
 A verified multi-step workflow. Structure:
@@ -112,39 +124,19 @@ A system tool or self-written script that needs install/uninstall/usage document
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 ```
 
-### Rules for content (all types):
-- **Frontmatter**: 描述使用三段式触发格式：
-  ```
-  [功能概述]。
-  当用户[场景1]、[场景2]、[场景3]时，必须使用此 Skill。
-  关键词：[关键词1]、[关键词2]、[关键词3]。
-  即使用户没有明确说'[精确术语]'，只要涉及[相关概念]，都应触发。
-  ```
-- **Must include `## Verification` section** with verifiable success criteria and self-optimization as last item
-- **Keep under 2000 words** — concise and actionable
-- **Information gathering is mandatory** — every skill must describe what context to check before taking action
-- **Reference real tools**: grep_tool, glob_tool, read_file_tool, write_file_tool, spawn_tool, web_search_tool, etc.
-- **Skills are instruction sets, not code** — no implementation code or scripts
+## 内容规则（所有类型）
 
-Output as JSON:
+- **Frontmatter**：三段式触发格式，包含场景、关键词、概念扩散
+- **必须包含 `## Verification`**，包含可验证的成功标准和 self-optimization
+- **不超过 2000 字**
+- **必须包含 Information Gathering**——执行前需要检查的上下文
+- **引用真实工具名**：grep_tool, glob_tool, read_file_tool, write_file_tool, spawn_tool, web_search_tool 等
+- **Skill 是指令集，不是代码**
 
-```json
-{
-  "skills": [
-    {
-      "name": "kebab-case-name",
-      "type": "execution|avoidance|tool",
-      "description": "三段式触发描述。[功能]。当用户[场景1]、[场景2]时，必须使用此 Skill。关键词：[关键词]。即使用户没有明确说'[术语]'，只要涉及[概念]，都应触发。",
-      "content": "---\nname: kebab-case-name\ndescription: ...\n---\n\n# Title\n\nBody..."
-    }
-  ]
-}
-```
+## 约束
 
-## Rules
-
-- **Name**: lowercase, kebab-case, verb-led (e.g. `analyze_tool-apk-optimization`, `avoid-debug-via-xx`)
-- **Do NOT overwrite** existing skill directories
-- **Does this skill reduce decision cost?** — if not, skip it even if the entry looks valid
-- If nothing needs creating, return `"skills": []`
-- **CRITICAL: Output ONLY the JSON block. No thinking tags (`<think>`), no explanations, no analysis. Just the raw ```json ... ``` code block.**
+- Name: lowercase, kebab-case, verb-led
+- 不要覆盖已有 skill 目录
+- 不减少决策成本的 skill → 跳过
+- 无需创建时返回 `"skills": []`
+- **只输出 JSON 块。无 think 标签、无解释、无分析。只输出 ```json ... ```**

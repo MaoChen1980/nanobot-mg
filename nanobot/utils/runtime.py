@@ -15,15 +15,15 @@ EMPTY_FINAL_RESPONSE_MESSAGE = (
 )
 
 FINALIZATION_RETRY_WITH_ASSESS = (
-    "Review the [assess] block above. Based on that assessment, provide your response to the user."
+    "Review the [assess] assessment above, then provide your response to the user."
 )
 
 FINALIZATION_RETRY_FALLBACK = (
-    "Please provide your response to the user based on the conversation above."
+    "Provide your response to the user based on the conversation above."
 )
 
 LENGTH_RECOVERY_PROMPT = (
-    "Output limit reached. Continue exactly where you left off "
+    "Output limit reached. Continue where you left off "
     "— no recap, no apology. Break remaining work into smaller steps if needed."
 )
 

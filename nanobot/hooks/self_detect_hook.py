@@ -26,64 +26,56 @@ from nanobot.agent.llm_context import chat_stream_with_retry
 # --- Reflection prompt -------------------------------------------------------
 
 REFLECTION_SYSTEM_PROMPT = """\
-你是 nanobot，正在回顾 this session 的对话。
+## 任务
+审查 session 执行日志和 hook 代码结构，挑出所有可疑的模式和代码问题。
 
-你没有上下文、没有工具、不在 agent loop。你的工作是**挑出所有可疑的东西**——
-你的输出都是 suspect，留给主循环验证。宁可误报，不可漏报。普通、正常、没有明确问题的行为也要质疑。
+输出作为 suspect 提交给主循环验证——宁可误报，不可漏报。普通、正常、没有明确问题的行为也要质疑。
 
-## 必须要怀疑的方向
-
-以下是必须检查的怀疑方向。不要跳过任何一个。
-
-| 类型 | 怀疑方向 | 说人话 |
-|------|----------|--------|
-| **behavior** | 这模式看起来效率不高、不够自然 | "总在同一个文件上改"、"频繁调用同一个工具"、"改了又改" |
-| **knowledge** | 这个"知识"只是出于偶然，不是稳定事实 | "当时这么理解的，不一定对" |
-| **decision** | 看起来像刻意的决定，也可能只是随手 | "选了 A 没选 B，不一定有理由" |
-| **correction** | 用户纠正过什么 | "用户上次说不要这样做" |
-| **self_bug** | 代码哪里看着不对 | "这里多了一次计数？" |
-
-**注意：** `behavior` 是最容易找到信号的类型。工具调用频次、重复度、时序模式都在 metrics 里——先从这里入手。
-
-## 输出格式
+## 输出要求
+按以下 JSON 格式输出 findings：
 
 ```json
 {
   "findings": [
     {
       "type": "behavior|knowledge|decision|correction|self_bug",
-      "content": "哪个具体指标或代码、为什么觉得可疑",
+      "content": "具体指标或代码片段、为什么觉得可疑",
       "relevance": "这条怀疑如果成立，会在什么场景下被用到"
     }
   ]
 }
 ```
 
-如果所有指标和代码都没有问题，输出空的 findings 列表是正常的。不要为了满足"必须有 finding"而强制制造怀疑。
+## 怀疑方向（必须检查所有类型，不要跳过）
+
+- **behavior**: 这模式看起来效率不高、不够自然——"总在同一个文件上改"、"频繁调用同一个工具"、"改了又改"
+- **knowledge**: 这个"知识"只是出于偶然，不是稳定事实——"当时这么理解的，不一定对"
+- **decision**: 看起来像刻意的决定，也可能只是随手——"选了 A 没选 B，不一定有理由"
+- **correction**: 用户纠正过什么——"用户上次说不要这样做"
+- **self_bug**: 代码哪里看着不对——"这里多了一次计数？"
+
+**注意：** `behavior` 是最容易找到信号的类型。工具调用频次、重复度、时序模式都在 metrics 里——先从这里入手。
+
+## 约束
+
+- 输出 JSON 格式，不要多余文字
+- 宁误报不漏报；一个 finding 都没有时输出空列表 `{"findings": []}`
+- 不要为了满足"必须有 finding"而强制制造怀疑
 """
 
 REFLECTION_USER_TEMPLATE = """\
-## Execution Log
+## 输入数据
 
 {metrics_summary}
 
-## Hook Module Structure
+## Hook 模块结构
 
 {hook_code}
 
-## 可疑点
+## 分析步骤
 
-你只有以上信息——metrics + hook 结构。逐一检查：
-
-1. **模式** (→ type: `behavior` / `correction` / `knowledge` / `decision`):
-   从 execution log 看，有没有什么重复模式看起来不太对劲？
-   比如总在调用同一个工具、读同一个文件、走同样的弯路。
-
-2. **代码结构** (→ type: `self_bug`): 从 hook 的类和方法的签名看，
-   有没有结构上不合理的地方？比如方法职责太多、命名歧义、缺少预期的入口点。
-   注意：你看不到完整源码，只能看结构。
-
-你不在 agent loop，无法验证——没关系，全部当成 suspect 输出就行。
+1. 检查行为模式（type: behavior/correction/knowledge/decision）：从 execution log 中找重复模式——频繁调用同一个工具、读同一个文件、走同样的弯路
+2. 检查代码结构（type: self_bug）：从 hook 的类和方法签名看结构问题——职责过多、命名歧义、缺少预期的入口点。注意：看不到完整源码，只能看结构
 """
 
 # --- Hook files for self-review ------------------------------------------------
