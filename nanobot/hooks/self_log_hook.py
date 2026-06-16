@@ -14,11 +14,31 @@ Log file: ~/.nanobot/self_improve/self_review_log.jsonl
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext
+
+
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
+
+
+def _lock_file(f, exclusive: bool = True) -> None:
+    """Acquire an advisory lock on *f* (fcntl.flock on Unix, no-op on Windows)."""
+    if _HAS_FCNTL:
+        _fcntl.flock(f.fileno(), _fcntl.LOCK_EX if exclusive else _fcntl.LOCK_SH)
+
+
+def _unlock_file(f) -> None:
+    """Release an advisory lock on *f* (fcntl.flock on Unix, no-op on Windows)."""
+    if _HAS_FCNTL:
+        _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
 
 
 class SelfLogHook(AgentHook):
@@ -146,7 +166,11 @@ class SelfLogHook(AgentHook):
         """Append one JSON line to the log file. Purges entries older than 1 day."""
         self.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(self.LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            _lock_file(f, exclusive=True)
+            try:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            finally:
+                _unlock_file(f)
         self._rotate_counter += 1
         if self._rotate_counter % 10 == 0:
             self._maybe_rotate()
@@ -157,7 +181,11 @@ class SelfLogHook(AgentHook):
         cutoff = now - self.MAX_LOG_AGE_SECONDS
         try:
             with open(self.LOG_FILE, "r", encoding="utf-8") as f:
-                lines = f.readlines()
+                _lock_file(f, exclusive=False)
+                try:
+                    lines = f.readlines()
+                finally:
+                    _unlock_file(f)
         except OSError:
             return
         kept = []
@@ -172,6 +200,13 @@ class SelfLogHook(AgentHook):
                 kept.append(line)
         if len(kept) == len(lines):
             return
-        with open(self.LOG_FILE, "w", encoding="utf-8") as f:
-            f.writelines(kept)
+        try:
+            with open(self.LOG_FILE, "w", encoding="utf-8") as f:
+                _lock_file(f, exclusive=True)
+                try:
+                    f.writelines(kept)
+                finally:
+                    _unlock_file(f)
+        except OSError:
+            return
 

@@ -14,10 +14,12 @@ from nanobot.agent.loop_constants import _RUNTIME_CHECKPOINT_KEY, _PENDING_USER_
 
 
 def checkpoint_message_key(message: dict[str, Any]) -> tuple[Any, ...]:
+    # NOTE: tool_call_id is intentionally excluded — it's a random UUID that
+    # changes on every retry, so including it makes overlap detection too strict
+    # and causes duplicate appends after checkpoint restore.
     return (
         message.get("role"),
         message.get("content"),
-        message.get("tool_call_id"),
         message.get("name"),
         message.get("tool_calls"),
         message.get("reasoning_content"),
