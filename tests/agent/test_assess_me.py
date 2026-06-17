@@ -557,7 +557,6 @@ class TestAssessMeTemplate:
 
     def _section_names(self) -> list[str]:
         return [
-            "有用信息盘点",
             "信息缺口",
             "假设检查",
             "进度与状态",
@@ -578,7 +577,7 @@ class TestAssessMeTemplate:
 
     def test_renders_without_verify(self) -> None:
         content = self._render(conversation="user: hello")
-        assert "有用信息盘点" in content
+        assert "事实合规" in content
         assert "Items to Verify" not in content
 
     def test_renders_with_verify(self) -> None:
@@ -599,9 +598,7 @@ class TestAssessMeTemplate:
         ])
         content = self._render(conversation=conv, verify="")
         assert "check this" in content
-        assert "有用信息盘点" in content
-
-
+        assert "事实合规" in content
 
 
 # =========================================================================

@@ -12,6 +12,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
+from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
 from nanobot.agent.context import ContextState
 
 from nanobot.agent.tools.message import MessageTool
@@ -129,6 +130,7 @@ class SystemMessageHandler:
             context_state=cs,
         )
         final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
+        all_msgs = [m for m in all_msgs if not is_assessment_message(m) and not is_debug_root_cause_message(m)]
         session.metadata["llm_request_count"] = session.metadata.get("llm_request_count", 0) + _total_llm_requests
         if is_subagent and self._loop._persist_subagent_followup(session, msg):
             self._loop.sessions.save(session)
@@ -274,6 +276,8 @@ class UserMessageHandler:
             session_key=key,
             pending_queue=pending_queue,
         )
+        # Strip assess_me / debug_root_cause messages from persisted history
+        all_msgs = [m for m in all_msgs if not is_assessment_message(m) and not is_debug_root_cause_message(m)]
 
         # Stage 7: finalize — save, file cap, recovery clear, background schedule
         if msg.ephemeral:

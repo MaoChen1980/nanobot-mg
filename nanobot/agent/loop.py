@@ -778,6 +778,9 @@ class AgentLoop:
             if not result:
                 logger.info("assess_me call returned empty")
                 return False
+            if result.strip().startswith("[status:ok]"):
+                logger.info("assess_me: all clear, no action needed")
+                return False
             # Keep at most one assess_me message — remove all stale ones before injecting new
             for i in range(len(messages) - 1, -1, -1):
                 if is_assessment_message(messages[i]):

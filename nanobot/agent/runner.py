@@ -1000,12 +1000,14 @@ class AgentRunner:
             # assess_me times out, break normally.
             if not _doubt_injected and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _doubt_injected = True
-                await self._run_assess_callback(spec, messages, timeout=120)
-                logger.info(
-                    "End-of-loop assess done (iter={}, session={})",
-                    iteration, spec.session_key or "default",
-                )
-                continue
+                injected = await self._run_assess_callback(spec, messages, timeout=120)
+                if injected:
+                    logger.info(
+                        "End-of-loop assess found issues (iter={}, session={}) — continuing",
+                        iteration, spec.session_key or "default",
+                    )
+                    continue
+                break
             break
 
         else:
