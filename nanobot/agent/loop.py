@@ -784,24 +784,29 @@ class AgentLoop:
                     messages.pop(i)
             messages.append(build_assessment_message(result))
 
-            # Chain: assess_me → debug_root_cause
-            try:
-                from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
-                logger.info("debug_root_cause call start")
-                dcr = DebugRootCauseTool()
-                dcr.set_context(messages)
-                dcr_result = await dcr.execute(problem=result)
-                logger.info("debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
-                # Don't inject error messages as analysis
-                if dcr_result and not dcr_result.startswith("Error:"):
-                    # Keep at most one DRC message — remove all stale ones before injecting new
-                    for i in range(len(messages) - 1, -1, -1):
-                        if is_debug_root_cause_message(messages[i]):
-                            messages.pop(i)
-                    messages.append(build_debug_root_cause_message(dcr_result))
-                    logger.info("debug_root_cause injected")
-            except Exception:
-                logger.exception("debug_root_cause failed")
+            # Chain: assess_me → debug_root_cause (only when assess_me signals need)
+            _needs_drc = result.strip().endswith("[need_drc]")
+            if _needs_drc:
+                clean_result = result.strip()[:-len("[need_drc]")].strip()
+                try:
+                    from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+                    logger.info("debug_root_cause call start")
+                    dcr = DebugRootCauseTool()
+                    dcr.set_context(messages)
+                    dcr_result = await dcr.execute(problem=clean_result)
+                    logger.info("debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
+                    # Don't inject error messages as analysis
+                    if dcr_result and not dcr_result.startswith("Error:"):
+                        # Keep at most one DRC message — remove all stale ones before injecting new
+                        for i in range(len(messages) - 1, -1, -1):
+                            if is_debug_root_cause_message(messages[i]):
+                                messages.pop(i)
+                        messages.append(build_debug_root_cause_message(dcr_result))
+                        logger.info("debug_root_cause injected")
+                except Exception:
+                    logger.exception("debug_root_cause failed")
+            else:
+                logger.info("debug_root_cause skipped — no [need_drc] signal from assess_me")
 
             # Detect skill creation opportunity
             if "值得创建 skill" in result:
