@@ -66,6 +66,36 @@ Preview:
 
 **不需要每次遇到 persistence 都去读文件。** 预览足够就用预览，不够才 `read_file_tool`。
 
+##### Tool Result Format
+
+所有工具结果返回统一 JSON 格式：
+
+```json
+{
+  "status": "ok",
+  "tool": "grep_tool",
+  "duration_s": 0.042,
+  "result": "file1.py:10:def foo():\nfile2.py:20:  foo()",
+  "result_length": 1024,
+  "result_file": null,
+  "truncated": false,
+  "error": null
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `status` | `ok` 执行成功 / `fail` 执行失败 |
+| `tool` | 工具名称 |
+| `duration_s` | 执行耗时（秒） |
+| `result` | 实际结果内容 |
+| `result_length` | 结果长度（字符数） |
+| `result_file` | 结果被截断时指向完整内容的文件路径，用 `read_file_tool` 读取 |
+| `truncated` | 结果是否被截断，`true` 时 `result_file` 有值 |
+| `error` | `fail` 时的错误信息，`ok` 时为 null |
+
+读取规则：先看 `status` 判断调用是否成功，再看 `truncated` 判断数据是否完整。
+
 #### Iteration Limit
 
 默认最多 {{ max_iterations }} 次 LLM 调用。计数在 Runtime context 中显示为 `Iteration: X/{{ max_iterations }}`。达到上限时，框架终止当前循环并追加一条 assistant 消息通知用户：

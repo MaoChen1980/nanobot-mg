@@ -383,8 +383,9 @@ class AgentRunner:
         if retry_ctx is None:
             retry_ctx = RetryContext()
 
-        def _normalize(spec, tc_id, name, result):
+        def _normalize(spec, tc_id, name, result, *, duration_ms=0, status="ok"):
             result = ensure_nonempty_tool_result(name, result)
+
             try:
                 content = maybe_persist_tool_result(
                     spec.workspace, spec.session_key, tc_id, result,
@@ -401,9 +402,44 @@ class AgentRunner:
                     content = str(result)
                 else:
                     content = result
-            if isinstance(content, str) and len(content) > spec.max_tool_result_chars:
-                return truncate_text(content, spec.max_tool_result_chars)
-            return content
+
+            # Detect persistence → extract preview and result_file
+            result_file = None
+            truncated = False
+            actual_result = content
+            if isinstance(content, str) and content.startswith("[tool output persisted]"):
+                truncated = True
+                for line in content.split("\n"):
+                    if line.startswith("Full output saved to: "):
+                        result_file = line[len("Full output saved to: "):]
+                        break
+                preview_start = content.find("Preview:\n")
+                if preview_start >= 0:
+                    actual_result = content[preview_start + len("Preview:\n"):]
+                    # Strip trailing hint if present
+                    tail = "\n...\n(Read the saved file if you need the full output.)"
+                    if actual_result.endswith(tail):
+                        actual_result = actual_result[:-len(tail)]
+
+            # Last-resort truncation for non-persisted results
+            if not truncated and isinstance(actual_result, str) and len(actual_result) > spec.max_tool_result_chars:
+                actual_result = truncate_text(actual_result, spec.max_tool_result_chars)
+
+            result_length = len(actual_result) if isinstance(actual_result, str) else 0
+            is_error = status == "error" or (isinstance(actual_result, str) and actual_result.startswith("Error"))
+
+            wrapper = {
+                "status": "fail" if is_error else "ok",
+                "tool": name,
+                "duration_s": round(duration_ms / 1000, 3),
+                "result": actual_result,
+                "result_length": result_length,
+                "result_file": result_file,
+                "truncated": truncated,
+                "error": actual_result if is_error else None,
+            }
+
+            return json.dumps(wrapper, ensure_ascii=False)
 
         for iteration in range(spec.max_iterations):
             logger.debug(
@@ -570,7 +606,10 @@ class AgentRunner:
                     for i in range(executed_count):
                         tc = tool_calls[i]
                         res = results[i]
-                        content = _normalize(spec, tc.id, tc.name, res)
+                        ev = new_events[i] if i < len(new_events) else {}
+                        content = _normalize(spec, tc.id, tc.name, res,
+                                              duration_ms=ev.get("duration_ms", 0),
+                                              status=ev.get("status", "ok"))
                         ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
                         tool_message = {
                             "role": "tool", "tool_call_id": tc.id, "name": tc.name,
@@ -618,7 +657,9 @@ class AgentRunner:
 
                 completed_tool_results = []
                 for tool_call, result, ev in zip(tool_calls, results, new_events):
-                    content = _normalize(spec, tool_call.id, tool_call.name, result)
+                    content = _normalize(spec, tool_call.id, tool_call.name, result,
+                                          duration_ms=ev.get("duration_ms", 0),
+                                          status=ev.get("status", "ok"))
                     ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else datetime.now(timezone.utc).isoformat()
                     tool_message = {
                         "role": "tool", "tool_call_id": tool_call.id, "name": tool_call.name,

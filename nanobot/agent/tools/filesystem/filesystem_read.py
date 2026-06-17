@@ -30,7 +30,7 @@ from nanobot.utils.media_decode import build_image_content_blocks, detect_image_
 @tool_parameters(
     build_parameters_schema(
         path=p("string", "Absolute path to a file to read. Supports text files, PDFs (pages param), images (rendered as Markdown), and Office documents (.docx/.xlsx/.pptx)."),
-        mode=p("string", "Reading mode: 'full' (outputs numbered lines) or 'overview' (previews structure via headings/sections without reading the whole file). Use overview when unsure what a file contains.",
+        mode=p("string", "Reading mode: 'full' (outputs numbered lines) or 'overview' (previews structure via headings/sections, avoids reading the full file into context). Use overview for large files to decide which sections to read.",
             enum=["full", "overview"], default="full",
         ),
         extract=p("string", "Optional Python regex (re.compile). Applied after offset/limit — only matching lines are returned, with 1 line of context before/after each match. Use instead of grep+cat for filtering logs or code. Example: 'Error.*timeout'."),
@@ -60,11 +60,11 @@ class ReadFileTool(_FsTool):
         "The TAG is a 4-character checksum of the line content for visual change detection.\n\n"
         "**Modes**:\n"
         "- `mode=full` (default) — Full read, supports offset+limit pagination\n"
-        "- `mode=overview` — Preview structure without reading the full file (headings/sections), use when unsure what a file contains\n"
+        "- `mode=overview` — For large files: previews structure (headings/sections) without reading full content into context, so you can decide which sections to read\n"
         "- `extract=regex` — Return only matching lines + 1 line of context before/after each match, replaces grep+cat combo\n\n"
         "**When to use**:\n"
         "- When viewing file contents\n"
-        "- When unsure what a file contains → first use `mode=overview` to preview structure\n"
+        "- Large files: first use `mode=overview` to preview structure, then read the relevant section\n"
         "- When reading large files in segments via offset+limit\n"
         "- When extracting text from PDF or Office documents\n"
         "- When extracting matching lines via regex\n\n"
