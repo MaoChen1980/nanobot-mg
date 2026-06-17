@@ -12,7 +12,7 @@ from typing import Any, Iterable, TypeVar
 
 from loguru import logger
 
-from nanobot.agent.tools.filesystem.filesystem import ListDirTool, _FsTool
+from nanobot.agent.tools.filesystem.filesystem import _FsTool
 
 _DEFAULT_HEAD_LIMIT = 250
 T = TypeVar("T")
@@ -92,7 +92,11 @@ def _matches_type(name: str, file_type: str | None) -> bool:
 
 
 class _SearchTool(_FsTool):
-    _IGNORE_DIRS = set(ListDirTool._IGNORE_DIRS)
+    _IGNORE_DIRS = {
+        ".git", "node_modules", "__pycache__", ".venv", "venv",
+        "dist", "build", ".tox", ".mypy_cache", ".pytest_cache",
+        ".ruff_cache", ".coverage", "htmlcov",
+    }
 
     def _display_path(self, target: Path, root: Path) -> str:
         """Always return an absolute resolved path for unambiguous cross-tool use."""

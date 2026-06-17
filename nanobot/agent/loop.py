@@ -29,12 +29,10 @@ from nanobot.agent.tools.conversation_search import ConversationSearchTool
 from nanobot.agent.tools.cron import CronTool
 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
 from nanobot.agent.tools.diagnose_codebase_tool import DiagnoseTool
-from nanobot.agent.tools.edit_files import EditFilesTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.filesystem import (
     DeleteFileTool,
     EditFileTool,
-    ListDirTool,
     MoveFileTool,
     ReadFileTool,
     WriteFileTool,
@@ -43,7 +41,6 @@ from nanobot.agent.tools.list_subagents import ListSubagentsTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.notebook import NotebookEditTool
-from nanobot.agent.tools.read_files import ReadFilesTool
 from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.respond_to_subagent import RespondToSubagentTool
@@ -386,9 +383,8 @@ class AgentLoop:
                 workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read
             )
         )
-        for cls in (WriteFileTool, EditFileTool, ListDirTool, DeleteFileTool, MoveFileTool):
+        for cls in (WriteFileTool, EditFileTool, DeleteFileTool, MoveFileTool):
             self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
-        self.tools.register(EditFilesTool(workspace=self.workspace, allowed_dir=allowed_dir))
         for cls in (GlobTool, GrepTool):
             self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(NotebookEditTool(workspace=self.workspace, allowed_dir=allowed_dir))
@@ -401,7 +397,6 @@ class AgentLoop:
         self.tools.register(MemorySearchTool(store=self.context.memory))
         self.tools.register(ConversationSearchTool(store=self.context.memory))
         self.tools.register(SearchTextTool(workspace=self.workspace, allowed_dir=allowed_dir))
-        self.tools.register(ReadFilesTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ExploreModuleTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(SaveStageTool())
         self.tools.register(ShowStagesTool())

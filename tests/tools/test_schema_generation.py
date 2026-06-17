@@ -195,12 +195,6 @@ class TestSpecificSchemaDefaults:
             if os.path.exists(path):
                 os.remove(path)
 
-    def test_list_dir_max_entries_default(self):
-        from nanobot.agent.tools.filesystem.filesystem_list import ListDirTool
-        tool = ListDirTool()
-        schema = tool._tool_parameters_schema
-        assert schema["properties"]["max_entries"]["default"] == 400
-
     def test_send_message_priority_enum(self):
         from nanobot.agent.tools.send_message import SendMessageTool
         from unittest.mock import MagicMock

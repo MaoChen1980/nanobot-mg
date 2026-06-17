@@ -232,10 +232,10 @@ class TestToolHintEdgeCases:
         result = _hint([_tc("custom_tool", None)])
         assert result == "custom_tool"
 
-    def test_list_dir_registered(self):
-        """S2: list_dir should use 'ls' format."""
-        result = _hint([_tc("list_dir_tool", {"path": "/tmp"})])
-        assert result == "ls /tmp"
+    def test_glob_registered(self):
+        """S2: glob should use 'glob' format."""
+        result = _hint([_tc("glob_tool", {"pattern": "**/*.py"})])
+        assert result == 'glob "**/*.py"'
 
 
 class TestToolHintMixedFolding:

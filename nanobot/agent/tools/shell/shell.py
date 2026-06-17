@@ -34,7 +34,7 @@ _IS_WINDOWS = sys.platform == "win32"
 _TOOL_SUGGESTIONS: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r'^(?:cat|type|gc|Get-Content)\s+', re.IGNORECASE), "read_file_tool(path=...)", "handles text, images, PDFs, and Office docs"),
     (re.compile(r'^(?:grep|findstr|sls|Select-String)\s+', re.IGNORECASE), "grep_tool(pattern=..., path=...)", "search file contents with regex"),
-    (re.compile(r'^(?:ls|dir|gci|Get-ChildItem)\s+', re.IGNORECASE), "list_dir_tool(path=...)", "list directory contents"),
+    (re.compile(r'^(?:ls|dir|gci|Get-ChildItem)\s+', re.IGNORECASE), "glob_tool(pattern=*, path=...)", "list directory contents"),
     (re.compile(r'^find\s+', re.IGNORECASE), "glob_tool(pattern=...)", "find files matching a pattern"),
     (re.compile(r'^curl\s+', re.IGNORECASE), "web_fetch_tool(url=...)", "fetch URL content"),
     (re.compile(r'^wget\s+', re.IGNORECASE), "web_fetch_tool(url=...)", "fetch URL content"),

@@ -9,7 +9,6 @@ from nanobot.utils.path import abbreviate_path
 # Registry: tool_name -> (key_args, template, is_path, is_command)
 _TOOL_FORMATS: dict[str, tuple[list[str], str, bool, bool]] = {
     "read_file_tool":      (["path", "file_path"],              "read {}",          True,  False),
-    "read_files_tool":     (["pattern"],                        'read_files("{}")', False, False),
     "write_file_tool":     (["path", "file_path"],              "write {}",         True,  False),
     "edit_file_tool":      (["file_path", "path"],              "edit {}",          True,  False),
     "delete_file_tool":    (["path"],                           "delete {}",        True,  False),
@@ -19,7 +18,6 @@ _TOOL_FORMATS: dict[str, tuple[list[str], str, bool, bool]] = {
     "exec_tool":           (["command"],                        "$ {}",             False, True),
     "web_search_tool":     (["query"],                          'search "{}"',      False, False),
     "web_fetch_tool":      (["url"],                            "fetch {}",         True,  False),
-    "list_dir_tool":       (["path"],                           "ls {}",            True,  False),
     "explore_module_tool": (["path"],                           "explore {}",       True,  False),
     "notebook_edit_tool":  (["notebook_path", "path"],          "notebook {}",      True,  False),
     "analyze_tool":        (["file_path", "path"],              "analyze {}",       True,  False),

@@ -84,14 +84,12 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 | 工具 | 用途 | 注意 |
 |------|------|------|
 | `read_file_tool` | 读文件 | 支持 extract 参数提取特定行 |
-| `read_files_tool` | 批量读文件 | |
 | `write_file_tool` | 写/创建文件 | |
 | `edit_file_tool` | 精确替换编辑 | 比 sed 更安全 |
-| `list_dir_tool` | 列出目录 | |
 | `delete_file_tool` | 删除文件 | |
 | `move_file_tool` | 移动/重命名 | |
-| `glob` | 文件模式匹配 | |
-| `grep` | 文本搜索 | 支持正则 |
+| `glob_tool` | 文件模式匹配 | |
+| `grep_tool` | 文本搜索 | 支持正则 |
 | `search_text_tool` | 语义文本搜索 | 嵌入搜索 |
 | `explore_module_tool` | 探索 Python 模块 | |
 | `notebook_edit_tool` | 编辑 Jupyter notebook | |

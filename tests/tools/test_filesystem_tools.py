@@ -1,10 +1,9 @@
-"""Tests for enhanced filesystem tools: ReadFileTool, EditFileTool, ListDirTool."""
+"""Tests for enhanced filesystem tools: ReadFileTool, EditFileTool."""
 
 import pytest
 
 from nanobot.agent.tools.filesystem import (
     EditFileTool,
-    ListDirTool,
     ReadFileTool,
     _find_match,
 )
@@ -189,74 +188,6 @@ class TestEditFileTool:
         f.write_text("hello", encoding="utf-8")
         result = await tool.execute(path=str(f), old_text="hello")
         assert result == "Error editing file: Unknown new_text"
-
-
-# ---------------------------------------------------------------------------
-# ListDirTool
-# ---------------------------------------------------------------------------
-
-class TestListDirTool:
-
-    @pytest.fixture()
-    def tool(self, tmp_path):
-        return ListDirTool(workspace=tmp_path)
-
-    @pytest.fixture()
-    def populated_dir(self, tmp_path):
-        (tmp_path / "src").mkdir()
-        (tmp_path / "src" / "main.py").write_text("pass")
-        (tmp_path / "src" / "utils.py").write_text("pass")
-        (tmp_path / "README.md").write_text("hi")
-        (tmp_path / ".git").mkdir()
-        (tmp_path / ".git" / "config").write_text("x")
-        (tmp_path / "node_modules").mkdir()
-        (tmp_path / "node_modules" / "pkg").mkdir()
-        return tmp_path
-
-    @pytest.mark.asyncio
-    async def test_basic_list(self, tool, populated_dir):
-        result = await tool.execute(path=str(populated_dir))
-        assert "README.md" in result
-        assert "src" in result
-        # .git and node_modules should be ignored
-        assert ".git" not in result
-        assert "node_modules" not in result
-
-    @pytest.mark.asyncio
-    async def test_recursive(self, tool, populated_dir):
-        result = await tool.execute(path=str(populated_dir), recursive=True)
-        assert (populated_dir / "src" / "main.py").resolve().as_posix() in result
-        assert (populated_dir / "src" / "utils.py").resolve().as_posix() in result
-        assert (populated_dir / "README.md").resolve().as_posix() in result
-        # Ignored dirs should not appear
-        assert ".git" not in result
-        assert "node_modules" not in result
-
-    @pytest.mark.asyncio
-    async def test_max_entries_truncation(self, tool, tmp_path):
-        for i in range(10):
-            (tmp_path / f"file_{i}.txt").write_text("x")
-        result = await tool.execute(path=str(tmp_path), max_entries=3)
-        assert "truncated" in result
-        assert "3 of 10" in result
-
-    @pytest.mark.asyncio
-    async def test_empty_dir(self, tool, tmp_path):
-        d = tmp_path / "empty"
-        d.mkdir()
-        result = await tool.execute(path=str(d))
-        assert "empty" in result.lower()
-
-    @pytest.mark.asyncio
-    async def test_not_found(self, tool, tmp_path):
-        result = await tool.execute(path=str(tmp_path / "nope"))
-        assert "Error" in result
-        assert "not found" in result
-
-    @pytest.mark.asyncio
-    async def test_missing_path_returns_clear_error(self, tool):
-        result = await tool.execute()
-        assert result == "Error listing directory: Unknown path"
 
 
 # ---------------------------------------------------------------------------
