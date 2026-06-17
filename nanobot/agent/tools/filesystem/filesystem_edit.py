@@ -221,9 +221,7 @@ class EditFileTool(_FsTool):
             if old_text is None:
                 return "Error: old_text is required in text-match mode. Omit old_text only when using first_line+last_line for line-range replacement."
 
-            # .ipynb detection
-            if path.endswith(".ipynb"):
-                return "Error: This is a Jupyter notebook. Use the notebook_edit_tool instead of edit_file_tool."
+            # .ipynb files are valid JSON — edit_file_tool handles them fine
 
             fp = self._resolve(path)
 
@@ -385,9 +383,6 @@ class EditFileTool(_FsTool):
         read_warning = file_state.check_read(fp)
         if read_warning:
             return read_warning
-
-        if path.endswith(".ipynb"):
-            return "Error: This is a Jupyter notebook. Use the notebook_edit_tool instead of edit_file_tool."
 
         # Staleness warning (informational -- does not block edit)
         hash_warning = file_state.check_content_hash(fp)

@@ -137,7 +137,7 @@ User message -> [Channel] -> AgentLoop -> [Tool execution] -> LLM Provider
 - **Sub-agents**: spawn / list_subagents / check_subagent
 - **Communication**: message / ask_user
 - **Goal management**: write_goal / list_goals / write_event / list_events / declare_assumption / verify_assumption / declare_checkpoint / set_goal_priority / set_goal_deadline / add_goal_dependency / escalate_blocker
-- **Other**: cron / notebook_edit / diagnose / my
+- **Other**: cron / diagnose / my
 - **MCP**: External tools via MCP Server
 
 ---

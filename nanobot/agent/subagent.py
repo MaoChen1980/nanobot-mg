@@ -105,7 +105,6 @@ class SubagentManager:
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._task_statuses: dict[str, SubagentStatus] = {}
         self._session_tasks: dict[str, set[str]] = {}  # session_key -> {task_id, ...}
-        self._pending_subagent_questions: dict[str, asyncio.Future] = {}
         self._subagent_origin: dict[str, dict[str, str]] = {}  # task_id -> origin info
         self._subagent_label_to_id: dict[str, str] = {}  # label -> task_id
         self._subagent_inboxes: dict[str, "asyncio.Queue[str]"] = {}  # task_id -> inbox
@@ -199,14 +198,10 @@ class SubagentManager:
             # Register team communication tools
             from nanobot.agent.tools.notify_orchestrator import NotifyOrchestratorTool
             from nanobot.agent.tools.send_message import SendMessageTool
-            from nanobot.agent.tools.request_input import RequestOrchestratorInputTool
             tools.register(NotifyOrchestratorTool(
                 manager=self, subagent_id=task_id, subagent_label=label,
             ))
             tools.register(SendMessageTool(
-                manager=self, subagent_id=task_id, subagent_label=label,
-            ))
-            tools.register(RequestOrchestratorInputTool(
                 manager=self, subagent_id=task_id, subagent_label=label,
             ))
             system_prompt = build_subagent_prompt(
@@ -504,68 +499,3 @@ class SubagentManager:
         logger.info("Sent message to Subagent [{}]: {}", subagent_label, content[:80])
         return f"Message sent to Subagent '{subagent_label}'"
 
-    async def request_orchestrator_input(
-        self,
-        question: str,
-        subagent_id: str,
-        subagent_label: str,
-        context: str = "",
-        timeout: float = 300.0,
-    ) -> str:
-        """Blocking: Subagent asks Orchestrator for input, waits for response."""
-        if not self.bus:
-            return "Error: message bus not available"
-        origin = self._subagent_origin.get(subagent_id)
-        if not origin:
-            return "Error: Subagent origin not found"
-
-        # Create a Future and store it
-        future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
-        self._pending_subagent_questions[subagent_id] = future
-
-        # Notify Orchestrator — subagent is BLOCKED until responded
-        ctx = f"\nContext: {context}" if context else ""
-        await self._inject_to_orchestrator(
-            f"[Subagent '{subagent_label}' waits for your input] ⏸️ Subagent已阻塞\n"
-            f"Question: {question}{ctx}\n"
-            f"务必用 respond_to_subagent(subagent_id='{subagent_label}', response=...) 回复，否则Subagent会一直卡住。",
-            origin,
-            metadata={
-                "injected_event": "subagent_request",
-                "subagent_id": subagent_id,
-                "subagent_label": subagent_label,
-            },
-        )
-        logger.info("Subagent [{}] requested Orchestrator input: {}", subagent_label, question[:80])
-
-        # Wait for response with timeout
-        try:
-            response = await asyncio.wait_for(future, timeout=timeout)
-            return response
-        except asyncio.TimeoutError:
-            self._pending_subagent_questions.pop(subagent_id, None)
-            logger.warning("Subagent [{}] timed out waiting for Orchestrator input", subagent_label)
-            return "Error: Orchestrator did not respond in time."
-        except asyncio.CancelledError:
-            self._pending_subagent_questions.pop(subagent_id, None)
-            return "Request cancelled. Continuing autonomously."
-
-    def respond_to_subagent(self, subagent_id: str, response: str) -> str:
-        """Orchestrator responds to a Subagent's pending request."""
-        # Try subagent_id as label first, then as task_id
-        actual_id = self._subagent_label_to_id.get(subagent_id, subagent_id)
-        future = self._pending_subagent_questions.pop(actual_id, None)
-        if future is None:
-            # Also try the original subagent_id directly (could be task_id)
-            future = self._pending_subagent_questions.pop(subagent_id, None)
-        if future is None:
-            known = list(self._pending_subagent_questions.keys())
-            labels = {v: k for k, v in self._subagent_label_to_id.items()}
-            known_labels = [labels.get(uid, uid) for uid in known]
-            return (
-                f"Error: no pending question from Subagent '{subagent_id}'. "
-                f"Subagents with pending questions: {known_labels}"
-            )
-        future.set_result(response)
-        logger.info("Orchestrator responded to Subagent [{}]: {}", subagent_id, response[:80])
-        return f"Response delivered to Subagent '{subagent_id}'"

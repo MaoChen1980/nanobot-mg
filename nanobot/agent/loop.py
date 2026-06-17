@@ -40,10 +40,8 @@ from nanobot.agent.tools.filesystem import (
 from nanobot.agent.tools.list_subagents import ListSubagentsTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
 from nanobot.agent.tools.message import MessageTool
-from nanobot.agent.tools.notebook import NotebookEditTool
 from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.tools.respond_to_subagent import RespondToSubagentTool
 from nanobot.agent.tools.scan_project import ScanProjectTool
 from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.self import SelfTool
@@ -52,7 +50,6 @@ from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.send_message import SendMessageTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.spawn import SpawnTool
-from nanobot.agent.tools.spawn_many import SpawnManyTool
 from nanobot.agent.tools.stage import RestoreStageTool, SaveStageTool, ShowStagesTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
@@ -387,7 +384,6 @@ class AgentLoop:
             self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
         for cls in (GlobTool, GrepTool):
             self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
-        self.tools.register(NotebookEditTool(workspace=self.workspace, allowed_dir=allowed_dir))
         if self.web_config.enable:
             self.tools.register(
                 WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent)
@@ -411,11 +407,9 @@ class AgentLoop:
             from nanobot.agent.tools.tool_call_log import ToolCallLogTool
             self.tools.register(ToolCallLogTool(db=self._db))
         self.tools.register(SpawnTool(manager=self.subagents))
-        self.tools.register(SpawnManyTool(manager=self.subagents))
         self.tools.register(CheckSubagentTool(manager=self.subagents))
         self.tools.register(CancelSubagentTool(manager=self.subagents))
         self.tools.register(ListSubagentsTool(manager=self.subagents))
-        self.tools.register(RespondToSubagentTool(manager=self.subagents))
         self.tools.register(SendMessageTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(
@@ -464,14 +458,14 @@ class AgentLoop:
             include_timestamps=True, timezone=self.context.timezone
         )
 
-        for name in ("message_tool", "spawn_tool", "spawn_many_tool", "cron_tool", "self_tool", "assess_me_tool", "debug_root_cause_tool"):
+        for name in ("message_tool", "spawn_tool", "cron_tool", "self_tool", "assess_me_tool", "debug_root_cause_tool"):
             tool = self.tools.get(name)
             if tool is None:
                 continue
             sc = getattr(tool, "set_context", None)
             if not sc:
                 continue
-            if name in ("spawn_tool", "spawn_many_tool"):
+            if name == "spawn_tool":
                 sc(channel, chat_id, effective_key=effective_key)
             elif name == "cron_tool":
                 sc(channel, chat_id, metadata=metadata, session_key=session_key)
@@ -1010,7 +1004,7 @@ class AgentLoop:
                 "• Subagent 进展如何？用 list_subagents_tool / check_subagent_tool 检查状态，有没卡住或完成的\n"
                 "• 读 team_board.md — subagent 可能写了发现、踩坑、阻塞，需要你关注或同步\n"
                 "• 读 TREE.md — 检查 task backlog，决定下一步调度\n"
-                "• 需要你回复或指导某个 subagent 吗？→ respond_to_subagent_tool 处理阻塞等待的\n"
+                "• 需要你回复或指导某个 subagent 吗？→ send_message_tool 发送指令\n"
                 "• 发现信息不对称？→ send_message_tool 主动告知，不要等 subagent 来问\n"
                 "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
                 "\n"

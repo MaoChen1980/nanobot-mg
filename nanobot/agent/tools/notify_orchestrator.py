@@ -41,7 +41,7 @@ class NotifyOrchestratorTool(Tool):
             "- suggestion: Improvement suggestions (found a better approach)\n"
             "- blocker: Blocking issue requiring Orchestrator decision\n\n"
             "**Note**: This is fire-and-forget; execution continues after calling.\n"
-            "If you need a reply from the Orchestrator, use request_orchestrator_input."
+            "If you need a reply from the Orchestrator, the Orchestrator will re-spawn you."
         )
 
     async def execute(self, message: str, priority: str = "info", **kwargs: Any) -> str:

@@ -101,10 +101,10 @@ async def test_send_to_subagent_unknown_label(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_spawn_many_duplicate_label_rejected(tmp_path):
-    """spawn_many rejects duplicate labels."""
+async def test_spawn_duplicate_label_rejected(tmp_path):
+    """spawn rejects duplicate labels."""
     from nanobot.agent.subagent import SubagentManager
-    from nanobot.agent.tools.spawn_many import SpawnManyTool
+    from nanobot.agent.tools.spawn import SpawnTool
     from nanobot.bus.queue import MessageBus
 
     bus = MessageBus()
@@ -117,7 +117,7 @@ async def test_spawn_many_duplicate_label_rejected(tmp_path):
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
     )
 
-    tool = SpawnManyTool(manager=mgr)
+    tool = SpawnTool(manager=mgr)
     result = await tool.execute(
         tasks=[
             {"task": "do thing A", "label": "same-label"},

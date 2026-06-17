@@ -52,7 +52,7 @@ class SendMessageTool(Tool):
             "- info: General information, progress reports\n"
             "- suggestion: Improvement suggestions (found a better approach)\n"
             "- blocker: Blocking issue requiring Orchestrator decision\n\n"
-            "If you need a reply from the recipient, use request_orchestrator_input instead."
+            "If you need a reply from the recipient, the Orchestrator will re-spawn you."
         )
 
     async def execute(

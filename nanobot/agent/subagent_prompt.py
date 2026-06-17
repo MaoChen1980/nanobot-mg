@@ -210,8 +210,12 @@ def build_subagent_prompt(
         "### Constraints\n\n"
         "- **No nested spawn** — you cannot spawn sub-agents\n"
         "- **No ask_user** — you cannot block waiting for input\n"
+        "- **No request_orchestrator_input_tool** — you cannot block waiting for the Orchestrator\n"
         "- **No conversation history** — you only see the context snapshot from spawn\n"
-        "- **Fixed iteration limit** — your execution budget is capped"
+        "- **Fixed iteration limit** — your execution budget is capped\n"
+        "- **Blocked? Fail directly** — if you cannot complete the task, report the blocker via "
+        "`send_message_tool(recipient='main', ...)` with what you tried and what's missing, "
+        "then stop. The Orchestrator will re-spawn with better instructions."
     )
 
     # Runtime context (always last — dynamic content for KV cache preservation)

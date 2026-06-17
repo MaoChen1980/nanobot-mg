@@ -92,7 +92,6 @@ messages → drop_orphan_tool_results → backfill_missing_tool_results → snip
 | `grep_tool` | 文本搜索 | 支持正则 |
 | `search_text_tool` | 语义文本搜索 | 嵌入搜索 |
 | `explore_module_tool` | 探索 Python 模块 | |
-| `notebook_edit_tool` | 编辑 Jupyter notebook | |
 | `git_inspect` | Git 历史/差异 | |
 
 ### 代码分析

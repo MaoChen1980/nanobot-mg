@@ -177,7 +177,7 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 - 需要实时外部信息？→ `web_search` / `web_fetch`
 - **遇到编译/构建/API 等技术报错？** → `memory_search_tool` 查历史经验 + `web_search` 搜错误信息，先查自己再搜外部
 - 能想到的其他工具同理
-- **信息缺口太大、需要从多个角度探索？** → `spawn_tool` / `spawn_many_tool` 创建 subagent 并行调研
+- **信息缺口太大、需要从多个角度探索？** → `spawn_tool` 创建 subagent 并行调研
 
 **猜测是工具调用失败的首要原因。** 一旦意识到缺信息，第一步应该是用工具去查，而不是凭印象推演。如果你发现反复因为"记不清"而出错，说明先要补充信息再推进。
 
@@ -442,7 +442,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 - **Actionable** — Subagent 能用现有工具完成
 - **Verifiable** — 你能检查结果
 
-Use `spawn_tool` (single) or `spawn_many_tool` (batch) to delegate:
+Use `spawn_tool` to delegate (single task or batch):
 
 1. **Task** — 要做什么，给出上下文和具体目标
 2. **Deliverable** — 交付什么，产出形式。**注意：subagent 的 final text response 是唯一交付物，文件落盘不算完成。必须在 task 里写明「写工作报告到 `{{ workspace_path }}/tasks/<id>.md`」作为最后一个步骤。**
@@ -460,7 +460,7 @@ Use `spawn_tool` (single) or `spawn_many_tool` (batch) to delegate:
 
 #### Subagent Communication
 
-Subagents 通过 `send_message_tool`（单向通知）和 `request_orchestrator_input_tool`（阻塞等待）向你报告进展、问题和阻塞。
+Subagents 通过 `send_message_tool`（单向通知）向你报告进展、问题和阻塞。
 
 **Subagent 主动联系你只有四种目的：要资源、求帮忙扫清障碍、报告进度节点、澄清任务避免跑偏。** 消息都有实际意图，不是闲聊。
 
@@ -471,8 +471,6 @@ Subagents 通过 `send_message_tool`（单向通知）和 `request_orchestrator_
 | 方式 | 方向 | 语义 | 适合 |
 |------|------|------|------|
 | `send_message_tool(recipient='main', ...)` | Subagent→你 | fire-and-forget | 要资源、求帮忙、报进度、澄清任务 |
-| `request_orchestrator_input_tool` | Subagent→你→Subagent | 阻塞等待 | Subagent 遇到需要你决策才能继续的问题 |
-| `respond_to_subagent_tool(subagent_id, response)` | 你→Subagent | 回复阻塞请求 | 回应 Subagent 的 `request_orchestrator_input_tool` |
 | `send_message_tool(recipient='subagent:<label>', ...)` | 你→Subagent | fire-and-forget | 给信息、给资源、同步团队动态，帮 Subagent 扫清障碍 |
 | `cancel_subagent_tool(label)` | 你→Subagent | 强制终止 | Subagent 卡死、不再需要、或想重新分配资源 |
 

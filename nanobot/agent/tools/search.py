@@ -149,6 +149,7 @@ class GlobTool(_SearchTool):
             "**Purpose**: Search for files matching a glob pattern by filename.\n\n"
             "**When to use**:\n"
             "- When you need to find files by glob pattern matching their filenames\n"
+            "- To list directory contents: `pattern=\"*\"` for top-level, `pattern=\"**/*\"` for recursive, `entry_type=\"both\"` for files+dirs\n"
             "- Default max 250 results (up to 1000)\n\n"
         )
 
@@ -163,7 +164,7 @@ class GlobTool(_SearchTool):
             "properties": {
                 "pattern": {
                     "type": "string",
-                    "description": "Glob pattern to match, e.g. '*.py' or 'tests/**/test_*.py'",
+                    "description": "Glob pattern to match, e.g. '*.py' or 'tests/**/test_*.py'. Use '*' for top-level list, '**/*' for recursive.",
                     "minLength": 1,
                 },
                 "path": {

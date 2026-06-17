@@ -107,24 +107,6 @@ class TestEditCreateFile:
 
 
 # ---------------------------------------------------------------------------
-# .ipynb detection
-# ---------------------------------------------------------------------------
-
-class TestEditIpynbDetection:
-    """edit_file should refuse .ipynb and suggest notebook_edit."""
-
-    @pytest.fixture()
-    def tool(self, tmp_path):
-        return EditFileTool(workspace=tmp_path)
-
-    @pytest.mark.asyncio
-    async def test_ipynb_rejected_with_suggestion(self, tool, tmp_path):
-        f = tmp_path / "analysis.ipynb"
-        f.write_text('{"cells": []}', encoding="utf-8")
-        result = await tool.execute(path=str(f), old_text="x", new_text="y")
-        assert "notebook" in result.lower()
-
-
 # ---------------------------------------------------------------------------
 # Path suggestion on not-found
 # ---------------------------------------------------------------------------
