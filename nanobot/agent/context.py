@@ -10,6 +10,7 @@ import platform
 import re
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass
 from importlib.resources import files as pkg_files
 from pathlib import Path
@@ -445,6 +446,19 @@ class ContextBuilder:
             return ""
         return content.strip()
 
+    def _build_user_feedback_section(self) -> str:
+        """Read workspace/framework/user_feedback.md for system prompt injection.
+
+        Written by MemoryExtractor._process_user_feedback() — aggregates
+        user correction/rejection signals detected by SelfDetectHook into
+        structured patterns the agent can learn from.
+        """
+        path = self.workspace / "framework" / "user_feedback.md"
+        content = self._cached_read_text(path)
+        if not content:
+            return ""
+        return content.strip()
+
     # -- vector-indexed memory -------------------------------------------------
 
     def _build_memory_section(self) -> str:
@@ -474,6 +488,13 @@ class ContextBuilder:
                 heading = name.replace(".md", "").title()
                 parts.append(f"### {heading}\n\n{text}")
 
+        # Track injection for quality stats
+        self._track_memory_injection(parts)
+
+        memory_quality = self._build_memory_quality_note()
+        if memory_quality:
+            parts.append(memory_quality)
+
         if not parts:
             return ""
         return (
@@ -483,6 +504,44 @@ class ContextBuilder:
             "learned from past work. Follow these guidelines in your responses.\n\n"
             + "\n\n".join(parts)
         )
+
+    def _track_memory_injection(self, parts: list[str]) -> None:
+        """Log which memory files are being injected (for quality tracking)."""
+        path = self.workspace / "framework" / ".memory_usage.json"
+        try:
+            old: list[dict] = json.loads(self._cached_read_text(path) or "[]")
+        except (json.JSONDecodeError, OSError):
+            old = []
+        entry = {
+            "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "files_injected": len(parts),
+        }
+        old.append(entry)
+        if len(old) > 100:
+            old = old[-100:]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+
+    def _build_memory_quality_note(self) -> str:
+        """Return a note about memory quality from injection history."""
+        path = self.workspace / "framework" / ".memory_usage.json"
+        try:
+            data: list[dict] = json.loads(self._cached_read_text(path) or "[]")
+        except (json.JSONDecodeError, OSError):
+            return ""
+        if len(data) < 3:
+            return ""
+        recent = data[-20:]
+        total = sum(e.get("files_injected", 0) for e in recent)
+        avg = total / len(recent)
+        note = (
+            f"#### Memory Usage Note\n\n"
+            f"Memory injected {avg:.0f} section(s) per turn on average "
+            f"(last {len(recent)} injections). "
+            f"If you notice outdated or irrelevant memories, use the memory tools "
+            f"to update or remove them.\n"
+        )
+        return note
 
     @staticmethod
     def _format_vector_results(results: list[dict]) -> str:
@@ -705,6 +764,10 @@ class ContextBuilder:
             logger.info("build_messages: _build_self_findings_section took {:.0f}ms", _elapsed)
         if findings_block:
             session_parts.append(findings_block)
+
+        feedback_block = self._build_user_feedback_section()
+        if feedback_block:
+            session_parts.append(feedback_block)
 
         if session_parts:
             sys_static = sys_static + "\n\n" + "\n\n".join(session_parts)

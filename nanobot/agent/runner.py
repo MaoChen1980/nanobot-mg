@@ -156,12 +156,18 @@ class AgentRunResult:
 
 @dataclass(slots=True)
 class _ToolLoopState:
-    """State tracking for tool-call loop recovery (parameter validation errors)."""
+    """State tracking for tool-call loop recovery (any tool errors + empty results)."""
+    # Per-tool error tracking
     tool_name: str = ""
     error_sig: str = ""
     count: int = 0
     level: int = 0  # 0=normal, 1=assess_done, 2=compress_done, 3=max
     checked_iteration: int = -1
+    # Running error tally (any tool, any error)
+    consecutive_errors: int = 0
+    # Empty result tracking
+    empty_tool: str = ""
+    empty_count: int = 0
 
 
 class AgentRunner:
@@ -363,6 +369,7 @@ class AgentRunner:
         _llm_request_count = 0
         _doubt_injected = False
         _tool_loop_state = _ToolLoopState()
+        _correction_handled = False  # once-per-run guard for user correction detection
 
         _current_messages_for_subagent.set(messages)
 
@@ -653,7 +660,7 @@ class AgentRunner:
                 length_recovery_count = 0
                 await hook.after_iteration(context)
 
-                # Tool loop recovery: detect repeated param validation errors
+                # Tool loop recovery: detect repeated tool errors
                 if tool_calls and not fatal_error:
                     recovery_action = await self._check_tool_loop(
                         _tool_loop_state, tool_calls, new_events, messages, iteration,
@@ -699,6 +706,21 @@ class AgentRunner:
                         context.error = final_content
                         await hook.after_iteration(context)
                         break
+
+                # User correction detection (lightweight, once per run)
+                if (not fatal_error
+                        and not _correction_handled
+                        and self._detect_user_corrections(messages)):
+                    _correction_handled = True
+                    logger.info("User correction detected, injecting assess_me (iter={})", iteration)
+                    assess_text = await _run_assess_me(messages)
+                    if assess_text:
+                        for i in range(len(messages) - 1, -1, -1):
+                            if is_assessment_message(messages[i]):
+                                messages.pop(i)
+                        messages.append(build_assessment_message(assess_text))
+                        had_injections = True
+
                 continue
 
             if response.has_tool_calls:
@@ -1023,7 +1045,12 @@ class AgentRunner:
         messages: list[dict],
         iteration: int,
     ) -> str | None:
-        """Check for repeated parameter validation errors.
+        """Check for sustained tool errors, repeated empty results, and param validation loops.
+
+        Detects three patterns:
+        1. Same tool + same error repeated → param validation / consistent failure
+        2. Any tool errors across consecutive iterations → sustained failure mode
+        3. Same tool returning empty/near-empty repeatedly → useless result loop
 
         Returns None (no action), "assess_me", "compress", or "force_stop".
         """
@@ -1031,38 +1058,90 @@ class AgentRunner:
             return None
         state.checked_iteration = iteration
 
-        # Collect parameter validation errors only
-        param_errors: list[tuple[str, str]] = []
+        # ── Pattern 1: same tool + same error repeated ──
+        tool_errors: list[tuple[str, str]] = []
+        empty_results: list[str] = []
         for tc, ev in zip(tool_calls, new_events):
+            if ev.get("status") == "error":
+                detail = ev.get("detail", "")
+                if "Invalid parameters" in detail:
+                    tool_errors.append((tc.name, detail))
+                else:
+                    tool_errors.append((tc.name, detail[:80]))
+            # Pattern 3 candidate: very short results (likely empty/uninformative)
             detail = ev.get("detail", "")
-            if ev.get("status") == "error" and "Invalid parameters" in detail:
-                param_errors.append((tc.name, detail))
+            if ev.get("status") == "ok" and len(detail) < 20 and not detail.startswith("Error"):
+                empty_results.append(tc.name)
 
-        if not param_errors:
+        # Pattern 1: per-tool param validation loop
+        if tool_errors:
+            # Consolidate: merge same-tool errors
+            from collections import Counter
+            err_counts: Counter = Counter(f"{name}:{sig[:40]}" for name, sig in tool_errors)
+            worst_key, worst_count = err_counts.most_common(1)[0]
+            tool_name = worst_key.split(":")[0]
+            # Use the original (untruncated) sig for cross-iteration comparison
+            error_sig_full = next((sig for name, sig in tool_errors if name == tool_name and f"{name}:{sig[:40]}" == worst_key), "")
+
+            if tool_name == state.tool_name and error_sig_full == state.error_sig:
+                state.count += worst_count
+            else:
+                # Different tool/error → start new tracking (resets level)
+                state.tool_name = tool_name
+                state.error_sig = error_sig_full
+                state.count = worst_count
+                state.level = 0
+
+            if state.count >= 3:
+                return self._tool_loop_escalate(state)
+        else:
+            # No errors in this iteration → reset Pattern 1 state
             state.tool_name = ""
             state.error_sig = ""
             state.count = 0
             state.level = 0
-            return None
 
-        tool_name = param_errors[0][0]
-        error_sig = param_errors[0][1][:80]
-
-        if tool_name == state.tool_name and error_sig == state.error_sig:
-            state.count += 1
+        # Pattern 2: consecutive errors across any tools (sustained failure)
+        has_any_error = any(ev.get("status") == "error" for ev in new_events)
+        if has_any_error:
+            state.consecutive_errors += 1
+            if state.consecutive_errors == 5:
+                logger.info(
+                    "Sustained tool failure detected: {} consecutive errors",
+                    state.consecutive_errors,
+                )
+                return "assess_me"
         else:
-            state.tool_name = tool_name
-            state.error_sig = error_sig
-            state.count = 1
-            state.level = 0
-            return None
+            state.consecutive_errors = 0
 
-        if state.count < 3:
-            return None
+        # Pattern 3: repeated empty results from same tool
+        if empty_results:
+            et = empty_results[0]
+            if et == state.empty_tool:
+                state.empty_count += 1
+            else:
+                state.empty_tool = et
+                state.empty_count = 1
 
-        # Threshold crossed — escalate
+            if state.empty_count >= 4:
+                logger.info(
+                    "Repeated empty result: {} ({}x)", state.empty_tool, state.empty_count,
+                )
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"[Repeated empty result on '{state.empty_tool}'. "
+                        f"This tool keeps returning nothing useful — try a different approach.]"
+                    ),
+                })
+                state.empty_count = 0
+                return "assess_me"
+
+        return None
+
+    def _tool_loop_escalate(self, state: _ToolLoopState) -> str:
+        """Escalate through tool loop recovery levels."""
         state.count = 0
-
         if state.level == 0:
             state.level = 1
             return "assess_me"
@@ -1073,6 +1152,30 @@ class AgentRunner:
             state.level = 3
             return "force_stop"
         return None
+
+    @staticmethod
+    def _detect_user_corrections(messages: list[dict]) -> bool:
+        """Quick check for user correction signals in latest messages.
+
+        Returns True if recent user message contains correction/rejection
+        patterns that warrant a self-assessment. Lightweight version of
+        what SelfDetectHook does in more detail.
+        """
+        _CORRECTION_PATTERNS = (
+            "不对", "不是", "错了", "不是这个", "不要", "别",
+            "wrong", "incorrect", "not what I", "you misunderstood",
+            "重新", "重来", "停",
+        )
+        for msg in reversed(messages[-20:]):
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content", "")
+            if not isinstance(content, str):
+                continue
+            for pat in _CORRECTION_PATTERNS:
+                if pat in content:
+                    return True
+        return False
 
     @staticmethod
     def _append_model_error_placeholder(messages: list[dict[str, Any]]) -> None:

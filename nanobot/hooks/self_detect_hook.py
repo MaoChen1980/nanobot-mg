@@ -116,28 +116,97 @@ def _fmt_args(args: dict) -> str:
 
 
 # --- User negative signal patterns ---------------------------------------------
+# Extended patterns: Chinese + English, ordered by specificity (more specific first).
 
 _USER_NEGATIVE_PATTERNS: dict[str, tuple[str, ...]] = {
-    "rejection": ("不要", "别", "不对", "不是", "不是这个"),
-    "correction": ("错了", "我说的是", "我问的是", "你理解错了", "不是这个意思"),
-    "redo": ("重新", "重来", "再来", "换一个"),
-    "interruption": ("停", "stop", "够了"),
+    "rejection": (
+        "不要", "别", "不对", "不是", "不是这个", "不行",
+        "no", "nope", "wrong", "incorrect", "not what I",
+    ),
+    "correction": (
+        "错了", "我说的是", "我问的是", "你理解错了", "不是这个意思",
+        "you misunderstood", "that's not", "actually", "correction",
+        "let me clarify", "what I meant", "重新来", "不是这样的",
+    ),
+    "redo": (
+        "重新", "重来", "再来", "换一个", "重做",
+        "redo", "try again", "start over", "from scratch",
+    ),
+    "interruption": (
+        "停", "stop", "够了", "别说了", "别做了", "停下",
+        "enough", "cancel", "abort", "hold on",
+    ),
+    "confusion": (
+        "不明白", "没看懂", "什么意思", "你确定",
+        "confused", "not clear", "doesn't make sense", "huh",
+    ),
 }
 
+# Feedback file written by _write_user_corrections() — consumed by MemoryExtractor.
+_FEEDBACK_FILE = Path.home() / ".nanobot" / "self_improve" / "user_corrections.jsonl"
+_MAX_FEEDBACK_CONTEXT = 200  # max chars of message context preserved per signal
 
-def _detect_user_signals(messages: list[dict]) -> dict[str, int]:
-    """Scan real user messages for negative feedback signals."""
-    counts: dict[str, int] = {}
+
+def _detect_user_signals(messages: list[dict]) -> list[dict]:
+    """Scan real user messages for negative feedback signals.
+
+    Returns structured list with type, matched keyword, context excerpt, and timestamp.
+    """
+    signals: list[dict] = []
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     for msg in messages:
         if msg.get("role") != "user":
             continue
         content = msg.get("content", "")
         if not isinstance(content, str) or not content:
             continue
-        for signal, keywords in _USER_NEGATIVE_PATTERNS.items():
-            if any(kw in content for kw in keywords):
-                counts[signal] = counts.get(signal, 0) + 1
+        for signal_type, keywords in _USER_NEGATIVE_PATTERNS.items():
+            for kw in keywords:
+                if kw in content:
+                    idx = content.index(kw)
+                    start = max(0, idx - 40)
+                    end = min(len(content), idx + len(kw) + 40)
+                    context = content[start:end].strip()
+                    if len(context) > _MAX_FEEDBACK_CONTEXT:
+                        context = context[:_MAX_FEEDBACK_CONTEXT] + "..."
+                    signals.append({
+                        "type": signal_type,
+                        "matched": kw,
+                        "context": context,
+                        "time": now,
+                    })
+                    break  # one match per message per signal type
+    return signals
+
+
+def _aggregate_signals(signal_records: list[dict]) -> dict[str, int]:
+    """Aggregate structured signal records back to per-type counts."""
+    counts: dict[str, int] = {}
+    for s in signal_records:
+        t = s["type"]
+        counts[t] = counts.get(t, 0) + 1
     return counts
+
+
+def _write_user_corrections(signal_records: list[dict]) -> None:
+    """Persist correction/rejection signals to a structured JSONL file.
+
+    Written to ``~/.nanobot/self_improve/user_corrections.jsonl``.
+    MemoryExtractor reads this file to learn from user corrections.
+
+    Only strong-correction signals are persisted (correction + rejection),
+    to avoid noise from casual redo/confusion patterns.
+    """
+    strong = [s for s in signal_records if s["type"] in ("correction", "rejection")]
+    if not strong:
+        return
+    try:
+        _FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        lines = "\n".join(json.dumps(s, ensure_ascii=False) for s in strong)
+        with open(_FEEDBACK_FILE, "a", encoding="utf-8") as f:
+            f.write(lines + "\n")
+    except OSError:
+        logger.debug("SelfDetectHook: failed to write user_corrections.jsonl")
 
 
 def _read_resolved_ids() -> set[str]:
@@ -422,14 +491,17 @@ class SelfDetectHook(AgentHook):
         seq_summary = "\n".join(seq_lines)
 
         # User negative signal aggregation
-        signal_counts: dict[str, int] = {}
+        all_signals: list[dict] = []
         for e in entries:
-            for sig, cnt in e.get("user_signals", {}).items():
-                signal_counts[sig] = signal_counts.get(sig, 0) + cnt
+            sigs = e.get("user_signals", [])
+            if isinstance(sigs, list):
+                all_signals.extend(sigs)
+        signal_counts = _aggregate_signals(all_signals)
         signal_str = ""
         if signal_counts:
             parts = [f"{k}={v}" for k, v in sorted(signal_counts.items())]
             signal_str = f"  User negative signals: {', '.join(parts)}\n"
+        _write_user_corrections(all_signals)
 
         metrics_text = (
             f"  Iterations: {iteration_range} @ {time_str}\n"
