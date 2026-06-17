@@ -14,6 +14,7 @@ Log file: ~/.nanobot/self_improve/self_review_log.jsonl
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,17 +29,27 @@ try:
 except ImportError:
     _HAS_FCNTL = False
 
+try:
+    import msvcrt as _msvcrt
+    _HAS_MSVCRT = True
+except ImportError:
+    _HAS_MSVCRT = False
+
 
 def _lock_file(f, exclusive: bool = True) -> None:
-    """Acquire an advisory lock on *f* (fcntl.flock on Unix, no-op on Windows)."""
+    """Acquire an advisory lock on *f*."""
     if _HAS_FCNTL:
         _fcntl.flock(f.fileno(), _fcntl.LOCK_EX if exclusive else _fcntl.LOCK_SH)
+    elif _HAS_MSVCRT:
+        _msvcrt.locking(f.fileno(), _msvcrt.LK_NBLCK, 1)
 
 
 def _unlock_file(f) -> None:
-    """Release an advisory lock on *f* (fcntl.flock on Unix, no-op on Windows)."""
+    """Release an advisory lock on *f*."""
     if _HAS_FCNTL:
         _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+    elif _HAS_MSVCRT:
+        _msvcrt.locking(f.fileno(), _msvcrt.LK_UNLCK, 1)
 
 
 class SelfLogHook(AgentHook):
@@ -51,23 +62,23 @@ class SelfLogHook(AgentHook):
 
     LOG_FILE = Path.home() / ".nanobot" / "self_improve" / "self_review_log.jsonl"
 
-    # Patterns that count as "discomfort" signals
-    DISCOMFORT_PATTERNS = [
-        "error",
-        "failed",
-        "not found",
-        "permission denied",
-        "timeout",
-        "empty result",
-        "no such file",
-        "does not exist",
+    # Patterns that count as "discomfort" signals (word-bounded regex to avoid false positives)
+    DISCOMFORT_PATTERNS: list[tuple[str, re.Pattern]] = [
+        ("error", re.compile(r"\b[a-zA-Z]*[Ee]rror\b")),  # catches both "error" and "ValueError"
+        ("failed", re.compile(r"\bfailed\b", re.IGNORECASE)),
+        ("not found", re.compile(r"\bnot found\b", re.IGNORECASE)),
+        ("permission denied", re.compile(r"\bpermission denied\b", re.IGNORECASE)),
+        ("timeout", re.compile(r"\btimeout\b", re.IGNORECASE)),
+        ("empty result", re.compile(r"\bempty result\b", re.IGNORECASE)),
+        ("no such file", re.compile(r"\bno such file\b", re.IGNORECASE)),
+        ("does not exist", re.compile(r"\bdoes not exist\b", re.IGNORECASE)),
     ]
 
     async def after_iteration(self, context: AgentHookContext) -> None:
         try:
             self._capture(context)
         except Exception:
-            logger.debug("SelfLogHook.after_iteration failed silently")
+            logger.warning("SelfLogHook.after_iteration failed", exc_info=True)
 
     def _capture(self, context: AgentHookContext) -> None:
         # Build basic metrics from context
@@ -99,13 +110,14 @@ class SelfLogHook(AgentHook):
         completion_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
 
-        # Aggregate duration from tool results (each result dict may contain duration_ms)
+        # Aggregate duration from tool_events (event dicts contain duration_ms, not tool_results)
+        # tool_results = raw tool return values; tool_events = {"name", "status", "detail", "duration_ms"}
         duration_sec = 0.0
-        for r in context.tool_results or []:
-            if isinstance(r, dict) and r.get("duration_ms"):
-                duration_sec += r["duration_ms"] / 1000.0
-            elif hasattr(r, "duration_ms") and r.duration_ms:
-                duration_sec += r.duration_ms / 1000.0
+        for ev in context.tool_events or []:
+            if isinstance(ev, dict) and ev.get("duration_ms"):
+                duration_sec += ev["duration_ms"] / 1000.0
+            elif hasattr(ev, "duration_ms") and ev.duration_ms:
+                duration_sec += ev.duration_ms / 1000.0
 
         # cost_usd: runner should set context.cost_usd; fallback to 0 until then
         cost_usd = getattr(context, "cost_usd", 0.0) or 0.0
@@ -131,35 +143,33 @@ class SelfLogHook(AgentHook):
         self._append_log(entry)
 
     def _is_error_result(self, result: object) -> bool:
-        """Check if a tool result looks like an error."""
+        """Check if a tool result looks like an error (substring, high-recall for counting)."""
         if result is None:
             return False
         s = str(result).lower()
-        return any(p in s for p in ["error", "exception", "failed", "timeout"])
+        return any(p in s for p in ("error", "exception", "failed", "timeout", "denied"))
 
-    # ⚠️ NOTE: `_is_empty_result` checks `str(result).strip()` against literal
-    # strings like `""` and `"[]"`. When `result` is a dict like `{"result": ""}`,
-    # `str(dict)` produces `"{'result': ''}"` — NOT an empty string.
-    # The discomfort-signal detection (`_detect_discomfort`) is the meaningful
-    # signal here; `_is_empty_result` is secondary.
     def _is_empty_result(self, result: object) -> bool:
         """Check if a tool result is empty or null."""
         if result is None:
             return True
+        if isinstance(result, dict):
+            return not any(v for v in result.values() if v is not None and v != "")
         s = str(result).strip()
         return s in ("", "None", "[]", "{}", "null")
 
     def _detect_discomfort(self, result: object) -> str | None:
-        """Detect discomfort signals in tool results."""
+        """Detect discomfort signals in tool results (word-bounded regex)."""
         if result is None:
             return None
-        s = str(result).lower()
-        for pattern in self.DISCOMFORT_PATTERNS:
-            if pattern in s:
-                return pattern
+        s = str(result) if isinstance(result, str) else str(result)
+        for name, pattern in self.DISCOMFORT_PATTERNS:
+            if pattern.search(s):
+                return name
         return None
 
     MAX_LOG_AGE_SECONDS = 86400  # 1 day
+    MAX_LOG_LINES = 10000
     _rotate_counter = 0
 
     def _append_log(self, entry: dict) -> None:
@@ -175,20 +185,10 @@ class SelfLogHook(AgentHook):
         if self._rotate_counter % 10 == 0:
             self._maybe_rotate()
 
-    def _maybe_rotate(self) -> None:
-        """Purge entries older than MAX_LOG_AGE_SECONDS."""
-        now = datetime.now(timezone.utc).timestamp()
-        cutoff = now - self.MAX_LOG_AGE_SECONDS
-        try:
-            with open(self.LOG_FILE, "r", encoding="utf-8") as f:
-                _lock_file(f, exclusive=False)
-                try:
-                    lines = f.readlines()
-                finally:
-                    _unlock_file(f)
-        except OSError:
-            return
-        kept = []
+    @staticmethod
+    def _filter_log_lines(lines: list[str], cutoff: float) -> list[str]:
+        """Filter log lines by cutoff timestamp, keep unparsable lines."""
+        kept: list[str] = []
         for line in lines:
             try:
                 entry = json.loads(line)
@@ -198,13 +198,27 @@ class SelfLogHook(AgentHook):
                     kept.append(line)
             except (ValueError, KeyError, TypeError):
                 kept.append(line)
-        if len(kept) == len(lines):
-            return
+        return kept
+
+    def _maybe_rotate(self) -> None:
+        """Purge old entries. Exclusive lock held across read+filter+write to avoid races."""
+        now_ts = datetime.now(timezone.utc).timestamp()
+        cutoff = now_ts - self.MAX_LOG_AGE_SECONDS
         try:
-            with open(self.LOG_FILE, "w", encoding="utf-8") as f:
+            with open(self.LOG_FILE, "r+", encoding="utf-8") as f:
                 _lock_file(f, exclusive=True)
                 try:
+                    lines = f.readlines()
+                    if not lines:
+                        return
+                    kept = self._filter_log_lines(lines, cutoff)
+                    if len(kept) > self.MAX_LOG_LINES:
+                        kept = kept[-self.MAX_LOG_LINES // 2:]
+                    if len(kept) == len(lines):
+                        return
+                    f.seek(0)
                     f.writelines(kept)
+                    f.truncate()
                 finally:
                     _unlock_file(f)
         except OSError:

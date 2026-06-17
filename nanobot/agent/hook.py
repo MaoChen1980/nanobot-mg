@@ -27,8 +27,8 @@ class AgentHookContext:
     stop_reason: str | None = None
     error: str | None = None
     workspace: Path | None = None
-    # Per-iteration aggregates (populated by runner before hooks run)
-    duration_sec: float = 0.0  # sum of all tool call durations in this iteration
+    # Per-iteration aggregate
+    duration_sec: float = 0.0  # total tool call duration in this iteration (set by SelfLogHook)
     cost_usd: float = 0.0  # estimated LLM call cost for this iteration
 
 

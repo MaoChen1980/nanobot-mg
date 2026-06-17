@@ -989,7 +989,7 @@ class AgentRunner:
         tool_name: str, params: dict[str, Any] | None,
         result: str, success: bool, error: str | None, duration_ms: int | None = None,
     ) -> None:
-        if self._db is None:
+        if self._db is None or not session_key:
             return
         try:
             self._db.insert_tool_call(
