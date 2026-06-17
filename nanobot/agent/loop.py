@@ -769,11 +769,14 @@ class AgentLoop:
                 build_debug_root_cause_message,
             )
             try:
+                logger.info("assess_me call start")
                 result = await assess_me(messages)
+                logger.info("assess_me call done (result_len={})", len(result) if result else 0)
             except Exception:
                 logger.exception("assess_me failed")
                 return False
             if not result:
+                logger.info("assess_me call returned empty")
                 return False
             # Keep at most one assess_me message — remove all stale ones before injecting new
             for i in range(len(messages) - 1, -1, -1):

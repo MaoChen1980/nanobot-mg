@@ -286,8 +286,8 @@ class AgentRunner:
             return injected
         except asyncio.TimeoutError:
             logger.warning(
-                "assess_me_callback timed out (session_key={})",
-                spec.session_key,
+                "assess_me_callback (assess_me + debug_root_cause) timed out after {}s (session_key={})",
+                timeout, spec.session_key,
             )
             return False
 
@@ -1000,7 +1000,7 @@ class AgentRunner:
             # assess_me times out, break normally.
             if not _doubt_injected and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _doubt_injected = True
-                await self._run_assess_callback(spec, messages, timeout=60)
+                await self._run_assess_callback(spec, messages, timeout=120)
                 logger.info(
                     "End-of-loop assess done (iter={}, session={})",
                     iteration, spec.session_key or "default",
