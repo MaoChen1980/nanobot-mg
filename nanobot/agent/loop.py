@@ -28,7 +28,6 @@ from nanobot.agent.tools.check_subagent import CheckSubagentTool
 from nanobot.agent.tools.conversation_search import ConversationSearchTool
 from nanobot.agent.tools.cron import CronTool
 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
-from nanobot.agent.tools.diagnose_codebase_tool import DiagnoseTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.filesystem import (
     DeleteFileTool,
@@ -398,7 +397,6 @@ class AgentLoop:
         self.tools.register(ShowStagesTool())
         self.tools.register(RestoreStageTool())
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
-        self.tools.register(DiagnoseTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
         self.tools.register(ReframeTool(workspace=self.workspace))
         self.tools.register(DebugRootCauseTool())

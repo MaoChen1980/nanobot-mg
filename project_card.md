@@ -84,7 +84,6 @@ E:\claude\nanobot-mg/
         cron.py (20KB)
         danger.py (2KB)
         debug_root_cause.py (12KB)
-        diagnose_codebase_tool.py (8KB)
         edit_files.py (19KB)
         explore_module.py (19KB)
         file_state.py (7KB)

@@ -218,11 +218,6 @@ class TestSpecificSchemaDefaults:
         schema = GrepTool().parameters
         assert schema["properties"]["offset"]["default"] == 0
 
-    def test_diagnose_codebase_required(self):
-        from nanobot.agent.tools.diagnose_codebase_tool import DiagnoseTool
-        schema = DiagnoseTool._tool_parameters_schema
-        assert "error" in schema.get("required", [])
-
     def test_semantic_search_required(self):
         from nanobot.agent.tools.semantic_search import SearchTextTool
         schema = SearchTextTool._tool_parameters_schema

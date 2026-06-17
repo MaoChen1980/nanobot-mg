@@ -129,7 +129,6 @@ class DebugRootCauseTool(Tool):
         "layer stripping, outlier analysis, force failure, peer review) + concrete "
         "things to examine. You decide which tools to use for the actual investigation.\n\n"
         "**How it differs from other tools**:\n"
-        "- `diagnose_codebase_tool` searches code + git history for matching error text\n"
         "- `assess_me_tool` audits what you know vs assume (cognition audit)\n"
         "- `reframe_tool` re-states the problem cleanly for a fresh perspective\n"
         "- `debug_root_cause_tool` gives you a **systematic investigation strategy** — "

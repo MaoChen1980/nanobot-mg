@@ -18,7 +18,6 @@ from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.stage import SaveStageTool, ShowStagesTool, RestoreStageTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
-from nanobot.agent.tools.diagnose_codebase_tool import DiagnoseTool
 from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
 from nanobot.agent.tools.assess_me_tool import AssessMeTool
@@ -58,7 +57,6 @@ def build_subagent_tools(
     tools.register(ShowStagesTool())
     tools.register(RestoreStageTool())
     tools.register(AnalyzeTool(workspace=workspace, allowed_dir=allowed_dir))
-    tools.register(DiagnoseTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(ReframeTool(workspace=workspace))
     tools.register(DebugRootCauseTool())
     tools.register(AssessMeTool())

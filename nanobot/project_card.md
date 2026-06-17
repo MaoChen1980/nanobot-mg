@@ -49,7 +49,6 @@ E:\claude\nanobot-mg\nanobot/
       conversation_search.py (6KB)
       cron.py (20KB)
       debug_root_cause.py (11KB)
-      diagnose_codebase_tool.py (8KB)
       edit_files.py (17KB)
       explore_module.py (19KB)
       file_state.py (7KB)
