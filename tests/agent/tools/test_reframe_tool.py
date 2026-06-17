@@ -83,13 +83,13 @@ class TestExecutePromptStructure:
         assert "debugging" in msg
 
     @pytest.mark.asyncio
-    async def test_prompt_starts_with_advisor_context(self):
+    async def test_prompt_starts_with_context_section(self):
         tool = _make_tool()
         with patch("nanobot.agent.tools.reframe.chat_stream_with_retry", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = LLMResponse(content="advice")
             await tool.execute(question="Q", goal="G")
             msg = mock_chat.call_args[0][0][0]["content"]
-        assert msg.startswith("You are acting as an independent advisor.")
+        assert msg.startswith("You are acting as an independent advisor")
 
     @pytest.mark.asyncio
     async def test_sections_in_correct_order(self):
@@ -111,8 +111,8 @@ class TestExecutePromptStructure:
         const_idx = msg.index("## Constraints")
         res_idx = msg.index("## Available Resources")
         focus_idx = msg.index("## Focus Area")
-        inst_idx = msg.index("## Instructions")
-        assert goal_idx < stuck_idx < tried_idx < diff_idx < const_idx < res_idx < focus_idx < inst_idx
+        instr_idx = msg.index("## Instructions")
+        assert goal_idx < stuck_idx < tried_idx < diff_idx < const_idx < res_idx < focus_idx < instr_idx
 
     @pytest.mark.asyncio
     async def test_chat_receives_single_user_message(self):

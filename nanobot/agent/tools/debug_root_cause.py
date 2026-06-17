@@ -167,8 +167,7 @@ class DebugRootCauseTool(Tool):
             "output concrete investigation steps for the agent to execute.",
             "",
             "**注意：你的输出是过程性内容（process），不是任务目标本身。** "
-            "你在诊断问题，不是在推进原始任务。你的输出在未来上下文压缩时应当被识别为过程性内容。"
-            "不要让调试过程掩盖了原始任务目标。",
+            "你在诊断问题，不是在推进原始任务。",
             "",
             "## Available Methods",
             _RCA_METHODS.strip(),
@@ -177,21 +176,16 @@ class DebugRootCauseTool(Tool):
             "Return a single **执行计划 (Execution Plan)** section with concrete steps "
             "the agent should take to investigate. Each step must be directly actionable:",
             "",
-            "1. What to do — the specific action (read what file, grep what pattern, compare "
-            "   what values, test what hypothesis)",
+            "1. What to do — the specific action",
             "2. What to look for — the specific evidence, patterns, or values of interest",
             "3. What conclusion to draw from each possible outcome",
             "",
             "Do NOT include background analysis, methodology descriptions, or multiple options.",
             "",
             "## Important",
-            "- Your job is to investigate and analyze, not to implement. Do NOT modify the "
-            "original task, do NOT write code, do NOT approve completion",
-            "- Each step must guide the agent toward the root cause — what to read, what to "
-            "compare, what to check. The agent still does its own reasoning",
-            "- If the problem is clear: output what the agent should examine to confirm the root cause",
-            "- If the problem is unclear: output steps to narrow it down",
-            "- If the fix is obvious from the evidence: output the evidence, let the agent decide the fix",
+            "- Your job is to investigate and analyze, not to implement.",
+            "- If the root cause is clear: output what to examine to confirm.",
+            "- If unclear: output steps to narrow it down.",
             "- Only one plan per response. No alternatives.",
         ]
 
@@ -211,7 +205,7 @@ class DebugRootCauseTool(Tool):
 
         lines += [
             "",
-            "## Conversation",
+            "## Context",
             conversation,
         ]
 
