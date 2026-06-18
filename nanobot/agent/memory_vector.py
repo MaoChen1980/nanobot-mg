@@ -13,6 +13,8 @@ from typing import Any
 
 from loguru import logger
 
+_MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "bge-small-zh-v1.5"
+
 
 class MemoryVectorIndex:
     """FAISS-based vector index for memory retrieval.
@@ -21,8 +23,6 @@ class MemoryVectorIndex:
     Gracefully degrades when sentence-transformers is not installed.
     Supports incremental indexing via mtime-based change tracking.
     """
-
-    _MODEL_NAME = "BAAI/bge-small-zh-v1.5"
     _INDEX_FILE = "index.faiss"
     _INDEX_BAK = "index.faiss.bak"
     _CHUNKS_FILE = "chunks.json"
@@ -51,7 +51,7 @@ class MemoryVectorIndex:
             try:
                 from sentence_transformers import SentenceTransformer
 
-                self._model = SentenceTransformer(self._MODEL_NAME)
+                self._model = SentenceTransformer(str(_MODEL_PATH))
                 return True
             except Exception:
                 logger.warning("Failed to load SentenceTransformer model", exc_info=True)

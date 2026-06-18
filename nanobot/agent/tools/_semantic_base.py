@@ -13,7 +13,7 @@ from loguru import logger
 
 _MODEL: Any = None
 _MODEL_LOCK = threading.Lock()
-_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
+_MODEL_PATH = Path(__file__).resolve().parent.parent.parent / "models" / "bge-small-zh-v1.5"
 
 
 def get_model() -> Any:
@@ -27,7 +27,7 @@ def get_model() -> Any:
         try:
             from sentence_transformers import SentenceTransformer
 
-            _MODEL = SentenceTransformer(_MODEL_NAME)
+            _MODEL = SentenceTransformer(str(_MODEL_PATH))
             return _MODEL
         except ImportError:
             return None
