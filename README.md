@@ -142,6 +142,30 @@ User message -> [Channel] -> AgentLoop -> [Tool execution] -> LLM Provider
 
 ---
 
+## Skill System
+
+Skills are markdown files that teach the agent how to perform specific tasks — code review, debugging, document analysis, etc. Currently 45+ built-in skills.
+
+**How it works:**
+
+1. Skills live at `nanobot/skills/<name>/SKILL.md` — auto-discovered, no registration needed
+2. **Two-tier loading**:
+   - **Always-skills** (`always: true` in frontmatter) — full content injected into every LLM context turn
+   - **Progressive skills** — name + description + path in context summary; LLM reads `SKILL.md` on demand via `read_file_tool`
+3. **Frontmatter metadata** controls requirements and behavior:
+   ```yaml
+   ---
+   name: code-review
+   description: "Review code for bugs, security issues, and maintainability"
+   always: true   # inject full content every turn
+   requires:
+     bins: [node, python]   # skip skill if binaries not found
+     env: [GITHUB_TOKEN]    # skip skill if env vars not set
+   ---
+   ```
+4. Each skill carries a **self-optimization footer** — the agent can edit its own skills to fix or improve them
+5. Workspace skills override built-in skills of the same name
+
 ## Memory System
 
 Three-layer design:

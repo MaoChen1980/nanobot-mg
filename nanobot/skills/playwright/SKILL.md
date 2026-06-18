@@ -1,0 +1,122 @@
+---
+name: "playwright"
+description: "Use when the task requires automating a real browser from the terminal (navigation, form filling, snapshots, screenshots, data extraction, UI-flow debugging) via `npx @playwright/mcp playwright-cli`."
+official: true
+---
+
+# Playwright CLI Skill
+
+Drive a real browser from the terminal using `playwright-cli`. Use `npx` to run it directly.
+Treat this skill as CLI-first automation. Do not pivot to `@playwright/test` unless the user explicitly asks for test files.
+
+## Prerequisite check (required)
+
+Before proposing commands, check whether `npx` is available:
+
+```bash
+exec_tool("command -v npx >/dev/null 2>&1")
+```
+
+If it is not available, pause and ask the user to install Node.js/npm. Provide these steps verbatim:
+
+```bash
+# Verify Node/npm are installed
+exec_tool("node --version")
+exec_tool("npm --version")
+
+# If missing, install Node.js/npm, then:
+exec_tool("npx @playwright/mcp playwright-cli --help")
+```
+
+Once `npx` is present, proceed.
+
+## Quick start
+
+```bash
+exec_tool('npx @playwright/mcp playwright-cli open https://playwright.dev')
+exec_tool('npx @playwright/mcp playwright-cli snapshot')
+exec_tool('npx @playwright/mcp playwright-cli click e15')
+exec_tool('npx @playwright/mcp playwright-cli fill e1 "search text"')
+exec_tool('npx @playwright/mcp playwright-cli press Enter')
+exec_tool('npx @playwright/mcp playwright-cli screenshot')
+```
+
+If the user prefers a global install, this is also valid:
+
+```bash
+exec_tool("npm install -g @playwright/mcp@latest")
+exec_tool("playwright-cli --help")
+```
+
+But default to `npx` — no global install needed.
+
+## Core workflow
+
+1. Open the page.
+2. Snapshot to get stable element refs.
+3. Interact using refs from the latest snapshot.
+4. Re-snapshot after navigation or significant DOM changes.
+5. Capture artifacts (screenshot, pdf, traces) when useful.
+
+Minimal loop:
+
+```bash
+exec_tool('npx @playwright/mcp playwright-cli open https://example.com')
+exec_tool('npx @playwright/mcp playwright-cli snapshot')
+exec_tool('npx @playwright/mcp playwright-cli click e3')
+exec_tool('npx @playwright/mcp playwright-cli snapshot')
+```
+
+## When to snapshot again
+
+Snapshot again after:
+
+- navigation
+- clicking elements that change the UI substantially
+- opening/closing modals or menus
+- tab switches
+
+Refs can go stale. When a command fails due to a missing ref, snapshot again.
+
+## Recommended patterns
+
+### Form fill and submit
+
+```bash
+exec_tool('npx @playwright/mcp playwright-cli open https://example.com/form')
+exec_tool('npx @playwright/mcp playwright-cli snapshot')
+exec_tool('npx @playwright/mcp playwright-cli fill e1 "user@example.com"')
+exec_tool('npx @playwright/mcp playwright-cli fill e2 "password123"')
+exec_tool('npx @playwright/mcp playwright-cli click e3')
+exec_tool('npx @playwright/mcp playwright-cli snapshot')
+```
+
+### Debug a UI flow with traces
+
+```bash
+exec_tool('npx @playwright/mcp playwright-cli open https://example.com')
+exec_tool('npx @playwright/mcp playwright-cli tracing-start')
+# ...interactions...
+exec_tool('npx @playwright/mcp playwright-cli tracing-stop')
+```
+
+### Multi-tab work
+
+```bash
+exec_tool('npx @playwright/mcp playwright-cli tab-new https://example.com')
+exec_tool('npx @playwright/mcp playwright-cli tab-list')
+exec_tool('npx @playwright/mcp playwright-cli tab-select 0')
+exec_tool('npx @playwright/mcp playwright-cli snapshot')
+```
+
+## Guardrails
+
+- Always snapshot before referencing element ids like `e12`.
+- Re-snapshot when refs seem stale.
+- Prefer explicit commands over `eval` and `run-code` unless needed.
+- When you do not have a fresh snapshot, use placeholder refs like `eX` and say why; do not bypass refs with `run-code`.
+- When capturing artifacts in this repo, use `output/playwright/` and avoid introducing new top-level artifact folders.
+- Default to CLI commands and workflows, not Playwright test specs.
+- **Self-optimization**: 此 Skill 可自我进化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准

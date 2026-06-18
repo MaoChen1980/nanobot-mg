@@ -21,11 +21,13 @@ class FakeContext:
     def __init__(self, **kwargs):
         self.tool_calls = kwargs.get("tool_calls", [])
         self.tool_results = kwargs.get("tool_results", [])
+        self.tool_events = kwargs.get("tool_events", [])  # {"name", "status", "detail", "duration_ms"}
         self.usage = kwargs.get("usage", {})
         self.iteration = kwargs.get("iteration", 1)
         self.error = kwargs.get("error")
         self.final_content = kwargs.get("final_content")
         self.messages = kwargs.get("messages", [])
+        self.cost_usd = kwargs.get("cost_usd", 0.0)  # runner may inject this
 
 
 class TestCapture:
@@ -66,6 +68,51 @@ class TestCapture:
         hook._capture(ctx)
         entry = json.loads(hook.LOG_FILE.read_text())
         assert entry["has_final_content"] is True
+
+    def test_capture_duration_from_tool_events(self, hook):
+        """duration_ms lives in tool_events, not tool_results."""
+        tc = MagicMock()
+        tc.name = "exec_tool"
+        ctx = FakeContext(
+            tool_calls=[tc],
+            tool_results=["ok"],
+            tool_events=[
+                {"name": "exec_tool", "status": "ok", "detail": "ok", "duration_ms": 1500},
+            ],
+            usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+            iteration=1,
+        )
+        hook._capture(ctx)
+        entry = json.loads(hook.LOG_FILE.read_text())
+        assert entry["duration_sec"] == 1.5
+
+    def test_capture_discomfort_signals_with_tool_name(self, hook):
+        """discomfort_signals now returns {pattern, tool} dicts, not plain strings."""
+        tc = MagicMock()
+        tc.name = "read_file_tool"
+        ctx = FakeContext(
+            tool_calls=[tc],
+            tool_results=["Error: file not found"],
+            tool_events=[],
+            usage={},
+            iteration=1,
+        )
+        hook._capture(ctx)
+        entry = json.loads(hook.LOG_FILE.read_text())
+        assert entry["discomfort_signals"] == [{"pattern": "error", "tool": "read_file_tool"}]
+        assert entry["error_count"] == 1
+
+    def test_capture_cost_usd(self, hook):
+        ctx = FakeContext(
+            tool_calls=[],
+            tool_results=[],
+            usage={},
+            cost_usd=0.0025,
+            iteration=1,
+        )
+        hook._capture(ctx)
+        entry = json.loads(hook.LOG_FILE.read_text())
+        assert entry["cost_usd"] == 0.0025
 
 
 class TestPredicates:
