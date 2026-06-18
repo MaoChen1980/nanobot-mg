@@ -927,7 +927,7 @@ class AgentLoop:
                         self.commands.dispatch_priority,
                     )
                     # After /stop cancels tasks, feed it to LLM so it can
-                    # update TREE.md (active → paused) and confirm with user.
+                    # update tree.json (active → paused) and confirm with user.
                     if _pre_stop_busy:
                         asyncio.create_task(self._dispatch(InboundMessage(
                             channel=msg.channel, sender_id=msg.sender_id,
@@ -935,7 +935,7 @@ class AgentLoop:
                             media=[], metadata={"_stop_redispatch": True},
                         )))
                     # Same for /new/clear/reset — feed to LLM after cancellation
-                    # so it can update TREE.md and confirm with user.
+                    # so it can update tree.json and confirm with user.
                     if _pre_new_busy:
                         asyncio.create_task(self._dispatch(InboundMessage(
                             channel=msg.channel, sender_id=msg.sender_id,
@@ -1012,7 +1012,7 @@ class AgentLoop:
                 "**进度跟踪**\n"
                 "• Subagent 进展如何？用 list_subagents_tool / check_subagent_tool 检查状态，有没卡住或完成的\n"
                 "• 读 team_board.md — subagent 可能写了发现、踩坑、阻塞，需要你关注或同步\n"
-                "• 读 TREE.md — 检查 task backlog，决定下一步调度\n"
+                "• 读 tree.json — 检查 task backlog，决定下一步调度\n"
                 "• 需要你回复或指导某个 subagent 吗？→ send_message_tool 发送指令\n"
                 "• 发现信息不对称？→ send_message_tool 主动告知，不要等 subagent 来问\n"
                 "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
@@ -1029,7 +1029,7 @@ class AgentLoop:
                 "• Subagent 完事了但质量不满意？→ 接受/重做/部分重做/重新拆解\n"
                 "\n"
                 "**收尾与输出**\n"
-                "• 全部结束了？→ 分析结果、更新 TREE.md、综合汇报\n"
+                "• 全部结束了？→ 分析结果、更新 tree.json、综合汇报\n"
                 "• 中间结果需要记录到 memory/文档吗？\n"
                 "• 需要向用户汇报进度或请示决策吗？\n"
                 "\n"

@@ -438,9 +438,9 @@ def init(
         tasks_dir.mkdir(parents=True, exist_ok=True)
         console.print(f"[green]✓[/green] Created [bold]{tasks_dir}[/bold]")
 
-    tree_path = target / "tasks" / "TREE.md"
+    tree_path = target / "tasks" / "tree.json"
     if not tree_path.exists():
-        tree_path.write_text("# Task Tree\n\n## active\n\n## paused\n\n## done\n", encoding="utf-8")
+        tree_path.write_text('{"schema_version":1,"items":[]}', encoding="utf-8")
         console.print(f"[green]✓[/green] Created [bold]{tree_path}[/bold]")
 
     console.print("\n[bold]Project initialized for coding agent.[/bold]")

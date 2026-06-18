@@ -469,7 +469,7 @@ class HubTCPServer:
                         pass
                     except Exception:
                         logger.exception("Unexpected error awaiting cancelled session task")
-                # Process /stop through LLM so it can update TREE.md
+                # Process /stop through LLM so it can update tree.json
                 # and confirm with the user over this proxy connection.
                 asyncio.create_task(self._deliver_stop_response(
                     proxy_key, msg, session_key, session_lock,

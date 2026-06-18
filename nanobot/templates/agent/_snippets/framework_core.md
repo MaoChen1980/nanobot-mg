@@ -373,83 +373,48 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ---
 
-### Task System — 目标管理体系：任务森林与任务树
+### Task System — 任务树系统
 
-`{{ workspace_path }}/tasks/TREE.md` 和 `{{ workspace_path }}/tasks/CURRENT.md` 是系统的**长期任务参考**，记录了所有任务树和当前进度。
-
-这些文件的内容会在**指令系统**（每条消息靠近生成点的位置）注入，作为你的验收标准和行为指引。
-
-**积极主动的更新：**
-- **好处**：知道目标和当下状态，推理规划和计算更准确
-- **不维护的后果**：推理会偏离任务目标，或者在过期状态下做出错误决定
+`tasks/tree.json` 是系统的**长期任务数据**，它会在指令系统以可视化树图注入。
 
 **文件说明：**
-| 文件 | 用途 | 格式 |
-|------|------|------|
-| `{{ workspace_path }}/tasks/TREE.md` | 任务森林（多棵树 + 状态） | `## active/paused/completed/cancelled` + 缩进树 |
-| `{{ workspace_path }}/tasks/CURRENT.md` | 当前进度：在做什么、下一步 | 自由格式，简短即可 |
-| `{{ workspace_path }}/tasks/<id>.md` | 单个任务详情（可选） | 描述 + 验收标准 |
+| 文件 | 用途 |
+|------|------|
+| `{{ workspace_path }}/tasks/tree.json` | 任务树数据（JSON）。schema 见 `tasks/tree.schema.md` |
+| `{{ workspace_path }}/tasks/CURRENT.md` | 当前 session 焦点和下一步 |
+| `{{ workspace_path }}/tasks/<project-id>/` | 项目目录，内含节点文档 |
 
-**核心概念：**
+**数据格式（tree.json）：**
+```json
+{
+  "items": [
+    {
+      "id": "project-root",
+      "name": "根任务名",
+      "status": "active | completed | failed | paused | pending",
+      "criteria": "成功标准（验证依据）",
+      "parent": null,
+      "doc": "tasks/project-root/report.md",
+      "note": "失败原因、关键决策",
+      "created": "2026-06-18",
+      "updated": "2026-06-18",
+      "completed": null
+    }
+  ]
+}
+```
 
-- **任务森林 (Task Forest)** — `TREE.md` 整体就是一片森林，包含所有任务树。按状态分为 `active / paused / completed / cancelled` 四个区域。
-- **任务树 (Task Tree)** — 一个根任务及其所有子任务组成一棵树。每个根任务是一个独立的工作单元，子任务从属于它。
-  ```
-  [#30] 重构安装脚本                 ← 根任务（树干）
-    - [#30.1] 修复 Mac 路径问题        ← 子任务（树枝）
-    - [#30.2] 修复 Windows 问题        ← 子任务（树枝） 
-  [#33] 优化性能                     ← 另一棵树的根任务
-    - [#33.1] 缓存查询结果              ← 子任务
-      - [#33.1.1] 实现 LRU 缓存          ← 孙任务
-  ```
+**核心行为（LLM 自主执行）：**
+1. **读取** — `read_file_tool` 读 `tasks/tree.json`
+2. **修改** — `edit_file_tool` / `write_file_tool` 改 JSON
+3. **创建** — 新任务先检查 tree.json，不在则添加节点
+4. **验证** — 子节点 completed 后，验证父节点 criteria
+5. **归档** — 根节点 completed 后，子节点折叠到 `tasks/<project-id>/index.md`
 
-**格式要求（必须遵守）：**
-
-森林分四个区域，每个区域可包含多棵树。树用缩进（2 空格一级）展示父子关系。
-
-````markdown
-# Task as Tree - {{ workspace_path }}/tasks/TREE.md
-
-- [#30] 根任务 → `{{ workspace_path }}/tasks/30.md` ## active
-  - [#30.1] 子任务 ## active
-  - [#30.2] 子任务 ## paused
-    - [#30.2.1] 孙子任务 ## cancelled
-- [#25] 暂停的根任务 → `{{ workspace_path }}/tasks/25.md` ## paused
-  - [#25.1] 子任务 ## completed
-- [#11] 已完成的根任务 → `{{ workspace_path }}/tasks/10.md`   ## completed
-  - [#11.1] 子任务 ✅ ## completed
-    - [#11.1.1] 子任务 ✅ ## completed
-````
-
-````markdown
-# Current State — {{ workspace_path }}/tasks/CURRENT.md
-
-**当前焦点：** [#30] 重构安装脚本
-**进度：** #31 已完成，#32 进行中
-**下一步：** #32 修复 Windows 问题
-````
-
-**状态规则：子任务持久保留，根任务 7 天清理**
-
-| 状态 | 含义 | 行为 |
-|------|------|------|
-| `## active` | 正在做 | 推进中 |
-| `## paused` | 暂停 | 用户说"先放一放"、`/stop`、新会话开启新任务时旧任务自动 paused |
-| `## cancelled` | 取消 | 用户说"不做了"。根任务保留 7 天后清理 |
-| `## completed` | 完成 | 验收通过。根任务保留 7 天后清理 |
-
-- **子任务完成或取消 → 不删除，留在原地**，只改状态标签（如加 ✅ 或 ❌）。整棵树的可见历史就是它的价值。
-- **子任务都完成 → 子任务标记 ✅，父任务仍然 active**（除非父任务也被验收）。
-- **根任务完成或取消** → 整棵树从 active 区域移到 completed 或 cancelled 区域。保留 7 天后清理。
-
-**什么时候更新 TREE.md：**
-
-- **发现 TREE.md 与实际不符时** — 任何时候发现任务状态、进度与实际情况不匹配，立即更新。TREE.md 是真相来源，必须反映实际状态。
-- **做到自然节点** — 子任务完成、方案落地、卡住了
-- **每 20 次带 tool call 的 iteration 之后** — 停下来理一下进度再继续
-- **用户说"先放放/继续做/不做了/stop"** — 更新状态（明确意图直接改，不确定先问）
-
-**新会话 + 旧 active 任务：** 新 session 读到 TREE.md 有 `## active` 但用户发的消息明显是新话题时，自动将旧 active 标记为 paused 并告知用户。
+**关键规则：**
+- 不删除历史节点。failed/paused 保留轨迹
+- 子节点 completed ≠ 父节点完成——验证 criteria
+- 新 session + 旧 active：用户发新话题时自动将旧 active 改为 paused
 
 ---
 
@@ -522,7 +487,7 @@ assistant: "spawn_tool subagent 之后我需要干什么？"
 user: "⏰ 定时检查（N 个 Subagent 运行中）：
 记住原始任务目标，所有决策围绕最终交付。
 - 用 list_subagents_tool / check_subagent_tool 看各 Subagent 状态
-- 完成/失败的 → 收结果、更新 TREE.md
+- 完成/失败的 → 收结果、更新 tree.json
 - 空转无产出的 → cancel_subagent_tool 收紧资源
 - 有新进展的 → 判断是否需要同步/调整方向
 - 需要重新分解的 → cancel + 重 spawn_tool

@@ -236,6 +236,7 @@ class ContextBuilder:
                 "search_tool_selector",
                 "operating_principles",
                 "orchestration_guide",
+                "task_tree",
                 "meta_learning",
                 "skill_refinement",
             ]
@@ -402,20 +403,61 @@ class ContextBuilder:
         return _split_thinking_messages(messages)
 
     def _build_task_tree_section(self) -> str:
-        """Read tasks/TREE.md from the workspace for context injection (cached by mtime)."""
-        tree_path = self.workspace / "tasks" / "TREE.md"
-        content = self._cached_read_text(tree_path)
-        if not content:
+        """Read tasks/tree.json from the workspace and render as a tree for context injection."""
+        tree_path = self.workspace / "tasks" / "tree.json"
+        raw = self._cached_read_text(tree_path)
+        if not raw:
             return ""
-        content = content.strip()
-        if not content:
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to parse tasks/tree.json — skipping tree section")
             return ""
+        items = data.get("items", [])
+        if not items:
+            return ""
+        rendered = self._render_tree_items(items, parent=None, depth=0)
         return (
-            f"# Task Tree - {self._workspace_path_str}/tasks/TREE.md\n\n"
-            "Current task tree. Tasks are managed as files under tasks/ — "
-            "use read_file_tool/write_file_tool/edit_file_tool to update them.\n\n"
-            + self._shift_headings(content, offset=1)
+            f"# Task Tree - {self._workspace_path_str}/tasks/tree.json\n\n"
+            "Current task tree. Tree data is in tasks/tree.json — "
+            "use read_file_tool/write_file_tool/edit_file_tool to update it. "
+            "Schema reference: tasks/tree.schema.md.\n\n"
+            + rendered
         )
+
+    @staticmethod
+    def _render_tree_items(items: list[dict], parent: str | None = None, depth: int = 0) -> str:
+        """Render tree.json items as indented text, recursing from roots (parent=None)."""
+        STATUS_MARKS = {
+            "completed": "✅", "active": "○", "pending": "·",
+            "failed": "✗", "paused": "⏸",
+        }
+        children = [it for it in items if it.get("parent") == parent]
+        if not children:
+            return ""
+        lines: list[str] = []
+        # Stable sort: roots first, then by created date within same depth
+        children.sort(key=lambda it: (
+            0 if it.get("parent") is None else 1,
+            it.get("created", ""),
+            it.get("id", ""),
+        ))
+        for child in children:
+            cid = child.get("id", "")
+            name = child.get("name", cid)
+            status = child.get("status", "active")
+            mark = STATUS_MARKS.get(status, "○")
+            indent = "  " * depth
+            doc = child.get("doc", "")
+            if doc:
+                lines.append(f"{indent}- {mark} **{name}** [{status}] → {doc}")
+            else:
+                lines.append(f"{indent}- {mark} **{name}** [{status}]")
+            note = child.get("note", "")
+            if note:
+                lines.append(f"{indent}  └ note: {note}")
+            lines.append(ContextBuilder._render_tree_items(items, parent=cid, depth=depth + 1))
+        return "\n".join(lines)
 
     def _build_current_context_section(self) -> str:
         """Read tasks/CURRENT.md from the workspace for session-level working context (cached by mtime)."""
@@ -754,7 +796,7 @@ class ContextBuilder:
         if memory_section:
             session_parts.append(memory_section)
 
-        # TREE.md and CURRENT.md are injected via build_instructions_section()
+        # tree.json and CURRENT.md are injected via build_instructions_section()
         # (message index 1, close to generation point) as verification standards.
 
         _t_log = time.time()

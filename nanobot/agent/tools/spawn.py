@@ -37,7 +37,7 @@ def build_context_block(workspace: Path | None = None, team_context: str | None 
             content = _read_workspace_file(workspace, filename)
             if content:
                 parts.append(f"=== {(workspace / filename).as_posix()} ===\n{content[:800]}\n===============")
-        for rel in ["tasks/TREE.md", "tasks/CURRENT.md", "tasks/team_board.md"]:
+        for rel in ["tasks/tree.json", "tasks/CURRENT.md", "tasks/team_board.md"]:
             content = _read_workspace_file(workspace, rel)
             if content:
                 parts.append(f"=== {(workspace / rel).as_posix()} ===\n{content[:8000]}\n===============")

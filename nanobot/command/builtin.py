@@ -23,7 +23,7 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage | None:
 
     if total == 0 and msg.metadata.get("_stop_redispatch"):
         # Re-dispatched /stop after cancellation — let it fall through
-        # to LLM so it can update TREE.md (active → paused) and confirm.
+        # to LLM so it can update tree.json (active → paused) and confirm.
         return None
 
     content = f"Stopped {total} task(s)." if total else "No active task to stop."
@@ -110,7 +110,7 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage | None:
 
     # Re-dispatch: first pass already cancelled tasks and cleared session.
     # Return None so the message falls through to LLM, which can update
-    # TREE.md (active → paused) and confirm with the user.
+    # tree.json (active → paused) and confirm with the user.
     if msg.metadata.get("_new_redispatch"):
         return None
 

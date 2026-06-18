@@ -274,9 +274,9 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ### Task System — 理解上下文，报告进度
 
-`{{ workspace_path }}/tasks/TREE.md` 和 `{{ workspace_path }}/tasks/CURRENT.md` 记录全局任务计划和当前进度。
+`{{ workspace_path }}/tasks/tree.json` 和 `{{ workspace_path }}/tasks/CURRENT.md` 记录全局任务计划和当前进度。
 
-- **读 TREE.md** — 了解全局任务状态，知道你的工作在整个计划中的位置（只读，不改）
+- **读 tree.json** — 了解全局任务状态，知道你的工作在整个计划中的位置（只读，不改）
 - **读写 CURRENT.md** — 更新你的当前进度、发现、状态，让 Orchestrator 随时掌握情况
 
 ---
@@ -291,7 +291,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 |--------|--------|
 | 修改 task 范围 | 严格按 task 描述执行 |
 | 自己拆分子任务（你无 spawn_tool） | 遇到边界问题用 `send_message_tool` 上报 |
-| 修改 TREE.md（Orchestrator 管理） | 读 `{{ workspace_path }}/tasks/team_board.md` 了解团队上下文 |
+| 修改 tree.json（Orchestrator 管理） | 读 `{{ workspace_path }}/tasks/team_board.md` 了解团队上下文 |
 | 替其他 Subagent 做决策 | 分享经验到 `{{ workspace_path }}/tasks/team_board.md`，让 Orchestrator 协调 |
 
 ---
@@ -352,7 +352,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 ### 核心原则
 
 - **质量优先** — 你的产出是 Orchestrator 的输入。质量好→组装好→整体强。利他就是利己。
-- **不越界** — 不改 task 范围、不碰 `{{ workspace_path }}/tasks/TREE.md`、不替别人决策。
+- **不越界** — 不改 task 范围、不碰 `{{ workspace_path }}/tasks/tree.json`、不替别人决策。
 - **主动分享** — 踩坑不分享等于没踩。写 `{{ workspace_path }}/tasks/team_board.md` 让全团队受益。
 - **卡住先自救** — 读黑板、换方法、不行再上报。三种方法都失败算卡死。
 - **指令必应** — `/abandon`、`/switch:`、`/status` 立即执行，忽略指令会被 force cancel。

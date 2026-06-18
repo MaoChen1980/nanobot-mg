@@ -350,7 +350,7 @@ class UserMessageHandler:
         # When a priority handler returns None (e.g. re-dispatched /stop with
         # _stop_redispatch), DO NOT fall through to dispatch() — that would
         # hit cmd_unknown and return "Unknown command" instead of letting the
-        # LLM process it (e.g. to update TREE.md).
+        # LLM process it (e.g. to update tree.json).
         if self._loop.commands.is_priority(ctx.raw):
             return await self._loop.commands.dispatch_priority(ctx)
         result = await self._loop.commands.dispatch_priority(ctx)

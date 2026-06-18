@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -426,13 +427,55 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
         _write(item, workspace / "framework" / item.relative_to(tpl / "framework"))
     (workspace / "skills").mkdir(exist_ok=True)
 
-    # Create tasks/ directory with TREE.md, CURRENT.md, and team_board.md templates
+    # Create tasks/ directory with tree.json, tree.schema.md, CURRENT.md, and team_board.md
     tasks_dir = workspace / "tasks"
     tasks_dir.mkdir(exist_ok=True)
-    tree_content = "# Task as Tree - tasks/TREE.md\n\n## active\n\n## paused\n\n## completed\n\n## cancelled\n"
+    tree_content = json.dumps({"schema_version": 1, "items": []}, indent=2, ensure_ascii=False)
     current_content = "# Current State — tasks/CURRENT.md\n"
     team_board_content = "# Team Board — tasks/team_board.md\n\nShare findings, blockers, and insights here so the whole team benefits.\n"
-    for name, content in (("TREE.md", tree_content), ("CURRENT.md", current_content), ("team_board.md", team_board_content)):
+    schema_content = (
+        "# tree.json Schema Reference\n\n"
+        "tree.json is the task tree data file at `tasks/tree.json`.\n\n"
+        "## Structure\n\n"
+        "```json\n"
+        '{\n  "schema_version": 1,\n  "items": [\n'
+        '    {\n      "id": "unique-node-id",\n'
+        '      "name": "Node display name",\n'
+        '      "status": "active | completed | failed | paused | pending",\n'
+        '      "criteria": "What counts as done (verification standard)",\n'
+        '      "parent": null | "parent-node-id",\n'
+        '      "doc": null | "relative/path/to/node-doc.md",\n'
+        '      "note": null | "Why failed/paused, key decisions",\n'
+        '      "created": "YYYY-MM-DD",\n'
+        '      "updated": "YYYY-MM-DD",\n'
+        '      "completed": null | "YYYY-MM-DD"\n'
+        "    }\n  ]\n}\n"
+        "```\n\n"
+        "## Fields\n\n"
+        "| Field | Required | Description |\n"
+        "|-------|----------|-------------|\n"
+        "| `id` | yes | Unique identifier, kebab-case |\n"
+        "| `name` | yes | Display name |\n"
+        "| `status` | yes | pending / active / completed / failed / paused |\n"
+        "| `criteria` | yes | Success criteria for verification |\n"
+        "| `parent` | yes | Parent node id, null for root |\n"
+        "| `doc` | no | Path to node document |\n"
+        "| `note` | no | Failure reasons, key decisions |\n"
+        "| `created` | yes | Creation date YYYY-MM-DD |\n"
+        "| `updated` | yes | Last update date YYYY-MM-DD |\n"
+        "| `completed` | no | Completion date YYYY-MM-DD |\n\n"
+        "## Operations\n\n"
+        "- Read: `read_file_tool` reads `tasks/tree.json`\n"
+        "- Write: `edit_file_tool` / `write_file_tool` modifies JSON\n"
+        "- Do not delete historical nodes. failed/paused preserve trace\n"
+        "- Archive: root completed --> children moved to `tasks/<project-id>/index.md` and removed from tree.json\n"
+    )
+    for name, content in (
+        ("tree.json", tree_content),
+        ("tree.schema.md", schema_content),
+        ("CURRENT.md", current_content),
+        ("team_board.md", team_board_content),
+    ):
         f = tasks_dir / name
         if not f.exists():
             f.write_text(content, encoding="utf-8")
