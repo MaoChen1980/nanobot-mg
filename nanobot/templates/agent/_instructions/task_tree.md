@@ -17,7 +17,8 @@
 
 **验证规则（重要）：**
 Trigger：你把一个节点的 status 改为 `completed`
-Action：检查该节点的父节点 criteria 是否全部满足
+Action 1：立即写该节点的报告到 `tasks/<project-id>/<node-id>.md`（记录做了什么、结果、关键数据），并更新该节点的 `doc` 字段
+Action 2：检查该节点的父节点 criteria 是否全部满足
 - 满足 → 父节点 status 改为 `completed`，递归向上验证
 - 不满足 → 新增子节点覆盖未完成的部分
 
@@ -28,9 +29,13 @@ Action：检查该节点的父节点 criteria 是否全部满足
 - `failed` — 尝试过但不可行（在 note 中记录原因和尝试过程）
 - `paused` — 暂停，依赖外部条件（在 note 中记录原因和等待条件）
 
-**归档：**
-只有根节点（parent 为 null）status 改为 `completed` 后才归档。
-归档动作：把该根节点的所有子节点写入 `tasks/<project-id>/index.md`，然后从 tree.json 的 items 中移除这些子节点。根节点保留在 items 中，status 不变。
+**归档（trigger-action）：**
+Trigger：根节点（parent 为 null）的 status 改为 `completed`
+Action：立即执行归档——
+1. 创建 `tasks/<project-id>/` 目录（如不存在）
+2. 把该根节点的所有子节点数据写入 `tasks/<project-id>/index.md`（含 id、name、status、criteria、note）
+3. 从 tree.json 的 items 中移除这些子节点
+4. 根节点保留在 items 中，status 保持 completed
 
 **规则：**
 - 不要仅仅因为子节点完成了就认为父节点完成了——验证 criteria
