@@ -97,7 +97,10 @@ def build_assessment_message(text: str) -> dict[str, Any]:
     """Build a *user*-role message for injecting an assessment into history."""
     return {
         "role": "user",
-        "content": f"{_ASSESSMENT_PREFIX}\n{text.strip()}{_ASSESSMENT_SUFFIX}",
+        "content": (
+            f"{_ASSESSMENT_PREFIX}\n{text.strip()}{_ASSESSMENT_SUFFIX}\n\n"
+            "---\n以上为上下文评估，请据此继续推进原始任务，无需回应此消息。"
+        ),
     }
 
 
@@ -121,7 +124,10 @@ def build_debug_root_cause_message(text: str) -> dict[str, Any]:
     """Build a *user*-role message for injecting a debug_root_cause into history."""
     return {
         "role": "user",
-        "content": f"{_DEBUG_RC_PREFIX}\n{text.strip()}{_DEBUG_RC_SUFFIX}",
+        "content": (
+            f"{_DEBUG_RC_PREFIX}\n{text.strip()}{_DEBUG_RC_SUFFIX}\n\n"
+            "---\n以上为根因分析，请结合分析继续推进任务，无需回应此消息。"
+        ),
     }
 
 

@@ -99,18 +99,21 @@ class TestBuildAssessmentMessage:
         assert msg["content"].startswith(_ASSESSMENT_PREFIX)
         assert "test analysis" in msg["content"]
 
-    def test_no_tailing_directive(self) -> None:
-        """Verify the injected message has no trailing instruction.
+    def test_tailing_continue_directive(self) -> None:
+        """Verify the injected message includes a continue-working directive.
 
-        The assessment should be purely informational — no call to action
-        appended after the [/assess] marker.
+        The assessment is context, not a user query — the trailing directive
+        tells the LLM to use it as reference and continue the original task.
         """
         msg = build_assessment_message("some analysis")
         content = msg["content"]
-        # Should end with [/assess], not with any directive text
-        assert content.rstrip().endswith("[/assess]")
-        # Assert the old Chinese directive is gone
-        assert "请继续按计划推进" not in content
+        # Content still contains the assessment body
+        assert "some analysis" in content
+        # Starts with [assess] tag (detection relies on this)
+        assert content.startswith("[assess]")
+        # Ends with the continue directive
+        assert "继续推进原始任务" in content
+        assert "无需回应此消息" in content
 
 
 

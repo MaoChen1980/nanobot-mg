@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import threading
 from collections import Counter
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
