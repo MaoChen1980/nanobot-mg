@@ -219,19 +219,23 @@ class ProvidersConfig(Base):
     deepseek: ProviderConfig = Field(default_factory=ProviderConfig)
     groq: ProviderConfig = Field(default_factory=ProviderConfig)
     zhipu: ProviderConfig = Field(default_factory=ProviderConfig)
+    zhipu_coding_plan: ProviderConfig = Field(default_factory=ProviderConfig)  # Zhipu AI Coding Plan
     dashscope: ProviderConfig = Field(default_factory=ProviderConfig)
+    dashscope_coding_plan: ProviderConfig = Field(default_factory=ProviderConfig)  # DashScope Coding Plan
     vllm: ProviderConfig = Field(default_factory=ProviderConfig)
     ollama: ProviderConfig = Field(default_factory=ProviderConfig)  # Ollama local models
     lm_studio: ProviderConfig = Field(default_factory=ProviderConfig)  # LM Studio local models
     ovms: ProviderConfig = Field(default_factory=ProviderConfig)  # OpenVINO Model Server (OVMS)
     gemini: ProviderConfig = Field(default_factory=ProviderConfig)
     moonshot: ProviderConfig = Field(default_factory=ProviderConfig)
+    kimi_code: ProviderConfig = Field(default_factory=ProviderConfig)  # Kimi Code (月之暗面编程权益)
     minimax: ProviderConfig = Field(default_factory=ProviderConfig)
     minimax_anthropic: ProviderConfig = Field(default_factory=ProviderConfig)  # MiniMax Anthropic endpoint (thinking)
     mistral: ProviderConfig = Field(default_factory=ProviderConfig)
     minimax_cn: ProviderConfig = Field(default_factory=ProviderConfig)
     minimax_anthropic_cn: ProviderConfig = Field(default_factory=ProviderConfig)  # MiniMax Anthropic endpoint (thinking)
     stepfun: ProviderConfig = Field(default_factory=ProviderConfig)  # Step Fun (阶跃星辰)
+    stepfun_plan: ProviderConfig = Field(default_factory=ProviderConfig)  # Step Plan (阶跃星辰 Step Plan)
     xiaomi_mimo: ProviderConfig = Field(default_factory=ProviderConfig)  # Xiaomi MIMO (小米)
     aihubmix: ProviderConfig = Field(default_factory=ProviderConfig)  # AiHubMix API gateway
     siliconflow: ProviderConfig = Field(default_factory=ProviderConfig)  # SiliconFlow (硅基流动)
@@ -242,6 +246,12 @@ class ProvidersConfig(Base):
     openai_codex: ProviderConfig = Field(default_factory=ProviderConfig, exclude=True)  # OpenAI Codex (OAuth)
     github_copilot: ProviderConfig = Field(default_factory=ProviderConfig, exclude=True)  # Github Copilot (OAuth)
     qianfan: ProviderConfig = Field(default_factory=ProviderConfig)  # Qianfan (百度千帆)
+    qianfan_coding_plan: ProviderConfig = Field(default_factory=ProviderConfig)  # Qianfan Coding Plan
+    hunyuan: ProviderConfig = Field(default_factory=ProviderConfig)  # Hunyuan (腾讯混元)
+    hunyuan_coding_plan: ProviderConfig = Field(default_factory=ProviderConfig)  # Hunyuan Coding Plan
+    minicpm: ProviderConfig = Field(default_factory=ProviderConfig)  # MiniCPM (面壁智能)
+    xai: ProviderConfig = Field(default_factory=ProviderConfig)  # xAI Grok
+    xunfei_coding: ProviderConfig = Field(default_factory=ProviderConfig)  # Xunfei MaaS Coding (讯飞星辰)
 
 
 class HeartbeatConfig(Base):

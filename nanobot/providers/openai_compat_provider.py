@@ -609,7 +609,7 @@ class OpenAICompatProvider(LLMProvider):
         if spec and spec.thinking_style == "reasoning_split" and tools:
             kwargs.setdefault("extra_body", {}).update({"reasoning_split": True})
         elif spec and spec.thinking_style and reasoning_effort is not None:
-            thinking_enabled = semantic_effort != "minimal"
+            thinking_enabled = semantic_effort not in ("none", "minimal")
             extra = _THINKING_STYLE_MAP.get(spec.thinking_style, lambda _: None)(thinking_enabled)
             if extra:
                 kwargs.setdefault("extra_body", {}).update(extra)
@@ -619,7 +619,7 @@ class OpenAICompatProvider(LLMProvider):
         # so that OpenRouter-style names like "moonshotai/kimi-k2.5" are handled
         # identically to bare names like "kimi-k2.5".
         if reasoning_effort is not None and _is_kimi_thinking_model(model_name):
-            thinking_enabled = semantic_effort != "minimal"
+            thinking_enabled = semantic_effort not in ("none", "minimal")
             kwargs.setdefault("extra_body", {}).update(
                 {"thinking": {"type": "enabled" if thinking_enabled else "disabled"}}
             )
@@ -643,9 +643,9 @@ class OpenAICompatProvider(LLMProvider):
         # thinking happened on that turn").
         thinking_active = (
             (spec and spec.thinking_style and reasoning_effort is not None
-             and semantic_effort != "minimal")
+             and semantic_effort not in ("none", "minimal"))
             or (reasoning_effort is not None and _is_kimi_thinking_model(model_name)
-                and semantic_effort != "minimal")
+                and semantic_effort not in ("none", "minimal"))
         )
         if thinking_active:
             logger.info(

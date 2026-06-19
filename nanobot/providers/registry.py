@@ -153,7 +153,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
     # VolcEngine (火山引擎): OpenAI-compatible gateway, pay-per-use models
     ProviderSpec(
         name="volcengine",
-        keywords=("volcengine", "volces", "ark"),
+        keywords=("volcengine", "volces", "ark", "doubao"),
         env_key="OPENAI_API_KEY",
         display_name="VolcEngine",
         backend="openai_compat",
@@ -279,6 +279,18 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_api_base="https://open.bigmodel.cn/api/paas/v4",
         thinking_style="thinking_type",
     ),
+    # Zhipu Coding Plan: separate base URL at /api/coding/paas/v4,
+    # same ZAI_API_KEY as the standard zhipu provider.
+    ProviderSpec(
+        name="zhipu_coding_plan",
+        keywords=("zhipu-coding", "glm-coding"),
+        env_key="ZAI_API_KEY",
+        display_name="Zhipu AI Coding Plan",
+        backend="openai_compat",
+        env_extras=(("ZHIPUAI_API_KEY", "{api_key}"),),
+        default_api_base="https://open.bigmodel.cn/api/coding/paas/v4",
+        strip_model_prefix=True,
+    ),
     # DashScope (通义): Qwen models, OpenAI-compatible endpoint
     ProviderSpec(
         name="dashscope",
@@ -288,6 +300,17 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
         thinking_style="enable_thinking",
+    ),
+    # DashScope Coding Plan (阿里云百炼 Coding Plan): dedicated subdomain,
+    # uses sk-sp-xxx key format (same DASHSCOPE_API_KEY env var).
+    ProviderSpec(
+        name="dashscope_coding_plan",
+        keywords=("dashscope-coding",),
+        env_key="DASHSCOPE_API_KEY",
+        display_name="DashScope Coding Plan",
+        backend="openai_compat",
+        default_api_base="https://coding.dashscope.aliyuncs.com/v1",
+        strip_model_prefix=True,
     ),
     # Moonshot (月之暗面): Kimi K2.5 / K2.6 enforce temperature >= 1.0.
     ProviderSpec(
@@ -301,6 +324,17 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
             ("kimi-k2.5", {"temperature": 1.0}),
             ("kimi-k2.6", {"temperature": 1.0}),
         ),
+    ),
+    # Kimi Code (月之暗面编程权益): separate domain api.kimi.com,
+    # uses kimi-for-coding / kimi-k2.7-code as model IDs.
+    ProviderSpec(
+        name="kimi_code",
+        keywords=("kimi-code", "kimi_for_coding"),
+        env_key="MOONSHOT_API_KEY",
+        display_name="Kimi Code",
+        backend="openai_compat",
+        default_api_base="https://api.kimi.com/coding/v1",
+        strip_model_prefix=True,
     ),
     # MiniMax: OpenAI-compatible API
     ProviderSpec(
@@ -358,6 +392,17 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.stepfun.com/v1",
         reasoning_as_content=True,
+    ),
+    # Step Plan (阶跃星辰 Step Plan): dedicated /step_plan/ path,
+    # uses step-router-v1 / step-3.5-flash model IDs.
+    ProviderSpec(
+        name="stepfun_plan",
+        keywords=("stepfun-plan", "step_plan"),
+        env_key="STEPFUN_API_KEY",
+        display_name="Step Plan",
+        backend="openai_compat",
+        default_api_base="https://api.stepfun.com/step_plan/v1",
+        strip_model_prefix=True,
     ),
     # Xiaomi MIMO (小米): OpenAI-compatible API
     # thinking.type is used (like Kimi), not reasoning_split (like MiniMax)
@@ -425,13 +470,82 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_api_base="https://api.groq.com/openai/v1",
     ),
     # Qianfan (百度千帆): OpenAI-compatible API
+    # ERNIE 5.0/5.1 supports enable_thinking for reasoning toggle.
     ProviderSpec(
         name="qianfan",
         keywords=("qianfan", "ernie"),
         env_key="QIANFAN_API_KEY",
         display_name="Qianfan",
         backend="openai_compat",
-        default_api_base="https://qianfan.baidubce.com/v2"
+        default_api_base="https://qianfan.baidubce.com/v2",
+        thinking_style="enable_thinking",
+    ),
+    # Qianfan Coding Plan (百度千帆 Coding Plan): /v2/coding path,
+    # uses qianfan-code-latest as unified model ID.
+    ProviderSpec(
+        name="qianfan_coding_plan",
+        keywords=("qianfan-coding",),
+        env_key="QIANFAN_API_KEY",
+        display_name="Qianfan Coding Plan",
+        backend="openai_compat",
+        default_api_base="https://qianfan.baidubce.com/v2/coding",
+        strip_model_prefix=True,
+    ),
+    # Hunyuan (腾讯混元): OpenAI-compatible API
+    # Latest models (hy3-preview, hunyuan-t1) support enable_thinking toggle.
+    ProviderSpec(
+        name="hunyuan",
+        keywords=("hunyuan",),
+        env_key="HUNYUAN_API_KEY",
+        display_name="Hunyuan",
+        backend="openai_compat",
+        default_api_base="https://api.hunyuan.cloud.tencent.com/v1",
+        thinking_style="enable_thinking",
+    ),
+    # Hunyuan Coding Plan (腾讯混元 TokenHub Coding Plan): lkeap platform,
+    # uses sk-sp-xxx API keys, unified model routing.
+    ProviderSpec(
+        name="hunyuan_coding_plan",
+        keywords=("hunyuan-coding", "lkeap"),
+        env_key="HUNYUAN_API_KEY",
+        display_name="Hunyuan Coding Plan",
+        backend="openai_compat",
+        default_api_base="https://api.lkeap.cloud.tencent.com/coding/v3",
+        strip_model_prefix=True,
+    ),
+    # MiniCPM (面壁智能): OpenAI-compatible API
+    # Thinking/non-thinking is model-name based (Instruct vs Thinking variants),
+    # not a parameter toggle. No thinking_style needed.
+    ProviderSpec(
+        name="minicpm",
+        keywords=("minicpm", "cpm"),
+        env_key="MINICPM_API_KEY",
+        display_name="MiniCPM",
+        backend="openai_compat",
+        default_api_base="https://api.modelbest.cn/v1",
+    ),
+    # xAI (Grok): OpenAI-compatible API
+    # reasoning_effort is a native OpenAI parameter (none/low/medium/high).
+    # No extra_body thinking_style needed — it just works.
+    ProviderSpec(
+        name="xai",
+        keywords=("grok", "xai"),
+        env_key="XAI_API_KEY",
+        display_name="xAI Grok",
+        backend="openai_compat",
+        default_api_base="https://api.x.ai/v1",
+        supports_max_completion_tokens=True,
+    ),
+    # Xunfei MaaS Coding Plan (讯飞星辰 Coding Plan): dedicated maas-coding-api
+    # subdomain, uses astron-code-latest as unified model ID.
+    ProviderSpec(
+        name="xunfei_coding",
+        keywords=("xunfei", "xfyun", "iflytek", "astron"),
+        env_key="XFYUN_API_KEY",
+        display_name="Xunfei MaaS Coding",
+        backend="openai_compat",
+        default_api_base="https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+        strip_model_prefix=True,
     ),
 )
 
