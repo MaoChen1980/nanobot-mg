@@ -253,7 +253,13 @@ class ContextBuilder:
         if always_skills_names:
             always_content = self.skills.format_skills_for_context(always_skills_names)
             if always_content:
-                sections.append(f"## Active Skills\n\n{always_content}")
+                sections.append(
+                    "## Active Skills\n\n"
+                    "> **Always 审查**：以下 skill 标记为 always=true，每轮自动注入。\n"
+                    "> 定期评估每个 always-skill：如果其行为已成为你的自然倾向（不注入也能正确执行），\n"
+                    "> 用 edit_file_tool 将其 frontmatter 的 `always: true` 改为 `false`，减少上下文开销。\n\n"
+                    f"{always_content}"
+                )
 
         # Available skills summary — dynamically built, excludes always-skills
         skills_summary = self.skills.build_skills_summary(exclude=set(always_skills_names))

@@ -32,6 +32,8 @@ version: 0.1.0
 | **Skill 可以改进** | 优化——简化步骤、添加边界情况、改进验证 |
 | **Skill 已过时** | 禁用或删除——已被更好的方法或框架特性取代 |
 | **你使用了一个 skill 但感觉笨重** | 改进——更流畅的工作流、更少的步骤、更好的示例 |
+| **Always-skill 不再需要 always** | 降级——行为已成为 LLM 自然倾向时，将 `always: true` 改为 `false` |
+| **Skill 值得 always 注入** | 升级——发现某个 skill 应该每轮都生效时，将 `always: false` 改为 `true` |
 
 ### Create a skill (pattern discovery)
 | 触发条件 | 寻找对象 |
