@@ -460,7 +460,7 @@ class ContextBuilder:
         return "\n".join(lines)
 
     def _build_current_context_section(self) -> str:
-        """Read tasks/CURRENT.md from the workspace for session-level working context (cached by mtime)."""
+        """Read tasks/CURRENT.md from the workspace for project-level working context (cached by mtime)."""
         current_path = self.workspace / "tasks" / "CURRENT.md"
         content = self._cached_read_text(current_path)
         if not content:
@@ -470,7 +470,7 @@ class ContextBuilder:
             return ""
         return (
             f"# Working Context - {self._workspace_path_str}/tasks/CURRENT.md\n\n"
-            "Session-level working context. Tracks what you're doing this session. "
+            "Project-level working context. Tracks the current project node's progress. "
             "Create and update it with write_file_tool.\n\n"
             + self._shift_headings(content, offset=1)
         )

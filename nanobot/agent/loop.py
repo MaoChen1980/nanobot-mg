@@ -1011,7 +1011,7 @@ class AgentLoop:
                 "\n"
                 "**进度跟踪**\n"
                 "• Subagent 进展如何？用 list_subagents_tool / check_subagent_tool 检查状态，有没卡住或完成的\n"
-                "• 读 team_board.md — subagent 可能写了发现、踩坑、阻塞，需要你关注或同步\n"
+                "• 读 team_board.md — subagent 可能写了事实发现、踩坑、洞察，需要你关注或同步\n"
                 "• 读 tree.json — 检查 task backlog，决定下一步调度\n"
                 "• 需要你回复或指导某个 subagent 吗？→ send_message_tool 发送指令\n"
                 "• 发现信息不对称？→ send_message_tool 主动告知，不要等 subagent 来问\n"

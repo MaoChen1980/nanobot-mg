@@ -431,8 +431,17 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
     tasks_dir = workspace / "tasks"
     tasks_dir.mkdir(exist_ok=True)
     tree_content = json.dumps({"schema_version": 1, "items": []}, indent=2, ensure_ascii=False)
-    current_content = "# Current State — tasks/CURRENT.md\n"
-    team_board_content = "# Team Board — tasks/team_board.md\n\nShare findings, blockers, and insights here so the whole team benefits.\n"
+    current_content = (
+        "# Current Project Progress — tasks/CURRENT.md\n\n"
+        "Track the current project node's progress here: what's done, what's next, blockers.\n"
+        "Cleared after project node completes and is archived.\n"
+    )
+    team_board_content = (
+        "# Project Fact Board — tasks/team_board.md\n\n"
+        "Record discoveries, insights, gotchas, and status changes for the current project node.\n"
+        "Progress goes to CURRENT.md; facts go here.\n"
+        "Cleared after project node completes and is archived.\n"
+    )
     schema_content = (
         "# tree.json Schema Reference\n\n"
         "tree.json is the task tree data file at `tasks/tree.json`.\n\n"

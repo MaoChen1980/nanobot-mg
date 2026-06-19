@@ -117,7 +117,7 @@ class SystemMessageHandler:
         )
         if is_subagent:
             history = list(history)
-            history.append({"role": "user", "content": f"Subagent 返回了结果。\n\n{msg.content.strip()}\n\n记住原始任务目标，所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、检查 team_board.md、处理/更新最新任务状态，有必要的话调整任务、添加新的 subagent、或 cancel 不需要的 subagent。\n\n请继续按计划推进。"})
+            history.append({"role": "user", "content": f"Subagent 返回了结果。\n\n{msg.content.strip()}\n\n记住原始任务目标，所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、检查 team_board.md（事实板）、处理/更新最新任务状态，有必要的话调整任务、添加新的 subagent、或 cancel 不需要的 subagent。\n\n请继续按计划推进。"})
             current_message = ""
         else:
             current_message = msg.content

@@ -66,7 +66,7 @@
 **好：**
 - `Nanobot MemoryExtractor 使用 FAISS 做向量搜索，min_score 默认 0.3，用于 supersedes 查找`
 - `Boss timer prompt 有三种决策分支：检查状态 / 取消空转 / 综合交付`
-- `{{ workspace_path }}/tasks/team_board.md` 按 ## 标题分 section，keyword overlap 选 top-3 注入 subagent prompt`
+- `{{ workspace_path }}/tasks/team_board.md` 是当前项目事实板，按 ## 标题分 section，keyword overlap 选 top-3 注入 subagent prompt。项目完成时归档清空`
 
 **差（没用，知道了也不改变行为）：**
 - `FAISS 用于搜索`（太笼统，谁用？在哪用？参数？）

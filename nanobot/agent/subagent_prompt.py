@@ -87,8 +87,8 @@ def _search_team_board(task_description: str, workspace: Path, top_k: int = 3) -
     scored.sort(key=lambda x: -x[0])
     selected = scored[:top_k]
 
-    lines_out = ["## Relevant Team Experience\n\n",
-                  "The following sections from the team's shared knowledge board "
+    lines_out = ["## Relevant Project Facts\n\n",
+                  "The following sections from the project's fact board (team_board.md) "
                   "may be relevant to your task:\n"]
     for _, heading, body in selected:
         lines_out.append(f"### {heading}\n")
