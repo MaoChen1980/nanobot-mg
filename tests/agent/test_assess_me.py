@@ -202,6 +202,163 @@ class TestFinalizeTurn:
         assert session.metadata.get("llm_request_count") == 3
         assert session.metadata.get("assistant_turn_count") == 2
 
+    # ------------------------------------------------------------------
+    # Rebuild tests — session.messages rebuilt from all_msgs to persist
+    # compressed history. These use a real _append_turn_to_session.
+    # ------------------------------------------------------------------
+
+    def _make_real_loop(self):
+        """Build a mock loop with a real _append_turn_to_session method."""
+        from nanobot.agent.loop import AgentLoop
+
+        loop = MagicMock(spec=AgentLoop)
+        loop.lifecycle = MagicMock()
+        loop._pt_save_interval = 999
+        loop.max_tool_result_chars = 1000
+        loop._sanitize_persisted_blocks = MagicMock(return_value=[])
+
+        # Bind the real _append_turn_to_session
+        loop._append_turn_to_session = (
+            AgentLoop._append_turn_to_session.__get__(loop, AgentLoop)
+        )
+        return loop
+
+    @pytest.mark.asyncio
+    async def test_rebuild_basic(self) -> None:
+        """Rebuild: history + current turn end up in session.messages."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_real_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        all_msgs = [
+            {"role": "system", "content": "prompt"},
+            {"role": "user", "content": "hello", "timestamp": "t1"},
+            {"role": "assistant", "content": "hi", "timestamp": "t2"},
+        ]
+
+        await handler._finalize_turn(session, all_msgs, 2, False, "hi")
+
+        assert len(session.messages) == 2
+        assert session.messages[0]["content"] == "hello"
+        assert session.messages[1]["content"] == "hi"
+
+    @pytest.mark.asyncio
+    async def test_rebuild_with_instructions(self) -> None:
+        """Rebuild: instructions at index 1 are not persisted."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_real_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        all_msgs = [
+            {"role": "system", "content": "prompt"},
+            {"role": "user", "content": "## Instructions\n\nDo X"},
+            {"role": "user", "content": "hello", "timestamp": "t1"},
+            {"role": "assistant", "content": "hi", "timestamp": "t2"},
+        ]
+
+        await handler._finalize_turn(session, all_msgs, 3, False, "hi")
+
+        assert len(session.messages) == 2
+        assert session.messages[0]["content"] == "hello"
+        assert session.messages[1]["content"] == "hi"
+
+    @pytest.mark.asyncio
+    async def test_rebuild_persisted_early_preserves_user_msg(self) -> None:
+        """Rebuild: early-persisted user message keeps _message_id and timestamp."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_real_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        session.messages = [
+            {"role": "user", "content": "hello", "timestamp": "t1", "_message_id": "msg_1"}
+        ]
+        all_msgs = [
+            {"role": "system", "content": "prompt"},
+            {"role": "user", "content": "hello", "timestamp": "t1"},
+            {"role": "assistant", "content": "hi", "timestamp": "t2"},
+        ]
+
+        await handler._finalize_turn(session, all_msgs, 2, True, "hi")
+
+        assert len(session.messages) == 2
+        assert session.messages[0].get("_message_id") == "msg_1"
+        assert session.messages[0].get("timestamp") == "t1"
+        assert session.messages[1]["content"] == "hi"
+
+    @pytest.mark.asyncio
+    async def test_rebuild_with_compressed_history(self) -> None:
+        """Rebuild: compressed synthetic pair + current turn survive finalize."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_real_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        all_msgs = [
+            {"role": "system", "content": "prompt"},
+            {"role": "user", "content": "[compressed summary of earlier conversation]"},
+            {"role": "assistant", "content": "[summary response]"},
+            {"role": "user", "content": "current query", "timestamp": "t3"},
+            {"role": "assistant", "content": "current response", "timestamp": "t4"},
+        ]
+
+        await handler._finalize_turn(session, all_msgs, 3, False, "current response")
+
+        # History: [compressed summary], Current: [summary response, current query, current response]
+        assert len(session.messages) == 4
+        assert session.messages[0]["content"] == "[compressed summary of earlier conversation]"
+        assert session.messages[1]["content"] == "[summary response]"
+        assert session.messages[2]["content"] == "current query"
+        assert session.messages[3]["content"] == "current response"
+
+    @pytest.mark.asyncio
+    async def test_rebuild_summary_injected_key_set_when_summary_exists(self) -> None:
+        """Rebuild: _summary_injected_key set when session._last_summary exists."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_real_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        session._last_summary = "previous summary"
+        all_msgs = [
+            {"role": "system", "content": "prompt"},
+            {"role": "user", "content": "hello", "timestamp": "t1"},
+            {"role": "assistant", "content": "hi", "timestamp": "t2"},
+        ]
+
+        await handler._finalize_turn(session, all_msgs, 2, False, "hi")
+
+        assert session.metadata.get("_summary_injected_key") == "previous summary"
+
+    @pytest.mark.asyncio
+    async def test_rebuild_empty_assistant_filtered(self) -> None:
+        """Rebuild: empty assistant messages are filtered by _append_turn_to_session."""
+        from nanobot.agent.loop_message_handlers import UserMessageHandler
+        from nanobot.session.manager import Session
+
+        loop = self._make_real_loop()
+        handler = UserMessageHandler(loop)
+        session = Session(key="test")
+        all_msgs = [
+            {"role": "system", "content": "prompt"},
+            {"role": "user", "content": "hello", "timestamp": "t1"},
+            {"role": "assistant", "content": ""},
+            {"role": "assistant", "content": "real response", "timestamp": "t2"},
+        ]
+
+        await handler._finalize_turn(session, all_msgs, 2, False, "real response")
+
+        assert len(session.messages) == 2
+        assert session.messages[0]["content"] == "hello"
+        assert session.messages[1]["content"] == "real response"
+
 
 # =========================================================================
 # is_assessment_message

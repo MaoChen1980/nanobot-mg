@@ -12,7 +12,6 @@ from loguru import logger
 if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
-from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
 from nanobot.agent.context import ContextState
 
 from nanobot.agent.tools.message import MessageTool
@@ -130,7 +129,8 @@ class SystemMessageHandler:
             context_state=cs,
         )
         final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
-        all_msgs = [m for m in all_msgs if not is_assessment_message(m) and not is_debug_root_cause_message(m)]
+        # 不剥离 assess_me/DRC — _append_turn_to_session 会在 append 时过滤。
+        # 预剥离会缩短 all_msgs 但 initial_msg_count 不变，导致索引错位。
         session.metadata["llm_request_count"] = session.metadata.get("llm_request_count", 0) + _total_llm_requests
         if is_subagent and self._loop._persist_subagent_followup(session, msg):
             self._loop.sessions.save(session)
@@ -276,8 +276,8 @@ class UserMessageHandler:
             session_key=key,
             pending_queue=pending_queue,
         )
-        # Strip assess_me / debug_root_cause messages from persisted history
-        all_msgs = [m for m in all_msgs if not is_assessment_message(m) and not is_debug_root_cause_message(m)]
+        # 不剥离 assess_me/DRC — _append_turn_to_session/_finalize_turn 内部会过滤。
+        # 预剥离会缩短 all_msgs 但 initial_msg_count 不变，导致索引错位。
 
         # Stage 7: finalize — save, file cap, recovery clear, background schedule
         if msg.ephemeral:
@@ -415,10 +415,56 @@ class UserMessageHandler:
         """Save turn, enforce file cap, clear recovery state."""
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE
-        # skip: system prompt (1) + retained_history + user message if already in session
-        # initial_msgs_count = 1 + len(retained_history) + 1
+
+        # Rebuild session.messages from all_msgs to persist compressed history.
+        # When proactive compression compresses the history portion of all_msgs,
+        # that compressed state must be written back to session.messages so the
+        # next turn loads the compressed version instead of the full uncompressed
+        # history.
         save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
-        self._loop._append_turn_to_session(session, all_msgs, save_skip)
+
+        # Detect instructions injected at index 1 (from runner iteration loop).
+        # When present, all subsequent indices are shifted by 1.
+        _instr_offset = 0
+        _history_start = 1
+        if (len(all_msgs) > 1
+                and all_msgs[1].get("role") == "user"
+                and isinstance(all_msgs[1].get("content"), str)
+                and all_msgs[1]["content"].startswith("## Instructions")):
+            _history_start = 2
+            _instr_offset = 1
+
+        # Adjust save_skip for instruction offset so current turn boundaries are correct
+        save_skip += _instr_offset
+
+        # The current user message is always at this position (adjusted for instructions)
+        _user_msg_idx = initial_msgs_count - 1 + _instr_offset
+
+        # History portion (post-compression if compression happened) excluding the current user message
+        history_slice = list(all_msgs[_history_start:_user_msg_idx])
+        # Current turn messages
+        current_slice = list(all_msgs[save_skip:])
+
+        # Save the early-persisted user message before clearing session.messages
+        _persisted_user_msg = None
+        if user_persisted_early and session.messages:
+            _persisted_user_msg = dict(session.messages[-1])
+
+        session.messages = []
+        self._loop._append_turn_to_session(session, history_slice, 0)
+        if user_persisted_early:
+            if _persisted_user_msg:
+                session.messages.append(_persisted_user_msg)
+            else:
+                # Fallback: use from all_msgs (loses timestamp/extra fields)
+                session.messages.append(dict(all_msgs[_user_msg_idx]))
+        self._loop._append_turn_to_session(session, current_slice, 0)
+
+        # Mark summary as already injected so crash recovery doesn't re-inject
+        # a summary that's already in the compressed history.
+        _last_summary = getattr(session, '_last_summary', None)
+        if _last_summary:
+            session.metadata["_summary_injected_key"] = _last_summary
 
         # Track persistent LLM request count (survives compression)
         if total_llm_requests:
