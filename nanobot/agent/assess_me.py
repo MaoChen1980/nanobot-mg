@@ -67,6 +67,7 @@ def format_conversation(messages: list[dict]) -> str:
 async def assess_me(
     messages: list[dict[str, Any]],
     verify: str = "",
+    tree_data: str = "",
 ) -> str:
     """Assess current cognition state from conversation history.
 
@@ -75,7 +76,7 @@ async def assess_me(
     callers handle empty assessments according to their context.
     """
     conversation = format_conversation(messages)
-    prompt = render_template("agent/assess_me.md", conversation=conversation, verify=verify)
+    prompt = render_template("agent/assess_me.md", conversation=conversation, verify=verify, tree=tree_data)
 
     resp = await chat_stream_with_retry(
         [{"role": "user", "content": prompt}],
