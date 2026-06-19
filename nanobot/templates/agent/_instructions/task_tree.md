@@ -6,7 +6,7 @@
 任务树是参考信息，**始终优先回应用户的最新消息**。不要在用户有明确提问时去检查或推进任务。只有当你处理完用户消息后空闲下来，才去检查任务树。
 
 **结构：**
-- `{{ workspace_path }}/tasks/tree.json` — 任务树数据。schema 参考 `tasks/tree.schema.md`
+- `{{ tree_path }}` — 任务树数据。schema 参考 `tasks/tree.schema.md`
 - `tasks/<project-id>/<node-id>.md` — 每个节点完成时的详细报告
 - `tasks/<project-id>/index.md` — 归档后的完整子树（根完成后由你折叠）
 

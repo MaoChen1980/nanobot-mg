@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import os
 from pathlib import Path
 
 from nanobot.utils.compat import dataclass
+
+
+# Per-session context: set in _run_tool() before each tool execution.
+# Allows FileStateManager to key by (session_key, path) for session isolation.
+_current_session_key: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "file_state_session_key", default=None
+)
 
 
 @dataclass(slots=True)
@@ -21,12 +29,21 @@ class ReadState:
 class FileStateManager:
     """Manages file read state for read-before-edit warnings and deduplication.
 
-    This class encapsulates what was previously module-level global state,
-    allowing multiple independent workspaces or test contexts.
+    Keys are ``(session_key, path)`` tuples for session isolation.
+    When no session context is available (e.g. during tests), the key is
+    ``(None, path)`` — all sessions share the same fallback slot.
     """
 
     def __init__(self) -> None:
-        self._state: dict[str, ReadState] = {}
+        self._state: dict[tuple[str | None, str], ReadState] = {}
+
+    @staticmethod
+    def _current_sk() -> str | None:
+        """Return the current session key from context (or None)."""
+        return _current_session_key.get()
+
+    def _key(self, path: str) -> tuple[str | None, str]:
+        return (self._current_sk(), path)
 
     def _hash_file(self, p: str) -> str | None:
         try:
@@ -41,7 +58,7 @@ class FileStateManager:
             mtime = os.path.getmtime(p)
         except OSError:
             return
-        self._state[p] = ReadState(
+        self._state[self._key(p)] = ReadState(
             mtime=mtime,
             offset=offset,
             limit=limit,
@@ -55,9 +72,9 @@ class FileStateManager:
         try:
             mtime = os.path.getmtime(p)
         except OSError:
-            self._state.pop(p, None)
+            self._state.pop(self._key(p), None)
             return
-        self._state[p] = ReadState(
+        self._state[self._key(p)] = ReadState(
             mtime=mtime,
             offset=1,
             limit=None,
@@ -73,7 +90,7 @@ class FileStateManager:
         the check passes to avoid false-positive staleness warnings.
         """
         p = str(Path(path).resolve())
-        entry = self._state.get(p)
+        entry = self._state.get(self._key(p))
         if entry is None:
             return "Warning: file has not been read yet. Read it first to verify content before editing."
         try:
@@ -93,7 +110,7 @@ class FileStateManager:
     def is_unchanged(self, path: str | Path, offset: int = 1, limit: int | None = None) -> bool:
         """Return True if file was previously read with same params and content is unchanged."""
         p = str(Path(path).resolve())
-        entry = self._state.get(p)
+        entry = self._state.get(self._key(p))
         if entry is None:
             return False
         if not entry.can_dedup:
@@ -120,7 +137,7 @@ class FileStateManager:
         This uses the full-file SHA256 stored by record_read().
         """
         p = str(Path(path).resolve())
-        entry = self._state.get(p)
+        entry = self._state.get(self._key(p))
         if entry is None:
             return "Warning: file has not been read yet. Read it first to verify content before editing."
         if entry.content_hash is None:
@@ -145,8 +162,13 @@ class FileStateManager:
     def get_content_hash(self, path: str | Path) -> str | None:
         """Return the content hash stored for this file (from last read)."""
         p = str(Path(path).resolve())
-        entry = self._state.get(p)
+        entry = self._state.get(self._key(p))
         return entry.content_hash if entry else None
+
+    def get_read_state(self, path: str | Path) -> ReadState | None:
+        """Return the stored ReadState for *path* in the current session context (or None)."""
+        p = str(Path(path).resolve())
+        return self._state.get(self._key(p))
 
     def clear(self) -> None:
         """Clear all tracked state (useful for testing)."""

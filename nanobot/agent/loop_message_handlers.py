@@ -12,7 +12,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
-from nanobot.agent.context import ContextState
+from nanobot.agent.context import ContextState, _sanitize_session_key
 
 from nanobot.agent.tools.message import MessageTool
 from nanobot.bus.events import OutboundMessage
@@ -116,7 +116,8 @@ class SystemMessageHandler:
         )
         if is_subagent:
             history = list(history)
-            history.append({"role": "user", "content": f"Subagent 返回了结果。\n\n{msg.content.strip()}\n\n记住原始任务目标，所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、检查 team_board.md（事实板）、处理/更新最新任务状态，有必要的话调整任务、添加新的 subagent、或 cancel 不需要的 subagent。\n\n请继续按计划推进。"})
+            suffix = f"_{_sanitize_session_key(key)}" if key else ""
+            history.append({"role": "user", "content": f"Subagent 返回了结果。\n\n{msg.content.strip()}\n\n记住原始任务目标，所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、检查 team_board{suffix}.md（事实板）、处理/更新最新任务状态，有必要的话调整任务、添加新的 subagent、或 cancel 不需要的 subagent。\n\n请继续按计划推进。"})
             current_message = ""
         else:
             current_message = msg.content
@@ -127,6 +128,7 @@ class SystemMessageHandler:
             chat_id=chat_id,
             current_role="user",
             context_state=cs,
+            session_key=key,
         )
         final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
         # 不剥离 assess_me/DRC — _append_turn_to_session 会在 append 时过滤。
@@ -244,7 +246,7 @@ class UserMessageHandler:
         logger.info("STAGE_DBG: tool context done")
 
         # Stage 3: build initial messages
-        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session)
+        initial_messages, pending_ask_id = self._build_initial_messages(msg, history, pending, session, key)
         logger.info("STAGE_DBG: _build_initial_messages done ({} messages)", len(initial_messages))
 
         # Stage 4: callbacks
@@ -364,7 +366,7 @@ class UserMessageHandler:
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
 
-    def _build_initial_messages(self, msg, history, pending, session):
+    def _build_initial_messages(self, msg, history, pending, session, key=None):
         """Build the initial message list for the agent loop."""
         cs = ContextState(
             tool_definitions=self._loop.tools.get_definitions(),
@@ -378,6 +380,7 @@ class UserMessageHandler:
             channel=msg.channel,
             chat_id=self._loop._runtime_chat_id(msg),
             context_state=cs,
+            session_key=key,
         )
         return initial_messages, None
 

@@ -1,143 +1,25 @@
-"""Tests for heartbeat service — skip chain, TREE.md parsing, HEARTBEAT_OK."""
+"""Tests for heartbeat service — skip chain, pending task check, HEARTBEAT_OK."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from nanobot.heartbeat.service import (
-    _format_duration,
     _HEARTBEAT_OK,
     _is_heartbeat_ok,
-    _parse_interval_tasks,
     HeartbeatService,
 )
-from nanobot.heartbeat.state import HeartbeatState
 
 
-# =========================================================================
-# _parse_interval_tasks
-# =========================================================================
-
-
-class TestParseIntervalTasks:
-    def test_parses_interval_tasks_in_active_section(self):
-        tree = """## active
-- check health [interval: 30m]
-- sync data [interval: 1h]
-## backlog
-- old task [interval: 5m]
-"""
-        result = _parse_interval_tasks(tree)
-        assert result == [("check health", 1800), ("sync data", 3600)]
-
-    def test_ignores_non_interval_lines(self):
-        tree = """## active
-- task without interval
-  - subtask
-## done
-"""
-        assert _parse_interval_tasks(tree) == []
-
-    def test_handles_seconds_minutes_hours(self):
-        tree = """## active
-- a [interval: 30s]
-- b [interval: 5m]
-- c [interval: 2h]
-"""
-        result = _parse_interval_tasks(tree)
-        assert result == [("a", 30), ("b", 300), ("c", 7200)]
-
-    def test_empty_active_section(self):
-        tree = """## active
-## done
-- x [interval: 1m]
-"""
-        assert _parse_interval_tasks(tree) == []
-
-    def test_case_insensitive_interval_keyword(self):
-        tree = """## active
-- task [Interval: 30m]
-- other [INTERVAL: 1h]
-"""
-        result = _parse_interval_tasks(tree)
-        assert result == [("task", 1800), ("other", 3600)]
-
-    def test_malformed_interval_value(self):
-        tree = """## active
-- bad [interval: abc]
-- no_val [interval: ]
-- zero [interval: 0m]
-"""
-        result = _parse_interval_tasks(tree)
-        # "abc", empty value, and 0s interval all filtered out
-        assert result == []
-
-    def test_trailing_whitespace_in_line(self):
-        tree = """## active
-- task [interval: 30m]
-"""
-        result = _parse_interval_tasks(tree)
-        assert result == [("task", 1800)]
-
-    def test_active_section_with_subtasks_and_mixed_content(self):
-        tree = """## active
-- main task [interval: 30m]
-  - subtask not interval
-- standalone [interval: 1h]
-  - subtask also not interval
-## done
-"""
-        result = _parse_interval_tasks(tree)
-        assert result == [("main task", 1800), ("standalone", 3600)]
-
-    def test_ignores_interval_tasks_outside_active(self):
-        tree = """## backlog
-- old [interval: 30m]
-## active
-- current [interval: 1h]
-"""
-        assert _parse_interval_tasks(tree) == [("current", 3600)]
-
-    def test_special_chars_in_task_name(self):
-        tree = """## active
-- deploy:prod [interval: 30m]
-- sync/data [interval: 1h]
-- a.b_c [interval: 5m]
-"""
-        result = _parse_interval_tasks(tree)
-        assert result == [("deploy:prod", 1800), ("sync/data", 3600), ("a.b_c", 300)]
-
-
-# =========================================================================
-# _format_duration
-# =========================================================================
-
-
-class TestFormatDuration:
-    def test_seconds(self):
-        assert _format_duration(45) == "45s"
-
-    def test_minutes(self):
-        assert _format_duration(300) == "5m"
-        assert _format_duration(3600) == "1h"
-
-    def test_non_even_values(self):
-        assert _format_duration(90) == "90s"
-        assert _format_duration(3700) == "3700s"
-
-    def test_edge_boundaries(self):
-        assert _format_duration(0) == "0s"
-        assert _format_duration(59) == "59s"      # just under 1m
-        assert _format_duration(60) == "1m"        # exactly 1m
-        assert _format_duration(3599) == "3599s"   # just under 1h
-        assert _format_duration(3600) == "1h"      # exactly 1h
-
-    def test_large_values(self):
-        assert _format_duration(86400) == "24h"
-        assert _format_duration(7200) == "2h"
-        assert _format_duration(120) == "2m"
+def _make_tree_json(tasks_dir: Path, items: list[dict]) -> Path:
+    """Write a tree.json with the given items."""
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    path = tasks_dir / "tree.json"
+    path.write_text(json.dumps({"schema_version": 1, "items": items}), encoding="utf-8")
+    return path
 
 
 # =========================================================================
@@ -165,8 +47,8 @@ class TestIsHeartbeatOk:
         assert _is_heartbeat_ok("I found a bug and fixed it") is False
 
     def test_partial_word_prefix(self):
-        assert _is_heartbeat_ok("HEARTBEAT_OK_THING") is True   # starts with HEARTBEAT_OK
-        assert _is_heartbeat_ok("XHEARTBEAT_OK") is False        # doesn't start with it
+        assert _is_heartbeat_ok("HEARTBEAT_OK_THING") is True
+        assert _is_heartbeat_ok("XHEARTBEAT_OK") is False
 
     def test_leading_whitespace(self):
         assert _is_heartbeat_ok("  HEARTBEAT_OK") is True
@@ -176,31 +58,81 @@ class TestIsHeartbeatOk:
 
 
 # =========================================================================
+# _find_pending_tasks
+# =========================================================================
+
+
+class TestFindPendingTasks:
+    def test_returns_empty_when_no_tree(self, tmp_path):
+        service = _make_service(agent_loop=_make_loop(tmp_path))
+        assert service._find_pending_tasks() == []
+
+    def test_returns_pending_leaves_only(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        service = _make_service(agent_loop=loop)
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "root", "status": "active", "parent": None},
+            {"id": "child1", "status": "pending", "parent": "root"},
+            {"id": "child2", "status": "completed", "parent": "root"},
+        ])
+        result = service._find_pending_tasks()
+        assert len(result) == 1
+        assert result[0]["id"] == "child1"
+
+    def test_ignores_pending_with_children(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        service = _make_service(agent_loop=loop)
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "parent", "status": "pending", "parent": None},
+            {"id": "child", "status": "pending", "parent": "parent"},
+        ])
+        result = service._find_pending_tasks()
+        assert len(result) == 1
+        assert result[0]["id"] == "child"
+
+    def test_caps_at_five(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        service = _make_service(agent_loop=loop)
+        items = [
+            {"id": f"task{i}", "status": "pending", "parent": None}
+            for i in range(10)
+        ]
+        _make_tree_json(tmp_path / "tasks", items)
+        result = service._find_pending_tasks()
+        assert len(result) == 5
+
+    def test_returns_empty_on_invalid_json(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        service = _make_service(agent_loop=loop)
+        (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "tasks" / "tree.json").write_text("not json", encoding="utf-8")
+        assert service._find_pending_tasks() == []
+
+
+# =========================================================================
 # _build_prompt
 # =========================================================================
 
 
 class TestBuildPrompt:
-    def test_contains_due_tasks(self):
-        service = _make_service(agent_loop=MagicMock())
-        prompt = service._build_prompt([("check health", 1800), ("sync", 3600)])
+    def test_contains_pending_tasks(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        service = _make_service(agent_loop=loop)
+        pending = [{"id": "t1", "name": "check health", "status": "pending"},
+                   {"id": "t2", "name": "sync data", "status": "pending"}]
+        prompt = service._build_prompt(pending)
         assert "check health" in prompt
-        assert "sync" in prompt
+        assert "sync data" in prompt
         assert _HEARTBEAT_OK in prompt
 
-    def test_single_task_format(self):
-        service = _make_service()
-        prompt = service._build_prompt([("check", 300)])
-        assert "- check (every 5m)" in prompt
-        assert _HEARTBEAT_OK in prompt
-
-    def test_ordering_and_section_headers(self):
-        service = _make_service()
-        prompt = service._build_prompt([("a", 60), ("b", 3600)])
-        assert "Heartbeat" in prompt.split("\n")[0]
-        assert "Reply HEARTBEAT_OK" in prompt
-        assert "- a (every 1m)" in prompt
-        assert "- b (every 1h)" in prompt
+    def test_shows_criteria_and_note(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        service = _make_service(agent_loop=loop)
+        pending = [{"id": "t1", "name": "deploy", "status": "pending",
+                    "criteria": "all tests pass", "note": "waiting for CI"}]
+        prompt = service._build_prompt(pending)
+        assert "all tests pass" in prompt
+        assert "waiting for CI" in prompt
 
 
 # =========================================================================
@@ -213,58 +145,53 @@ class TestSkipChain:
         service = _make_service(enabled=False)
         service._last_run = 0.0
         await service._tick()
-        assert service._last_run == 0.0  # not updated
+        assert service._last_run == 0.0
 
-    async def test_skips_when_no_tree_md(self, tmp_path):
+    async def test_skips_when_no_tree_json(self, tmp_path):
         loop = _make_loop(tmp_path)
-        service = _make_service(agent_loop=loop)
-        service._last_run = 0.0
-        await service._tick()
-        assert service._last_run == 0.0  # cooldown not triggered
-
-    async def test_skips_when_session_busy(self, tmp_path):
-        _write_tree(tmp_path, ["check health", "30m"])
-        loop = _make_loop(tmp_path)
-        loop._session_dispatch = {"cli:direct": MagicMock()}
         service = _make_service(agent_loop=loop)
         service._last_run = 0.0
         await service._tick()
         assert service._last_run == 0.0
 
-    async def test_fires_when_tasks_due(self, tmp_path):
-        _write_tree(tmp_path, ["check health", "30m"])
+    async def test_skips_when_no_pending_tasks(self, tmp_path):
         loop = _make_loop(tmp_path)
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "root", "status": "completed", "parent": None},
+        ])
+        service = _make_service(agent_loop=loop)
+        service._last_run = 0.0
+        await service._tick()
+        assert service._last_run == 0.0
+
+    async def test_skips_when_session_busy(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        loop._session_dispatch = {None: MagicMock()}
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "task1", "status": "pending", "parent": None},
+        ])
+        service = _make_service(agent_loop=loop)
+        service._last_run = 0.0
+        await service._tick()
+        assert service._last_run == 0.0
+
+    async def test_fires_when_pending_tasks(self, tmp_path):
+        loop = _make_loop(tmp_path)
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "task1", "status": "pending", "parent": None},
+        ])
         loop.process_direct = AsyncMock(return_value=MagicMock(content="HEARTBEAT_OK"))
         service = _make_service(agent_loop=loop)
-        service._state = HeartbeatState(tmp_path / "tasks" / ".heartbeat_state.json")
         await service._tick()
         loop.process_direct.assert_awaited_once()
-        # timestamp updated after run
-        assert service._state.last_run("check health") is not None
-
-    async def test_skips_when_not_due(self, tmp_path):
-        _write_tree(tmp_path, ["check health", "30m"])
-        loop = _make_loop(tmp_path)
-        service = _make_service(agent_loop=loop)
-        service._state = HeartbeatState(tmp_path / "tasks" / ".heartbeat_state.json")
-        service._state.mark_run("check health", ts=9999999999.0)
-        await service._tick()
-        loop.process_direct.assert_not_called()
-
-    async def test_skips_when_state_not_initialized(self, tmp_path):
-        _write_tree(tmp_path, ["check health", "30m"])
-        loop = _make_loop(tmp_path)
-        service = _make_service(agent_loop=loop)
-        service._state = None
-        await service._tick()
-        loop.process_direct.assert_not_called()
 
     async def test_updates_last_run_on_fire(self, tmp_path):
-        _write_tree(tmp_path, ["check health", "30m"])
         loop = _make_loop(tmp_path)
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "task1", "status": "pending", "parent": None},
+        ])
         loop.process_direct = AsyncMock(return_value=MagicMock(content="HEARTBEAT_OK"))
         service = _make_service(agent_loop=loop)
-        service._state = HeartbeatState(tmp_path / "tasks" / ".heartbeat_state.json")
         service._last_run = 0.0
         await service._tick()
         assert service._last_run > 0.0
@@ -277,22 +204,24 @@ class TestSkipChain:
 
 class TestHeartbeatOkResponse:
     async def test_sets_content_to_none_on_heartbeat_ok(self, tmp_path):
-        _write_tree(tmp_path, ["check health", "30m"])
         loop = _make_loop(tmp_path)
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "task1", "status": "pending", "parent": None},
+        ])
         response = MagicMock(content="HEARTBEAT_OK all good")
         loop.process_direct = AsyncMock(return_value=response)
         service = _make_service(agent_loop=loop)
-        service._state = HeartbeatState(tmp_path / "tasks" / ".heartbeat_state.json")
         await service._tick()
         assert response.content is None
 
     async def test_keeps_content_on_normal_response(self, tmp_path):
-        _write_tree(tmp_path, ["check health", "30m"])
         loop = _make_loop(tmp_path)
+        _make_tree_json(tmp_path / "tasks", [
+            {"id": "task1", "status": "pending", "parent": None},
+        ])
         response = MagicMock(content="Found an issue, fixed it")
         loop.process_direct = AsyncMock(return_value=response)
         service = _make_service(agent_loop=loop)
-        service._state = HeartbeatState(tmp_path / "tasks" / ".heartbeat_state.json")
         await service._tick()
         assert response.content == "Found an issue, fixed it"
 
@@ -351,13 +280,11 @@ class TestLifecycle:
 # =========================================================================
 
 
-def _make_service(
-    agent_loop=None,
-    enabled: bool = True,
-) -> HeartbeatService:
+def _make_service(agent_loop=None, enabled: bool = True, session_key: str | None = None) -> HeartbeatService:
     return HeartbeatService(
         agent_loop=agent_loop or MagicMock(),
         enabled=enabled,
+        session_key=session_key,
     )
 
 
@@ -367,16 +294,3 @@ def _make_loop(tmp_path: Path) -> MagicMock:
     loop._session_dispatch = {}
     loop.dispatch_manager = MagicMock()
     return loop
-
-
-def _write_tree(tmp_path: Path, task: list[str]) -> Path:
-    """Write a minimal TREE.md with one interval task under ## active."""
-    tree_dir = tmp_path / "tasks"
-    tree_dir.mkdir(parents=True, exist_ok=True)
-    tree_path = tree_dir / "TREE.md"
-    name, interval = task
-    tree_path.write_text(
-        f"## active\n- {name} [interval: {interval}]\n## done\n",
-        encoding="utf-8",
-    )
-    return tree_path

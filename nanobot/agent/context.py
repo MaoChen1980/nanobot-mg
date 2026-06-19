@@ -36,6 +36,17 @@ _gpu_info_cache: str | None = None  # GPU description
 
 # Regex matching Windows absolute paths with backslashes (e.g. C:\Users\foo)
 _WIN_PATH_RE = re.compile(r"\b[A-Za-z]:\\[^\s\"'|&;<>()$`]*")
+_SESSION_KEY_RE = re.compile(r"[^\w.-]")
+
+
+def _sanitize_session_key(key: str) -> str:
+    """Replace characters unsafe for filenames (e.g. ``:`` in ``cli:direct``).
+
+    Applies a broader character filter than ``safe_filename()`` (replaces
+    anything outside ``[\\w.-]``) and strips leading/trailing whitespace
+    first so the suffix is always clean.
+    """
+    return _SESSION_KEY_RE.sub("_", key.strip())
 
 
 def normalize_paths(text: str) -> str:
@@ -126,6 +137,7 @@ class ContextBuilder:
         channel: str | None = None,
         tool_definitions: list[dict[str, Any]] | None = None,
         runtime_context: str | None = None,
+        session_key: str | None = None,
     ) -> str:
         """Build the static portion of the system prompt (identity, tools, bootstrap, skills)."""
         _t0 = time.time()
@@ -140,6 +152,11 @@ class ContextBuilder:
 
         bootstrap = self._load_bootstrap_files()
 
+        suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        tree_rel = f"tasks/tree{suffix}.json"
+        current_rel = f"tasks/CURRENT{suffix}.md"
+        team_board_rel = f"tasks/team_board{suffix}.md"
+
         result = render_template(
             "agent/system_prompt.md",
             identity=identity,
@@ -148,6 +165,10 @@ class ContextBuilder:
             runtime_context=runtime_context,
             # Workspace path — used by included templates (framework_core etc.)
             workspace_path=self._workspace_path_str,
+            # Session-scoped paths
+            tree_path=f"{self._workspace_path_str}/{tree_rel}",
+            current_path=f"{self._workspace_path_str}/{current_rel}",
+            team_board_path=f"{self._workspace_path_str}/{team_board_rel}",
             # Framework config — used by framework_core.md via {% include %}
             max_iterations=self._framework_config.get("max_iterations", 200),
             context_window_tokens=self._framework_config.get("context_window_tokens", 200_000),
@@ -156,6 +177,15 @@ class ContextBuilder:
             subagent_max_iterations=self._framework_config.get("subagent_max_iterations", 100),
             heartbeat_interval_minutes=self._framework_config.get("heartbeat_interval_minutes", 30),
         )
+
+        # Post-process: replace old path references in included templates
+        if suffix:
+            old_tree = f"{self._workspace_path_str}/tasks/tree.json"
+            old_current = f"{self._workspace_path_str}/tasks/CURRENT.md"
+            old_board = f"{self._workspace_path_str}/tasks/team_board.md"
+            result = result.replace(old_tree, f"{self._workspace_path_str}/{tree_rel}")
+            result = result.replace(old_current, f"{self._workspace_path_str}/{current_rel}")
+            result = result.replace(old_board, f"{self._workspace_path_str}/{team_board_rel}")
 
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 100:
@@ -198,7 +228,7 @@ class ContextBuilder:
         )
         return "\n".join(lines)
 
-    def build_instructions_section(self, *, for_subagent: bool = False) -> str:
+    def build_instructions_section(self, *, for_subagent: bool = False, session_key: str | None = None) -> str:
         """Build instructions block (prepended to last user message, near generation point).
 
         These are directive/procedural rules that LLMs treat as instructions
@@ -214,6 +244,12 @@ class ContextBuilder:
         rules_text = self.memory.read_rules().strip()
         if rules_text:
             sections.append(f"## Rules\n\n{rules_text}")
+
+        # Session-scoped file paths for instructions that reference them
+        suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        tree_rel = f"tasks/tree{suffix}.json"
+        current_rel = f"tasks/CURRENT{suffix}.md"
+        team_board_rel = f"tasks/team_board{suffix}.md"
 
         # Static instruction snippets loaded from template files
         # Edit these files to change instruction content (no Python changes needed)
@@ -240,13 +276,33 @@ class ContextBuilder:
                 "meta_learning",
                 "skill_refinement",
             ]
+        template_kwargs = dict(
+            workspace_path=self._workspace_path_str,
+            tree_path=f"{self._workspace_path_str}/{tree_rel}",
+            current_path=f"{self._workspace_path_str}/{current_rel}",
+            team_board_path=f"{self._workspace_path_str}/{team_board_rel}",
+        )
         for name in snippet_names:
             content = render_template(
                 f"agent/_instructions/{name}.md",
-                workspace_path=self._workspace_path_str,
+                **template_kwargs,
             )
             if content.strip():
                 sections.append(content)
+
+        # Post-process: replace well-known path references with session-scoped equivalents.
+        # This covers templates that still use `{{ workspace_path }}/tasks/tree.json` etc.
+        # without requiring every template file to be updated.
+        if suffix:
+            old_tree = f"{self._workspace_path_str}/tasks/tree.json"
+            old_current = f"{self._workspace_path_str}/tasks/CURRENT.md"
+            old_board = f"{self._workspace_path_str}/tasks/team_board.md"
+            for i, sec in enumerate(sections):
+                sec = sec.replace(old_tree, f"{self._workspace_path_str}/{tree_rel}")
+                sec = sec.replace(old_current, f"{self._workspace_path_str}/{current_rel}")
+                if team_board_rel:
+                    sec = sec.replace(old_board, f"{self._workspace_path_str}/{team_board_rel}")
+                sections[i] = sec
 
         # Always-skills — full content, always injected near generation point
         always_skills_names = self.skills.get_always_skills()
@@ -274,8 +330,8 @@ class ContextBuilder:
         # Current task tree — injected as verification standard (not reference)
         # Re-injected every iteration via instructions, immune to compression.
         if not for_subagent:
-            task_tree = self._build_task_tree_section()
-            current_ctx = self._build_current_context_section()
+            task_tree = self._build_task_tree_section(session_key=session_key)
+            current_ctx = self._build_current_context_section(session_key=session_key)
             task_parts: list[str] = []
             if task_tree:
                 task_parts.append(task_tree)
@@ -432,21 +488,22 @@ class ContextBuilder:
     def _get_children(items: list[dict], parent_id: str) -> list[dict]:
         return [it for it in items if it.get("parent") == parent_id]
 
-    def _build_task_tree_section(self) -> str:
-        """Read tasks/tree.json from the workspace and render as a tree for context injection.
+    def _build_task_tree_section(self, session_key: str | None = None) -> str:
+        """Read tasks/tree*.json from the workspace and render as a tree.
 
+        Per-session isolation via session_key (e.g. ``tree_cli_direct.json``).
         Only injects when there are active (non-completed, non-failed) tasks.
-        All-completed trees generate no output, saving context and avoiding
-        distractions when no task work is needed.
         """
-        tree_path = self.workspace / "tasks" / "tree.json"
+        suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        tree_path = self.workspace / "tasks" / f"tree{suffix}.json"
+        tree_rel = f"tasks/tree{suffix}.json"
         raw = self._cached_read_text(tree_path)
         if not raw:
             return ""
         try:
             data = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to parse tasks/tree.json — skipping tree section")
+            logger.warning("Failed to parse %s — skipping tree section", tree_rel)
             return ""
         items = data.get("items", [])
         if not items:
@@ -457,8 +514,8 @@ class ContextBuilder:
             return ""
         rendered = self._render_tree_items(items, parent=None, depth=0)
         return (
-            f"# Task Tree - {self._workspace_path_str}/tasks/tree.json\n\n"
-            "Current task tree. Tree data is in tasks/tree.json — "
+            f"# Task Tree - {self._workspace_path_str}/{tree_rel}\n\n"
+            f"Current task tree. Tree data is in {tree_rel} — "
             "use read_file_tool/write_file_tool/edit_file_tool to update it. "
             "Schema reference: tasks/tree.schema.md.\n\n"
             + rendered
@@ -498,9 +555,11 @@ class ContextBuilder:
             lines.append(ContextBuilder._render_tree_items(items, parent=cid, depth=depth + 1))
         return "\n".join(lines)
 
-    def _build_current_context_section(self) -> str:
-        """Read tasks/CURRENT.md from the workspace for project-level working context (cached by mtime)."""
-        current_path = self.workspace / "tasks" / "CURRENT.md"
+    def _build_current_context_section(self, session_key: str | None = None) -> str:
+        """Read tasks/CURRENT*.md from the workspace (per-session isolation via session_key)."""
+        suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        current_path = self.workspace / "tasks" / f"CURRENT{suffix}.md"
+        current_rel = f"tasks/CURRENT{suffix}.md"
         content = self._cached_read_text(current_path)
         if not content:
             return ""
@@ -508,7 +567,7 @@ class ContextBuilder:
         if not content:
             return ""
         return (
-            f"# Working Context - {self._workspace_path_str}/tasks/CURRENT.md\n\n"
+            f"# Working Context - {self._workspace_path_str}/{current_rel}\n\n"
             "Project-level working context. Tracks the current project node's progress. "
             "Create and update it with write_file_tool.\n\n"
             + self._shift_headings(content, offset=1)
@@ -805,6 +864,7 @@ class ContextBuilder:
         chat_id: str | None = None,
         current_role: str = "user",
         context_state: ContextState | None = None,
+        session_key: str | None = None,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
         cs = context_state or ContextState()
@@ -817,10 +877,14 @@ class ContextBuilder:
         if cs.history_budget_tokens is not None:
             runtime_lines.append(f"History Budget: ~{cs.history_budget_tokens} tokens available")
 
+        # Use explicit session_key when available; fall back to channel:chat_id
+        # for callers that don't have one (e.g. thread-scoped override).
+        sys_session_key = session_key or (f"{channel}:{chat_id}" if channel and chat_id else None)
         sys_static = self.build_system_prompt(
             channel=channel,
             tool_definitions=cs.tool_definitions,
             runtime_context="\n".join(runtime_lines),
+            session_key=sys_session_key,
         )
         retained_history = history
 

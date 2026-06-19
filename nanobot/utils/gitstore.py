@@ -485,10 +485,10 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
         "- Do not delete historical nodes. failed/paused preserve trace\n"
         "- Archive: root completed --> children moved to `tasks/<project-id>/index.md` and removed from tree.json\n"
     )
+    # tree.json and CURRENT.md are now session-scoped (tree_{key}.json, CURRENT_{key}.md)
+    # — created dynamically by the LLM via file tools. Only create shared schema/board files.
     for name, content in (
-        ("tree.json", tree_content),
         ("tree.schema.md", schema_content),
-        ("CURRENT.md", current_content),
         ("team_board.md", team_board_content),
     ):
         f = tasks_dir / name

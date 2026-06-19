@@ -27,8 +27,10 @@ def _read_workspace_file(workspace: Path, filename: str) -> str:
     return ""
 
 
-def build_context_block(workspace: Path | None = None, team_context: str | None = None) -> str:
+def build_context_block(workspace: Path | None = None, team_context: str | None = None, session_key: str | None = None) -> str:
     """Build context block from current messages and files."""
+    from nanobot.agent.context import _sanitize_session_key
+
     messages = _current_messages_for_subagent.get() or []
     parts: list[str] = ["## Context from Main Agent"]
 
@@ -37,7 +39,8 @@ def build_context_block(workspace: Path | None = None, team_context: str | None 
             content = _read_workspace_file(workspace, filename)
             if content:
                 parts.append(f"=== {(workspace / filename).as_posix()} ===\n{content[:800]}\n===============")
-        for rel in ["tasks/tree.json", "tasks/CURRENT.md", "tasks/team_board.md"]:
+        suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        for rel in [f"tasks/tree{suffix}.json", f"tasks/CURRENT{suffix}.md", f"tasks/team_board{suffix}.md"]:
             content = _read_workspace_file(workspace, rel)
             if content:
                 parts.append(f"=== {(workspace / rel).as_posix()} ===\n{content[:8000]}\n===============")
@@ -154,7 +157,7 @@ class SpawnTool(Tool):
                 return f"Error: duplicate label '{label}' in spawn tasks. Each task must have a unique label."
             seen_labels.add(label)
         workspace = getattr(self._manager, "workspace", None)
-        context = build_context_block(workspace, team_context=team_context)
+        context = build_context_block(workspace, team_context=team_context, session_key=self._session_key.get())
         results: list[str] = []
         for t in tasks:
             task = t["task"]

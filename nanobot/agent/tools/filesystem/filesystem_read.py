@@ -103,7 +103,7 @@ class ReadFileTool(_FsTool):
                 return build_image_content_blocks(raw, mime, str(fp), f"(Image file: {path})")
 
             # Read dedup: same path + offset + limit + unchanged mtime + unchanged hash → stub
-            entry = file_state._default_manager._state.get(str(fp.resolve()))
+            entry = file_state._default_manager.get_read_state(fp)
             try:
                 current_mtime = os.path.getmtime(fp)
             except OSError:

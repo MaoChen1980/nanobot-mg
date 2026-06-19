@@ -214,6 +214,7 @@ class SubagentManager:
                 output_schema=output_schema,
                 role=role,
                 task_description=task,
+                session_key=origin["session_key"],
             )
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},

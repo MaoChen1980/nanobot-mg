@@ -1,9 +1,9 @@
-"""Heartbeat service — skip chain, TREE.md interval tasks, HEARTBEAT_OK protocol."""
+"""Heartbeat service — skip chain, pending task check, HEARTBEAT_OK protocol."""
 
 from __future__ import annotations
 
 import asyncio
-import re
+import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,66 +19,16 @@ _HEARTBEAT_OK = "HEARTBEAT_OK"
 _SESSION_KEY = "cli:direct"
 _STATE_FILE = ".heartbeat_state.json"
 
-_INTERVAL_RE = re.compile(
-    r"^\s*[-*]\s+(.+?)\s*\[interval:\s*(\d+)\s*(s|m|h)\]\s*$",
-    re.IGNORECASE,
-)
-
-_UNIT_MULT = {"s": 1, "m": 60, "h": 3600}
-
-
-def _format_duration(seconds: int) -> str:
-    """Format seconds to human-readable short form."""
-    if seconds >= 3600 and seconds % 3600 == 0:
-        return f"{seconds // 3600}h"
-    if seconds >= 60 and seconds % 60 == 0:
-        return f"{seconds // 60}m"
-    return f"{seconds}s"
-
-
-def _parse_interval_tasks(tree_content: str) -> list[tuple[str, int]]:
-    """Parse TREE.md for interval-annotated tasks under ``## active``.
-
-    Returns list of ``(task_name, interval_seconds)``.
-    """
-    tasks: list[tuple[str, int]] = []
-    in_active = False
-    for line in tree_content.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("## ") and "active" in stripped.lower():
-            in_active = True
-            continue
-        if stripped.startswith("## "):
-            in_active = False
-            continue
-        if not in_active:
-            continue
-        m = _INTERVAL_RE.match(line)
-        if m:
-            name = m.group(1).strip()
-            interval = int(m.group(2)) * _UNIT_MULT[m.group(3)]
-            if interval > 0:
-                tasks.append((name, interval))
-    return tasks
-
-
-def _is_heartbeat_ok(content: str | None) -> bool:
-    """Check if LLM response is a HEARTBEAT_OK ack."""
-    if not content:
-        return True
-    return content.strip().upper().startswith(_HEARTBEAT_OK)
-
 
 class HeartbeatService:
-    """Periodic heartbeat that checks TREE.md for due interval tasks.
+    """Periodic heartbeat that checks tree.json for pending tasks.
 
     Flow
     ----
-    1. Timer fires → skip chain (disabled, cooldown, session busy, no due tasks)
-    2. Build heartbeat prompt from due interval tasks
+    1. Timer fires → skip chain (disabled, cooldown, session busy, no pending tasks)
+    2. Build heartbeat prompt from pending tasks
     3. ``agent_loop.process_direct()`` — lightweight LLM call
     4. Check response for ``HEARTBEAT_OK`` → suppress delivery
-    5. Update task run timestamps
     """
 
     def __init__(
@@ -142,6 +92,34 @@ class HeartbeatService:
     # Tick — skip chain + prompt + LLM + response handling
     # ------------------------------------------------------------------
 
+    def _tree_path(self) -> Path:
+        """Return session-scoped tree.json path."""
+        from nanobot.agent.context import _sanitize_session_key
+
+        suffix = f"_{_sanitize_session_key(self.session_key)}" if self.session_key else ""
+        return self.agent_loop.workspace / "tasks" / f"tree{suffix}.json"
+
+    def _find_pending_tasks(self) -> list[dict]:
+        """Scan tree.json for pending leaf tasks."""
+        tree_path = self._tree_path()
+        if not tree_path.exists():
+            return []
+        try:
+            raw = tree_path.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except (json.JSONDecodeError, OSError):
+            return []
+        items: list[dict] = data.get("items", [])
+        if not items:
+            return []
+        # Collect parent IDs so we can identify leaves
+        parent_ids = {item.get("parent") for item in items if item.get("parent")}
+        pending = [
+            item for item in items
+            if item.get("status") == "pending" and item.get("id") not in parent_ids
+        ]
+        return pending[:5]  # cap at 5 to keep prompt short
+
     async def _tick(self) -> None:
         """Single heartbeat beat: skip chain → prompt → LLM → handle response."""
         t0 = time.time()
@@ -159,42 +137,15 @@ class HeartbeatService:
             logger.debug("Heartbeat skipped: session busy")
             return
 
-        # --- Read TREE.md ---
-        tree_path = self.agent_loop.workspace / "tasks" / "TREE.md"
-        if not tree_path.exists():
-            logger.debug("Heartbeat skipped: no TREE.md")
-            return
-
-        try:
-            tree_content = tree_path.read_text(encoding="utf-8")
-        except OSError:
-            logger.warning("Heartbeat skipped: cannot read TREE.md")
-            return
-
-        # --- Parse interval tasks ---
-        interval_tasks = _parse_interval_tasks(tree_content)
-        if not interval_tasks:
-            logger.debug("Heartbeat skipped: no interval tasks in TREE.md")
-            return
-
-        # --- Check which tasks are due ---
-        state = self._state
-        if state is None:
-            logger.debug("Heartbeat skipped: state not initialized")
-            return
-        due: list[tuple[str, int]] = []
-        for name, interval_sec in interval_tasks:
-            last = state.last_run(name)
-            if last is None or (t0 - last) >= interval_sec:
-                due.append((name, interval_sec))
-
-        if not due:
-            logger.debug("Heartbeat skipped: no interval tasks due")
+        # --- Read tree.json for pending tasks ---
+        pending = self._find_pending_tasks()
+        if not pending:
+            logger.debug("Heartbeat skipped: no pending tasks")
             return
 
         # --- Build prompt ---
-        prompt = self._build_prompt(due)
-        logger.info("Heartbeat fire: {} task(s) due", len(due))
+        prompt = self._build_prompt(pending)
+        logger.info("Heartbeat fire: {} pending task(s)", len(pending))
 
         # --- Send to LLM via process_direct ---
         self._last_run = t0
@@ -220,27 +171,31 @@ class HeartbeatService:
                 len(response.content or ""),
             )
 
-        # --- Update task timestamps ---
-        now = time.time()
-        state.mark_tasks({name: now for name, _ in due})
-
     # ------------------------------------------------------------------
     # Prompt building
     # ------------------------------------------------------------------
 
-    def _build_prompt(self, due: list[tuple[str, int]]) -> str:
-        """Build the heartbeat user message from due tasks."""
+    def _build_prompt(self, pending: list[dict]) -> str:
+        """Build the heartbeat user message from pending tasks."""
+        tree_path = self._tree_path().as_posix()
         lines = [
-            "⏰ Heartbeat — due interval tasks from TREE.md:",
+            "⏰ Heartbeat — pending tasks detected:",
             "",
         ]
-        for name, interval_sec in due:
-            lines.append(f"  - {name} (every {_format_duration(interval_sec)})")
+        for item in pending:
+            name = item.get("name", item.get("id", "?"))
+            criteria = item.get("criteria", "")
+            note = item.get("note", "")
+            parts = [f"  - {name}"]
+            if criteria:
+                parts[0] += f" ({criteria})"
+            if note:
+                parts[0] += f" — {note}"
+            lines.append(parts[0])
         lines.append("")
-        lines.append("For each due task, decide if it needs attention:")
+        lines.append(f"Read `{tree_path}` and decide if any task needs attention.")
         lines.append(f"- Reply {_HEARTBEAT_OK} if nothing needs to be done")
         lines.append("- If work is needed, do it (check status, update files, etc.)")
-        lines.append("- Update TREE.md with any progress made")
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
@@ -249,3 +204,10 @@ class HeartbeatService:
 
     def _resolve_state_path(self) -> Path:
         return self.agent_loop.workspace / "tasks" / _STATE_FILE
+
+
+def _is_heartbeat_ok(content: str | None) -> bool:
+    """Check if LLM response is a HEARTBEAT_OK ack."""
+    if not content:
+        return True
+    return content.strip().upper().startswith(_HEARTBEAT_OK)

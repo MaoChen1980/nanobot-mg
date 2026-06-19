@@ -10,6 +10,7 @@ from loguru import logger
 
 from nanobot.agent.runner_injection import drain_injections
 from nanobot.agent.runner_constants import _MAX_INJECTION_CYCLES
+from nanobot.agent.tools import file_state
 from nanobot.utils.runtime import check_repeated_external_lookup
 
 
@@ -135,6 +136,8 @@ async def _run_tool(
     turn: int,
 ) -> tuple:
     """Execute a single tool call and return (result, event, error)."""
+    if spec is not None and hasattr(spec, "session_key"):
+        file_state._current_session_key.set(spec.session_key)
     lookup_error = check_repeated_external_lookup(
         tool_call.name,
         tool_call.arguments,

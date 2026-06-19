@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from loguru import logger
 
 from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
-from nanobot.agent.context import ContextBuilder
+from nanobot.agent.context import ContextBuilder, _sanitize_session_key
 from nanobot.agent.context_vars import _current_debug_enabled
 from nanobot.agent.hook import AgentHook, CompositeHook
 from nanobot.agent.loop_hook import _LoopHook
@@ -697,7 +697,7 @@ class AgentLoop:
             return items
 
         # Build instructions for runner-level injection (fresh before every LLM call)
-        instructions = self.context.build_instructions_section()
+        instructions = self.context.build_instructions_section(session_key=session.key if session else None)
 
         result = await self.runner.run(AgentRunSpec(
             initial_messages=initial_messages,
@@ -1007,6 +1007,7 @@ class AgentLoop:
         + user directive) for API-compliant delivery.
         """
         count = self.subagents.get_running_count_by_session(session_key)
+        suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
         msg = InboundMessage(
             channel=channel,
             sender_id="user",
@@ -1019,8 +1020,8 @@ class AgentLoop:
                 "\n"
                 "**进度跟踪**\n"
                 "• Subagent 进展如何？用 list_subagents_tool / check_subagent_tool 检查状态，有没卡住或完成的\n"
-                "• 读 team_board.md — subagent 可能写了事实发现、踩坑、洞察，需要你关注或同步\n"
-                "• 读 tree.json — 检查 task backlog，决定下一步调度\n"
+                f"• 读 team_board{suffix}.md — subagent 可能写了事实发现、踩坑、洞察，需要你关注或同步\n"
+                f"• 读 tree{suffix}.json — 检查 task backlog，决定下一步调度\n"
                 "• 需要你回复或指导某个 subagent 吗？→ send_message_tool 发送指令\n"
                 "• 发现信息不对称？→ send_message_tool 主动告知，不要等 subagent 来问\n"
                 "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
@@ -1037,7 +1038,7 @@ class AgentLoop:
                 "• Subagent 完事了但质量不满意？→ 接受/重做/部分重做/重新拆解\n"
                 "\n"
                 "**收尾与输出**\n"
-                "• 全部结束了？→ 分析结果、更新 tree.json、综合汇报\n"
+                f"• 全部结束了？→ 分析结果、更新 tree{suffix}.json、综合汇报\n"
                 "• 中间结果需要记录到 memory/文档吗？\n"
                 "• 需要向用户汇报进度或请示决策吗？\n"
                 "\n"

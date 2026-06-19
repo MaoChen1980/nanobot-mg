@@ -37,13 +37,14 @@ def _tokenize(text: str) -> set[str]:
     return {t for t in tokens if t not in _STOP_WORDS and not t.isdigit()}
 
 
-def _search_team_board(task_description: str, workspace: Path, top_k: int = 3) -> str | None:
+def _search_team_board(task_description: str, workspace: Path, top_k: int = 3, board_rel: str | None = None) -> str | None:
     """Search team_board.md for sections relevant to the task description.
 
     Uses simple keyword overlap scoring — fast, no external dependencies.
     Returns formatted markdown section or None if no relevant content found.
+    *board_rel*: session-scoped relative path (e.g. ``tasks/team_board_cli_direct.md``).
     """
-    board_path = workspace / _TEAM_BOARD_PATH
+    board_path = workspace / (board_rel or _TEAM_BOARD_PATH)
     if not board_path.exists():
         return None
 
@@ -108,6 +109,7 @@ def build_subagent_prompt(
     output_schema: str | None = None,
     role: str | None = None,
     task_description: str | None = None,
+    session_key: str | None = None,
 ) -> str:
     """Build system prompt for subagent — same structure as main agent.
 
@@ -124,6 +126,13 @@ def build_subagent_prompt(
         db=db,
         project_root=project_root,
     )
+
+    # Session-scoped file paths
+    from nanobot.agent.context import _sanitize_session_key
+    suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+    tree_rel = f"tasks/tree{suffix}.json"
+    current_rel = f"tasks/CURRENT{suffix}.md"
+    team_board_rel = f"tasks/team_board{suffix}.md"
 
     parts: list[str] = []
 
@@ -144,11 +153,11 @@ def build_subagent_prompt(
     if skills_summary:
         parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
-    # 3. Task tree + current context (same as main agent)
-    tree_section = ctx._build_task_tree_section()
+    # 3. Task tree + current context (same as main agent, session-scoped)
+    tree_section = ctx._build_task_tree_section(session_key=session_key)
     if tree_section:
         parts.append(tree_section)
-    ctx_section = ctx._build_current_context_section()
+    ctx_section = ctx._build_current_context_section(session_key=session_key)
     if ctx_section:
         parts.append(ctx_section)
 
@@ -165,22 +174,35 @@ def build_subagent_prompt(
     if bootstrap:
         parts.append(bootstrap)
 
-    # 7. Relevant team experience (searched from team_board.md)
+    # 7. Relevant team experience (searched from session-scoped team_board.md)
     if task_description:
-        board_section = _search_team_board(task_description, workspace)
+        board_rel = team_board_rel  # use session-scoped path
+        board_section = _search_team_board(task_description, workspace, board_rel=board_rel)
         if board_section:
             parts.append(board_section)
 
     ws_path = workspace.expanduser().resolve().as_posix()
 
     # 8. Framework rules (adapted for subagent — how the system works)
-    parts.append(render_template("agent/_snippets/subagent_framework.md",
+    fw_content = render_template("agent/_snippets/subagent_framework.md",
         workspace_path=ws_path,
+        tree_path=f"{ws_path}/{tree_rel}",
+        current_path=f"{ws_path}/{current_rel}",
+        team_board_path=f"{ws_path}/{team_board_rel}",
         max_iterations=ctx._framework_config.get("max_iterations", 200),
         context_window_tokens=ctx._framework_config.get("context_window_tokens", 200_000),
         max_tool_result_chars=ctx._framework_config.get("max_tool_result_chars", 32_000),
         exec_timeout=ctx._framework_config.get("exec_timeout", 60),
-    ))
+    )
+    # Post-process old path references in the template
+    if suffix:
+        old_tree = f"{ws_path}/tasks/tree.json"
+        old_current = f"{ws_path}/tasks/CURRENT.md"
+        old_board = f"{ws_path}/tasks/team_board.md"
+        fw_content = fw_content.replace(old_tree, f"{ws_path}/{tree_rel}")
+        fw_content = fw_content.replace(old_current, f"{ws_path}/{current_rel}")
+        fw_content = fw_content.replace(old_board, f"{ws_path}/{team_board_rel}")
+    parts.append(fw_content)
 
     # 9. Search tool selector
     parts.append(render_template("agent/resolver.md", workspace_path=ws_path))
