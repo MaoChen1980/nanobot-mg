@@ -284,3 +284,116 @@ class TestTaskTreeInMessages:
         result = builder.build_instructions_section(for_subagent=False)
         assert "Integration Test" in result
         assert "Task Tree" in result
+
+
+# ---------------------------------------------------------------------------
+# _has_active_tasks — terminal vs active detection
+# ---------------------------------------------------------------------------
+
+
+class TestHasActiveTasks:
+    def _builder(self) -> ContextBuilder:
+        """Return a bare builder for calling instance methods."""
+        return object.__new__(ContextBuilder)
+
+    def test_empty_list_returns_false(self):
+        assert self._builder()._has_active_tasks([]) is False
+
+    def test_single_active_returns_true(self):
+        items = [{"id": "r1", "status": "active", "parent": None}]
+        assert self._builder()._has_active_tasks(items) is True
+
+    def test_single_pending_returns_true(self):
+        items = [{"id": "r1", "status": "pending", "parent": None}]
+        assert self._builder()._has_active_tasks(items) is True
+
+    def test_single_paused_returns_true(self):
+        items = [{"id": "r1", "status": "paused", "parent": None}]
+        assert self._builder()._has_active_tasks(items) is True
+
+    def test_single_completed_returns_false(self):
+        items = [{"id": "r1", "status": "completed", "parent": None}]
+        assert self._builder()._has_active_tasks(items) is False
+
+    def test_single_failed_returns_false(self):
+        items = [{"id": "r1", "status": "failed", "parent": None}]
+        assert self._builder()._has_active_tasks(items) is False
+
+    def test_missing_status_treated_as_active(self):
+        """Missing/null status is active, consistent with _render_tree_items."""
+        items = [{"id": "r1", "parent": None}]
+        assert self._builder()._has_active_tasks(items) is True
+
+    def test_all_completed_returns_false(self):
+        items = [
+            {"id": "r1", "status": "completed", "parent": None},
+            {"id": "r2", "status": "completed", "parent": None},
+        ]
+        assert self._builder()._has_active_tasks(items) is False
+
+    def test_mixed_terminals_and_active_returns_true(self):
+        items = [
+            {"id": "r1", "status": "completed", "parent": None},
+            {"id": "r2", "status": "active", "parent": "r1"},
+        ]
+        assert self._builder()._has_active_tasks(items) is True
+
+    def test_deep_tree_with_active_leaf(self):
+        items = [
+            {"id": "l0", "status": "completed", "parent": None},
+            {"id": "l1", "status": "completed", "parent": "l0"},
+            {"id": "l2", "status": "active", "parent": "l1"},
+        ]
+        assert self._builder()._has_active_tasks(items) is True
+
+    def test_deep_tree_all_completed(self):
+        items = [
+            {"id": "l0", "status": "completed", "parent": None},
+            {"id": "l1", "status": "completed", "parent": "l0"},
+            {"id": "l2", "status": "completed", "parent": "l1"},
+        ]
+        assert self._builder()._has_active_tasks(items) is False
+
+    def test_unknown_status_treated_as_active(self):
+        items = [{"id": "r1", "status": "unknown", "parent": None}]
+        assert self._builder()._has_active_tasks(items) is True
+
+
+# ---------------------------------------------------------------------------
+# _build_task_tree_section — all-completed early return
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTaskTreeSectionAllCompleted:
+    def test_all_completed_returns_empty(self, tmp_path):
+        workspace = _write_tree(tmp_path, [
+            {"id": "r1", "status": "completed", "parent": None},
+            {"id": "c1", "status": "completed", "parent": "r1"},
+        ])
+        builder = ContextBuilder(workspace)
+        assert builder._build_task_tree_section() == ""
+
+    def test_all_failed_returns_empty(self, tmp_path):
+        workspace = _write_tree(tmp_path, [
+            {"id": "r1", "status": "failed", "parent": None},
+        ])
+        builder = ContextBuilder(workspace)
+        assert builder._build_task_tree_section() == ""
+
+    def test_mixed_completed_and_failed_all_terminal_returns_empty(self, tmp_path):
+        workspace = _write_tree(tmp_path, [
+            {"id": "r1", "status": "completed", "parent": None},
+            {"id": "c1", "status": "failed", "parent": "r1"},
+        ])
+        builder = ContextBuilder(workspace)
+        assert builder._build_task_tree_section() == ""
+
+    def test_any_active_returns_tree(self, tmp_path):
+        workspace = _write_tree(tmp_path, [
+            {"id": "r1", "status": "completed", "parent": None},
+            {"id": "c1", "status": "active", "parent": "r1"},
+        ])
+        builder = ContextBuilder(workspace)
+        result = builder._build_task_tree_section()
+        assert "Task Tree" in result
+        assert "c1" in result

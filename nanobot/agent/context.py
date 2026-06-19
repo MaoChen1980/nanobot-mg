@@ -408,8 +408,37 @@ class ContextBuilder:
         Delegates to nanobot.utils.helpers.split_thinking_messages."""
         return _split_thinking_messages(messages)
 
+    def _has_active_tasks(self, items: list[dict], _depth: int = 0) -> bool:
+        """Check if tree.json has any non-terminal tasks (active, pending, etc.).
+
+        Missing/null status is treated as active, consistent with
+        ``_render_tree_items`` which renders it as ``○``.
+        A depth guard prevents infinite recursion from malformed cycles.
+        """
+        if _depth > 100:
+            logger.warning("_has_active_tasks: max depth exceeded — possible cycle in tree.json")
+            return True
+        for item in items:
+            status = item.get("status")
+            if status is None or status not in ("completed", "failed"):
+                return True
+            if self._has_active_tasks(
+                    self._get_children(items, item.get("id", "")),
+                    _depth=_depth + 1):
+                return True
+        return False
+
+    @staticmethod
+    def _get_children(items: list[dict], parent_id: str) -> list[dict]:
+        return [it for it in items if it.get("parent") == parent_id]
+
     def _build_task_tree_section(self) -> str:
-        """Read tasks/tree.json from the workspace and render as a tree for context injection."""
+        """Read tasks/tree.json from the workspace and render as a tree for context injection.
+
+        Only injects when there are active (non-completed, non-failed) tasks.
+        All-completed trees generate no output, saving context and avoiding
+        distractions when no task work is needed.
+        """
         tree_path = self.workspace / "tasks" / "tree.json"
         raw = self._cached_read_text(tree_path)
         if not raw:
@@ -421,6 +450,10 @@ class ContextBuilder:
             return ""
         items = data.get("items", [])
         if not items:
+            return ""
+        # Skip injection when no active tasks remain
+        if not self._has_active_tasks(items):
+            logger.debug("All tasks completed — skipping tree injection")
             return ""
         rendered = self._render_tree_items(items, parent=None, depth=0)
         return (
