@@ -328,7 +328,6 @@ class TestAssessMeTool:
             mock_assess.assert_called_once_with(
                 [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}],
                 verify="",
-                tree_data="",
             )
             assert "All good" in result
 
@@ -348,7 +347,6 @@ class TestAssessMeTool:
             mock_assess.assert_called_once_with(
                 [{"role": "user", "content": "Check these claims"}],
                 verify="Config at /etc/app/config.yml, Port 8080 is open",
-                tree_data="",
             )
             assert "Verified" in result
 
@@ -467,13 +465,11 @@ class TestAppendTurnToSessionAssessmentFilter:
 class TestMakeRetryAssessCallback:
     def _make_loop(self):
         """Build a mock with the real _make_retry_assess_callback bound."""
-        from pathlib import Path
         from nanobot.agent.loop import AgentLoop
 
         loop = MagicMock(spec=AgentLoop)
         loop.provider = MagicMock()
         loop.model = "test-model"
-        loop.workspace = Path("/tmp/test-workspace")
 
         loop._make_retry_assess_callback = (
             AgentLoop._make_retry_assess_callback.__get__(loop, AgentLoop)
@@ -570,8 +566,6 @@ class TestAssessMeTemplate:
             "未来方向",
             "思维模式",
             "可复用模式",
-            "长期目标对齐",
-            "工作量评估",
         ]
 
     def test_includes_all_sections(self) -> None:
@@ -608,23 +602,6 @@ class TestAssessMeTemplate:
         content = self._render(conversation=conv, verify="")
         assert "check this" in content
         assert "事实合规" in content
-
-    def test_renders_with_tree_data(self) -> None:
-        """Renders tree.json content when tree= kwarg is provided."""
-        tree_content = '{"nodes": [{"id": "root", "name": "test", "status": "active"}]}'
-        content = self._render(
-            conversation="user: hi",
-            tree=tree_content,
-        )
-        assert tree_content in content
-        assert "长期目标对齐" in content
-        assert "工作量评估" in content
-
-    def test_renders_without_tree_data(self) -> None:
-        """Renders gracefully when tree= is empty."""
-        content = self._render(conversation="user: hi", tree="")
-        assert "tree.json 数据" in content  # section heading always present
-        assert "长期目标对齐" in content
 
 
 # =========================================================================

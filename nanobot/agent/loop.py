@@ -400,7 +400,7 @@ class AgentLoop:
         self.tools.register(ScanProjectTool(loop=self))
         self.tools.register(ReframeTool(workspace=self.workspace))
         self.tools.register(DebugRootCauseTool())
-        self.tools.register(AssessMeTool(workspace=self.workspace))
+        self.tools.register(AssessMeTool())
         if self._db:
             from nanobot.agent.tools.tool_call_log import ToolCallLogTool
             self.tools.register(ToolCallLogTool(db=self._db))
@@ -768,25 +768,9 @@ class AgentLoop:
                 build_assessment_message,
                 build_debug_root_cause_message,
             )
-
-            # Read tree.json for long-term goal awareness in assess_me
-            tree_data = ""
-            tree_path = loop.workspace / "tasks" / "tree.json"
-            if tree_path.is_file():
-                try:
-                    tree_data = tree_path.read_text(encoding="utf-8", errors="replace")
-                except Exception:
-                    logger.exception("Failed to read tree.json for assess_me")
-                    tree_data = "(read error)"
-            elif (loop.workspace / "tasks" / "TREE.md").is_file():
-                try:
-                    tree_data = (loop.workspace / "tasks" / "TREE.md").read_text(encoding="utf-8", errors="replace")
-                except Exception:
-                    logger.exception("Failed to read TREE.md for assess_me")
-
             try:
                 logger.info("assess_me call start")
-                result = await assess_me(messages, tree_data=tree_data)
+                result = await assess_me(messages)
                 logger.info("assess_me call done (result_len={})", len(result) if result else 0)
             except Exception:
                 logger.exception("assess_me failed")

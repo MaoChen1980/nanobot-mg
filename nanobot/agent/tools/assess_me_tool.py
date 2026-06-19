@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
-from pathlib import Path
 from typing import Any
 
 from nanobot.agent.tools.base import Tool, tool_parameters
@@ -44,11 +43,10 @@ class AssessMeTool(Tool):
     )
     read_only = True
 
-    def __init__(self, workspace: Path | None = None) -> None:
+    def __init__(self) -> None:
         self._messages: ContextVar[list[dict[str, Any]]] = ContextVar(
             "assess_me_messages", default=[]
         )
-        self._workspace = workspace
 
     def set_context(self, messages: list[dict[str, Any]]) -> None:
         """Set the conversation messages for assessment."""
@@ -64,22 +62,10 @@ class AssessMeTool(Tool):
         if not messages:
             return "Error: no active session — cannot read conversation history."
 
-        # Read tree.json for long-term goal awareness
-        tree_data = ""
-        if self._workspace:
-            tree_path = self._workspace / "tasks" / "tree.json"
-            if tree_path.is_file():
-                try:
-                    tree_data = tree_path.read_text(encoding="utf-8", errors="replace")
-                except Exception:
-                    logger = getattr(__import__("loguru", fromlist=["logger"]), "logger", None)
-                    if logger:
-                        logger.exception("Failed to read tree.json for assess_me_tool")
-
         from nanobot.agent.assess_me import assess_me
 
         try:
-            result = await assess_me(messages, verify=verify, tree_data=tree_data)
+            result = await assess_me(messages, verify=verify)
         except Exception as e:
             return f"Error: assessment LLM call failed — {e}"
 

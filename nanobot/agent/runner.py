@@ -995,9 +995,10 @@ class AgentRunner:
             await hook.after_iteration(context)
 
             # End-of-loop assessment — run assess_me to give the LLM a chance to
-            # reconsider its output (e.g. active goal not yet complete). Fires on
-            # every final response so the root-goal check persists until done.
-            if response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
+            # reconsider its output. If assess_me injects analysis, the LLM reads it
+            # on the next iteration and decides whether to continue or stop. If
+            # assess_me times out, break normally.
+            if not _doubt_injected and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _doubt_injected = True
                 injected = await self._run_assess_callback(spec, messages, timeout=120)
                 if injected:
