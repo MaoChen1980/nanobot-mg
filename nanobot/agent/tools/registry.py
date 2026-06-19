@@ -129,10 +129,9 @@ class ToolRegistry:
         4. **Post-validators** — run :attr:`Tool._post_validators`, collect warnings
         5. **Format result** — append ``❌`` on error, ``✓`` on single-line success
         """
-        _HINT = "\n\n[Analyze the error above and try a different approach.]"
         tool, params, error = self.prepare_call(name, params)
         if error:
-            return error + " ❌" + _HINT
+            return error
 
         # Cache hit for read_only tools — skip execution
         if tool.read_only:
@@ -145,18 +144,18 @@ class ToolRegistry:
         for v in tool._pre_validators:
             err = await v.check(tool, params)
             if err:
-                return f"❌ {v.__class__.__name__}: {err}" + _HINT
+                return f"{v.__class__.__name__}: {err}"
 
         # Execute
         try:
             result = await tool.execute(**params)
         except Exception as e:
             logger.exception("Tool '{}' execution failed", name)
-            return f"Error executing {name}: {str(e)} ❌" + _HINT
+            return f"Error executing {name}: {str(e)}"
 
         # If tool itself reported an error, skip post-validators
         if isinstance(result, str) and result.startswith("Error"):
-            return result + " ❌" + _HINT
+            return result
 
         # Danger warnings pass through as-is — not errors, no ❌
         if isinstance(result, str) and result.startswith("⚠️ Danger:"):
@@ -188,17 +187,10 @@ class ToolRegistry:
     def _format_result(name: str, result: Any) -> str:
         """Standardize result formatting.
 
-        - Error strings (starting with ``Error``) get ``❌``.
-        - Danger warnings (starting with ``⚠️ Danger:``) pass through as-is.
-        - Single-line success strings get ``✓``.
-        - Multi-line results (file contents, exec output) are returned as-is.
+        Danger warnings pass through as-is.
         """
-        if isinstance(result, str) and result.startswith("Error"):
-            return result + " ❌"
         if isinstance(result, str) and result.startswith("⚠️ Danger:"):
             return result
-        if isinstance(result, str) and "\n" not in result and "✓" not in result:
-            return result + " ✓"
         return str(result)
 
     @property

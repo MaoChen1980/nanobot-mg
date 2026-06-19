@@ -131,12 +131,6 @@ class ExploreModuleTool(_FsTool):
             result = self._explore_generic(fp, suffix, lines)
 
         result += f"\n({total_lines} lines total in {fp.name})"
-
-        # Actionable hint: tell LLM how to jump to definitions
-        result += (
-            f"\n\n- Tip: use `read_file_tool(path=\"{fp.resolve().as_posix()}\", offset=<line_no>, limit=40)` "
-            f"to read a specific function/class body."
-        )
         return result
 
     # ------------------------------------------------------------------

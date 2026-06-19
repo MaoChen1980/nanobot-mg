@@ -99,11 +99,7 @@ class SearchTextTool(Tool):
 
         model = get_model()
         if model is None:
-            return (
-                "Semantic search is unavailable — sentence-transformers "
-                "is not installed. "
-                "Install with: pip install nanobot-ai[memory-vector]"
-            )
+            return "Semantic search is unavailable — sentence-transformers not installed"
 
         chunks = chunk_text(text)
         if not chunks:

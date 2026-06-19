@@ -462,7 +462,8 @@ class GrepTool(_SearchTool):
         except Exception:
             return None
         if proc.returncode not in (0, 1):
-            return None
+            stderr_text = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+            return f"rg failed (exit {proc.returncode}): {stderr_text[:500]}" if stderr_text else None
 
         text = stdout.decode("utf-8", errors="replace").strip()
         if not text:

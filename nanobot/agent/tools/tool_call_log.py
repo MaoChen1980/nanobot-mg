@@ -62,11 +62,11 @@ class ToolCallLogTool(Tool):
 
         lines = []
         for r in rows:
-            status = "✅" if r["success"] else "❌"
+            status = "[OK]" if r["success"] else "[FAIL]"
             dur = f" {r['duration_ms']}ms" if r.get("duration_ms") else ""
             error = f" [ERROR: {r.get('error', '')}]" if not r["success"] and r.get("error") else ""
-            result_preview = (r["result"] or "")[:120].replace("\n", " ")
-            if len(r["result"] or "") > 120:
+            result_preview = (r["result"] or "")[:500].replace("\n", " ")
+            if len(r["result"] or "") > 500:
                 result_preview += "..."
             lines.append(
                 f"{status}[iter {r['iteration']}/turn {r['turn']}] {r['tool_name']}{dur}{error}"

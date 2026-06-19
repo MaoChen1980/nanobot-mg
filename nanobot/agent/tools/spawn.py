@@ -178,4 +178,4 @@ class SpawnTool(Tool):
             )
             results.append(result)
         summary = "\n".join(results)
-        return f"Spawned {len(tasks)} subagent(s):\n{summary}\n\n请继续按计划推进。"
+        return f"Spawned {len(tasks)} subagent(s):\n{summary}"

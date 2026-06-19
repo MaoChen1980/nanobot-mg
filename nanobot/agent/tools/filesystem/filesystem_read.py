@@ -179,7 +179,7 @@ class ReadFileTool(_FsTool):
                         break
                     trimmed.append(line)
                 end = start + len(trimmed)
-                result = "\n".join(trimmed)
+                result = "\n".join(trimmed) + "\n\n(content truncated at ~256K chars)"
 
             if end < total:
                 result += f"\n\n(Showing lines {offset}-{end} of {total}. Use offset={end + 1} to continue.)"

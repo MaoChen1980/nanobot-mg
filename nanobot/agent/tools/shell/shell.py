@@ -158,6 +158,17 @@ class ExecTool(Tool):
     _DEFAULT_TAIL_LINES = 5
     _TAIL_LINES_ON_ERROR = 15
 
+    # Windows NT status code → human-readable explanation
+    _EXIT_CODE_HINTS: dict[int, str] = {
+        -1073741819: "STATUS_ACCESS_VIOLATION (the process crashed — memory access error)",
+        -1073741502: "STATUS_DLL_NOT_FOUND (a required DLL could not be loaded)",
+        -1073741515: "STATUS_CONTROL_C_EXIT (process terminated by Ctrl+C / taskkill)",
+        -1073741795: "STATUS_STACK_BUFFER_OVERRUN (stack corruption detected)",
+        -1073741676: "STATUS_HEAP_CORRUPTION (heap memory corruption)",
+        -1073740968: "STATUS_STACK_OVERFLOW (stack overflow)",
+        255:         "cmd.exe internal error or child process crashed (exit 255)",
+    }
+
     description = (
             "**Purpose**: Execute shell commands for computation and scripting.\n\n"
             "**When to use**:\n"
@@ -344,7 +355,19 @@ class ExecTool(Tool):
                     except asyncio.TimeoutError:
                         await self._kill_process(process)
                         logger.warning("Command timed out after {}s", effective_timeout)
-                        return f"Error: Command timed out after {effective_timeout} seconds"
+                        stderr_text = ""
+                        try:
+                            stderr_bytes = await asyncio.wait_for(process.stderr.read(), timeout=2.0) if process.stderr else b""
+                            stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
+                        except Exception:
+                            pass
+                        stdout_text = b"".join(stdout_chunks).decode("utf-8", errors="replace") if stdout_chunks else ""
+                        msg = f"Error: Command timed out after {effective_timeout} seconds"
+                        if stdout_text:
+                            msg += f"\nSTDOUT:\n{stdout_text}"
+                        if stderr_text:
+                            msg += f"\nSTDERR:\n{stderr_text}"
+                        return msg
                     except asyncio.CancelledError:
                         await self._kill_process(process)
                         raise
@@ -368,7 +391,21 @@ class ExecTool(Tool):
                     except asyncio.TimeoutError:
                         await self._kill_process(process)
                         logger.warning("Command timed out after {}s", effective_timeout)
-                        return f"Error: Command timed out after {effective_timeout} seconds"
+                        partial_stdout = partial_stderr = ""
+                        try:
+                            partial_stdout = (await asyncio.wait_for(process.stdout.read(), timeout=2.0)).decode("utf-8", errors="replace").strip() if process.stdout else ""
+                        except Exception:
+                            pass
+                        try:
+                            partial_stderr = (await asyncio.wait_for(process.stderr.read(), timeout=2.0)).decode("utf-8", errors="replace").strip() if process.stderr else ""
+                        except Exception:
+                            pass
+                        msg = f"Error: Command timed out after {effective_timeout} seconds"
+                        if partial_stdout:
+                            msg += f"\nSTDOUT:\n{partial_stdout}"
+                        if partial_stderr:
+                            msg += f"\nSTDERR:\n{partial_stderr}"
+                        return msg
                     except asyncio.CancelledError:
                         await self._kill_process(process)
                         raise
@@ -385,12 +422,26 @@ class ExecTool(Tool):
                     capture_fh.close()
 
             exit_code = process.returncode
+            if exit_code != 0:
+                hint = self._EXIT_CODE_HINTS.get(exit_code, "")
+                hint_suffix = f" — {hint}" if hint else ""
+                logger.warning("Command exit with code {} (shell=pwsh, cwd={}, cmd={:.80}){}",
+                               exit_code, cwd, command, hint_suffix)
+
             cwd_safe = cwd.replace('\\', '/')
-            status_line = f"Exit: {exit_code}  |  cwd: {cwd_safe}  |  shell: {'pwsh' if _IS_WINDOWS else 'sh'}"
+            hint = self._EXIT_CODE_HINTS.get(exit_code, "")
+            hint_suffix = f" — {hint}" if hint else ""
+            status_line = f"Exit: {exit_code}  |  cwd: {cwd_safe}  |  shell: {'pwsh' if _IS_WINDOWS else 'sh'}{hint_suffix}"
 
             body = "\n".join(output_parts) if output_parts else "(no output)"
             SEP = "─" * 56
             result = f"{status_line}\n{SEP}\n{body}"
+
+            # If command failed and stderr wasn't already in output_parts, append it
+            if exit_code != 0 and stderr_text and stderr_text.strip():
+                stderr_in_body = any("STDERR:" in p for p in output_parts)
+                if not stderr_in_body:
+                    result += f"\nSTDERR:\n{stderr_text}"
 
             max_len = self._MAX_OUTPUT
             if len(result) > max_len:
@@ -724,8 +775,10 @@ class ExecTool(Tool):
                     stderr=asyncio.subprocess.DEVNULL,
                 )
                 await asyncio.wait_for(kill_proc.wait(), timeout=3.0)
-            except (OSError, asyncio.TimeoutError):
-                pass
+            except OSError as e:
+                logger.debug("taskkill failed for pid {}: {}", process.pid, e)
+            except asyncio.TimeoutError:
+                logger.debug("taskkill timed out for pid {}", process.pid)
         else:
             process.kill()
         try:
@@ -754,7 +807,7 @@ class ExecTool(Tool):
             sr = os.environ.get("SYSTEMROOT", r"C:\Windows")
             env = {
                 "SYSTEMROOT": sr,
-                "COMSPEC": "cmd.exe",
+                "COMSPEC": os.environ.get("COMSPEC", f"{sr}\\System32\\cmd.exe"),
                 "USERPROFILE": os.environ.get("USERPROFILE", ""),
                 "HOMEDRIVE": os.environ.get("HOMEDRIVE", "C:"),
                 "HOMEPATH": os.environ.get("HOMEPATH", "\\"),

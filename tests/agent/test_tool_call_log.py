@@ -96,7 +96,7 @@ class TestToolCallLogTool:
         )
         tool = ToolCallLogTool(db=db)
         result = await tool.execute(session_key="s1", limit=5)
-        assert "✅" in result
+        assert "[OK]" in result
         assert "[iter 3/turn 5] read_file" in result
         assert "17ms" in result
         assert "foo.txt" in result
@@ -113,7 +113,7 @@ class TestToolCallLogTool:
         )
         tool = ToolCallLogTool(db=db)
         result = await tool.execute(session_key="s2", limit=5)
-        assert "❌" in result
+        assert "[FAIL]" in result
         assert "[ERROR: Permission denied]" in result
 
 
@@ -133,7 +133,7 @@ class TestToolCallLogLimitClamping:
             )
         tool = ToolCallLogTool(db=db)
         result = await tool.execute(session_key="s1")
-        assert result.count("✅") == 20
+        assert result.count("[OK]") == 20
 
     @pytest.mark.asyncio
     async def test_limit_50(self, db):
@@ -144,7 +144,7 @@ class TestToolCallLogLimitClamping:
             )
         tool = ToolCallLogTool(db=db)
         result = await tool.execute(session_key="s2", limit=50)
-        assert result.count("✅") == 50
+        assert result.count("[OK]") == 50
 
     @pytest.mark.asyncio
     async def test_limit_150_clamped_to_100(self, db):
@@ -156,4 +156,4 @@ class TestToolCallLogLimitClamping:
             )
         tool = ToolCallLogTool(db=db)
         result = await tool.execute(session_key="s3", limit=150)
-        assert result.count("✅") == 100
+        assert result.count("[OK]") == 100

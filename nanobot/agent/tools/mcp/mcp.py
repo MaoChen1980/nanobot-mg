@@ -267,13 +267,17 @@ class MCPToolWrapper(MCPWrapperBase):
     def _extract_result(self, result: Any) -> str:
         from mcp import types
 
+        is_error = getattr(result, "isError", False)
         parts = []
         for block in result.content:
             if isinstance(block, types.TextContent):
                 parts.append(block.text)
             else:
                 parts.append(str(block))
-        return "\n".join(parts) or "(no output)"
+        text = "\n".join(parts) or "(no output)"
+        if is_error:
+            text = f"Error: {text}"
+        return text
 
 
 class MCPResourceWrapper(MCPWrapperBase):
