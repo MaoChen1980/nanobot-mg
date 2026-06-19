@@ -883,6 +883,14 @@ class AgentLoop:
         else:
             logger.info("Skill creation agent completed with no output")
 
+        # Git commit any skills the sub-agent created or modified
+        from nanobot.utils.gitstore import commit_workspace_changes
+        commit_workspace_changes(
+            self.workspace,
+            rel_dirs=["skills"],
+            message="skill: create/update from assess_me",
+        )
+
     async def run(self) -> None:
         """Run the agent loop, dispatching messages as tasks to stay responsive to /stop."""
         self._running = True

@@ -72,9 +72,11 @@ class SkillsLoader:
             skills = [s for s in skills if s["name"] not in self.disabled_skills]
         return skills
 
-    @staticmethod
-    def _ensure_self_optimization_footer(skill_file: Path) -> None:
-        """Append the self-optimization footer to SKILL.md if missing."""
+    def _ensure_self_optimization_footer(self, skill_file: Path) -> None:
+        """Append the self-optimization footer to SKILL.md if missing.
+
+        Commits changes to git for workspace skills when modified.
+        """
         try:
             content = skill_file.read_text(encoding="utf-8")
             if "**Self-optimization**" in content:
@@ -83,6 +85,18 @@ class SkillsLoader:
                 content.rstrip("\n") + _SELF_OPTIMIZATION_FOOTER, encoding="utf-8"
             )
             logger.debug("SkillsLoader: added self-optimization footer to {}", skill_file)
+
+            # Only commit workspace skills (not builtin)
+            try:
+                skill_file.relative_to(self.workspace_skills)
+                from nanobot.utils.gitstore import commit_workspace_changes
+                commit_workspace_changes(
+                    self.workspace,
+                    rel_dirs=[str(skill_file.relative_to(self.workspace).parent)],
+                    message=f"skill: add self-optimization footer to {skill_file.parent.name}",
+                )
+            except ValueError:
+                pass  # Not a workspace skill
         except OSError:
             logger.warning("SkillsLoader: failed to update {}", skill_file)
 

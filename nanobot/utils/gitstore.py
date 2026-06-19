@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -145,7 +146,11 @@ class GitStore:
                 str(p.relative_to(self._workspace))
                 for p in self._workspace.glob("memory/**/*.md")
             )
-            paths = self._tracked_files + memory_files
+            skill_files = sorted(
+                str(p.relative_to(self._workspace))
+                for p in self._workspace.glob("skills/**/*")
+            )
+            paths = self._tracked_files + memory_files + skill_files
 
             msg_bytes = message.encode("utf-8") if isinstance(message, str) else message
             porcelain.add(str(self._workspace), paths=paths)
@@ -205,13 +210,14 @@ class GitStore:
         return False
 
     def _build_gitignore(self) -> str:
-        """Generate .gitignore — allow tracked root files + memory/ dir."""
+        """Generate .gitignore — allow tracked root files + memory/ + skills/ dirs."""
         allowed = sorted(set(self._tracked_files))
         lines = ["/*"]
         for f in allowed:
             lines.append(f"!{f}")
         lines.append("!memory/")
         lines.append("memory/.vector_index/")
+        lines.append("!skills/")
         lines.append("!.gitignore")
         return "\n".join(lines) + "\n"
 
@@ -518,3 +524,66 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
         logger.warning("Failed to initialize git store for {}", workspace)
 
     return added
+
+
+def commit_workspace_changes(
+    workspace: Path,
+    rel_dirs: list[str] | None = None,
+    message: str = "auto-commit",
+) -> str | None:
+    """Stage and commit changes under workspace/rel_dirs using the parent git repo.
+
+    Works for workspaces that sit inside an existing git repository
+    (the common case).  For GitStore-managed standalone repos, use
+    GitStore.auto_commit() instead.
+
+    Returns the short commit SHA, or None if nothing to commit or not a git repo.
+    """
+    git_dir = workspace / ".git"
+    if not git_dir.exists():
+        return None
+
+    if not rel_dirs:
+        rel_dirs = ["skills"]
+
+    try:
+        # Check for changes first
+        status = subprocess.run(
+            ["git", "status", "--porcelain"] + rel_dirs,
+            capture_output=True, text=True, cwd=str(workspace), timeout=30,
+        )
+        if not status.stdout.strip():
+            return None
+
+        # Stage
+        subprocess.run(
+            ["git", "add"] + rel_dirs,
+            capture_output=True, cwd=str(workspace), timeout=30, check=True,
+        )
+
+        # Commit
+        result = subprocess.run(
+            ["git", "commit", "-m", message, "--author=nanobot <nanobot@nanobot>"],
+            capture_output=True, text=True, cwd=str(workspace), timeout=30,
+        )
+        if result.returncode != 0:
+            if "nothing to commit" in result.stdout or "nothing to commit" in result.stderr:
+                return None
+            logger.warning("git commit failed for {}: {}", workspace, result.stderr.strip())
+            return None
+
+        # Get short SHA via rev-parse (handles root-commit format too)
+        rev = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, cwd=str(workspace), timeout=30,
+        )
+        sha = rev.stdout.strip() if rev.returncode == 0 else None
+        if sha:
+            logger.debug("Committed workspace changes: {} ({})", sha, message)
+        return sha
+    except subprocess.TimeoutExpired:
+        logger.warning("git operation timed out for {}", workspace)
+        return None
+    except Exception:
+        logger.warning("git commit failed for {}", workspace, exc_info=True)
+        return None

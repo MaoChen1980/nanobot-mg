@@ -740,6 +740,14 @@ class MemoryExtractor:
             changed = True
             logger.info("MemoryExtractor: added tool {} to pending_skills.md", name)
 
+        if changed:
+            from nanobot.utils.gitstore import commit_workspace_changes
+            commit_workspace_changes(
+                self.store.workspace,
+                rel_dirs=["tools", "memory/pending_skills.md"],
+                message="tool: add scripts to workspace tools and enqueue skills",
+            )
+
         self._pending_tool_scripts = []
         return changed
 
@@ -844,7 +852,13 @@ class MemoryExtractor:
         # Remove materialized entries from pending_skills.md
         self._remove_materialized_from_pending(pending_path, created)
 
-        # Commit is handled by run() after all phases complete
+        # Git commit the new skills
+        from nanobot.utils.gitstore import commit_workspace_changes
+        commit_workspace_changes(
+            self.store.workspace,
+            rel_dirs=["skills", "memory/pending_skills.md"],
+            message=f"skill: create {', '.join(created)}",
+        )
         return True
 
     @staticmethod

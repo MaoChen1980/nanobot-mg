@@ -214,3 +214,85 @@ class TestNestedRepoProtection:
 
         assert result is False
         assert not (workspace / ".git").exists()
+
+
+class TestCommitWorkspaceChanges:
+    """Tests for commit_workspace_changes() — git commit for parent-repo workspaces."""
+
+    def test_returns_none_when_not_a_git_repo(self, tmp_path):
+        """Should return None when workspace is not a git repo."""
+        from nanobot.utils.gitstore import commit_workspace_changes
+
+        assert commit_workspace_changes(tmp_path, ["."], "msg") is None
+
+    def test_returns_none_when_no_changes(self, tmp_path):
+        """Should return None when there are no uncommitted changes."""
+        from nanobot.utils.gitstore import commit_workspace_changes
+
+        _init_git_repo(tmp_path)
+        assert commit_workspace_changes(tmp_path, ["."], "msg") is None
+
+    def test_commits_new_file(self, tmp_path):
+        """Should commit a newly created file under rel_dirs."""
+        from nanobot.utils.gitstore import commit_workspace_changes
+
+        _init_git_repo(tmp_path)
+        skills = tmp_path / "skills"
+        skills.mkdir()
+        (skills / "test-skill").mkdir()
+        (skills / "test-skill" / "SKILL.md").write_text("name: test-skill\n", encoding="utf-8")
+
+        sha = commit_workspace_changes(tmp_path, ["skills"], "skill: create test-skill")
+        assert sha is not None
+        assert len(sha) >= 7
+
+        # Verify commit appears in log
+        log = subprocess.run(
+            ["git", "log", "--oneline", "-1"],
+            capture_output=True, text=True, cwd=str(tmp_path), timeout=30,
+        )
+        assert sha in log.stdout
+
+    def test_commits_only_specified_rel_dirs(self, tmp_path):
+        """Should only commit changes in the given rel_dirs, leaving others dirty."""
+        from nanobot.utils.gitstore import commit_workspace_changes
+
+        _init_git_repo(tmp_path)
+        skills = tmp_path / "skills"
+        skills.mkdir()
+        (skills / "a").mkdir()
+        (skills / "a" / "SKILL.md").write_text("name: a\n", encoding="utf-8")
+        other = tmp_path / "other"
+        other.mkdir()
+        (other / "untracked.txt").write_text("dirty", encoding="utf-8")
+
+        sha = commit_workspace_changes(tmp_path, ["skills"], "only skills")
+        assert sha is not None
+
+        # other/ should still be dirty
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True, cwd=str(tmp_path), timeout=30,
+        )
+        assert "other/" in status.stdout
+
+    def test_add_failure_returns_none(self, tmp_path):
+        """Should return None when git add fails (e.g. invalid rel_dir)."""
+        from nanobot.utils.gitstore import commit_workspace_changes
+
+        _init_git_repo(tmp_path)
+        result = commit_workspace_changes(tmp_path, ["nonexistent"], "msg")
+        assert result is None
+
+
+def _init_git_repo(path):
+    """Initialize a bare git repo at path with a user config for commits."""
+    subprocess.run(["git", "init", "-q", str(path)], check=True, timeout=30)
+    subprocess.run(
+        ["git", "-C", str(path), "config", "user.email", "test@test.com"],
+        check=True, capture_output=True, timeout=30,
+    )
+    subprocess.run(
+        ["git", "-C", str(path), "config", "user.name", "Tester"],
+        check=True, capture_output=True, timeout=30,
+    )
