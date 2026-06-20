@@ -67,15 +67,24 @@ def format_conversation(messages: list[dict]) -> str:
 async def assess_me(
     messages: list[dict[str, Any]],
     verify: str = "",
+    has_active_task: bool = True,
 ) -> str:
     """Assess current cognition state from conversation history.
 
     Returns a structured analysis answering the 7 cognition questions.
     Never returns ``None``. Returns ``""`` when the LLM call fails —
     callers handle empty assessments according to their context.
+
+    When ``has_active_task`` is False, task-progress sections are omitted
+    from the assessment prompt — only behavioral quality checks remain.
     """
     conversation = format_conversation(messages)
-    prompt = render_template("agent/assess_me.md", conversation=conversation, verify=verify)
+    prompt = render_template(
+        "agent/assess_me.md",
+        conversation=conversation,
+        verify=verify,
+        has_active_task=has_active_task,
+    )
 
     resp = await chat_stream_with_retry(
         [{"role": "user", "content": prompt}],

@@ -768,9 +768,33 @@ class AgentLoop:
                 build_assessment_message,
                 build_debug_root_cause_message,
             )
+
+            # Check if tree.json has active tasks — pass to assess_me so it
+            # skips task-progress sections when there's nothing in progress.
+            _has_active = True  # conservative default
+            try:
+                from nanobot.agent.context import _sanitize_session_key
+                import json as _json
+                suffix = f"_{_sanitize_session_key(session.key)}" if session and session.key else ""
+                tree_path = loop.workspace / "tasks" / f"tree{suffix}.json"
+                if tree_path.exists():
+                    raw = tree_path.read_text(encoding="utf-8")
+                    data = _json.loads(raw)
+                    for item in data.get("items", []):
+                        st = item.get("status")
+                        if st is None or st not in ("completed", "failed"):
+                            _has_active = True
+                            break
+                    else:
+                        _has_active = False
+                else:
+                    _has_active = False
+            except Exception:
+                _has_active = True
+
             try:
                 logger.info("assess_me call start")
-                result = await assess_me(messages)
+                result = await assess_me(messages, has_active_task=_has_active)
                 logger.info("assess_me call done (result_len={})", len(result) if result else 0)
             except Exception:
                 logger.exception("assess_me failed")
