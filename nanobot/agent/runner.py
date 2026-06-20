@@ -367,7 +367,7 @@ class AgentRunner:
         injection_cycles = 0
         total_retry_count = 0
         _llm_request_count = 0
-        _doubt_injected = False
+        _end_assess_ran = False
         _tool_loop_state = _ToolLoopState()
         _correction_handled = False  # once-per-run guard for user correction detection
 
@@ -994,12 +994,11 @@ class AgentRunner:
             context.stop_reason = stop_reason
             await hook.after_iteration(context)
 
-            # End-of-loop assessment — run assess_me to give the LLM a chance to
-            # reconsider its output. If assess_me injects analysis, the LLM reads it
-            # on the next iteration and decides whether to continue or stop. If
-            # assess_me times out, break normally.
-            if not _doubt_injected and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
-                _doubt_injected = True
+            # End-of-loop assessment — one revision cycle: assess → inject →
+            # LLM revises → output regardless. Gives the LLM one chance to
+            # see feedback before the output is finalized.
+            if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
+                _end_assess_ran = True
                 injected = await self._run_assess_callback(spec, messages, timeout=120)
                 if injected:
                     logger.info(
@@ -1030,7 +1029,7 @@ class AgentRunner:
 
         # End-of-loop self-assessment — fire-and-forget for next-turn context.
         # Skip if the synchronous end-of-loop assess already ran (replaces obsolete doubt).
-        if not _doubt_injected and spec.assess_me_callback is not None and self._assess_responses > 0:
+        if not _end_assess_ran and spec.assess_me_callback is not None and self._assess_responses > 0:
             asyncio.create_task(self._run_assess_callback(spec, messages))
 
         return AgentRunResult(
