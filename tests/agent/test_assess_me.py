@@ -652,10 +652,11 @@ class TestMakeRetryAssessCallback:
         msgs = [{"role": "user", "content": "hello"}]
 
         with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
-            mock_assess.return_value = "analysis result"
+            mock_assess.return_value = '{"status": "findings", "summary": "test finding", "content": "some detail"}'
             result = await callback(msgs)
 
-            assert result is True
+            assert result  # AssessResult with injected=True is truthy
+            assert not result.needs_revision
             assert len(msgs) == 2
             assert is_assessment_message(msgs[1])
 
@@ -673,8 +674,33 @@ class TestMakeRetryAssessCallback:
             mock_assess.return_value = ""
             result = await callback(msgs)
 
-            assert result is False
+            assert not result  # AssessResult() is falsy
+            assert not result.needs_revision
             assert len(msgs) == 1
+
+    @pytest.mark.asyncio
+    async def test_callback_sets_needs_revision(self) -> None:
+        from nanobot.session.manager import Session
+
+        loop = self._make_loop()
+        session = Session(key="test")
+        callback = loop._make_retry_assess_callback(session)
+        assert callback is not None
+
+        msgs = [{"role": "user", "content": "hello"}]
+
+        with patch("nanobot.agent.assess_me.assess_me", new_callable=AsyncMock) as mock_assess:
+            mock_assess.return_value = (
+                '{"status": "findings", "summary": "bad output", '
+                '"content": "needs fix", "needs_revision": true}'
+            )
+            result = await callback(msgs)
+
+            assert result  # injected
+            assert result.needs_revision
+            assert len(msgs) == 2
+            # The injection text should contain the fix instruction
+            assert "请直接修正内容" in msgs[1]["content"]
 
 
 # =========================================================================

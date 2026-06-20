@@ -229,9 +229,10 @@ async def test_runner_empty_response_does_not_break_tool_chain():
 
     assert result.final_content == "Here are the results."
     assert result.stop_reason == "completed"
-    # 5 calls (4 original + 1 doubt assess_me self-check)
-    assert call_count == 5
-    assert result.total_llm_requests == 5
+    # 4 calls: tool call → empty retry → tool call → text response. No
+    # end-of-loop assess continue (fire-and-forget only).
+    assert call_count == 4
+    assert result.total_llm_requests == 4
     assert "read_file_tool" in result.tools_used
 
 
@@ -354,9 +355,9 @@ async def test_loop_stream_filter_handles_think_only_prefix_without_crashing(tmp
     )
 
     assert final_content == "Hello"
-    # Doubt assess_me triggers a second streaming round (self-check)
-    assert deltas == ["Hello", "Hello"]
-    assert endings == [False, False]
+    # End-of-loop assess is fire-and-forget — no second streaming round
+    assert deltas == ["Hello"]
+    assert endings == [False]
 
 
 
@@ -457,11 +458,10 @@ async def test_length_recovery_streaming_calls_on_stream_end_with_resuming():
         hook=StreamHook(),
     ))
 
-    # Doubt assess_me adds one extra round on the final response
-    assert len(stream_end_calls) == 3
+    # End-of-loop assess is fire-and-forget — no extra round
+    assert len(stream_end_calls) == 2
     assert stream_end_calls[0] is True   # length recovery: resuming
-    assert stream_end_calls[1] is False  # doubt round: not resuming
-    assert stream_end_calls[2] is False  # final break: not resuming
+    assert stream_end_calls[1] is False  # final break: not resuming
 
 
 

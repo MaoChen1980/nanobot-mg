@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 import os
 import time
 from contextlib import AsyncExitStack
@@ -757,29 +758,30 @@ class AgentLoop:
         """Build assess_me callback for runner retry paths.
 
         Handles: assess_me → inject → debug_root_cause chain → skill creation.
+        Returns an AssessResult (truthy if injection occurred).
         """
         if session is None:
             return None
         loop = self  # capture loop ref for inner use
 
-        async def _cb(messages: list[dict]) -> bool:
+        async def _cb(messages: list[dict]) -> "AssessResult":
             from nanobot.agent.assess_me import (
                 assess_me,
                 build_assessment_message,
                 build_debug_root_cause_message,
             )
+            from nanobot.agent.runner import AssessResult
 
             # Check if tree.json has active tasks — pass to assess_me so it
             # skips task-progress sections when there's nothing in progress.
             _has_active = True  # conservative default
             try:
                 from nanobot.agent.context import _sanitize_session_key
-                import json as _json
                 suffix = f"_{_sanitize_session_key(session.key)}" if session and session.key else ""
                 tree_path = loop.workspace / "tasks" / f"tree{suffix}.json"
                 if tree_path.exists():
                     raw = tree_path.read_text(encoding="utf-8")
-                    data = _json.loads(raw)
+                    data = json.loads(raw)
                     for item in data.get("items", []):
                         st = item.get("status")
                         if st is None or st not in ("completed", "failed"):
@@ -798,51 +800,32 @@ class AgentLoop:
                 logger.info("assess_me call done (result_len={})", len(result) if result else 0)
             except Exception:
                 logger.exception("assess_me failed")
-                return False
+                return AssessResult()
             if not result:
                 logger.info("assess_me call returned empty")
-                return False
-            if result.strip().startswith("[status:ok]"):
-                logger.info("assess_me: all clear, no action needed")
-                return False
-            # Keep at most one assess_me message — remove all stale ones before injecting new
-            for i in range(len(messages) - 1, -1, -1):
-                if is_assessment_message(messages[i]):
-                    messages.pop(i)
-            messages.append(build_assessment_message(result))
+                return AssessResult()
 
-            # Chain: assess_me → debug_root_cause (only when assess_me signals need)
-            _needs_drc = result.strip().endswith("[need_drc]")
-            if _needs_drc:
-                clean_result = result.strip()[:-len("[need_drc]")].strip()
-                try:
-                    from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
-                    logger.info("debug_root_cause call start")
-                    dcr = DebugRootCauseTool()
-                    dcr.set_context(messages)
-                    dcr_result = await dcr.execute(problem=clean_result)
-                    logger.info("debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
-                    # Don't inject error messages as analysis
-                    if dcr_result and not dcr_result.startswith("Error:"):
-                        # Keep at most one DRC message — remove all stale ones before injecting new
-                        for i in range(len(messages) - 1, -1, -1):
-                            if is_debug_root_cause_message(messages[i]):
-                                messages.pop(i)
-                        messages.append(build_debug_root_cause_message(dcr_result))
-                        logger.info("debug_root_cause injected")
-                except Exception:
-                    logger.exception("debug_root_cause failed")
-            else:
-                logger.info("debug_root_cause skipped — no [need_drc] signal from assess_me")
+            # Parse JSON output from assess_me
+            try:
+                parsed = json.loads(result)
+            except json.JSONDecodeError:
+                logger.warning("assess_me returned non-JSON: {}…", result[:100])
+                return AssessResult()
 
-            # Detect skill creation opportunity
-            if "值得创建 skill" in result:
+            status = parsed.get("status", "findings")
+            needs_revision = parsed.get("needs_revision", False)
+
+            # ── orthogonal actions (independent of status) ──
+
+            # Skill creation — always check if a reusable pattern was found
+            skill_pattern = parsed.get("skill_pattern")
+            if skill_pattern:
                 import hashlib
-                dedup_key = hashlib.md5(result.encode()).hexdigest()
+                dedup_key = hashlib.md5(skill_pattern.encode()).hexdigest()
                 if dedup_key not in loop._skill_creation_inflight:
                     loop._skill_creation_inflight.add(dedup_key)
                     task = asyncio.create_task(
-                        loop._spawn_skill_creator(result, session_key=session.key if session else None),
+                        loop._spawn_skill_creator(skill_pattern, session_key=session.key if session else None),
                     )
                     task.add_done_callback(
                         lambda t: (
@@ -855,7 +838,58 @@ class AgentLoop:
                 else:
                     logger.info("Skill creation already in-flight for this pattern — skipping")
 
-            return True
+            # ── injection decision (gated by status) ──
+
+            if status == "ok":
+                logger.info("assess_me: all clear, no action needed")
+                return AssessResult(needs_revision=needs_revision)
+
+            # status == "findings" — inject assessment context for next turn
+            parts = []
+            summary = parsed.get("summary", "")
+            if summary:
+                parts.append(f"## {summary}")
+            content = parsed.get("content", "")
+            if content:
+                parts.append(content)
+            injection_text = "\n\n".join(parts) if parts else result
+
+            # When needs_revision, push LLM to fix rather than explain the assessment
+            if needs_revision:
+                injection_text += (
+                    "\n\n以上评估发现需要修正的问题，请直接修正内容，"
+                    "而非解释评估结果。如果修正涉及对话上下文中的信息，"
+                    "请综合上下文完成修正。"
+                )
+
+            # Keep at most one assess_me message — remove all stale ones before injecting new
+            for i in range(len(messages) - 1, -1, -1):
+                if is_assessment_message(messages[i]):
+                    messages.pop(i)
+            messages.append(build_assessment_message(injection_text))
+
+            # DRC — blocker is inherently a finding, only fires under "findings"
+            if parsed.get("need_drc"):
+                blocker = parsed.get("blocker") or content
+                try:
+                    from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+                    logger.info("debug_root_cause call start")
+                    dcr = DebugRootCauseTool()
+                    dcr.set_context(messages)
+                    dcr_result = await dcr.execute(problem=blocker)
+                    logger.info("debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
+                    if dcr_result and not dcr_result.startswith("Error:"):
+                        for i in range(len(messages) - 1, -1, -1):
+                            if is_debug_root_cause_message(messages[i]):
+                                messages.pop(i)
+                        messages.append(build_debug_root_cause_message(dcr_result))
+                        logger.info("debug_root_cause injected")
+                except Exception:
+                    logger.exception("debug_root_cause failed")
+            else:
+                logger.info("debug_root_cause skipped — assess_me signaled no need")
+
+            return AssessResult(injected=True, needs_revision=needs_revision)
         return _cb
 
     async def _spawn_skill_creator(self, assess_result: str, session_key: str | None = None) -> None:

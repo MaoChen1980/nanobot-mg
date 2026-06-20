@@ -119,7 +119,7 @@ class AgentRunSpec:
     max_overflow_retries: int = 3  # max retries for context window overflow
     backoff_config: Any | None = None  # BackoffConfig for retry delays
     # AssessMe: called when retry/error thresholds are crossed
-    # Signature: async (messages: list[dict]) -> bool (True if injected)
+    # Signature: async (messages: list[dict]) -> AssessResult
     assess_me_callback: Any | None = None
     assess_interval: int = 10  # periodic assess trigger: (response_count - last) >= interval
     previous_summary: str | None = None
@@ -152,6 +152,20 @@ class AgentRunResult:
     overflow_summary: str | None = None
     # Total LLM API calls made during this run (includes retries)
     total_llm_requests: int = 0
+
+
+@dataclass(slots=True)
+class AssessResult:
+    """Result of an assess_me callback execution.
+
+    ``__bool__`` returns ``self.injected`` so existing ``if injected:``
+    checks continue working without changes.
+    """
+    injected: bool = False
+    needs_revision: bool = False
+
+    def __bool__(self) -> bool:
+        return self.injected
 
 
 @dataclass(slots=True)
@@ -264,32 +278,32 @@ class AgentRunner:
             logger.exception("Proactive compression failed (session={})", spec.session_key or "default")
             return initial_msg_count, overflow_summary
 
-    async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 120) -> bool:
+    async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 120) -> AssessResult:
         """Run assess_me_callback with timeout protection.
 
-        Returns the callback's return value (True if assessment was injected).
-        Returns False on timeout or if no callback is configured.
+        Returns the callback's AssessResult (truthy if assessment was injected).
+        Returns AssessResult() on timeout or if no callback is configured.
         """
         if spec.assess_me_callback is None:
-            return False
+            return AssessResult()
         try:
             logger.debug(
                 "assess_me_callback start (session_key={})",
                 spec.session_key,
             )
-            injected = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
-            if injected:
+            result = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
+            if result:
                 logger.info(
                     "assess_me_callback injected (session_key={})",
                     spec.session_key,
                 )
-            return injected
+            return result
         except asyncio.TimeoutError:
             logger.warning(
                 "assess_me_callback (assess_me + debug_root_cause) timed out after {}s (session_key={})",
                 timeout, spec.session_key,
             )
-            return False
+            return AssessResult()
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
         """Drain pending injections. Returns normalized user messages."""
@@ -994,19 +1008,23 @@ class AgentRunner:
             context.stop_reason = stop_reason
             await hook.after_iteration(context)
 
-            # End-of-loop assessment — one revision cycle: assess → inject →
-            # LLM revises → output regardless. Gives the LLM one chance to
-            # see feedback before the output is finalized.
+            # End-of-loop self-assessment — inject assessment context for the
+            # next turn (if assess_me finds issues) without overriding the current
+            # response. The original final_content always goes to the user.
             if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _end_assess_ran = True
-                injected = await self._run_assess_callback(spec, messages, timeout=120)
-                if injected:
+                assess_result = await self._run_assess_callback(spec, messages, timeout=120)
+                if assess_result.needs_revision:
                     logger.info(
-                        "End-of-loop assess found issues (iter={}, session={}) — continuing",
+                        "End-of-loop assess needs revision (iter={}, session={}) — continuing",
                         iteration, spec.session_key or "default",
                     )
                     continue
-                break
+                if assess_result:
+                    logger.info(
+                        "End-of-loop assess injected context (iter={}, session={})",
+                        iteration, spec.session_key or "default",
+                    )
             break
 
         else:
@@ -1026,11 +1044,6 @@ class AgentRunner:
             )
             if drained_after_max_iterations:
                 had_injections = True
-
-        # End-of-loop self-assessment — fire-and-forget for next-turn context.
-        # Skip if the synchronous end-of-loop assess already ran (replaces obsolete doubt).
-        if not _end_assess_ran and spec.assess_me_callback is not None and self._assess_responses > 0:
-            asyncio.create_task(self._run_assess_callback(spec, messages))
 
         return AgentRunResult(
             final_content=final_content,
