@@ -92,12 +92,18 @@ class SessionLifecycle:
     # ── error recovery ──────────────────────────────────────────────────
 
     def cleanup_on_error(self, key: str) -> bool:
-        """Clean up pending-user-turn for a session after an error.
+        """Clean up pending-user-turn and runtime checkpoint after an error.
+
+        If a turn crashes mid-flight (e.g. unhandled exception, CancelledError),
+        the runtime checkpoint left in session.metadata can be restored on the
+        next user message, reverting the conversation to a stale partial state.
+        Always clear it here alongside the pending-user-turn flag.
 
         Returns ``True`` if any cleanup was performed (and saved).
         """
         session = self._sm.get_or_create(key)
         cleared = self._recovery.clear_pending_user_turn(session)
+        self._recovery.clear_runtime_checkpoint(session)
         if cleared:
             self._sm.save(session)
         return cleared

@@ -252,6 +252,10 @@ class SessionManager:
     def save(self, session: Session) -> None:
         """Save a session to the database (full save: delete + re-insert)."""
         if self._db is not None:
+            # Strip runtime checkpoint before persisting — it's transient
+            # in-memory state for crash recovery within the same session,
+            # not meant to survive a restart.
+            session.metadata.pop("runtime_checkpoint", None)
             self._db.save_session(session)
 
         with self._cache_lock:
