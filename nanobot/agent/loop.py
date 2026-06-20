@@ -805,9 +805,15 @@ class AgentLoop:
                 logger.info("assess_me call returned empty")
                 return AssessResult()
 
-            # Parse JSON output from assess_me
+            # Parse JSON output from assess_me — strip markdown code fences
+            # if present (LLMs commonly wrap JSON in ```json ... ```).
+            cleaned = result.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.removeprefix("```json").removeprefix("```").strip()
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3].strip()
             try:
-                parsed = json.loads(result)
+                parsed = json.loads(cleaned)
             except json.JSONDecodeError:
                 logger.warning("assess_me returned non-JSON: {}…", result[:100])
                 return AssessResult()
@@ -868,9 +874,9 @@ class AgentLoop:
                     messages.pop(i)
             messages.append(build_assessment_message(injection_text))
 
-            # DRC — blocker is inherently a finding, only fires under "findings"
-            if parsed.get("need_drc"):
-                blocker = parsed.get("blocker") or content
+            # DRC — blocker 非空即表示需要根因分析，无需额外 need_drc 开关
+            if parsed.get("blocker"):
+                blocker = parsed.get("blocker")
                 try:
                     from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
                     logger.info("debug_root_cause call start")
