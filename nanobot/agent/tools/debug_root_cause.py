@@ -213,7 +213,6 @@ class DebugRootCauseTool(Tool):
         try:
             resp = await chat_stream_with_retry(
                 [{"role": "user", "content": prompt}],
-                max_tokens=2000,
             )
         except Exception as e:
             logger.warning("debug_root_cause LLM call failed: {}", e)

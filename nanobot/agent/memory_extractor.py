@@ -804,7 +804,6 @@ class MemoryExtractor:
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": user_content},
                 ],
-                max_tokens=16384,
             )
         except Exception:
             logger.exception("MemoryExtractor: skill creation LLM call failed")

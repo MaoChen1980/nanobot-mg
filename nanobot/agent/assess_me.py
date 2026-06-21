@@ -88,7 +88,6 @@ async def assess_me(
 
     resp = await chat_stream_with_retry(
         [{"role": "user", "content": prompt}],
-        max_tokens=1000,
     )
     if resp.finish_reason == "error":
         logger.warning("assess_me LLM call failed: {}", (resp.content or "")[:200])
