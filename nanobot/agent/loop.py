@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
 import json
 import os
+import re
 import time
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -754,6 +756,37 @@ class AgentLoop:
                 result.stop_reason, result.had_injections, result.initial_message_count,
                 result.total_llm_requests)
 
+    @staticmethod
+    def _extract_assess_json(text: str) -> dict[str, Any] | None:
+        """Extract a JSON object from LLM assess_me output.
+
+        Handles <think> tags, markdown code fences, leading/trailing plain text,
+        and trailing content after the JSON — all common LLM output behaviours
+        that break a naive ``json.loads()``.
+        """
+        # 1. Strip <think>…</think> blocks.
+        s = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+        # 2. Strip markdown code fences and any language tag.
+        if s.startswith("```"):
+            s = re.sub(r"^```\w*\n?", "", s)
+            s = re.sub(r"\n?```$", "", s)
+            s = s.strip()
+
+        # 3. Locate the first JSON object ({).
+        start = s.find("{")
+        if start < 0:
+            return None
+        s = s[start:]
+
+        # 4. Use raw_decode for brace-balanced extraction (handles trailing text).
+        try:
+            decoder = json.JSONDecoder()
+            obj, _ = decoder.raw_decode(s)
+            return obj
+        except json.JSONDecodeError:
+            return None
+
     def _make_retry_assess_callback(self, session: Session | None):
         """Build assess_me callback for runner retry paths.
 
@@ -805,16 +838,12 @@ class AgentLoop:
                 logger.info("assess_me call returned empty")
                 return AssessResult()
 
-            # Parse JSON output from assess_me — strip markdown code fences
-            # if present (LLMs commonly wrap JSON in ```json ... ```).
-            cleaned = result.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.removeprefix("```json").removeprefix("```").strip()
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3].strip()
-            try:
-                parsed = json.loads(cleaned)
-            except json.JSONDecodeError:
+            # Parse JSON output from assess_me — handle <think> tags, code fences,
+            # leading/trailing text, and any other non-JSON wrapping.  Use
+            # json.JSONDecoder.raw_decode for brace-level extraction so that
+            # trailing human text after the JSON object doesn't cause failure.
+            parsed = AgentLoop._extract_assess_json(result)
+            if parsed is None:
                 logger.warning("assess_me returned non-JSON: {}…", result[:100])
                 return AssessResult()
 
@@ -826,7 +855,6 @@ class AgentLoop:
             # Skill creation — always check if a reusable pattern was found
             skill_pattern = parsed.get("skill_pattern")
             if skill_pattern:
-                import hashlib
                 dedup_key = hashlib.md5(skill_pattern.encode()).hexdigest()
                 if dedup_key not in loop._skill_creation_inflight:
                     loop._skill_creation_inflight.add(dedup_key)
@@ -846,9 +874,9 @@ class AgentLoop:
 
             # ── injection decision (gated by status) ──
 
-            if status == "ok":
+            if status == "ok" and not needs_revision:
                 logger.info("assess_me: all clear, no action needed")
-                return AssessResult(needs_revision=needs_revision)
+                return AssessResult()
 
             # status == "findings" — inject assessment context for next turn
             parts = []

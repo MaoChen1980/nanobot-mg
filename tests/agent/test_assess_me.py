@@ -703,9 +703,46 @@ class TestMakeRetryAssessCallback:
             assert "请直接修正内容" in msgs[1]["content"]
 
 
-# =========================================================================
-# runner — assess_me_callback in spec
-# =========================================================================
+class TestExtractAssessJson:
+    """Direct tests for AgentLoop._extract_assess_json."""
+
+    @pytest.mark.parametrize("input_text,expected", [
+        # Clean JSON
+        ('{"status": "ok"}', {"status": "ok"}),
+        # Trailing text after JSON
+        ('{"status": "findings"}\n\nSome extra commentary', {"status": "findings"}),
+        # <think> tags
+        ('<think>Let me analyze...</think>{"status": "ok"}', {"status": "ok"}),
+        # Multi-line <think>
+        ('<think>\nline1\nline2\n</think>\n{"status": "findings"}', {"status": "findings"}),
+        # Code fences with json tag
+        ('```json\n{"status": "ok"}\n```', {"status": "ok"}),
+        # Code fences without tag
+        ('```\n{"status": "ok"}\n```', {"status": "ok"}),
+        # Code fence + trailing text after closing
+        ('```json\n{"s": "ok"}\n```\nsome text', {"s": "ok"}),
+        # Leading markdown heading
+        ('## 评估结果\n\n{"status": "findings", "summary": "test"}', {"status": "findings", "summary": "test"}),
+        # Nested braces in JSON string value
+        ('{"msg": "hello { world }", "n": 1}', {"msg": "hello { world }", "n": 1}),
+        # Escaped quotes
+        ('{"msg": "hello \\"world\\""}', {"msg": 'hello "world"'}),
+        # Unicode escapes
+        ('{"c": "\\u4e16\\u754c"}', {"c": "世界"}),
+        # No JSON at all
+        ("Hello world", None),
+        # Empty string
+        ("", None),
+        # Only <think> with no JSON
+        ("<think>processing</think>", None),
+        # Only code fence with no JSON
+        ("```\njust text\n```", None),
+    ])
+    def test_extract_json(self, input_text: str, expected) -> None:
+        from nanobot.agent.loop import AgentLoop
+
+        result = AgentLoop._extract_assess_json(input_text)
+        assert result == expected, f"Input: {input_text!r}\nExpected: {expected!r}\nGot: {result!r}"
 
 
 class TestRunnerAssessMeSpec:
