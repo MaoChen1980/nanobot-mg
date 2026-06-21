@@ -353,11 +353,42 @@ class AgentLoop:
         self.model = model
         self.context_window_tokens = context_window_tokens
         self.runner.provider = provider
+        if self.runner._current_spec is not None:
+            self.runner._current_spec.model = model
         self.subagents.set_provider(provider, model)
         from nanobot.agent.llm_context import set_llm
         set_llm(provider, model)
+        self.context._framework_config.update({
+            "model": model,
+            "provider": provider.__class__.__name__,
+            "context_window_tokens": context_window_tokens,
+        })
         self._provider_signature = snapshot.signature
         logger.info("Runtime model switched for next turn: {} -> {}", old_model, model)
+
+    def switch_model(self, new_model: str) -> bool:
+        """Switch to a new model at runtime, resolving and switching the provider too.
+
+        The change is ephemeral — ``reload_config`` or the next message's
+        ``_refresh_provider_snapshot`` will revert to the disk config.
+
+        Returns True on success, False if the model couldn't be resolved to a provider.
+        """
+        if new_model == self.model:
+            return True
+        from nanobot.config.loader import load_config, resolve_config_env_vars
+        from nanobot.providers.factory import build_provider_snapshot
+
+        try:
+            config = resolve_config_env_vars(load_config())
+            config.agents.defaults.model = new_model
+            snapshot = build_provider_snapshot(config)
+        except Exception as exc:
+            logger.error("Failed to resolve provider for model '{}': {}", new_model, exc)
+            return False
+        self._apply_provider_snapshot(snapshot)
+        logger.info("Ephemeral runtime model switch to '{}' — reload_config will revert to disk config", new_model)
+        return True
 
     def _refresh_provider_snapshot(self) -> None:
         if self._provider_snapshot_loader is None:

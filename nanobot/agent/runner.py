@@ -190,6 +190,7 @@ class AgentRunner:
     def __init__(self, provider: LLMProvider, db=None):
         self.provider = provider
         self._db = db
+        self._current_spec: AgentRunSpec | None = None
         self._assess_responses = 0  # periodic assess_me counter (local to this run)
         self._last_assess_at = 0
         self._pt_responses = 0  # periodic .pt snapshot counter (local to this run)
@@ -363,6 +364,7 @@ class AgentRunner:
         return True, injection_cycles
 
     async def run(self, spec: AgentRunSpec) -> AgentRunResult:
+        self._current_spec = spec
         hook = spec.hook or AgentHook()
         messages = list(spec.initial_messages)
         initial_msg_count = len(messages)
@@ -1045,6 +1047,7 @@ class AgentRunner:
             if drained_after_max_iterations:
                 had_injections = True
 
+        self._current_spec = None
         return AgentRunResult(
             final_content=final_content,
             messages=messages,

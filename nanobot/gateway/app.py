@@ -1030,6 +1030,14 @@ class GatewayApplication:
             loop.max_tool_result_chars = d.max_tool_result_chars
             loop.max_iterations = d.max_tool_iterations
             loop.provider_retry_mode = d.provider_retry_mode
+
+            # Eagerly sync model + provider so there's no stale window
+            # between reload_config and the next message's refresh.
+            from nanobot.providers.factory import build_provider_snapshot
+            snapshot = build_provider_snapshot(new_config)
+            if snapshot.signature != loop._provider_signature:
+                loop._apply_provider_snapshot(snapshot)
+            self.provider = loop.provider
         self.config = new_config
         logger.info("Config hot-reloaded from disk")
 

@@ -414,6 +414,11 @@ class SelfTool(Tool):
             return f"Error: '{key}' must be <= {spec['max']}"
         if "min_len" in spec and len(str(value)) < spec["min_len"]:
             return f"Error: '{key}' must be at least {spec['min_len']} characters"
+        if key == "model":
+            if not self._loop.switch_model(value):
+                return f"Error: no provider available for model '{value}'"
+            self._audit("modify", f"{key}: {old!r} -> {value!r}")
+            return f"Set {key} = {value!r} (was {old!r})"
         setattr(self._loop, key, value)
         self._audit("modify", f"{key}: {old!r} -> {value!r}")
         return f"Set {key} = {value!r} (was {old!r})"
