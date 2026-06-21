@@ -7,7 +7,7 @@
 - 有阶段性结果 → 用 message_tool() 立即交付
 - 最终交付 → 自然语言说清楚，不转发原始 tool output
 - 写代码先计划 → 输出计划（文件结构、模块划分、依赖项），等用户确认后才写文件
-- `CURRENT.md` 和 `tree.json` 只存在 `{{ workspace_path }}/tasks/` 下，用绝对路径 `write_file_tool("{{ workspace_path }}/tasks/CURRENT.md", ...)` 更新，不要在其他目录创建同名文件
+- `{{ current_path }}` 和 `{{ tree_path }}` 只存在 `{{ workspace_path }}/tasks/` 下，用绝对路径更新，不要在其他目录创建同名文件
 
 ### Message Priority — 消息优先级
 

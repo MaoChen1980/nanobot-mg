@@ -11,7 +11,9 @@
 - `tasks/<project-id>/index.md` — 归档后的完整子树（根完成后由你折叠）
 
 **创建根节点：**
-新任务 → read_file_tool 读 tree.json → 如果不在其中，用 edit_file_tool/write_file_tool 添加根节点。
+新任务 → read_file_tool 读 `{{ tree_path }}`：
+- 文件不存在 → 用 write_file_tool(`"{{ tree_path }}"`, `{"items": []}`) 创建空树，再添加根节点
+- 存在但任务不在其中 → edit_file_tool/write_file_tool 添加根节点
 根节点必须有 id、name、criteria（成功标准）、status: active。
 
 **生长规则：**
@@ -37,7 +39,7 @@ Trigger：根节点（parent 为 null）的 status 改为 `completed`
 Action：立即执行归档——
 1. 创建 `tasks/<project-id>/` 目录（如不存在）
 2. 把该根节点的所有子节点数据写入 `tasks/<project-id>/index.md`（含 id、name、status、criteria、note）
-3. 从 tree.json 的 items 中移除这些子节点
+3. 从 `{{ tree_path }}` 的 items 中移除这些子节点
 4. 根节点保留在 items 中，status 保持 completed
 
 **规则：**

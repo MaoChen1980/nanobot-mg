@@ -165,10 +165,13 @@ class ContextBuilder:
             runtime_context=runtime_context,
             # Workspace path — used by included templates (framework_core etc.)
             workspace_path=self._workspace_path_str,
-            # Session-scoped paths
+            # Session-scoped paths (full and relative)
             tree_path=f"{self._workspace_path_str}/{tree_rel}",
             current_path=f"{self._workspace_path_str}/{current_rel}",
             team_board_path=f"{self._workspace_path_str}/{team_board_rel}",
+            tree_rel=tree_rel,
+            current_rel=current_rel,
+            team_board_rel=team_board_rel,
             # Framework config — used by framework_core.md via {% include %}
             max_iterations=self._framework_config.get("max_iterations", 200),
             context_window_tokens=self._framework_config.get("context_window_tokens", 200_000),
@@ -281,6 +284,9 @@ class ContextBuilder:
             tree_path=f"{self._workspace_path_str}/{tree_rel}",
             current_path=f"{self._workspace_path_str}/{current_rel}",
             team_board_path=f"{self._workspace_path_str}/{team_board_rel}",
+            tree_rel=tree_rel,
+            current_rel=current_rel,
+            team_board_rel=team_board_rel,
         )
         for name in snippet_names:
             content = render_template(

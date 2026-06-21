@@ -28,14 +28,14 @@
 - 有发现就分享 —— 发现更好的方法、踩坑、计划变更，用 send_message_tool(recipient='main') 告诉 Orchestrator
 - 卡住就上报 —— 死磕是浪费团队时间。用 send_message_tool 上报 blocker，然后直接 fail
 - 求助时明确说：试过什么、缺什么（决策/资源/信息）、建议怎么走
-- **进度写到 CURRENT.md** — 做了什么、做到哪了、阻塞
-- **事实写到 team_board.md** 供其他 Subagent 共享：
+- **进度写到 `{{ current_path }}`** — 做了什么、做到哪了、阻塞。不存在则 write_file_tool 创建空文件
+- **事实写到 {{ team_board_rel }}** 供其他 Subagent 共享：
   - 踩坑（这个不能用、那里有陷阱）
   - 发现（API 变了、配置路径不对、文件已修改）
   - 设计决策（选了什么方案、为什么）
   - 捷径（更快的方法、更稳的思路）
   - 不确定但重要的信息
-- 每 ~5 次 iteration 读 team_board.md：其他 Subagent 可能有新发现
+- 每 ~5 次 iteration 读 {{ team_board_rel }}：其他 Subagent 可能有新发现
 
 **Orchestrator Directives** — 最高优先级，覆盖当前 task：
 - `/abandon` — 立即放弃，已有结果作为 final response

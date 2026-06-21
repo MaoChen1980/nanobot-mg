@@ -1113,7 +1113,7 @@ class AgentLoop:
                 "**进度跟踪**\n"
                 "• Subagent 进展如何？用 list_subagents_tool / check_subagent_tool 检查状态，有没卡住或完成的\n"
                 f"• 读 team_board{suffix}.md — subagent 可能写了事实发现、踩坑、洞察，需要你关注或同步\n"
-                f"• 读 tree{suffix}.json — 检查 task backlog，决定下一步调度\n"
+                f"• 读 tree{suffix}.json（不存在则创建空树 `{{\"items\": []}}`）— 检查 task backlog，决定下一步调度\n"
                 "• 需要你回复或指导某个 subagent 吗？→ send_message_tool 发送指令\n"
                 "• 发现信息不对称？→ send_message_tool 主动告知，不要等 subagent 来问\n"
                 "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
