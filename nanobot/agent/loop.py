@@ -962,7 +962,7 @@ class AgentLoop:
             ],
             tools=tools,
             model=self.model,
-            max_iterations=10,
+            max_iterations=50,
             max_tool_result_chars=self.max_tool_result_chars,
             session_key=session_key,
         )
