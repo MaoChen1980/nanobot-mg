@@ -9,7 +9,7 @@ from nanobot.providers.registry import ProviderSpec
 def _assert_openai_compat_timeout(timeout) -> None:
     assert isinstance(timeout, httpx.Timeout)
     assert timeout.connect == 120.0
-    assert timeout.read == 900.0
+    assert timeout.read == 120.0  # matches overall timeout, not per-chunk idle timeout
     assert timeout.write == 120.0
     assert timeout.pool is None
 
@@ -59,6 +59,6 @@ def test_openai_compat_provider_timeout_can_be_overridden_by_env(monkeypatch) ->
     t = mock_async_openai.call_args.kwargs["timeout"]
     assert isinstance(t, httpx.Timeout)
     assert t.connect == 45.0
-    assert t.read == 900.0
+    assert t.read == 45.0  # matches overridden overall timeout
     assert t.write == 45.0
     assert t.pool is None

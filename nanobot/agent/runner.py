@@ -279,7 +279,7 @@ class AgentRunner:
             logger.exception("Proactive compression failed (session={})", spec.session_key or "default")
             return initial_msg_count, overflow_summary
 
-    async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 120) -> AssessResult:
+    async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 180) -> AssessResult:
         """Run assess_me_callback with timeout protection.
 
         Returns the callback's AssessResult (truthy if assessment was injected).
@@ -1015,7 +1015,7 @@ class AgentRunner:
             # response. The original final_content always goes to the user.
             if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _end_assess_ran = True
-                assess_result = await self._run_assess_callback(spec, messages, timeout=120)
+                assess_result = await self._run_assess_callback(spec, messages, timeout=180)
                 if assess_result.needs_revision:
                     logger.info(
                         "End-of-loop assess needs revision (iter={}, session={}) — continuing",

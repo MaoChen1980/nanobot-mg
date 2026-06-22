@@ -332,12 +332,12 @@ class OpenAICompatProvider(LLMProvider):
         # LAN.  Cloud providers benefit from keepalive, so we leave the
         # default pool settings for them.
         timeout_s = _openai_compat_timeout_s()
-        # Align httpx read timeout with the per-chunk idle timeout so that
-        # httpx does not preemptively raise ReadTimeout during long streaming
-        # gaps (e.g. reasoning models that pause >120s between chunks).
-        # The actual per-chunk guard is asyncio.wait_for in chat_stream().
+        # Set httpx read timeout to the overall request timeout so httpx does
+        # NOT preemptively raise ReadTimeout during long streaming gaps
+        # (e.g. reasoning models that pause >30s between chunks). The actual
+        # per-chunk idle guard is asyncio.wait_for in chat_stream().
         idle_read_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "30"))
-        t = httpx.Timeout(timeout_s, read=idle_read_timeout_s, pool=None)
+        t = httpx.Timeout(timeout_s, read=timeout_s, pool=None)
         http_client: httpx.AsyncClient | None = None
         if _is_local_endpoint(spec, effective_base):
             http_client = httpx.AsyncClient(
@@ -1463,6 +1463,11 @@ class OpenAICompatProvider(LLMProvider):
             return result
         except asyncio.TimeoutError:
             logger.warning("OpenAI-compat stream timed out after {}s", idle_timeout_s)
+            if stream is not None:
+                try:
+                    await stream.close()
+                except Exception:
+                    pass
             return LLMResponse(
                 content=(
                     f"Error calling LLM: stream stalled for more than "
