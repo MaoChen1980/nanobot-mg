@@ -398,9 +398,13 @@ class AgentLoop:
         except Exception:
             logger.exception("Failed to refresh provider config")
             return
-        if snapshot.signature == self._provider_signature:
-            return
-        self._apply_provider_snapshot(snapshot)
+        if snapshot.signature != self._provider_signature:
+            self._apply_provider_snapshot(snapshot)
+        # Ensure ContextVar is set in current task's context (reload_config may
+        # have called _apply_provider_snapshot from a different task, leaving
+        # this task's ContextVar stale).
+        from nanobot.agent.llm_context import set_llm
+        set_llm(self.provider, self.model)
 
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
