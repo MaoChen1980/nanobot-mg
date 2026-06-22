@@ -1455,11 +1455,11 @@ class MemoryExtractor:
                         break
                 if tldr:
                     emoji, summary = _extract_emoji(tldr)
-                    summary = _trim_sentence(summary, 60)
+                    summary = _trim_sentence(summary, 120)
                 else:
                     raw = _first_finding_text(text)
                     emoji, summary = _extract_emoji(raw)
-                    summary = _trim_sentence(summary, 60)
+                    summary = _trim_sentence(summary, 120)
                 if summary:
                     pinned_candidates.append((rel, mtime, summary, emoji))
 
@@ -1485,7 +1485,7 @@ class MemoryExtractor:
                 emoji, rest = _extract_emoji(text)
                 # Strip `"- "` list prefix that leaked from _format_finding_paragraph
                 rest = rest.lstrip("- ").strip()
-                trimmed = _trim_sentence(rest, 80)
+                trimmed = _trim_sentence(rest, 180)
                 display = f"{emoji} {trimmed}" if emoji else trimmed
                 lines.append(f"- {display}")
             lines.append("")
@@ -1518,10 +1518,10 @@ class MemoryExtractor:
             # Keyword-style file links: [heading](rel)
             for rel, _stem, heading in sorted(files, key=lambda x: x[2]):
                 display = heading if heading else Path(rel).stem
-                display = _trim_sentence(display, 35)
+                display = _trim_sentence(display, 100)
                 links.append(f"[{display}]({rel})")
-            topic_str = ", ".join(links[:12])
-            if len(links) > 12:
+            topic_str = ", ".join(links[:20])
+            if len(links) > 20:
                 topic_str += ", …"
             if cat != ".":
                 lines.append(f"- [**{label}**]({cat}/index.md) — {topic_str}")
@@ -1540,7 +1540,7 @@ class MemoryExtractor:
                 date_str = datetime.fromtimestamp(ts_v).strftime("%Y-%m-%d") if ts_v else ""
                 emoji, rest = _extract_emoji(text)
                 rest = rest.lstrip("- ").strip()
-                trimmed = _trim_sentence(rest, 60)
+                trimmed = _trim_sentence(rest, 145)
                 display = f"{emoji} {trimmed}" if emoji else trimmed
                 prefix = f"{date_str}: " if date_str else ""
                 lines.append(f"- {prefix}{display}")
