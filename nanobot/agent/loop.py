@@ -815,7 +815,9 @@ class AgentLoop:
             decoder = json.JSONDecoder()
             obj, _ = decoder.raw_decode(s)
             return obj
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.debug("assess_me JSON decode error at position {}: {} (context: {}…)",
+                         e.pos, e.msg, s[max(0, e.pos-20):e.pos+40])
             return None
 
     def _make_retry_assess_callback(self, session: Session | None):
