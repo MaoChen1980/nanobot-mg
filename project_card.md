@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-06-15T20:30:37+0800
+Last scanned: 2026-06-22T07:13:08+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,14 +11,14 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~86,735
+- **Approx LOC**: ~100,875
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 359 | ~86,447 |
-| Shell | 5 | ~288 |
+| Python | 396 | ~100,268 |
+| Shell | 8 | ~607 |
 
 ## Directory Structure
 
@@ -74,7 +74,7 @@ E:\claude\nanobot-mg/
         shell/
         __init__.py (352B)
         _section_utils.py (9KB)
-        _semantic_base.py (15KB)
+        _semantic_base.py (16KB)
         analyze_tool.py (8KB)
         assess_me_tool.py (4KB)
         base.py (16KB)
@@ -84,67 +84,66 @@ E:\claude\nanobot-mg/
         cron.py (20KB)
         danger.py (2KB)
         debug_root_cause.py (12KB)
-        edit_files.py (19KB)
-        explore_module.py (19KB)
-        file_state.py (7KB)
+        explore_module.py (18KB)
+        file_state.py (8KB)
         list_subagents.py (1KB)
         memory_search.py (7KB)
         message.py (8KB)
-        notebook.py (7KB)
         notify_orchestrator.py (2KB)
         output_cache.py (3KB)
-        read_files.py (8KB)
         reframe.py (6KB)
         registry.py (8KB)
         sandbox.py (2KB)
         scan_project.py (2KB)
         schema.py (2KB)
-        search.py (27KB)
-        self.py (20KB)
+        search.py (28KB)
+        self.py (21KB)
         self_restart_tool.py (2KB)
         semantic_search.py (5KB)
         send_message.py (4KB)
         shell_validators.py (7KB)
-        spawn.py (9KB)
+        spawn.py (10KB)
         stage.py (14KB)
         tool_call_log.py (3KB)
         web.py (23KB)
       __init__.py (584B)
-      assess_me.py (4KB)
-      compress.py (22KB)
+      assess_me.py (5KB)
+      compress.py (18KB)
       compressor.py (7KB)
-      context.py (38KB)
+      context.py (49KB)
       context_vars.py (981B)
       db.py (23KB)
       hook.py (6KB)
       llm_context.py (2KB)
-      loop.py (63KB)
+      loop.py (74KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (749B)
       loop_dispatch.py (7KB)
       loop_hook.py (9KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (29KB)
+      loop_message_handlers.py (25KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (68KB)
+      memory_extractor.py (72KB)
       memory_store.py (10KB)
       memory_vector.py (25KB)
       message_pipe.py (6KB)
       project_scanner.py (21KB)
-      runner.py (45KB)
+      runner.py (59KB)
       runner_constants.py (566B)
       runner_context.py (6KB)
       runner_execution.py (8KB)
       runner_injection.py (5KB)
       runner_llm.py (7KB)
       runner_retry.py (4KB)
-      skills.py (13KB)
-      subagent.py (25KB)
-      subagent_prompt.py (8KB)
+      skills.py (14KB)
+      subagent.py (21KB)
+      subagent_prompt.py (10KB)
       subagent_status.py (2KB)
       subagent_tools.py (4KB)
     api/
+      __init__.py (46B)
+      server.py (24KB)
     bus/
     cli/
     command/
@@ -154,6 +153,7 @@ E:\claude\nanobot-mg/
     gateway/
     heartbeat/
     hooks/
+    models/
     onboard/
     providers/
     proxy/
@@ -169,7 +169,6 @@ E:\claude\nanobot-mg/
     _commit.py (56B)
     nanobot.py (4KB)
     project_card.md (4KB)
-  tasks/
   tests/
   CONTRIBUTING.md (4KB)
   docker-compose.yml (1KB)
@@ -178,7 +177,7 @@ E:\claude\nanobot-mg/
   LICENSE (1KB)
   project_card.md (11KB)
   pyproject.toml (5KB)
-  README.md (7KB)
+  README.md (8KB)
   README_en.md (5KB)
   SECURITY.md (8KB)
   setup.bat (39B)

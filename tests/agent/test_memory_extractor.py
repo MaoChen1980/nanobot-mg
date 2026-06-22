@@ -168,13 +168,99 @@ class TestFormatFindingParagraph:
         assert MemoryExtractor._format_finding_paragraph("pattern", "Do Y") == "- 💡 Do Y"
 
     def test_knowledge(self) -> None:
-        assert MemoryExtractor._format_finding_paragraph("knowledge", "Fact Z") == "- Fact Z"
+        assert MemoryExtractor._format_finding_paragraph("knowledge", "Fact Z") == "- 📌 Fact Z"
 
     def test_preference(self) -> None:
-        assert MemoryExtractor._format_finding_paragraph("preference", "I like W") == "- I like W"
+        assert MemoryExtractor._format_finding_paragraph("preference", "I like W") == "- 👤 I like W"
 
     def test_skill(self) -> None:
-        assert MemoryExtractor._format_finding_paragraph("skill", "Can do V") == "- Can do V"
+        assert MemoryExtractor._format_finding_paragraph("skill", "Can do V") == "- 🛠️ Can do V"
+
+
+class TestBuildTldr:
+    def test_empty_returns_none(self) -> None:
+        assert MemoryExtractor._build_tldr([]) is None
+
+    def test_single_finding(self) -> None:
+        result = MemoryExtractor._build_tldr(
+            [{"content": "- ⚠️ Don't X\n<!--ts:100.0-->", "ts": 100.0}]
+        )
+        assert result == "> **TL;DR**: Don't X"
+
+    def test_pinned_preferred_over_newest(self) -> None:
+        result = MemoryExtractor._build_tldr([
+            {"content": "- 📌 older\n<!--ts:50.0-->", "ts": 50.0},
+            {"content": "- 💡 newer pinned\n<!--ts:200.0--><!--pinned-->", "ts": 200.0},
+        ])
+        assert result == "> **TL;DR**: newer pinned"
+
+    def test_newest_when_no_pinned(self) -> None:
+        result = MemoryExtractor._build_tldr([
+            {"content": "- 📌 old\n<!--ts:50.0-->", "ts": 50.0},
+            {"content": "- 💡 newer\n<!--ts:200.0-->", "ts": 200.0},
+        ])
+        assert result == "> **TL;DR**: newer"
+
+    def test_strips_pinned_recent_markers(self) -> None:
+        """<!--pinned--> and <!--recent--> should not leak into TL;DR."""
+        result = MemoryExtractor._build_tldr([
+            {"content": "- 📌 test\n<!--ts:100.0--><!--pinned--><!--recent-->", "ts": 100.0},
+        ])
+        assert "<!--pinned-->" not in result
+        assert "<!--recent-->" not in result
+        assert result == "> **TL;DR**: test"
+
+    def test_max_chars_respected(self) -> None:
+        long = "a" * 200
+        result = MemoryExtractor._build_tldr(
+            [{"content": f"- 📌 {long}\n<!--ts:100.0-->", "ts": 100.0}],
+            max_chars=30,
+        )
+        prefix = "> **TL;DR**: "
+        assert result.startswith(prefix)
+        content = result[len(prefix):]
+        assert len(content) <= 30 + 1  # 30 + possible "…" ellipsis
+
+
+class TestDedupSemantic:
+    def test_empty_passthrough(self) -> None:
+        assert MemoryExtractor._dedup_semantic([]) == []
+
+    def test_single_passthrough(self) -> None:
+        p = [{"content": "- 📌 only one<!--ts:100.0-->", "ts": 100.0}]
+        assert MemoryExtractor._dedup_semantic(p) == p
+
+    def test_low_overlap_preserved(self) -> None:
+        """Different topics should not be deduped."""
+        paragraphs = [
+            {"content": "- 📌 Gradle wrapper fix for Windows PowerShell\n<!--ts:100.0-->", "ts": 100.0},
+            {"content": "- 💡 Compose test timing on Activity launch\n<!--ts:200.0-->", "ts": 200.0},
+        ]
+        assert len(MemoryExtractor._dedup_semantic(paragraphs)) == 2
+
+    def test_high_overlap_merged(self) -> None:
+        """Near-identical findings should be deduped."""
+        paragraphs = [
+            {"content": "- ⚠️ Windows gradlew wrapper fix for PowerShell quoting issue\n<!--ts:100.0-->", "ts": 100.0},
+            {"content": "- ⚠️ Windows gradlew wrapper for PowerShell quoting resolution\n<!--ts:200.0-->", "ts": 200.0},
+        ]
+        assert len(MemoryExtractor._dedup_semantic(paragraphs)) == 1
+
+    def test_cjk_bigram_dedup(self) -> None:
+        """CJK texts should use character bigram overlap."""
+        paragraphs = [
+            {"content": "- ⚠️ Windows 上 gradlew 的引号问题会导致 JAVA_HOME 解析失败\n<!--ts:100.0-->", "ts": 100.0},
+            {"content": "- ⚠️ Windows 下 gradlew 引号问题会导致 JAVA_HOME 解析失败\n<!--ts:200.0-->", "ts": 200.0},
+        ]
+        assert len(MemoryExtractor._dedup_semantic(paragraphs)) == 1
+
+    def test_cjk_different_topics_preserved(self) -> None:
+        """Different CJK topics should not be deduped."""
+        paragraphs = [
+            {"content": "- 📌 Compose 测试中 placeholder 在语义树中可能不存在\n<!--ts:100.0-->", "ts": 100.0},
+            {"content": "- 📌 Gradle KSP 编译顺序影响增量构建缓存命中率\n<!--ts:200.0-->", "ts": 200.0},
+        ]
+        assert len(MemoryExtractor._dedup_semantic(paragraphs)) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -511,6 +597,8 @@ def _read_paragraphs(path: Path) -> list[str]:
         if not heading_skipped and p.startswith("# "):
             heading_skipped = True
             continue
+        if p.startswith("> "):  # Skip TL;DR blockquote
+            continue
         if p == "---":
             break
         result.append(p)
@@ -629,7 +717,8 @@ class TestWriteCleanupAndRebuildByType:
         topic_file = extractor.store.memory_dir / "Python.md"
         text = topic_file.read_text(encoding="utf-8")
         assert "💡" in text
-        assert "**" not in text
+        # TL;DR uses **bold** so ** is expected; ensure no **name** pattern occurs
+        assert "**Do Y**" not in text
 
     @pytest.mark.asyncio
     async def test_instruction_written_to_rules_md(self, extractor: MemoryExtractor) -> None:
@@ -880,8 +969,8 @@ class TestWriteCleanupAndRebuildRecent:
                           recent=True),
         ])
         assert result is not None
-        assert "- new" in result[0]["content"]
-        assert "- old" in result[1]["content"]
+        assert "new" in result[0]["content"]
+        assert "old" in result[1]["content"]
 
     @pytest.mark.asyncio
     async def test_recent_max_12(self, extractor: MemoryExtractor) -> None:

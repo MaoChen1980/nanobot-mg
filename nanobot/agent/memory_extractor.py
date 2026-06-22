@@ -32,6 +32,17 @@ _USER_FEEDBACK_FILE = Path.home() / ".nanobot" / "self_improve" / "user_correcti
 
 _TS_RE = re.compile(r"<!--ts:(\d+(?:\.\d+)?)-->")  # embedded timestamp in memory files
 
+# Type → emoji for MEMORY.md index and finding formatting
+_FTYPE_EMOJI: dict[str, str] = {
+    "pitfall": "⚠️",
+    "pattern": "💡",
+    "knowledge": "📌",
+    "preference": "👤",
+    "instruction": "",
+    "skill": "🛠️",
+}
+_EMOJI_SET = set(_FTYPE_EMOJI.values()) - {""}
+
 
 def _parse_ts(ts_str: str | None) -> float | None:
     """Parse ISO 8601 timestamp string to float, or return None."""
@@ -478,12 +489,15 @@ class MemoryExtractor:
                 {"content": e["content"], "ts": e["ts"]} for e in entries
             ]
 
-            # Dedup by normalized content (strip ts/pinned/recent markers)
+            # Dedup by normalized content (strip ts/pinned/recent markers + emoji)
             # Sort newest-first so dedup keeps the latest version
             seen: set[str] = set()
             unique: list[dict[str, Any]] = []
             for e in sorted(merged, key=lambda x: -(x["ts"] or 0)):
                 clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").replace("<!--recent-->", "").strip()
+                clean = clean.lstrip("- ").strip()
+                for em in _EMOJI_SET:
+                    clean = clean.replace(em, "").strip()
                 if clean not in seen:
                     seen.add(clean)
                     unique.append(e)
@@ -505,8 +519,20 @@ class MemoryExtractor:
                 filtered.append(e)
             unique = filtered
 
+            # Enhanced semantic dedup: merge near-duplicate findings
+            if len(unique) > 1 and rel_path != "RULES.md":
+                unique = self._dedup_semantic(unique)
+
             content_lines.append(header)
             content_lines.append("")
+
+            # Add TL;DR from most important finding (skip for RULES.md — too diverse)
+            if rel_path not in ("RULES.md", "user.md", "pending_skills.md"):
+                tldr = self._build_tldr(unique)
+                if tldr:
+                    content_lines.append(tldr)
+                    content_lines.append("")
+
             for e in unique:
                 content_lines.append(e["content"])
                 content_lines.append("")
@@ -540,6 +566,7 @@ class MemoryExtractor:
         """Split file text into paragraphs, extracting ts from markers.
 
         Only the first ``# `` line is treated as the heading and excluded.
+        Blockquote lines (``> ...``, e.g. TL;DR) are also excluded.
         A trailing footer block (``---`` separator + companion line) is excluded.
         """
         raw_paragraphs = re.split(r"\n\n+", text.strip())
@@ -552,6 +579,8 @@ class MemoryExtractor:
                 continue
             if not heading_skipped and p.startswith("# "):
                 heading_skipped = True
+                continue
+            if p.startswith("> "):  # Skip blockquote (TL;DR)
                 continue
             # Footer starts at --- and absorbs one trailing paragraph
             if p == "---":
@@ -611,18 +640,77 @@ class MemoryExtractor:
                 return True
         return False
 
+    @staticmethod
+    def _build_tldr(unique: list[dict[str, Any]], max_chars: int = 100) -> str | None:
+        """Build a TL;DR from the most important finding."""
+        if not unique:
+            return None
+        # Pinned first, then newest (chronologically last since sorted asc)
+        best = next((e for e in unique if "<!--pinned-->" in e["content"]), unique[-1])
+        clean = _TS_RE.sub("", best["content"]).strip()
+        # Strip ts/pinned/recent markers (they become orphaned newlines after ts removal)
+        clean = clean.replace("<!--pinned-->", "").replace("<!--recent-->", "").strip()
+        # Strip markdown list prefix + emoji
+        clean = clean.lstrip("- ").strip()
+        for e in _EMOJI_SET:
+            clean = clean.replace(e, "").strip()
+        if not clean:
+            return None
+        return "> **TL;DR**: " + _trim_sentence(clean, max_chars)
+
+    @staticmethod
+    def _tokenize_for_dedup(text: str) -> set[str]:
+        """Tokenize text for semantic dedup comparison.
+
+        Uses character bigrams of CJK text for Chinese/Japanese-heavy content,
+        word-level tokens otherwise.
+        """
+        stripped = _TS_RE.sub("", text)
+        # Use CJK character bigrams if enough Chinese/Japanese characters exist
+        cjk_chars = [c for c in stripped if '一' <= c <= '鿿']
+        if len(cjk_chars) >= 4:  # at least 2 bigrams for meaningful comparison
+            return {cjk_chars[i] + cjk_chars[i + 1] for i in range(len(cjk_chars) - 1)}
+        # Word-level tokenization for Latin text
+        return set(
+            w.lower() for w in stripped.split()
+            if len(w) > 2
+        )
+
+    @staticmethod
+    def _dedup_semantic(paragraphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Merge near-duplicate findings within a topic using overlap heuristic.
+
+        Uses word overlap for Latin text, character bigram overlap for CJK text.
+        """
+        if len(paragraphs) < 2:
+            return paragraphs
+        seen_idx: set[int] = set()
+        result: list[dict[str, Any]] = []
+        for i, e in enumerate(paragraphs):
+            if i in seen_idx:
+                continue
+            tokens_i = MemoryExtractor._tokenize_for_dedup(e["content"])
+            result.append(e)
+            for j in range(i + 1, len(paragraphs)):
+                if j in seen_idx:
+                    continue
+                tokens_j = MemoryExtractor._tokenize_for_dedup(paragraphs[j]["content"])
+                if len(tokens_i) > 3 and len(tokens_j) > 3:
+                    overlap = len(tokens_i & tokens_j) / max(len(tokens_i), len(tokens_j))
+                    if overlap > 0.7:
+                        seen_idx.add(j)
+        return result
+
     # ------------------------------------------------------------------
     # Supersedes — replace old content with new content using FAISS
     # ------------------------------------------------------------------
 
     @staticmethod
     def _format_finding_paragraph(ftype: str, content: str) -> str:
-        """Format a finding as a markdown paragraph."""
-        if ftype == "pitfall":
-            return f"- ⚠️ {content}"
-        elif ftype == "pattern":
-            return f"- 💡 {content}"
-        return f"- {content}"
+        """Format a finding as a markdown paragraph with type-appropriate emoji."""
+        emoji = _FTYPE_EMOJI.get(ftype, "")
+        prefix = f"- {emoji} " if emoji else "- "
+        return prefix + content
 
     # (supersedes is now handled by _supersedes_in_memory + flush-time plan)
 
@@ -1308,13 +1396,30 @@ class MemoryExtractor:
     def _generate_memory_index(self, recent_entries: list[dict[str, Any]]) -> None:
         """Scan memory/ and generate compact MEMORY.md for agent system prompt.
 
-        Format: Recent changes (15 newest) + per-category summary with file count and topics.
+        Format: Pinned (emoji + short actionable summary) + Recent changes + per-category.
         """
         exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
 
+        # Helpers
+        def _extract_emoji(line: str) -> tuple[str, str]:
+            """Return (emoji, rest_of_line) or ('', line)."""
+            for e in sorted(_EMOJI_SET, key=len, reverse=True):  # longer first to avoid partial match
+                if e in line:
+                    return e, line.replace(e, "", 1).strip()
+            return "", line
+
+        def _first_finding_text(text: str) -> str:
+            """Get first non-heading, non-TLDR content line from a file."""
+            for line in text.split("\n"):
+                s = line.strip()
+                if not s or s.startswith("# ") or s.startswith("> ") or s.startswith("---"):
+                    continue
+                return s.lstrip("- ").strip()
+            return ""
+
         # Collect file metadata + pinned items
         file_meta: list[tuple[str, int, str, str, str]] = []  # (rel, mtime_ns, category, stem, heading)
-        pinned_candidates: list[tuple[str, int, str]] = []  # (rel, mtime_ns, summary)
+        pinned_candidates: list[tuple[str, int, str, str]] = []  # (rel, mtime_ns, summary, emoji)
         for p in self.store.memory_dir.rglob("*.md"):
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
@@ -1340,27 +1445,30 @@ class MemoryExtractor:
             stem = Path(rel).stem
             file_meta.append((rel, mtime, parent, stem, heading))
 
-            # Detect pinned — collect all, sort later
+            # Detect pinned — prefer TL;DR, then first finding text
             if "<!--pinned-->" in text:
-                summary = heading
+                tldr = ""
                 for line in text.split("\n"):
                     s = line.strip()
-                    if s and not s.startswith("#") and "<!--pinned-->" not in s:
-                        # Use description field if available, else first content line
-                        if s.startswith("description:"):
-                            summary = _trim_sentence(s[len("description:"):].strip())
-                        else:
-                            summary = _trim_sentence(s[:200].lstrip("- *💡⚠️ ").strip())
+                    if s.startswith("> **TL;DR**:"):
+                        tldr = s[len("> **TL;DR**:"):].strip()
                         break
-                pinned_candidates.append((rel, mtime, summary))
+                if tldr:
+                    emoji, summary = _extract_emoji(tldr)
+                    summary = _trim_sentence(summary, 60)
+                else:
+                    raw = _first_finding_text(text)
+                    emoji, summary = _extract_emoji(raw)
+                    summary = _trim_sentence(summary, 60)
+                if summary:
+                    pinned_candidates.append((rel, mtime, summary, emoji))
 
         # Sort pinned by recency (newest first), take top 6
         pinned_candidates.sort(key=lambda x: -x[1])
-        rel_to_heading = {rel: h for rel, _, _, _, h in file_meta}
-        pinned: list[str] = [
-            f"- [{rel_to_heading.get(rel, rel)}]({rel}) — {summary}"
-            for rel, _mtime, summary in pinned_candidates[:6]
-        ]
+        pinned: list[str] = []
+        for rel, _mtime, summary, emoji in pinned_candidates[:6]:
+            emoji_prefix = f"{emoji} " if emoji else ""
+            pinned.append(f"- {emoji_prefix}[{summary}]({rel})")
 
         if not file_meta:
             return
@@ -1388,10 +1496,14 @@ class MemoryExtractor:
                 if not text:
                     continue
                 age_s = now_s - ts_v
+                # Strip emoji before counting length, re-add after trim
+                emoji, rest = _extract_emoji(text)
+                trimmed = _trim_sentence(rest, 80)
+                display = f"{emoji} {trimmed}" if emoji else trimmed
                 if age_s < two_days:
-                    lines.append(f"- **{_trim_sentence(text, 200)}**")
+                    lines.append(f"- **{display}**")
                 else:
-                    lines.append(f"- {_trim_sentence(text, 200)}")
+                    lines.append(f"- {display}")
             lines.append("")
 
         # Category summary with clickable links (max 20 folders)
@@ -1408,9 +1520,10 @@ class MemoryExtractor:
                         if any(f.is_file() and f.suffix == ".md" for f in child.rglob("*.md")):
                             sub_rel = f"{cat}/{child.name}/index.md" if cat != "." else f"{child.name}/index.md"
                             links.append(f"[{child.name}/]({sub_rel})")
-            # File links after directories
+            # File links after directories — trim heading, detect emoji from content
             for rel, _stem, heading in sorted(files, key=lambda x: x[2]):
                 display = heading if heading else Path(rel).stem
+                display = _trim_sentence(display, 45)
                 links.append(f"[{display}]({rel})")
             topic_str = " · ".join(links[:8])
             if len(links) > 8:

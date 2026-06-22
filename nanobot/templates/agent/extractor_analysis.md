@@ -14,7 +14,7 @@
   "findings": [
     {
       "type": "knowledge|pitfall|pattern|preference|skill|tool_script|instruction",
-      "content": "<自包含、具体、包含触发条件+方案的一句话>",
+      "content": "<自包含、具体、When: … → Do: … 格式的一句话>",
       "topic": "<broad topic path>",
       "name": "<kebab-case name — required for pattern and skill>",
       "pinned": true,
@@ -62,6 +62,12 @@
 - 自包含：脱离上下文也能读懂
 - 具体：包含技术细节（方法名、参数值、路径等）
 - 精确：避免模糊评价（"很好"、"不太好"）
+- **格式：用 "When: … → Do: …" 结构**，触发条件在前，行动方案在后。这直接决定 MEMORY.md 索引行质量。
+
+**好：**
+- `When: 在 Windows 上运行 gradlew (PowerShell) → Do: 用 .bat wrapper，避免引号解析破坏 JAVA_HOME`
+- `When: 编写 Compose 第一个 @Test，Activity 首次启动 → Do: 先断言 placeholder 已存在，再点 tab 导航`
+- `Nanobot MemoryExtractor 使用 FAISS 做向量搜索，min_score 默认 0.3，用于 supersedes 查找`
 
 **好：**
 - `Nanobot MemoryExtractor 使用 FAISS 做向量搜索，min_score 默认 0.3，用于 supersedes 查找`
