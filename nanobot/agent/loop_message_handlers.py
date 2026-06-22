@@ -117,7 +117,7 @@ class SystemMessageHandler:
         if is_subagent:
             history = list(history)
             suffix = f"_{_sanitize_session_key(key)}" if key else ""
-            history.append({"role": "user", "content": f"Subagent 返回了结果。\n\n{msg.content.strip()}\n\n记住原始任务目标，所有决策围绕最终交付。\n\n请检查 Subagent 状态轮数、检查 team_board{suffix}.md（事实板）、处理/更新最新任务状态，有必要的话调整任务、添加新的 subagent、或 cancel 不需要的 subagent。\n\n请继续按计划推进。"})
+            history.append({"role": "user", "content": f"## Subagent Result — 按 Orchestration Guide 处理\n\n{msg.content.strip()}\n\n按 Orchestration Guide 的 Trigger-Action Rules 处理。\n\n### 决策原则\n- 方案选择、优先级、下一步 → 直接决策，不需要问用户\n- 可回退的决策自己做，错了用户会纠正\n- 只有 Safety/Privacy 规则定义的操作才需要确认"})
             current_message = ""
         else:
             current_message = msg.content

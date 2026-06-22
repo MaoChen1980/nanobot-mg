@@ -135,6 +135,12 @@ class SpawnTool(Tool):
             "- Success → system message notifies you of the result content\n"
             "- Failure → system message notifies you of the error\n"
             "- You can proactively query with `check_subagent_tool(task_id=...)`\n\n"
+            "## After Spawning — 你的职责\n\n"
+            "spawn 返回后不要等，立即做以下事：\n"
+            "- 更新 {{ tree_path }}，将子任务标记为 active\n"
+            "- 用 message_tool 告知用户你分配了什么、预计结果异步到达\n"
+            "- 继续处理你自己的其他工作（或等待结果）\n\n"
+            "Subagent 结果到达时 → 执行 orchestration guide 的 Trigger-Action Rules。\n\n"
             "## Examples\n\n"
             'spawn(tasks=[{"task": "Search all files containing TODO", "label": "find-todos"}])\n'
             "→ Searches for TODO in the background; system message notifies you of result\n\n"
