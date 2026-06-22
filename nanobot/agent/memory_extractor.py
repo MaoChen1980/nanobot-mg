@@ -1396,7 +1396,7 @@ class MemoryExtractor:
     def _generate_memory_index(self, recent_entries: list[dict[str, Any]]) -> None:
         """Scan memory/ and generate compact MEMORY.md for agent system prompt.
 
-        Format: Pinned (emoji + short actionable summary) + Recent changes + per-category.
+        Format: Active (top progress) + Rules (pinned) + Index (keyword links) + Recent (dated).
         """
         exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
 
@@ -1463,10 +1463,10 @@ class MemoryExtractor:
                 if summary:
                     pinned_candidates.append((rel, mtime, summary, emoji))
 
-        # Sort pinned by recency (newest first), take top 6
+        # Sort pinned by recency (newest first), take top 5
         pinned_candidates.sort(key=lambda x: -x[1])
         pinned: list[str] = []
-        for rel, _mtime, summary, emoji in pinned_candidates[:6]:
+        for rel, _mtime, summary, emoji in pinned_candidates[:5]:
             emoji_prefix = f"{emoji} " if emoji else ""
             pinned.append(f"- {emoji_prefix}[{summary}]({rel})")
 
@@ -1475,44 +1475,39 @@ class MemoryExtractor:
 
         lines = ["# Memory\n", ""]
 
+        # ── Active — top 3 recent entries (current progress) ──
+        if recent_entries:
+            lines.append("## Active\n")
+            for r in recent_entries[:3]:
+                text = r.get("content", "")
+                if not text:
+                    continue
+                emoji, rest = _extract_emoji(text)
+                # Strip `"- "` list prefix that leaked from _format_finding_paragraph
+                rest = rest.lstrip("- ").strip()
+                trimmed = _trim_sentence(rest, 80)
+                display = f"{emoji} {trimmed}" if emoji else trimmed
+                lines.append(f"- {display}")
+            lines.append("")
+
+        # ── Rules — pinned items ──
         if pinned:
-            lines.append("## Pinned\n")
+            lines.append("## Rules\n")
             lines.extend(pinned)
             lines.append("")
 
-        # Per-category index
+        # Build category index
         category_index: dict[str, list[tuple[str, str, str]]] = {}
         for rel, _mtime, parent, stem, heading in file_meta:
             category_index.setdefault(parent, []).append((rel, stem, heading))
 
-        # Recent changes — from final memory state (already ts-sorted, newest first)
-        if recent_entries:
-            now_s = time.time()
-            two_days = 2 * 86400
-            lines.append("## Recent changes\n")
-            for r in recent_entries:
-                text = r.get("content", "")
-                ts_v = r.get("ts", 0)
-                if not text:
-                    continue
-                age_s = now_s - ts_v
-                # Strip emoji before counting length, re-add after trim
-                emoji, rest = _extract_emoji(text)
-                trimmed = _trim_sentence(rest, 80)
-                display = f"{emoji} {trimmed}" if emoji else trimmed
-                if age_s < two_days:
-                    lines.append(f"- **{display}**")
-                else:
-                    lines.append(f"- {display}")
-            lines.append("")
-
-        # Category summary with clickable links (max 20 folders)
+        # ── Index — per-category keyword links (clickable, human+LLM dual-purpose) ──
+        lines.append("## Index\n")
         cat_order = sorted(category_index, key=lambda c: (c == ".", c))[:20]
         for cat in cat_order:
             files = category_index[cat]
             label = cat if cat != "." else "misc"
             links: list[str] = []
-            # Sub-directory links first (any depth)
             cat_path = self.store.memory_dir / cat if cat != "." else self.store.memory_dir
             if cat_path.is_dir():
                 for child in sorted(cat_path.iterdir()):
@@ -1520,27 +1515,36 @@ class MemoryExtractor:
                         if any(f.is_file() and f.suffix == ".md" for f in child.rglob("*.md")):
                             sub_rel = f"{cat}/{child.name}/index.md" if cat != "." else f"{child.name}/index.md"
                             links.append(f"[{child.name}/]({sub_rel})")
-            # File links after directories — trim heading, detect emoji from content
+            # Keyword-style file links: [heading](rel)
             for rel, _stem, heading in sorted(files, key=lambda x: x[2]):
                 display = heading if heading else Path(rel).stem
-                display = _trim_sentence(display, 45)
+                display = _trim_sentence(display, 35)
                 links.append(f"[{display}]({rel})")
-            topic_str = " · ".join(links[:8])
-            if len(links) > 8:
-                topic_str += " …"
-            lines.append(f"- **{label}/** ({len(files)}) — {topic_str}")
-
-        # Make category labels clickable (point to index.md), misc stays plain
-        final: list[str] = []
-        for line in lines:
-            m = re.match(r"^- \*\*(.+?)\*\* \((\d+)\) — (.+)$", line)
-            if m and m.group(1).rstrip("/") not in (".", "misc"):
-                cat_name = m.group(1).rstrip("/")
-                rest = f"{m.group(2)} — {m.group(3)}"
-                final.append(f"- **[`{cat_name}/`]({cat_name}/index.md)** {rest}")
+            topic_str = ", ".join(links[:12])
+            if len(links) > 12:
+                topic_str += ", …"
+            if cat != ".":
+                lines.append(f"- [**{label}**]({cat}/index.md) — {topic_str}")
             else:
-                final.append(line)
-        lines[:] = final
+                lines.append(f"- **{label}** — {topic_str}")
+        lines.append("")
+
+        # ── Recent — dated milestone entries ──
+        if recent_entries:
+            lines.append("## Recent\n")
+            for r in recent_entries:
+                text = r.get("content", "")
+                ts_v = r.get("ts", 0)
+                if not text:
+                    continue
+                date_str = datetime.fromtimestamp(ts_v).strftime("%Y-%m-%d") if ts_v else ""
+                emoji, rest = _extract_emoji(text)
+                rest = rest.lstrip("- ").strip()
+                trimmed = _trim_sentence(rest, 60)
+                display = f"{emoji} {trimmed}" if emoji else trimmed
+                prefix = f"{date_str}: " if date_str else ""
+                lines.append(f"- {prefix}{display}")
+            lines.append("")
 
         self.store.memory_file.write_text("\n".join(lines), encoding="utf-8")
         logger.info(
