@@ -1179,6 +1179,7 @@ class MemoryExtractor:
                     continue
                 date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 text += f"\n\n---\n\n*合并 Consolidation: {date_str}*"
+                target_path.parent.mkdir(parents=True, exist_ok=True)
                 target_path.write_text(text, encoding="utf-8")
                 for src_name in sources:
                     (cat_dir / src_name).unlink(missing_ok=True)
