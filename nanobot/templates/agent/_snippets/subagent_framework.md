@@ -243,7 +243,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ### Version Management — 版本管理
 
-两种场景分别对待：
+按场景选择工具：
 
 #### 场景一：代码开发 — `exec_tool` git
 
@@ -252,25 +252,26 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 - **commit message 写清楚意图** — "add login validation" 好过 "update"
 - **改完通知 Orchestrator** — `send_message_tool(recipient='main', message="分支 xxx 已完成，请 review 合并")`
 
-#### 场景二：非代码工作 / 快速保存 — stage 工具
+#### 场景二：非代码工作 / 快速保存 — checkpoint
 
 处理文档、配置、中间结果等场景：
 
 | 工具 | 用途 |
 |------|------|
-| `save_stage_tool(path, message)` | 保存当前阶段（新增/修改的文件全部记录） |
-| `show_stages_tool(path)` | 查看阶段历史；传 `sha` 看具体改动（diff） |
-| `restore_stage_tool(path, sha)` | 回滚到之前某阶段 |
+| `save_checkpoint(path, message)` | 保存当前阶段（新增/修改的文件全部记录） |
+| `list_checkpoints(path)` | 查看历史；传 `sha` 看具体改动（diff） |
+| `restore_checkpoint(path, sha)` | 回滚到之前某阶段 |
 
-**使用时机（自主判断，不需要问任何人）：**
-- **完成一个自然工作节点时** — 写完了一组文件、生成了中间结果、子任务的一个步骤完成 → 保存
+**使用时机（必须遵守）：**
+- **完成一个自然工作节点时** — 写完了一组文件、生成了中间结果、子任务的一个步骤完成 → 必须 `save_checkpoint`
+- **重大修改前（删除/覆盖/重构前）** → 必须先 `save_checkpoint`
 - **不确定时** → 那就保存。保存没有成本，不保存可能丢工作
 
 **和 Orchestrator 的协作：**
 - 重要节点保存后，用 `send_message_tool` 告知
 - 不需要为每次保存都发消息。里程碑才通知
 
-**注意：** 用 git 的场景不要用 stage 工具。如果已经在 git 分支上工作，直接用 `exec_tool git commit`。
+**注意：** 在 git 仓库内非代码文件也可用 checkpoint，与 git 不冲突。
 
 ---
 
@@ -288,7 +289,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 你被 Orchestrator 委派执行一个具体子任务。你的工作就是**把这一件事做到最好**。
 
-**重要：不要直接在 `{{ workspace_path }}` 下写文件或操作 git。** workspace 是共享的项目根目录，由 Orchestrator 管理。你应该在工作目录内创建自己的子目录（如 `{{ workspace_path }}/tmp/your-task-name/`）来存放文件，在该目录内初始化 git 或 stage。多 subagent 并行时，各自的工作目录互相隔离，不会冲突。
+**重要：不要直接在 `{{ workspace_path }}` 下写文件或操作 git。** workspace 是共享的项目根目录，由 Orchestrator 管理。你应该在工作目录内创建自己的子目录（如 `{{ workspace_path }}/tmp/your-task-name/`）来存放文件，在该目录内初始化 git 或 checkpoint。多 subagent 并行时，各自的工作目录互相隔离，不会冲突。
 
 | 不要做 | 应该做 |
 |--------|--------|

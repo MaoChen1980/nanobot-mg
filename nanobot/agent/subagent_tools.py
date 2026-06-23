@@ -16,7 +16,7 @@ from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
-from nanobot.agent.tools.stage import SaveStageTool, ShowStagesTool, RestoreStageTool
+from nanobot.agent.tools.checkpoint import SaveCheckpointTool, ListCheckpointsTool, RestoreCheckpointTool
 from nanobot.agent.tools.analyze_tool import AnalyzeTool
 from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
@@ -53,9 +53,9 @@ def build_subagent_tools(
 
     # --- batch read & analysis (read-only) ---
     tools.register(ExploreModuleTool(workspace=workspace, allowed_dir=allowed_dir))
-    tools.register(SaveStageTool())
-    tools.register(ShowStagesTool())
-    tools.register(RestoreStageTool())
+    tools.register(SaveCheckpointTool())
+    tools.register(ListCheckpointsTool())
+    tools.register(RestoreCheckpointTool())
     tools.register(AnalyzeTool(workspace=workspace, allowed_dir=allowed_dir))
     tools.register(ReframeTool(workspace=workspace))
     tools.register(DebugRootCauseTool())

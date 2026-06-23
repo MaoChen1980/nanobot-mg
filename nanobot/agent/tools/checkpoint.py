@@ -1,4 +1,4 @@
-"""Stage (version control) tools — save, browse, and restore work stages.
+"""Checkpoint tools — save, browse, and restore work checkpoints.
 
 Pure Python implementation using dulwich — tracks file changes with git
 internally but needs no system ``git`` installed.
@@ -92,7 +92,7 @@ def _commit_touches_path(repo, commit, rel_path: str) -> bool:
 
 
 # ===================================================================
-# save_stage — save the current state as a new stage
+# save_checkpoint — checkpoint the current state
 # ===================================================================
 
 
@@ -100,33 +100,32 @@ def _commit_touches_path(repo, commit, rel_path: str) -> bool:
     properties={
         "path": p(
             "string",
-            "Directory to save as a new stage. "
+            "Directory to checkpoint. "
             "All file changes in this directory are recorded. "
             "If the directory has no internal storage yet, one is "
-            "automatically set up (first save = first stage).",
+            "automatically set up (first save = first checkpoint).",
         ),
         "message": p(
             "string",
-            "What happened in this stage, e.g. 'v2 - 初稿完成' or '添加了数据分析图表'. "
-            "Be descriptive so you can tell stages apart later.",
+            "What happened, e.g. 'v2 - 初稿完成' or '改前备份'. "
+            "Be descriptive so you can tell checkpoints apart later.",
         ),
     },
     required=["path"],
 )
-class SaveStageTool(Tool):
-    """Save the current state of your work as a named stage.
+class SaveCheckpointTool(Tool):
+    """Save the current state of your work as a checkpoint.
 
-    Think of this as hitting "save point" — every file change in the
+    Think of this as a save point — every file change in the
     directory gets recorded so you can review or undo it later.
 
     Uses git internally (no system git required).  Files listed in
     a ``.gitignore`` inside the directory are automatically skipped.
 
-    Ask the user before saving: '当前阶段已完成，要保存一版吗？'
-    Use ``show_stages_tool`` to browse history, ``restore_stage_tool`` to roll back.
+    Use ``list_checkpoints`` to browse history, ``restore_checkpoint`` to roll back.
     """
 
-    name = "save_stage_tool"
+    name = "save_checkpoint"
     read_only = False
 
     async def execute(self, path: str, message: str = "", **kwargs: Any) -> str:
@@ -144,7 +143,7 @@ class SaveStageTool(Tool):
         has_staged = any(st.staged.values())
 
         if not unstaged and not untracked and not has_staged:
-            return "Nothing changed since the last save — stage is already up to date."
+            return "Nothing changed since the last save — checkpoint is already up to date."
 
         to_stage = unstaged + untracked
         if to_stage:
@@ -169,7 +168,7 @@ class SaveStageTool(Tool):
 
 
 # ===================================================================
-# show_stages — browse saved stages and inspect changes
+# list_checkpoints — browse saved checkpoints
 # ===================================================================
 
 
@@ -177,24 +176,24 @@ class SaveStageTool(Tool):
     properties={
         "path": p(
             "string",
-            "Directory (or a file inside it) whose saved stages to browse. "
-            "The tool locates its internal storage and shows the stage history. "
-            "If no storage is found, use ``save_stage_tool`` first.",
+            "Directory (or a file inside it) whose checkpoints to browse. "
+            "The tool locates its internal storage and shows the checkpoint history. "
+            "If no storage is found, use ``save_checkpoint`` first.",
         ),
         "sha": p(
             "string",
-            "Which stage to inspect in detail.  Shows the exact file changes "
-            "in that stage (what was added and how it changed). "
-            "Omit this to see the stage log.",
+            "Which checkpoint to inspect in detail.  Shows the exact file changes "
+            "in that checkpoint (what was added and how it changed). "
+            "Omit this to see the checkpoint log.",
         ),
         "since": p(
             "string",
-            "Only show stages saved after this time, "
+            "Only show checkpoints saved after this time, "
             "e.g. '7 days ago', '2024-01-01', '1 month ago'.",
         ),
         "max_stages": p(
             "integer",
-            "How many recent stages to show (default 20, max 50).",
+            "How many recent checkpoints to show (default 20, max 50).",
             minimum=1,
             maximum=50,
             default=20,
@@ -202,20 +201,20 @@ class SaveStageTool(Tool):
     },
     required=["path"],
 )
-class ShowStagesTool(Tool):
-    """Browse saved stages and inspect what changed in each one.
+class ListCheckpointsTool(Tool):
+    """Browse saved checkpoints and inspect what changed in each one.
 
     Two modes:
-    - **Log mode** (default): list stages with SHA, timestamp, and message.
+    - **Log mode** (default): list checkpoints with SHA, timestamp, and message.
       Filter by file path or time range.
     - **Diff mode** (pass ``sha``): show the exact file changes in a
-      specific stage.
+      specific checkpoint.
 
-    Works with any directory previously saved via ``save_stage_tool``.
+    Works with any directory previously saved via ``save_checkpoint``.
     Pure Python, no system git required.
     """
 
-    name = "show_stages_tool"
+    name = "list_checkpoints"
     read_only = True
 
     async def execute(
@@ -233,8 +232,8 @@ class ShowStagesTool(Tool):
         git_root = _find_git_root(abs_path)
         if not git_root:
             return (
-                "No stages found.  "
-                "Use ``save_stage_tool(path, message)`` to record the first one."
+                "No checkpoints found.  "
+                "Use ``save_checkpoint(path, message)`` to record the first one."
             )
 
         try:
@@ -260,7 +259,7 @@ class ShowStagesTool(Tool):
         try:
             head = repo.refs[b"HEAD"]
         except KeyError:
-            return "No stages saved yet."
+            return "No checkpoints saved yet."
 
         entries: list[dict[str, Any]] = []
         sha: bytes | None = head
@@ -285,9 +284,9 @@ class ShowStagesTool(Tool):
             sha = commit.parents[0] if commit.parents else None
 
         if not entries:
-            return "No matching stages found."
+            return "No matching checkpoints found."
 
-        lines = [f"# Stages — {Path(repo.path).name}"]
+        lines = [f"# Checkpoints — {Path(repo.path).name}"]
         lines.append("")
         if since:
             lines.append(f"Since: {since}")
@@ -299,7 +298,7 @@ class ShowStagesTool(Tool):
             lines.append(f"  {e['sha']}  {e['timestamp']}  {e['message']}")
 
         lines.append("")
-        lines.append(f"({len(entries)} stages shown)")
+        lines.append(f"({len(entries)} checkpoints shown)")
         return "\n".join(lines)
 
     # -- diff view ---------------------------------------------------------
@@ -310,11 +309,11 @@ class ShowStagesTool(Tool):
 
         full_sha = _resolve_sha(repo, sha)
         if not full_sha:
-            return f"Stage '{sha}' not found.  Use ``show_stages_tool`` to list them."
+            return f"Checkpoint '{sha}' not found.  Use ``list_checkpoints`` to list them."
 
         commit = repo[full_sha]
         if commit.type_name != b"commit":
-            return f"'{sha}' is not a valid stage."
+            return f"'{sha}' is not a valid checkpoint."
 
         msg = commit.message.decode("utf-8", errors="replace").strip()
         ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(commit.commit_time))
@@ -324,10 +323,10 @@ class ShowStagesTool(Tool):
             files = [entry.path.decode() for entry in tree.iteritems()]
             file_list = "\n".join(f"  A  {f}" for f in files) if files else "  (empty)"
             return (
-                f"Stage {sha[:8]}  —  First save\n"
+                f"Checkpoint {sha[:8]}  —  First save\n"
                 f"Date:   {ts}\n\n"
                 f"{msg}\n\n"
-                f"[First stage — all files added]\n{file_list}"
+                f"[First checkpoint — all files added]\n{file_list}"
             )
 
         buf = BytesIO()
@@ -343,7 +342,7 @@ class ShowStagesTool(Tool):
             diff_text = "  (no file changes)"
 
         return (
-            f"Stage {sha[:8]}  —  Changes\n"
+            f"Checkpoint {sha[:8]}  —  Changes\n"
             f"Date:   {ts}\n\n"
             f"{msg}\n\n"
             f"{diff_text}"
@@ -351,7 +350,7 @@ class ShowStagesTool(Tool):
 
 
 # ===================================================================
-# restore_stage — roll back to a previous stage
+# restore_checkpoint — roll back to a previous checkpoint
 # ===================================================================
 
 
@@ -376,26 +375,23 @@ def _restore_tree(repo, tree_obj, repo_path: Path, prefix: str = "") -> list[str
         "path": p(
             "string",
             "Directory whose files should be rolled back. "
-            "Must have stages saved (use ``save_stage_tool`` first).",
+            "Must have checkpoints (use ``save_checkpoint`` first).",
         ),
         "sha": p(
             "string",
-            "Which stage to go back to.  Get the SHA from ``show_stages_tool``.",
+            "Which checkpoint to go back to.  Get the SHA from ``list_checkpoints``.",
         ),
     },
     required=["path", "sha"],
 )
-class RestoreStageTool(Tool):
-    """Roll back files to a previously saved stage.
+class RestoreCheckpointTool(Tool):
+    """Roll back files to a previously saved checkpoint.
 
-    Reads files from the saved stage and writes them to the working directory.
-    Files that didn't exist in that stage are left alone (safe rollback).
-
-    Before rolling back, ask: '要不要先保存当前阶段？'
-    That way no work is lost even after a rollback.
+    Reads files from the checkpoint and writes them to the working directory.
+    Files that didn't exist in that checkpoint are left alone (safe rollback).
     """
 
-    name = "restore_stage_tool"
+    name = "restore_checkpoint"
     read_only = False
 
     async def execute(self, path: str, sha: str, **kwargs: Any) -> str:
@@ -405,26 +401,26 @@ class RestoreStageTool(Tool):
         git_root = _find_git_root(repo_path)
         if not git_root:
             return (
-                "No stages found in this directory.  "
-                "Use ``save_stage_tool(path, message)`` first."
+                "No checkpoints found in this directory.  "
+                "Use ``save_checkpoint(path, message)`` first."
             )
 
         with Repo(str(git_root)) as repo:
             full_sha = _resolve_sha(repo, sha)
             if not full_sha:
-                return f"Stage '{sha}' not found.  Use ``show_stages_tool`` to list them."
+                return f"Checkpoint '{sha}' not found.  Use ``list_checkpoints`` to list them."
 
             commit = repo[full_sha]
             if commit.type_name != b"commit":
-                return f"'{sha}' is not a valid stage."
+                return f"'{sha}' is not a valid checkpoint."
 
             tree = repo[commit.tree]
             restored = _restore_tree(repo, tree, repo_path)
 
         if not restored:
-            return f"Stage {sha[:8]} has no files to restore."
+            return f"Checkpoint {sha[:8]} has no files to restore."
 
         return (
-            f"Restored {len(restored)} file(s) from stage {sha[:8]}:\n"
+            f"Restored {len(restored)} file(s) from checkpoint {sha[:8]}:\n"
             + "\n".join(f"  {f}" for f in restored)
         )

@@ -325,7 +325,7 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ### Version Management — 版本管理
 
-两种场景，两套工具。
+两套工具，按场景使用。
 
 #### 场景一：代码开发 — 用 `exec_tool` 调 git
 
@@ -354,26 +354,27 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 - 分支隔离让多个 subagent 并行互不干扰
 - review 保证质量，问题合入前发现而不是合入后
 
-#### 场景二：非代码工作 / 快速保存 — 用 stage 工具
+#### 场景二：非代码工作 / 快速保存 — 用 checkpoint
 
 处理 PPT、文档、配置实验等没有 git 仓库的场景，或不想开分支的快速实验：
 
 | 工具 | 用途 |
 |------|------|
-| `save_stage_tool(path, message)` | 保存当前阶段（新增/修改的文件全部记录） |
-| `show_stages_tool(path)` | 查看阶段历史；传 `sha` 看具体改动（diff） |
-| `restore_stage_tool(path, sha)` | 回滚到之前某阶段 |
+| `save_checkpoint(path, message)` | 保存当前阶段（新增/修改的文件全部记录） |
+| `list_checkpoints(path)` | 查看历史；传 `sha` 看具体改动（diff） |
+| `restore_checkpoint(path, sha)` | 回滚到之前某阶段 |
 
-**使用时机：**
-- 完成一个自然阶段（如生成了 PPT、写完了一组文件）→ `save_stage_tool` 保存一版
-- 大规模改动前，建议先保存一版以便回滚
+**使用时机（必须遵守）：**
+- **完成一个自然阶段（如生成了 PPT、写完了一组文件）后** → 必须 `save_checkpoint` 保存一版
+- **重大修改前（重构、删除、覆盖等）** → 必须 `save_checkpoint` 保存当前状态
+- **换方案前** → 每条路径各打一个 checkpoint，方便对比回滚
 - 不确定时 → 那就保存。保存没有成本，不保存可能丢工作
 
 **最佳实践：**
-- `save_stage_tool` 会列出所有改动（新增/修改），你可以判断是否需要排除某些文件
+- `save_checkpoint` 会列出所有改动（新增/修改），你可以判断是否需要排除某些文件
 - 不需要的文件写到 `.gitignore` 再重新保存
-- **用 git 的场景不要用 stage 工具** — 代码开发请用场景一的方式
-- `restore_stage_tool` 只写文件，不删除文件（即使目标版本没有它）
+- 在 git 仓库内非代码文件也可用 checkpoint，与 git 不冲突
+- `restore_checkpoint` 只写文件，不删除文件（即使目标版本没有它）
 
 ---
 
@@ -460,7 +461,7 @@ Use `spawn_tool` to delegate (single task or batch):
 
 委派时带上你的 Situational Awareness（人/环境/数据/行为），Subagent 才能在其上下文中做出恰当判断。
 
-**每个 Subagent 要有自己的工作目录。** 不要让他们直接操作 workspace 根目录。在 task 里指定工作路径（如 `{{ workspace_path }}/tmp/<subagent-label>/`），subagent 在该目录内初始化 git 或 stage。这样多 subagent 并行时文件互不冲突，review 时也只关注自己涉及的范围。
+**每个 Subagent 要有自己的工作目录。** 不要让他们直接操作 workspace 根目录。在 task 里指定工作路径（如 `{{ workspace_path }}/tmp/<subagent-label>/`），subagent 在该目录内初始化 git 或 checkpoint。这样多 subagent 并行时文件互不冲突，review 时也只关注自己涉及的范围。
 
 初始计划是起点——随时会变。
 

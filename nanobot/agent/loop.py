@@ -409,7 +409,7 @@ class AgentLoop:
         from nanobot.agent.tools.send_message import SendMessageTool
         from nanobot.agent.tools.shell import ExecTool
         from nanobot.agent.tools.spawn import SpawnTool
-        from nanobot.agent.tools.stage import RestoreStageTool, SaveStageTool, ShowStagesTool
+        from nanobot.agent.tools.checkpoint import RestoreCheckpointTool, SaveCheckpointTool, ListCheckpointsTool
         from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
         allowed_dir = (
             self.workspace if (self.restrict_to_workspace or self.exec_config.sandbox) else None
@@ -434,9 +434,9 @@ class AgentLoop:
         self.tools.register(ConversationSearchTool(store=self.context.memory))
         self.tools.register(SearchTextTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ExploreModuleTool(workspace=self.workspace, allowed_dir=allowed_dir))
-        self.tools.register(SaveStageTool())
-        self.tools.register(ShowStagesTool())
-        self.tools.register(RestoreStageTool())
+        self.tools.register(SaveCheckpointTool())
+        self.tools.register(ListCheckpointsTool())
+        self.tools.register(RestoreCheckpointTool())
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
         self.tools.register(ReframeTool(workspace=self.workspace))

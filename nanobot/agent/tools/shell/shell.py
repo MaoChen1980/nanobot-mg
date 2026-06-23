@@ -215,9 +215,9 @@ class ExecTool(Tool):
         if lower.startswith("git"):
             rest = lower[3:].strip()
             if rest.startswith("log"):
-                return "Suggestion: Use `show_stages_tool(path)` to browse stage history."
+                return "Suggestion: Use `list_checkpoints(path)` to browse checkpoint history."
             if rest.startswith("show"):
-                return "Suggestion: Use `show_stages_tool(path, sha=...)` to inspect a specific stage."
+                return "Suggestion: Use `list_checkpoints(path, sha=...)` to inspect a specific checkpoint."
         return None
 
     async def execute(

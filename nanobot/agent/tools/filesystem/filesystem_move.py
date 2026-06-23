@@ -53,7 +53,7 @@ class MoveFileTool(_FsTool):
             return danger_warning(
                 problem=f"Destination already exists: {dst_resolved.name}{size_str}",
                 risk="Moving will overwrite the existing destination file — potential data loss",
-                suggestion="Back up the destination file first (git commit or save_stage_tool), read its contents to verify, or choose a different destination path",
+                suggestion="Back up the destination file first (git commit or save_checkpoint), read its contents to verify, or choose a different destination path",
                 tool_name="move_file_tool",
             )
 

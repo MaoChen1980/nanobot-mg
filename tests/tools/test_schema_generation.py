@@ -207,9 +207,9 @@ class TestSpecificSchemaDefaults:
         schema = NotifyOrchestratorTool._tool_parameters_schema
         assert schema["properties"]["priority"]["enum"] == ["info", "suggestion", "blocker"]
 
-    def test_stage_message_not_required(self):
-        from nanobot.agent.tools.stage import SaveStageTool
-        schema = SaveStageTool._tool_parameters_schema
+    def test_checkpoint_message_not_required(self):
+        from nanobot.agent.tools.checkpoint import SaveCheckpointTool
+        schema = SaveCheckpointTool._tool_parameters_schema
         assert "message" not in schema.get("required", [])
         assert "path" in schema.get("required", [])
 

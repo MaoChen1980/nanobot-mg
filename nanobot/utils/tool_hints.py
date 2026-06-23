@@ -20,7 +20,7 @@ _TOOL_FORMATS: dict[str, tuple[list[str], str, bool, bool]] = {
     "web_fetch_tool":      (["url"],                            "fetch {}",         True,  False),
     "explore_module_tool": (["path"],                           "explore {}",       True,  False),
     "analyze_tool":        (["file_path", "path"],              "analyze {}",       True,  False),
-    "show_stages_tool":    (["path"],                           "git {}",           True,  False),
+    "list_checkpoints":    (["path"],                           "cp {}",            True,  False),
     "recall":         (["query"],                          'recall("{}")',     False, False),
     "search_text_tool":    (["query"],                          'search("{}")',     False, False),
     "ask_user":       (["question"],                       'ask("{}")',        False, False),

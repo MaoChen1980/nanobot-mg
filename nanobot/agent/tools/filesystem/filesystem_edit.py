@@ -196,7 +196,7 @@ class EditFileTool(_FsTool):
                     problem=f"Removing {len(old_text)} characters from {path}",
                     risk="Large content removal may delete more than intended, "
                          "especially if old_text matches unexpected locations",
-                    suggestion="Back up the file first (git commit or save_stage_tool), then read it "
+                    suggestion="Back up the file first (git commit or save_checkpoint), then read it "
                                "with read_file_tool to verify the exact text you want to remove "
                                "before editing",
                     tool_name="edit_file_tool",
