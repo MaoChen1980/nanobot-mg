@@ -46,6 +46,8 @@ class MemoryStore:
         self._git = GitStore(workspace, tracked_files=[
             "SOUL.md", "USER.md", "RULES.md",
         ])
+        # mtime-based file read cache: path_key -> (mtime, content)
+        self._file_cache: dict[str, tuple[float, str]] = {}
         self.vector_index = MemoryVectorIndex(self.memory_dir)
         if not self.vector_index.load() and self.list_memory_files():
             logger.info("No vector index found — building from existing memory/ files")
@@ -63,10 +65,15 @@ class MemoryStore:
     def git(self) -> GitStore:
         return self._git
 
-    @staticmethod
-    def read_file(path: Path) -> str:
+    def read_file(self, path: Path) -> str:
         try:
-            return path.read_text(encoding="utf-8")
+            mtime = path.stat().st_mtime
+            cached = self._file_cache.get(str(path))
+            if cached and cached[0] == mtime:
+                return cached[1]
+            content = path.read_text(encoding="utf-8")
+            self._file_cache[str(path)] = (mtime, content)
+            return content
         except FileNotFoundError:
             return ""
 

@@ -8,7 +8,6 @@ import re
 import shutil
 from pathlib import Path
 
-import yaml
 from loguru import logger
 
 # Default builtin skills directory (relative to this file)
@@ -324,6 +323,10 @@ class SkillsLoader:
             return None
         match = _STRIP_SKILL_FRONTMATTER.match(content)
         if not match:
+            return None
+        try:
+            import yaml
+        except ImportError:
             return None
         try:
             parsed = yaml.safe_load(match.group(1))

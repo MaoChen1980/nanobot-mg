@@ -91,6 +91,8 @@ class ContextBuilder:
         # Content caches — invalidated by mtime change
         self._file_text_cache: dict[str, tuple[float, str]] = {}
         self._identity_cache: dict[tuple, str] = {}
+        # Batched .memory_usage.json writes: accumulate, flush every 10 turns
+        self._pending_memory_entries: list[dict] = []
 
 
     def warmup(self) -> None:
@@ -686,17 +688,29 @@ class ContextBuilder:
         )
 
     def _track_memory_injection(self, parts: list[str]) -> None:
-        """Log which memory files are being injected (for quality tracking)."""
+        """Log which memory files are being injected (for quality tracking).
+
+        Accumulates in memory and flushes to disk every 10 turns
+        to reduce per-turn I/O overhead.
+        """
+        self._pending_memory_entries.append({
+            "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "files_injected": len(parts),
+        })
+        if len(self._pending_memory_entries) >= 10:
+            self._flush_memory_entries()
+
+    def _flush_memory_entries(self) -> None:
+        """Flush pending memory usage entries to disk."""
+        if not self._pending_memory_entries:
+            return
         path = self.workspace / "framework" / ".memory_usage.json"
         try:
             old: list[dict] = json.loads(self._cached_read_text(path) or "[]")
         except (json.JSONDecodeError, OSError):
             old = []
-        entry = {
-            "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "files_injected": len(parts),
-        }
-        old.append(entry)
+        old.extend(self._pending_memory_entries)
+        self._pending_memory_entries.clear()
         if len(old) > 100:
             old = old[-100:]
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -39,11 +39,6 @@ if sys.platform == "win32":
         logger.debug("Failed to enable Virtual Terminal Processing")
 
 import typer
-from prompt_toolkit import PromptSession, print_formatted_text
-from prompt_toolkit.application import run_in_terminal
-from prompt_toolkit.formatted_text import ANSI, HTML
-from prompt_toolkit.history import FileHistory
-from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
@@ -52,17 +47,23 @@ from rich.text import Text
 from nanobot import __logo__, __version__
 
 
-class SafeFileHistory(FileHistory):
-    """FileHistory subclass that sanitizes surrogate characters on write.
+class SafeFileHistory:
+    """FileHistory that sanitizes surrogate characters on write.
 
-    On Windows, special Unicode input (emoji, mixed-script) can produce
-    surrogate characters that crash prompt_toolkit's file write.
-    See issue #2846.
+    Lazily imports prompt_toolkit to avoid startup cost.
+    Proxies all FileHistory methods via __getattr__ for duck-typing compatibility.
     """
+
+    def __init__(self, filename: str):
+        from prompt_toolkit.history import FileHistory
+        self._inner = FileHistory(filename)
 
     def store_string(self, string: str) -> None:
         safe = string.encode("utf-8", errors="replace").decode("utf-8")
-        super().store_string(safe)
+        self._inner.store_string(safe)
+
+    def __getattr__(self, name: str):
+        return getattr(self._inner, name)
 from nanobot.cli.stream import StreamRenderer, ThinkingSpinner
 from nanobot.config.paths import get_workspace_path, is_default_workspace
 from nanobot.config.schema import Config
@@ -151,6 +152,9 @@ def _init_prompt_session() -> None:
     """Create the prompt_toolkit session with persistent file history."""
     global _PROMPT_SESSION, _SAVED_TERM_ATTRS
 
+    # Defer heavy prompt_toolkit import to session init time (not module level)
+    from prompt_toolkit import PromptSession
+
     # Save terminal state so we can restore it on exit
     try:
         import termios
@@ -226,11 +230,14 @@ def _response_renderable(content: str, render_markdown: bool, metadata: dict | N
 async def _print_interactive_line(text: str) -> None:
     """Print async interactive updates with prompt_toolkit-safe Rich styling."""
     def _write() -> None:
+        from prompt_toolkit import print_formatted_text
+        from prompt_toolkit.formatted_text import ANSI
         ansi = _render_interactive_ansi(
             lambda c: c.print(f"  [dim]↳ {text}[/dim]")
         )
         print_formatted_text(ANSI(ansi), end="")
 
+    from prompt_toolkit.application import run_in_terminal
     await run_in_terminal(_write)
 
 
@@ -241,6 +248,8 @@ async def _print_interactive_response(
 ) -> None:
     """Print async interactive replies with prompt_toolkit-safe Rich styling."""
     def _write() -> None:
+        from prompt_toolkit import print_formatted_text
+        from prompt_toolkit.formatted_text import ANSI
         content = response or ""
         ansi = _render_interactive_ansi(
             lambda c: (
@@ -252,6 +261,7 @@ async def _print_interactive_response(
         )
         print_formatted_text(ANSI(ansi), end="")
 
+    from prompt_toolkit.application import run_in_terminal
     await run_in_terminal(_write)
 
 
@@ -287,6 +297,8 @@ async def _read_interactive_input_async() -> str:
     if _PROMPT_SESSION is None:
         raise RuntimeError("Call _init_prompt_session() first")
     try:
+        from prompt_toolkit.formatted_text import HTML
+        from prompt_toolkit.patch_stdout import patch_stdout
         with patch_stdout():
             return await _PROMPT_SESSION.prompt_async(
                 HTML("<b fg='ansiblue'>You:</b> "),

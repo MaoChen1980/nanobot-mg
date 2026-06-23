@@ -135,36 +135,70 @@ class SelfFixHook(AgentHook):
     # -- Injection ------------------------------------------------------------
 
     def _inject_insight(self, context: AgentHookContext, insight: str) -> None:
-        """Prepend a system reminder to the message list."""
+        """Prepend findings to the message list.
+
+        Self-bug findings (nanobot code issues) are injected as system
+        reminders that the LLM treats as actionable. Other findings
+        remain as excluded user/assistant pairs for awareness.
+        """
         # Remove stale SelfFixHook entries from previous turns
         context.messages[:] = [
             m for m in context.messages
             if m.get("_source") != "self_fix_hook"
         ]
-        reminders = [
-            {
-                "role": "user",
+
+        # Separate self_bug findings from other types
+        lines = insight.split("\n")
+        self_bug_lines = [l for l in lines if "(self_bug)" in l]
+        other_lines = [l for l in lines if "(self_bug)" not in l]
+
+        reminders = []
+
+        # Self-bug findings: inject as system-role (actionable)
+        if self_bug_lines:
+            reminders.append({
+                "role": "system",
                 "content": (
-                    f"[Self-Fix from your history]\n{insight}\n"
-                    "-- These are items flagged by your self-review system."
+                    "[Self-Fix Action Required]\n"
+                    "以下 self_bug 代码问题需要修复：\n"
+                    + "\n".join(self_bug_lines) + "\n\n"
+                    "评估置信度，如果 > 90% 就直接修改代码修复。修复后标记已解决。"
                 ),
                 "_source": "self_fix_hook",
                 "_iteration": context.iteration,
-                "status": "excluded",
-            },
-            {
-                "role": "assistant",
-                "content": (
-                    f"[Self-Fix acknowledged] Got it. I'll keep these in mind "
-                    f"and address them when there's an opportunity, or when "
-                    f"they become relevant to the work at hand."
-                ),
-                "_source": "self_fix_hook",
-                "_iteration": context.iteration,
-                "status": "excluded",
-            },
-        ]
-        # Inject as second and third messages (after any existing system message)
+            })
+
+        # Other findings: inject as excluded user/assistant pair (awareness)
+        if other_lines:
+            other_insight = "\n".join(other_lines)
+            reminders += [
+                {
+                    "role": "user",
+                    "content": (
+                        f"[Self-Fix from your history]\n{other_insight}\n"
+                        "-- These are items flagged by your self-review system."
+                    ),
+                    "_source": "self_fix_hook",
+                    "_iteration": context.iteration,
+                    "status": "excluded",
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"[Self-Fix acknowledged] Got it. I'll keep these in mind "
+                        f"and address them when there's an opportunity, or when "
+                        f"they become relevant to the work at hand."
+                    ),
+                    "_source": "self_fix_hook",
+                    "_iteration": context.iteration,
+                    "status": "excluded",
+                },
+            ]
+
+        if not reminders:
+            return
+
+        # Inject after any existing system message
         if context.messages and context.messages[0].get("role") == "system":
             context.messages[1:1] = reminders
         else:

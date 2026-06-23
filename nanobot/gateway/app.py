@@ -421,6 +421,10 @@ class GatewayApplication:
                     if job_deliver is None:
                         job_deliver = True
                     dry_run = not bool(job_deliver)
+                    # Self-evolution jobs need to execute real tools (edit/write)
+                    # even when no delivery channel is configured
+                    if dry_run and job.name in ("daily-evolution", "daily-self-review"):
+                        dry_run = False
                 except Exception as e:
                     logger.warning("Failed to access job.payload.deliver: {}, job.payload={}", e, job.payload)
                     dry_run = False

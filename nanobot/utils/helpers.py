@@ -11,16 +11,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import tiktoken
 from loguru import logger
 
-# Lazy-init cached tiktoken encoder — creation is expensive (~50-100ms)
+# Lazy-init cached tiktoken encoder — module import and encoder creation are both expensive
 _cached_encoder: Any = None
 
 
 def _get_encoder():
     global _cached_encoder
     if _cached_encoder is None:
+        import tiktoken
         _cached_encoder = tiktoken.get_encoding("cl100k_base")
     return _cached_encoder
 

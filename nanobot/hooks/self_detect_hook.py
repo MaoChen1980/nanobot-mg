@@ -291,12 +291,14 @@ class SelfDetectHook(AgentHook):
     FINDINGS_FILE = Path.home() / ".nanobot" / "self_improve" / "self_reflect_findings.json"
     RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
     DEFAULT_INTERVAL = 3  # fire once every N turns
+    DEFAULT_ITER_INTERVAL = 20  # also fire every N iterations (catches short sessions)
 
     def __init__(self, reraise: bool = False, interval: int | None = None) -> None:
         super().__init__(reraise)
         self._turn_count = 0  # user turns (for interval check)
         self._entries_accumulated = []
         self._interval = interval if interval is not None else self.DEFAULT_INTERVAL
+        self._total_iterations = 0  # total iterations across turns
         self._workspace: Path | None = None
 
     def set_workspace(self, workspace_path: Path) -> None:
@@ -312,6 +314,7 @@ class SelfDetectHook(AgentHook):
     async def after_iteration(self, context: AgentHookContext) -> None:
         try:
             self._entries_accumulated.append(self._build_entry(context))
+            self._total_iterations += 1
         except Exception:
             logger.debug("SelfDetectHook.after_iteration failed silently")
 
@@ -348,18 +351,26 @@ class SelfDetectHook(AgentHook):
 
     # -- after_turn: batch reflection every N turns --------------------------------
 
+    def _should_fire(self) -> bool:
+        """Return True when accumulated entries warrant a reflection pass."""
+        if not self._entries_accumulated:
+            return False
+        return (self._turn_count >= self._interval or
+                self._total_iterations >= self.DEFAULT_ITER_INTERVAL)
+
     async def after_turn(self) -> None:
         if not self._entries_accumulated:
             return
 
         self._turn_count += 1
-        if self._turn_count < self._interval:
+        if not self._should_fire():
             return  # keep accumulating
 
         # Fire reflection and reset batch
         entries = self._entries_accumulated
         self._entries_accumulated = []
         self._turn_count = 0
+        self._total_iterations = 0
 
         try:
             await self._run_turn_reflection(entries)
@@ -620,11 +631,31 @@ class SelfDetectHook(AgentHook):
     def _save_findings(
         self, findings: list[dict[str, Any]], iteration_range: str, time_str: str
     ) -> None:
-        """Write structured findings to JSON file for SelfFixHook."""
+        """Write structured findings to JSON file for SelfFixHook.
+
+        Auto-resolves old findings that don't reappear: when new findings
+        supersede a previous batch, the old IDs are written to
+        resolved_findings.jsonl so self_findings.md stays fresh.
+        """
         self.FINDINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
         for f in findings:
             if "id" not in f and f.get("content"):
                 f["id"] = self._finding_id(f["content"])
+
+        # Auto-resolve stale findings from previous batch
+        new_ids = {f["id"] for f in findings if f.get("id")}
+        try:
+            old_payload = json.loads(self.FINDINGS_FILE.read_text(encoding="utf-8"))
+            old_findings = old_payload.get("findings", [])
+            stale = [of.get("id") for of in old_findings
+                     if of.get("id") and of["id"] not in new_ids]
+            if stale:
+                self.RESOLVED_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.RESOLVED_FILE, "a", encoding="utf-8") as f:
+                    for oid in stale:
+                        f.write(oid + "\n")
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            pass
 
         # Read existing resolved IDs to carry forward
         resolved_ids = _read_resolved_ids()

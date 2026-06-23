@@ -22,7 +22,6 @@ def _safe_regex_search(pattern: re.Pattern, text: str, timeout: float = 3.0) -> 
         return False
 from urllib.parse import quote, urlparse
 
-import httpx
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool, tool_parameters
@@ -50,8 +49,9 @@ class WebToolBase:
         self.user_agent = user_agent if user_agent is not None else _DEFAULT_USER_AGENT
 
     @property
-    def _client(self) -> httpx.AsyncClient:
+    def _client(self):
         """Lazily-initialized shared HTTP client for connection pooling."""
+        import httpx
         try:
             return self.__client
         except AttributeError:
@@ -454,11 +454,12 @@ class WebFetchTool(WebToolBase, Tool):
                 "extractor": extractor, "truncated": truncated, "length": len(text),
                 "untrusted": True, "text": text,
             }, ensure_ascii=False)
-        except httpx.ProxyError as e:
-            logger.error("WebFetch proxy error for {}: {}", url, e)
-            return json.dumps({"error": f"Proxy error: {e}", "url": url}, ensure_ascii=False)
         except Exception as e:
-            logger.error("WebFetch error for {}: {}", url, e)
+            is_proxy = "ProxyError" in type(e).__name__
+            if is_proxy:
+                logger.error("WebFetch proxy error for {}: {}", url, e)
+            else:
+                logger.error("WebFetch error for {}: {}", url, e)
             return json.dumps({"error": str(e), "url": url}, ensure_ascii=False)
 
     def _to_markdown(self, html_content: str) -> str:
