@@ -336,7 +336,15 @@ async def handle_provider_models(request: Request) -> Response:
         "moonshot": "https://api.moonshot.cn/v1/models",
         "groq": "https://api.groq.com/openai/v1/models",
         "ollama": "http://localhost:11434/v1/models",
-        "gemini": "https://generativelanguage.googleapis.com/v1beta3/models",
+        "gemini": "https://generativelanguage.googleapis.com/v1beta/models",
+        "openrouter": "https://openrouter.ai/api/v1/models",
+        "aihubmix": "https://aihubmix.com/v1/models",
+        "siliconflow": "https://api.siliconflow.cn/v1/models",
+        "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+        "mistral": "https://api.mistral.ai/v1/models",
+        "hunyuan": "https://api.hunyuan.cloud.tencent.com/v1/models",
+        "minicpm": "https://api.modelbest.cn/v1/models",
+        "xai": "https://api.x.ai/v1/models",
     }
     if api_base:
         # Avoid double /v1 when api_base already ends with /v1
