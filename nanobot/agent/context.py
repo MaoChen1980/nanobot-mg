@@ -266,6 +266,7 @@ class ContextBuilder:
                 "subagent_escalation",
                 "meta_learning",
                 "skill_refinement",
+                "tool_result_summary",
             ]
         else:
             snippet_names = [
@@ -278,6 +279,7 @@ class ContextBuilder:
                 "task_tree",
                 "meta_learning",
                 "skill_refinement",
+                "tool_result_summary",
             ]
         template_kwargs = dict(
             workspace_path=self._workspace_path_str,

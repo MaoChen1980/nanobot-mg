@@ -131,7 +131,14 @@ class MessagePipe:
         if len(messages) < 3:
             return messages, CompressEvent()
 
-        history_msgs = messages[1:]
+        # Skip instructions block at index 1 if present — same heuristic as
+        # _maybe_compress_messages in runner.py, so the instructions block is
+        # never accidentally compressed into a synthetic pair.
+        _instr_skip = 2 if (len(messages) > 1
+                            and messages[1].get("role") == "user"
+                            and isinstance(messages[1].get("content"), str)
+                            and messages[1]["content"].startswith("## Instructions")) else 1
+        history_msgs = messages[_instr_skip:]
         all_turns = Compressor.split_turns(history_msgs)
 
         if len(all_turns) <= 1:
@@ -140,7 +147,11 @@ class MessagePipe:
                     "Single turn compression: dropping {} messages, keeping system + latest",
                     len(messages) - 2,
                 )
-                return [messages[0], messages[-1]], CompressEvent()
+                result = [messages[0]]
+                if _instr_skip > 1:
+                    result.append(messages[1])
+                result.append(messages[-1])
+                return result, CompressEvent()
             return messages, CompressEvent()
 
         to_compress, keep = Compressor.split_by_budget(all_turns, budget=budget)
@@ -160,11 +171,12 @@ class MessagePipe:
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
-        # Build result: system + synthetic pair + kept turns
+        # Build result: system + instructions (if present) + synthetic pair + kept turns
+        result = [messages[0]]
+        if _instr_skip > 1:
+            result.append(messages[1])  # preserve instructions block
         if event.synthetic_pair:
-            result = [messages[0]] + event.synthetic_pair
-        else:
-            result = [messages[0]]
+            result.extend(event.synthetic_pair)
         for turn in keep:
             result.extend(turn)
 

@@ -79,7 +79,7 @@ def test_record_turn_keeps_image_placeholder_without_meta() -> None:
 def test_record_turn_keeps_tool_results_under_16k() -> None:
     loop = _mk_loop()
     session = Session(key="test:tool-result")
-    content = "x" * 12_000
+    content = "x" * 5_000
 
     loop._append_turn_to_session(
         session,

@@ -1094,6 +1094,12 @@ class AgentRunner:
         if messages and messages[-1].get("content") == content:
             return
         if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
+            existing = messages[-1].get("content", "")
+            # Don't overwrite content containing tool_summary markers —
+            # _append_turn_to_session needs them to replace tool results.
+            if isinstance(existing, str) and "[tool_summary:" in existing:
+                messages.append({"role": "assistant", "content": content})
+                return
             messages[-1]["content"] = content
             return
         messages.append({"role": "assistant", "content": content})

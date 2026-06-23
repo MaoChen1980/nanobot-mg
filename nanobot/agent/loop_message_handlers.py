@@ -12,6 +12,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
+from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
 from nanobot.agent.context import ContextState, _sanitize_session_key
 
 from nanobot.agent.tools.message import MessageTool
@@ -424,24 +425,30 @@ class UserMessageHandler:
         # that compressed state must be written back to session.messages so the
         # next turn loads the compressed version instead of the full uncompressed
         # history.
-        save_skip = initial_msgs_count if user_persisted_early else initial_msgs_count - 1
-
         # Detect instructions injected at index 1 (from runner iteration loop).
-        # When present, all subsequent indices are shifted by 1.
-        _instr_offset = 0
         _history_start = 1
         if (len(all_msgs) > 1
                 and all_msgs[1].get("role") == "user"
                 and isinstance(all_msgs[1].get("content"), str)
                 and all_msgs[1]["content"].startswith("## Instructions")):
             _history_start = 2
-            _instr_offset = 1
 
-        # Adjust save_skip for instruction offset so current turn boundaries are correct
-        save_skip += _instr_offset
+        # Find current-turn user message dynamically by scanning from the end.
+        # After mid-run compression, initial_msgs_count may be inflated with
+        # interleaved assistant/tool messages from earlier iterations, making
+        # the old formula (initial_msgs_count - 1) unreliable.  Scanning
+        # backwards for the last non-assessment user message is always correct.
+        _user_msg_idx = -1
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if (all_msgs[i].get("role") == "user"
+                    and not is_assessment_message(all_msgs[i])
+                    and not is_debug_root_cause_message(all_msgs[i])):
+                _user_msg_idx = i
+                break
+        if _user_msg_idx < 0:
+            _user_msg_idx = _history_start
 
-        # The current user message is always at this position (adjusted for instructions)
-        _user_msg_idx = initial_msgs_count - 1 + _instr_offset
+        save_skip = _user_msg_idx + (1 if user_persisted_early else 0)
 
         # History portion (post-compression if compression happened) excluding the current user message
         history_slice = list(all_msgs[_history_start:_user_msg_idx])

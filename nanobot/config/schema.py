@@ -175,7 +175,7 @@ class AgentDefaults(Base):
     context_block_limit: Optional[int] = None
     temperature: float = 0.1
     max_tool_iterations: int = 200
-    max_tool_result_chars: int = 8_000
+    max_tool_result_chars: int = 20_000
     provider_retry_mode: Literal["standard", "persistent"] = "persistent"
     reasoning_effort: Optional[str] = "high"  # low / medium / high / max / adaptive - enables LLM thinking mode
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"

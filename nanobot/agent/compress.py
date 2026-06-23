@@ -391,11 +391,26 @@ async def compress_session(
 # ---------------------------------------------------------------------------
 
 def _format_turns(msgs: list[dict]) -> str:
-    """Format a flat message list into the prompt text block."""
+    """Format a flat message list into the prompt text block.
+
+    Skips framework-injected messages that are irrelevant to summarization
+    and waste compression tokens:
+    - ``role == "system"`` — tool definitions / agent instructions
+    - ``## Instructions`` — per-turn injected instructions block
+    - ``[assess]`` / ``[debug_root_cause]`` — assess_me / DRC injections
+    """
     lines: list[str] = []
     for msg in msgs:
         role = msg.get("role", "unknown")
+        if role == "system":
+            continue
         content = msg.get("content", "")
+        if isinstance(content, str) and (
+            content.startswith("## Instructions")
+            or content.startswith("[assess]")
+            or content.startswith("[debug_root_cause]")
+        ):
+            continue
         if isinstance(content, str):
             lines.append(f"<{role}>\n{content}\n</{role}>")
         elif isinstance(content, list):

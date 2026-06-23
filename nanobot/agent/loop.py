@@ -96,6 +96,12 @@ if TYPE_CHECKING:
     from nanobot.config.schema import ChannelsConfig, ExecToolConfig, ToolsConfig, WebToolsConfig
     from nanobot.cron.service import CronService
 
+# Regex for LLM-provided tool result summaries (see tool_result_summary instruction).
+_SUMMARY_RE = re.compile(
+    r'\[tool_summary:([^\]]+)\](.*?)\[/tool_summary\]',
+    re.DOTALL,
+)
+
 
 @dataclasses.dataclass
 class _SessionDispatchState:
@@ -782,16 +788,21 @@ class AgentLoop:
 
         # (IV markers re-entry and completion detection removed)
 
+        # Strip tool_summary markers from user-facing final_content.
+        # Markers must remain in result.messages so _append_turn_to_session
+        # can collect summaries and replace tool results.
+        fc = _SUMMARY_RE.sub("", result.final_content) if result.final_content else None
+
         if result.stop_reason == "max_iterations":
             logger.warning("Max iterations ({}) reached", self.max_iterations)
             if on_stream and on_stream_end:
-                await on_stream(result.final_content or "")
+                await on_stream(fc or "")
                 await on_stream_end(resuming=False)
         elif result.stop_reason == "error":
             logger.error("LLM returned error: {}", (result.final_content or "")[:200])
 
         await hook.after_turn()
-        return (result.final_content, result.tools_used, result.messages,
+        return (fc, result.tools_used, result.messages,
                 result.stop_reason, result.had_injections, result.initial_message_count,
                 result.total_llm_requests)
 
@@ -1345,8 +1356,26 @@ class AgentLoop:
         Appends ``messages[skip:]`` into ``session.messages``, stripping
         runtime-only blocks and oversized tool results. Does **not** persist
         to storage — call ``sessions.save()`` separately if needed.
+
+        Also replaces tool results with LLM-provided summaries when the model
+        annotated them with ``[tool_summary:call_id]...[/tool_summary]``
+        in a subsequent assistant message (see tool_result_summary instruction).
         """
         from datetime import datetime, timezone
+
+        # ── collect LLM-provided tool summaries ──
+        _tc_summary: dict[str, str] = {}
+        for m in messages[skip:]:
+            if m.get("role") != "assistant":
+                continue
+            content = m.get("content", "")
+            if not isinstance(content, str):
+                continue
+            for match in _SUMMARY_RE.finditer(content):
+                cid, summary = match.group(1), match.group(2).strip()
+                if summary and cid not in _tc_summary:
+                    _tc_summary[cid] = summary
+                    logger.info("TOOL_SUMMARY: collected summary for call_id={} ({} chars) {!r}", cid, len(summary), summary[:120])
 
         for m in messages[skip:]:
             entry = dict(m)
@@ -1356,7 +1385,13 @@ class AgentLoop:
             if is_assessment_message(entry) or is_debug_root_cause_message(entry):
                 continue  # skip ephemeral framework-injected messages — not part of real conversation
             if role == "tool":
-                if isinstance(content, str) and len(content) > self.max_tool_result_chars:
+                # Replace with LLM-provided summary when available
+                tc_id = entry.get("tool_call_id")
+                if tc_id and isinstance(tc_id, str) and tc_id in _tc_summary:
+                    old_len = len(entry["content"]) if isinstance(entry.get("content"), str) else -1
+                    entry["content"] = _tc_summary[tc_id]
+                    logger.info("TOOL_SUMMARY: replaced tool result {} ({} chars → {} chars)", tc_id, old_len, len(entry["content"]))
+                elif isinstance(content, str) and len(content) > self.max_tool_result_chars:
                     entry["content"] = truncate_text_fn(content, self.max_tool_result_chars)
                 elif isinstance(content, list):
                     filtered = self._sanitize_persisted_blocks(content, should_truncate_text=True)
@@ -1389,6 +1424,9 @@ class AgentLoop:
                     if not filtered:
                         continue
                     entry["content"] = filtered
+            # Strip tool_summary markers from assistant content
+            if role == "assistant" and isinstance(entry.get("content"), str):
+                entry["content"] = _SUMMARY_RE.sub("", entry["content"]).strip()
             entry.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
             session.messages.append(entry)
         session.updated_at = datetime.now(timezone.utc)

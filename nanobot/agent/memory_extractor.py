@@ -276,9 +276,23 @@ class MemoryExtractor:
         self, pt_content: dict
     ) -> dict[str, Any] | None:
         """Call LLM to analyze a saved prompt, return parsed JSON."""
+        # Strip system prompt and instructions before analysis — they are
+        # framework overhead, not conversation content the LLM should analyze.
+        msgs = pt_content.get("messages", [])
+        filtered_msgs = list(msgs)
+        if filtered_msgs and filtered_msgs[0].get("role") == "system":
+            filtered_msgs = filtered_msgs[1:]
+        if (filtered_msgs
+                and filtered_msgs[0].get("role") == "user"
+                and isinstance(filtered_msgs[0].get("content"), str)
+                and filtered_msgs[0]["content"].startswith("## Instructions")):
+            filtered_msgs = filtered_msgs[1:]
+        analysis_content = dict(pt_content)
+        analysis_content["messages"] = filtered_msgs
+
         # Prepend saved_at so LLM knows when this conversation happened
         saved_at = pt_content.get("saved_at", "")
-        pt_text = json.dumps(pt_content, ensure_ascii=False, indent=2)
+        pt_text = json.dumps(analysis_content, ensure_ascii=False, indent=2)
         if len(pt_text) > _ANALYSIS_MAX_CHARS:
             pt_text = "... (conversation start truncated)\n" + pt_text[-_ANALYSIS_MAX_CHARS:]
 
