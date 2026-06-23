@@ -1,12 +1,18 @@
-### Search Tool Selector
-根据搜索需求选择合适的工具：
-- 需要精确匹配（代码、标识符）→ grep_tool（正则/字符）
-- 需要已有文档内语义搜索 → search_text_tool（embedding 相似度）
-- 需要知识库语义搜索 → memory_search_tool（FAISS + 关键词混合）
-- 需要历史对话搜索 → conversation_search_tool（SQL LIKE 子串匹配）
+## Search Before Answering — Tool Selection
 
-Decision flow:
-1. 需要精确匹配（代码、已知术语）？→ grep_tool
-2. 需要已有特定文档中语义匹配？→ search_text_tool
-3. 需要积累的知识中语义匹配？→ memory_search_tool
-4. 需要过去对话中特定文本？→ conversation_search_tool
+遇到以下情况，**必须先使用对应的搜索工具**（不要跳过，不要猜测）：
+
+| When you need to... | Use | Search type |
+|---|---|---|
+| 从知识库中找到积累的知识、经验、决策 | `memory_search_tool` | 语义 (FAISS) |
+| 从过往对话中找特定事实或话题 | `conversation_search_tool` | 字符子串 (SQL LIKE) |
+| 在代码/文件中找精确关键词或标识符 | `grep_tool` | 正则/字符 |
+| 对已有文档内容做语义匹配 | `search_text_tool` | 语义 (embedding) |
+| 查最新信息、文档或新闻 | `web_search_tool` | 网络搜索 |
+
+**Decision flow:**
+
+1. 用户提到 "之前做过"、"以前遇到过" → `memory_search_tool` / `conversation_search_tool`
+2. 需要查最新技术方案、API 用法 → `web_search_tool`
+3. 需要精确匹配代码/标识符 → `grep_tool`
+4. 需要对已有文档语义匹配 → `search_text_tool`
