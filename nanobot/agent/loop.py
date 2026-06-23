@@ -896,6 +896,8 @@ class AgentLoop:
             # Skill creation — always check if a reusable pattern was found
             skill_pattern = parsed.get("skill_pattern")
             if skill_pattern:
+                if not isinstance(skill_pattern, str):
+                    skill_pattern = json.dumps(skill_pattern, ensure_ascii=False)
                 dedup_key = hashlib.md5(skill_pattern.encode()).hexdigest()
                 if dedup_key not in loop._skill_creation_inflight:
                     loop._skill_creation_inflight.add(dedup_key)
