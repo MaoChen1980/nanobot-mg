@@ -37,6 +37,8 @@ _gpu_info_cache: str | None = None  # GPU description
 # Regex matching Windows absolute paths with backslashes (e.g. C:\Users\foo)
 _WIN_PATH_RE = re.compile(r"\b[A-Za-z]:\\[^\s\"'|&;<>()$`]*")
 _SESSION_KEY_RE = re.compile(r"[^\w.-]")
+# Base64 data URL detection — used in _strip_old_images (called every turn)
+_base64_DATA_RE = re.compile(r"data:[^;]+;base64,[A-Za-z0-9+/=]{100,}")
 
 
 def _sanitize_session_key(key: str) -> str:
@@ -93,6 +95,8 @@ class ContextBuilder:
         self._identity_cache: dict[tuple, str] = {}
         # Batched .memory_usage.json writes: accumulate, flush every 10 turns
         self._pending_memory_entries: list[dict] = []
+        # Cache for _build_memory_quality_note: (mtime, formatted_string)
+        self._memory_quality_cache: tuple[float, str] | None = None
 
 
     def warmup(self) -> None:
@@ -219,11 +223,12 @@ class ContextBuilder:
                     desc = truncated[:last_break]
                 else:
                     desc = truncated + "..."
-            # Indent continuation lines for LLM-readable hierarchy
+            # Indent continuation lines for LLM-readable hierarchy (list+join avoids O(n²))
             _desc_lines = desc.split("\n")
-            indented_desc = _desc_lines[0]
+            _parts = [_desc_lines[0]]
             for _line in _desc_lines[1:]:
-                indented_desc += "\n  " + _line if _line.strip() else "\n"
+                _parts.append("\n  " + _line if _line.strip() else "\n")
+            indented_desc = "".join(_parts)
             lines.append(f"- **{name}**: {indented_desc}")
             lines.append("")  # blank line between tools
         lines.append(
@@ -717,13 +722,20 @@ class ContextBuilder:
         path.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
 
     def _build_memory_quality_note(self) -> str:
-        """Return a note about memory quality from injection history."""
+        """Return a note about memory quality from injection history (cached by mtime)."""
         path = self.workspace / "framework" / ".memory_usage.json"
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return ""
+        if self._memory_quality_cache is not None and self._memory_quality_cache[0] == mtime:
+            return self._memory_quality_cache[1]
         try:
             data: list[dict] = json.loads(self._cached_read_text(path) or "[]")
         except (json.JSONDecodeError, OSError):
             return ""
         if len(data) < 3:
+            self._memory_quality_cache = (mtime, "")
             return ""
         recent = data[-20:]
         total = sum(e.get("files_injected", 0) for e in recent)
@@ -735,6 +747,7 @@ class ContextBuilder:
             f"If you notice outdated or irrelevant memories, use the memory tools "
             f"to update or remove them.\n"
         )
+        self._memory_quality_cache = (mtime, note)
         return note
 
     @staticmethod
@@ -789,7 +802,7 @@ class ContextBuilder:
         ``[image_url, text]`` lists, so the runner embeds full base64 directly
         in tool message text — this is where the string-case cleanup applies.
         """
-        _base64_data_re = re.compile(r"data:[^;]+;base64,[A-Za-z0-9+/=]{100,}")
+        _base64_data_re = _base64_DATA_RE
 
         for msg in messages:
             content = msg.get("content")

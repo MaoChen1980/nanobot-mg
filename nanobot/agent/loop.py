@@ -24,36 +24,7 @@ from nanobot.agent.memory import MemoryExtractor
 from nanobot.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunner, AgentRunSpec
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
 from nanobot.agent.subagent import SubagentManager
-from nanobot.agent.tools.analyze_tool import AnalyzeTool
-from nanobot.agent.tools.assess_me_tool import AssessMeTool
-from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
-from nanobot.agent.tools.check_subagent import CheckSubagentTool
-from nanobot.agent.tools.conversation_search import ConversationSearchTool
-from nanobot.agent.tools.cron import CronTool
-from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
-from nanobot.agent.tools.explore_module import ExploreModuleTool
-from nanobot.agent.tools.filesystem import (
-    DeleteFileTool,
-    EditFileTool,
-    MoveFileTool,
-    ReadFileTool,
-    WriteFileTool,
-)
-from nanobot.agent.tools.list_subagents import ListSubagentsTool
-from nanobot.agent.tools.memory_search import MemorySearchTool
-from nanobot.agent.tools.message import MessageTool
-from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.tools.scan_project import ScanProjectTool
-from nanobot.agent.tools.search import GlobTool, GrepTool
-from nanobot.agent.tools.self import SelfTool
-from nanobot.agent.tools.self_restart_tool import SelfRestartTool
-from nanobot.agent.tools.semantic_search import SearchTextTool
-from nanobot.agent.tools.send_message import SendMessageTool
-from nanobot.agent.tools.shell import ExecTool
-from nanobot.agent.tools.spawn import SpawnTool
-from nanobot.agent.tools.stage import RestoreStageTool, SaveStageTool, ShowStagesTool
-from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.command import CommandContext, CommandRouter, register_builtin_commands
@@ -277,6 +248,7 @@ class AgentLoop:
         )
         self._register_default_tools()
         if _tc.my.enable:
+            from nanobot.agent.tools.self import SelfTool
             self.tools.register(SelfTool(loop=self, modify_allowed=_tc.my.allow_set))
         self._runtime_vars: dict[str, Any] = {}
         self._current_iteration: int = 0
@@ -414,6 +386,31 @@ class AgentLoop:
 
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
+        # Lazy imports — deferred to here so module-level import doesn't pull in all tool modules
+        from nanobot.agent.tools.analyze_tool import AnalyzeTool
+        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
+        from nanobot.agent.tools.check_subagent import CheckSubagentTool
+        from nanobot.agent.tools.conversation_search import ConversationSearchTool
+        from nanobot.agent.tools.cron import CronTool
+        from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+        from nanobot.agent.tools.explore_module import ExploreModuleTool
+        from nanobot.agent.tools.filesystem import (
+            DeleteFileTool, EditFileTool, MoveFileTool, ReadFileTool, WriteFileTool,
+        )
+        from nanobot.agent.tools.list_subagents import ListSubagentsTool
+        from nanobot.agent.tools.memory_search import MemorySearchTool
+        from nanobot.agent.tools.message import MessageTool
+        from nanobot.agent.tools.reframe import ReframeTool
+        from nanobot.agent.tools.scan_project import ScanProjectTool
+        from nanobot.agent.tools.search import GlobTool, GrepTool
+        from nanobot.agent.tools.self_restart_tool import SelfRestartTool
+        from nanobot.agent.tools.semantic_search import SearchTextTool
+        from nanobot.agent.tools.send_message import SendMessageTool
+        from nanobot.agent.tools.shell import ExecTool
+        from nanobot.agent.tools.spawn import SpawnTool
+        from nanobot.agent.tools.stage import RestoreStageTool, SaveStageTool, ShowStagesTool
+        from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
         allowed_dir = (
             self.workspace if (self.restrict_to_workspace or self.exec_config.sandbox) else None
         )
