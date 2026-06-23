@@ -123,7 +123,7 @@ class AgentRunSpec:
     assess_me_callback: Any | None = None
     assess_interval: int = 10  # periodic assess trigger: (response_count - last) >= interval
     previous_summary: str | None = None
-    instructions: str | None = None  # injected into last user msg before each LLM call
+    instructions: str | None = None  # injected at index 1 each iteration; can be a callable () -> str | None for per-iteration refresh
     prompts_dir: Path | None = None  # save .pt snapshots in runner loop
     pt_save_interval: int = 30  # .pt snapshot: every N LLM responses
 
@@ -503,8 +503,11 @@ class AgentRunner:
             # must REPLACE stale instructions rather than inserting — a bare
             # insert(1, ...) would mutate the source list and accumulate
             # duplicates across iterations.
-            if spec.instructions and messages_for_model:
-                instr = {"role": "user", "content": f"## Instructions\n\n{spec.instructions}"}
+            # If spec.instructions is a callable, call it each iteration for
+            # fresh content (used by subagents to refresh team_board, etc.).
+            instr_content = spec.instructions() if callable(spec.instructions) else spec.instructions
+            if instr_content and messages_for_model:
+                instr = {"role": "user", "content": f"## Instructions\n\n{instr_content}"}
                 if (len(messages_for_model) > 1
                         and messages_for_model[1].get("role") == "user"
                         and isinstance(messages_for_model[1].get("content"), str)

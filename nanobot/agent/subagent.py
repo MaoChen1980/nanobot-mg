@@ -213,7 +213,6 @@ class SubagentManager:
                 project_root=self.project_root,
                 output_schema=output_schema,
                 role=role,
-                task_description=task,
                 session_key=origin["session_key"],
             )
             messages: list[dict[str, Any]] = [
@@ -254,7 +253,7 @@ class SubagentManager:
                     injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
                     session_key=origin["session_key"],
-                    instructions=self._context_builder.build_instructions_section(for_subagent=True) if self._context_builder else None,
+                    instructions=lambda: self._context_builder.build_instructions_section(for_subagent=True, session_key=origin["session_key"]) if self._context_builder else None,
                 ))
 
                 # Save conversation snapshot for MemoryExtractor

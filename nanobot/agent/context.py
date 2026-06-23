@@ -352,7 +352,39 @@ class ContextBuilder:
                     + "\n\n".join(task_parts)
                 )
 
+        # Team board — auto-injected for both Orchestrator and Subagents
+        team_board = self._build_team_board_section(session_key=session_key)
+        if team_board:
+            heading = (
+                "## Team Board — 当前项目事实黑板\n\n"
+                "以下是当前项目所有节点共享的事实发现。这些信息已自动注入上下文，"
+                "无需额外 read_file_tool。\n\n"
+                if for_subagent
+                else "## Team Board\n\n"
+            )
+            sections.append(heading + team_board)
+
         return "\n\n".join(sections)
+
+    def _build_team_board_section(self, session_key: str | None = None) -> str:
+        """Read tasks/team_board*.md from the workspace and return content if non-empty."""
+        suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        board_path = self.workspace / "tasks" / f"team_board{suffix}.md"
+        content = self._cached_read_text(board_path)
+        if not content:
+            return ""
+        content = content.strip()
+        if not content:
+            return ""
+        # Cap at 4000 chars to prevent unbounded context consumption
+        _MAX_BOARD_CHARS = 4000
+        if len(content) > _MAX_BOARD_CHARS:
+            truncation_note = (
+                f"\n\n> ⚠️ Board truncated ({len(content)} chars > {_MAX_BOARD_CHARS} limit). "
+                "Use `read_file_tool` to see full content."
+            )
+            content = content[:_MAX_BOARD_CHARS] + truncation_note
+        return self._shift_headings(content, offset=1)
 
     @staticmethod
     def _shift_headings(text: str, offset: int = 1) -> str:

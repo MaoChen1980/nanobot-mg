@@ -734,8 +734,12 @@ class AgentLoop:
 
             return items
 
-        # Build instructions for runner-level injection (fresh before every LLM call)
-        instructions = self.context.build_instructions_section(session_key=session.key if session else None)
+        # Build instructions for runner-level injection (fresh before every LLM call).
+        # Use callable for per-iteration refresh so the orchestrator sees team_board
+        # updates from subagents that write mid-run.
+        ctx = self.context
+        sk = session.key if session else None
+        instructions = lambda: ctx.build_instructions_section(session_key=sk)
 
         result = await self.runner.run(AgentRunSpec(
             initial_messages=initial_messages,
