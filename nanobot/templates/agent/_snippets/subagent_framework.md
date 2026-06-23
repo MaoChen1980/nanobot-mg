@@ -53,7 +53,7 @@ Orchestrator 可以在你执行工具期间通过 inbox 发消息。你会在下
 
 当原始结果超过 {{ max_tool_result_chars }} 字符时，框架自动将完整结果保存到文件，tool 消息中只返回引用 + 预览：
 
-同时，你应该用 `[tool_summary:call_id]...[/tool_summary]` 标记为大工具结果提供摘要。框架在后台将对应 tool result 替换为你的摘要文本，同时标记对用户不可见。后续 iteration 和 session 历史全部使用压缩后的版本，大幅节省 context 空间。如需完整内容，重新调用工具即可。**大结果(>500字符)必须标注，小结果不需要。**
+同时，你应该用 `[tool_summary:call_id]...[/tool_summary]` 标记为大工具结果提供摘要。框架**用你的摘要完全替换原始 tool result** 进入 session 历史，后续 iteration 和持久化都只保留摘要版本。**摘要就是你为后续推理保留的全部信息**——写摘要时要确保关键事实完整保留，丢失了就无法恢复。如需完整内容，重新调用工具即可。**大结果(>500字符)必须标注，小结果不需要。**
 
 ```
 [tool output persisted]
