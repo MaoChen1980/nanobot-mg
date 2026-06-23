@@ -290,7 +290,7 @@ class SelfDetectHook(AgentHook):
     LOG_FILE = Path.home() / ".nanobot" / "self_improve" / "self_log.md"
     FINDINGS_FILE = Path.home() / ".nanobot" / "self_improve" / "self_reflect_findings.json"
     RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
-    DEFAULT_INTERVAL = 15  # fire once every N turns
+    DEFAULT_INTERVAL = 3  # fire once every N turns
 
     def __init__(self, reraise: bool = False, interval: int | None = None) -> None:
         super().__init__(reraise)
