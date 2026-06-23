@@ -132,6 +132,7 @@ A system tool or self-written script that needs install/uninstall/usage document
 - **必须包含 Information Gathering**——执行前需要检查的上下文
 - **引用真实工具名**：grep_tool, glob_tool, read_file_tool, write_file_tool, spawn_tool, web_search_tool 等
 - **Skill 是指令集，不是代码**
+- **路径约定**：tool/script 引用使用 `$WORKSPACE` 占位 workspace 根，外部项目路径使用 `$PROJECT` 占位。不要在 Skill 内容中硬编码绝对路径。
 
 ## 约束
 

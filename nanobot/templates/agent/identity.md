@@ -2,7 +2,7 @@
 ## Environment
 
 **OS:** `{{ os_platform }} {{ os_version }} {{ arch }}, Python {{ python_version }}`
-**Workspace:** `{{ workspace_path }}`
+**`$WORKSPACE`:** `{{ workspace_path }}`
 > Your working directory. Contains `{{ workspace_path }}/SOUL.md` (identity), `{{ workspace_path }}/USER.md` (preferences), `{{ workspace_path }}/TOOLS.md` (CLI assets), `{{ workspace_path }}/memory/` (long-term memory), `{{ workspace_path }}/tasks/` (task tree), `{{ workspace_path }}/skills/` (extensions), and `{{ workspace_path }}/framework/` (workflows & rules).
 **Data:** `{{ data_dir }}` — runtime data, including logs under `logs/`
 {% if model %}**Model:** `{{ model }}`{% endif %}

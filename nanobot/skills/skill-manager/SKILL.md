@@ -15,6 +15,11 @@ version: 0.1.0
 
 # Skill Manager
 
+> **路径约定**：
+> - `$WORKSPACE` = workspace 根目录（系统提示中可见），所有内部路径以此锚定
+> - `$PROJECT` = 外部项目根目录，由 `glob_tool` 确认后使用
+> - Skill 中引用路径时一律用此约定，不硬编码绝对路径
+
 ## Quick Start
 
 此 skill 用于**自我管理你的 skill 库**——知道何时保存可复用的方法、如何创建/修复 skill，并保持其准确性。你使用常规文件工具（write_file、edit_file、read_file、exec）来管理 skills。
@@ -70,35 +75,35 @@ version: 0.1.0
 ### Create a skill
 1. **检查重复**：扫描 `skills_summary`（始终在你的 prompt 中）——如果已有 skill 覆盖此功能，则跳过。
 2. **检查 trigger**：确认有明确的触发信号（用户关键词、消息类型、工具返回、cron 周期）。没有外部 trigger 的 skill 不应创建。
-3. **创建目录**：`mkdir -p workspace/skills/<name>/`
-4. **写入 SKILL.md** 使用 `write_file(path="workspace/skills/<name>/SKILL.md", content="...")`。必须包含 `## When to Use`、`## Steps`、`## Verification` 三个章节。末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
-5. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description。
-6. **验证**：`exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)`
+3. **创建目录**：`mkdir -p $WORKSPACE/skills/<name>/`
+4. **写入 SKILL.md** 使用 `write_file(path="$WORKSPACE/skills/<name>/SKILL.md", content="...")`。必须包含 `## When to Use`、`## Steps`、`## Verification` 三个章节。末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
+5. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('$WORKSPACE')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description。
+6. **验证**：`exec(python {baseDir}/scripts/quick_validate.py $WORKSPACE/skills/<name>)`
 7. 修复任何验证错误
 
 ### Patch a skill (targeted fix)
 当 skill 的指令有误时：
-1. `read_file(path="workspace/skills/<name>/SKILL.md")` — 读取当前内容
+1. `read_file(path="$WORKSPACE/skills/<name>/SKILL.md")` — 读取当前内容
 2. `edit_file(old_string="<wrong text>", new_string="<corrected text>")` — 修复特定部分。
-3. `exec(python {baseDir}/scripts/quick_validate.py workspace/skills/<name>)` — 验证
+3. `exec(python {baseDir}/scripts/quick_validate.py $WORKSPACE/skills/<name>)` — 验证
 
 ### Edit a skill (full rewrite)
-1. `read_file(path="workspace/skills/<name>/SKILL.md")` — 读取当前内容
-2. `write_file(path="workspace/skills/<name>/SKILL.md", content="<complete new content>")` — 完全替换。
+1. `read_file(path="$WORKSPACE/skills/<name>/SKILL.md")` — 读取当前内容
+2. `write_file(path="$WORKSPACE/skills/<name>/SKILL.md", content="<complete new content>")` — 完全替换。
 3. 验证
 
 ### Delete a skill
 1. 与用户确认
-2. `exec(rm -rf workspace/skills/<name>)`
+2. `exec(rm -rf $WORKSPACE/skills/<name>)`
 
 ### Add supporting files
-`write_file(path="workspace/skills/<name>/references/<filename>.md", content="...")`
-`write_file(path="workspace/skills/<name>/scripts/<filename>.py", content="...")`
+`write_file(path="$WORKSPACE/skills/<name>/references/<filename>.md", content="...")`
+`write_file(path="$WORKSPACE/skills/<name>/scripts/<filename>.py", content="...")`
 
 允许的子目录：`scripts/`、`references/`、`assets/`
 
 ### List existing skills
-`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('workspace')).build_skills_summary())")`
+`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('$WORKSPACE')).build_skills_summary())")`
 
 ---
 
@@ -107,7 +112,7 @@ version: 0.1.0
 每个 skill 是一个包含 `SKILL.md` 文件的目录：
 
 ```
-workspace/skills/<name>/
+$WORKSPACE/skills/<name>/
 ├── SKILL.md (必填)
 ├── scripts/      — 可执行代码（可选）
 ├── references/   — 文档（可选）
@@ -191,7 +196,7 @@ See [API Reference](references/api.md) for full details.
 ## Validation
 
 ```bash
-python {baseDir}/scripts/quick_validate.py workspace/skills/<name>
+python {baseDir}/scripts/quick_validate.py $WORKSPACE/skills/<name>
 ```
 
 检查项：frontmatter 有效、名称与目录匹配、description 非空、仅使用允许的子目录。
