@@ -198,8 +198,9 @@ class MemoryVectorIndex:
         embeddings = self._model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
         dim = embeddings.shape[1]
-        flat = faiss.IndexFlat(dim, faiss.METRIC_INNER_PRODUCT)
-        self._index = faiss.IndexIDMap(flat)
+        hnsw = faiss.IndexHNSWFlat(dim, 32, faiss.METRIC_INNER_PRODUCT)
+        hnsw.hnsw.efConstruction = 80
+        self._index = faiss.IndexIDMap(hnsw)
 
         ids = np.arange(len(chunks), dtype=np.int64)
         self._index.add_with_ids(np.array(embeddings, dtype=np.float32), ids)
@@ -642,8 +643,9 @@ class MemoryVectorIndex:
                     for i in range(ntotal):
                         loaded_index.reconstruct(i, embs[i])
                     ids = np.arange(ntotal, dtype=np.int64)
-                    flat = faiss.IndexFlat(d, faiss.METRIC_INNER_PRODUCT)
-                    idmap = faiss.IndexIDMap(flat)
+                    hnsw = faiss.IndexHNSWFlat(d, 32, faiss.METRIC_INNER_PRODUCT)
+                    hnsw.hnsw.efConstruction = 80
+                    idmap = faiss.IndexIDMap(hnsw)
                     idmap.add_with_ids(embs, ids)
                     self._index = idmap
                     self.save()
