@@ -1038,7 +1038,7 @@ class AgentLoop:
         spec = AgentRunSpec(
             initial_messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"根据以下可复用模式创建或更新 skill。不要闲聊，直接执行步骤。\n\n{skill_pattern}"},
+                {"role": "user", "content": "根据系统 prompt 中的 skill pattern 创建或更新 SKILL.md。不要闲聊，直接执行步骤。"},
             ],
             tools=tools,
             model=self.model,

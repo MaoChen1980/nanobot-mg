@@ -101,7 +101,7 @@ Output as a bullet list in `content`. Be factual — base each mark only on what
 - 不要提问——这是报告，不是问询
 - 发现问题时指出问题和修复方向，不要列出多个方案让下游选
 - 一切正常则 `status` 填 `"ok"`
-- `blocker` 条件：反复试 3+ 次卡住 / 无替代路径 / 工具全失败 / 未知错误
+- `blocker` 条件（检查最近 10 次 iteration）：同一 tool_name 返回相同 error ≥3 次 / 无替代路径 / 工具全失败 / 未知错误
 
 ## Conversation
 

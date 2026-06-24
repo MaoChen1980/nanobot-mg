@@ -107,10 +107,7 @@ def build_subagent_prompt(
         fw_content = fw_content.replace(old_board, f"{ws_path}/{team_board_rel}")
     parts.append(fw_content)
 
-    # 9. Search tool selector
-    parts.append(render_template("agent/resolver.md", workspace_path=ws_path))
-
-    # 10. Output schema (optional)
+    # 9. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"

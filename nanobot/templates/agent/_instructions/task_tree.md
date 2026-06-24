@@ -23,9 +23,10 @@
 **验证规则（重要）：**
 Trigger：你把一个节点的 status 改为 `completed`
 Action 1：立即写该节点的报告到 `tasks/<project-id>/<node-id>.md`（记录做了什么、结果、关键数据），并更新该节点的 `doc` 字段
-Action 2：检查该节点的父节点 criteria 是否全部满足
-- 满足 → 父节点 status 改为 `completed`，递归向上验证
-- 不满足 → 新增子节点覆盖未完成的部分
+Action 2：用 read_file_tool 读 {{ tree_path }}，找到父节点，逐条检查其 criteria 字段：
+- 每条 criteria 必须在对话历史中有对应的完成证据
+- 全部满足 → 父节点 status 改为 completed，递归向上验证
+- 有不满足 → 新增子节点覆盖未完成的部分
 
 **状态定义：**
 - `pending` — 已定义但未开始

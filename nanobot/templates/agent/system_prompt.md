@@ -11,9 +11,6 @@
 
 {% endif %}
 
-════════
-{% include 'agent/resolver.md' %}
-
 
 {% if bootstrap %}
 ════════
