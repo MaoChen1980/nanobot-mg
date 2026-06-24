@@ -61,6 +61,7 @@ class AnthropicProvider(LLMProvider):
         super().__init__(api_key, api_base)
         self.default_model = default_model
         self.extra_headers = extra_headers or {}
+        self._spec = spec
         self._supports_prompt_caching = spec.supports_prompt_caching if spec else True
 
         from anthropic import AsyncAnthropic
@@ -178,8 +179,9 @@ class AnthropicProvider(LLMProvider):
             logger.warning("Failed to dump prompt: {}", e)
             return None
 
-    @staticmethod
-    def _strip_prefix(model: str) -> str:
+    def _strip_prefix(self, model: str) -> str:
+        if self._spec and self._spec.strip_model_prefix:
+            return model.split("/")[-1]
         if model.startswith("anthropic/"):
             return model[len("anthropic/"):]
         return model
@@ -500,6 +502,11 @@ class AnthropicProvider(LLMProvider):
         extra_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         model_name = self._strip_prefix(model or self.default_model)
+
+        # Apply provider-specific default for reasoning_effort when not explicitly set
+        if reasoning_effort is None and self._spec and self._spec.default_reasoning_effort is not None:
+            reasoning_effort = self._spec.default_reasoning_effort
+
         system, anthropic_msgs = self._convert_messages(self._sanitize_empty_content(messages))
         anthropic_tools = self._convert_tools(tools)
 
@@ -761,7 +768,8 @@ class AnthropicProvider(LLMProvider):
             stop_sequences=stop_sequences,
             extra_body=extra_body,
         )
-        idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "30"))
+        spec_idle = self._spec.stream_idle_timeout if self._spec else 0
+        idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", str(spec_idle or 30)))
         try:
             async with self._client.messages.stream(**kwargs) as stream:
                 final_message = None
