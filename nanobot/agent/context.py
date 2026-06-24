@@ -386,7 +386,7 @@ class ContextBuilder:
         if not content:
             return ""
         # Cap at 4000 chars to prevent unbounded context consumption
-        _MAX_BOARD_CHARS = 4000
+        _MAX_BOARD_CHARS = 8000
         if len(content) > _MAX_BOARD_CHARS:
             truncation_note = (
                 f"\n\n> ⚠️ Board truncated ({len(content)} chars > {_MAX_BOARD_CHARS} limit). "
