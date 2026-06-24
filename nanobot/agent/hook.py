@@ -174,3 +174,30 @@ class CompositeHook(AgentHook):
             except Exception:
                 logger.exception("AgentHook.filter_tool_calls error in {}", type(h).__name__)
         return tool_calls
+
+
+class SDKCaptureHook(AgentHook):
+    """Captures tool names, messages, usage, and stop_reason for SDK consumers.
+
+    Used internally by ``Nanobot.run()`` to populate ``RunResult``.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tools_used: list[str] = []
+        self.messages: list[dict[str, Any]] = []
+        self.usage: dict[str, int] = {}
+        self.stop_reason: str | None = None
+        self.error: str | None = None
+
+    async def after_iteration(self, context: AgentHookContext) -> None:
+        for tc in context.tool_calls:
+            name = tc.name or ""
+            if name and name not in self.tools_used:
+                self.tools_used.append(name)
+        self.messages = context.messages
+        self.usage = context.usage
+        if context.stop_reason:
+            self.stop_reason = context.stop_reason
+        if context.error:
+            self.error = context.error

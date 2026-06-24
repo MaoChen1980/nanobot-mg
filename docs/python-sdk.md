@@ -82,14 +82,63 @@ Run the agent once and return a `RunResult`.
 | `message` | `str` | *(required)* | The user message to process. |
 | `session_key` | `str` | `"sdk:default"` | Session identifier for conversation isolation. Different keys get independent history. |
 | `hooks` | `list[AgentHook] \| None` | `None` | Lifecycle hooks for this run only. |
+| returns | `RunResult` | | Result including content, tool usage, and capture data. |
 
 ### `RunResult`
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `content` | `str` | The agent's final text response. |
-| `tools_used` | `list[str]` | Reserved for richer SDK introspection; may be empty in current versions. |
-| `messages` | `list[dict]` | Reserved for richer SDK introspection; may be empty in current versions. |
+| `tools_used` | `list[str]` | Tool names used during the run. |
+| `messages` | `list[dict]` | Full message history of the run. |
+| `usage` | `dict[str, int] \| None` | Token usage (e.g. `{"input_tokens": ..., "output_tokens": ...}`). |
+| `stop_reason` | `str \| None` | Why the run stopped (e.g. `"end_turn"`, `"max_tokens"`). |
+| `error` | `str \| None` | Error message if the run failed. |
+
+### `bot.stream(message, *, session_key="sdk:default", hooks=None) -> RunStream`
+
+Run the agent and get a streaming `RunStream` handle for fine-grained event consumption.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `message` | `str` | *(required)* | The user message to process. |
+| `session_key` | `str` | `"sdk:default"` | Session identifier for conversation isolation. |
+| `hooks` | `list[AgentHook] \| None` | `None` | Lifecycle hooks for this stream only. |
+| returns | `RunStream` | | Streaming handle to consume events and wait for completion. |
+
+```python
+stream = bot.stream("Explain quantum computing")
+async for event in stream.stream_events():
+    if event.type == "text.delta":
+        print(event.data, end="")
+result = await stream.wait()
+```
+
+### `RunStream`
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `stream_events()` | `AsyncIterator[StreamEvent]` | Yield typed events as the agent runs. Can only be called once. |
+| `wait()` | `await RunResult` | Wait for completion and return a `RunResult`. |
+| `text()` | `await str` | Wait for completion and return accumulated text. |
+| `cancel()` | `None` | Cancel the running agent. Thread-safe; unblocks the consumer immediately. |
+
+### `StreamEvent`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `str` | Event type — see table below. |
+| `data` | `Any` | Event payload. |
+
+| Event type | Data | When |
+|------------|------|------|
+| `text.delta` | `str` | A text content delta. |
+| `reasoning.delta` | `str` | A reasoning/thinking delta. |
+| `tool.started` | `str` | A tool call started (data is tool name). |
+| `tool.completed` | `str` | A tool call completed (data is tool name). |
+| `tool.failed` | `str` | A tool call failed (data is tool name). |
+| `run.completed` | `str` | The run finished (data is final content). |
+| `run.failed` | `str` | The run failed (data is error string). |
 
 ## Hooks
 

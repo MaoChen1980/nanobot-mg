@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
-from nanobot.agent.hook import AgentHook
+from nanobot.agent.hook import AgentHook, SDKCaptureHook
 from nanobot.agent.loop import AgentLoop
 from nanobot.bus.queue import MessageBus
 from nanobot.utils.compat import dataclass
@@ -18,6 +19,94 @@ class RunResult:
     content: str
     tools_used: list[str]
     messages: list[dict[str, Any]]
+    usage: dict[str, int] | None = None
+    stop_reason: str | None = None
+    error: str | None = None
+
+
+@dataclass
+class StreamEvent:
+    """An event yielded by ``Nanobot.stream()``.
+
+    Event types:
+        - ``text.delta`` — a text content delta.
+        - ``reasoning.delta`` — a reasoning/thinking delta.
+        - ``tool.started`` — a tool call started (data is the tool name).
+        - ``tool.completed`` — a tool call completed (data is the tool name).
+        - ``tool.failed`` — a tool call failed (data is the tool name).
+        - ``run.completed`` — the run finished (data is the final content).
+        - ``run.failed`` — the run failed (data is the error string).
+    """
+
+    type: str
+    data: Any
+
+
+class RunStream:
+    """A streaming agent run returned by ``Nanobot.stream()``."""
+
+    def __init__(
+        self,
+        task: asyncio.Task[Any],
+        queue: asyncio.Queue[tuple[str, Any] | None],
+        capture: SDKCaptureHook,
+    ) -> None:
+        self._task = task
+        self._queue = queue
+        self._capture = capture
+        self._consumed = False
+
+    async def stream_events(self) -> AsyncIterator[StreamEvent]:
+        """Yield ``StreamEvent`` values as the agent runs.
+
+        Can only be called once per run.  Raises ``RuntimeError`` on re-entry.
+        """
+        if self._consumed:
+            raise RuntimeError("RunStream has already been consumed")
+        try:
+            while True:
+                item = await self._queue.get()
+                if item is None:
+                    break
+                typ, data = item
+                yield StreamEvent(type=typ, data=data)
+
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        finally:
+            self._consumed = True
+
+    async def wait(self) -> RunResult:
+        """Wait for the run to finish and return a ``RunResult``."""
+        if not self._consumed:
+            async for _ in self.stream_events():
+                pass
+        content = self._capture.messages[-1].get("content", "") if self._capture.messages else ""
+        if isinstance(content, list):
+            texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            content = "\n".join(texts)
+        return RunResult(
+            content=content,
+            tools_used=self._capture.tools_used,
+            messages=self._capture.messages,
+            usage=self._capture.usage or None,
+            stop_reason=self._capture.stop_reason,
+            error=self._capture.error,
+        )
+
+    async def text(self) -> str:
+        """Wait for completion and return the accumulated text content."""
+        result = await self.wait()
+        return result.content
+
+    def cancel(self) -> None:
+        """Cancel the running agent."""
+        self._task.cancel()
+        self._queue.put_nowait(None)
 
 
 class Nanobot:
@@ -103,18 +192,60 @@ class Nanobot:
                 Different keys get independent history.
             hooks: Optional lifecycle hooks for this run.
         """
-        prev = self._loop._extra_hooks
-        if hooks is not None:
-            self._loop._extra_hooks = list(hooks)
-        try:
-            response = await self._loop.process_direct(
-                message, session_key=session_key,
-            )
-        finally:
-            self._loop._extra_hooks = prev
+        capture = SDKCaptureHook()
+        all_hooks = list(hooks) + [capture] if hooks else [capture]
+        response = await self._loop.process_direct(
+            message, session_key=session_key, extra_hooks=all_hooks,
+        )
 
         content = (response.content if response else None) or ""
-        return RunResult(content=content, tools_used=[], messages=[])
+        return RunResult(
+            content=content,
+            tools_used=capture.tools_used,
+            messages=capture.messages,
+            usage=capture.usage or None,
+            stop_reason=capture.stop_reason,
+            error=capture.error,
+        )
+
+    def stream(
+        self,
+        message: str,
+        *,
+        session_key: str = "sdk:default",
+        hooks: list[AgentHook] | None = None,
+    ) -> RunStream:
+        """Run the agent and return a ``RunStream`` for consuming streaming events.
+
+        Usage::
+
+            stream = bot.stream("Hello")
+            async for event in stream.stream_events():
+                if event.type == "text.delta":
+                    print(event.data, end="")
+            result = await stream.wait()
+        """
+        capture = SDKCaptureHook()
+        all_hooks = list(hooks) + [capture] if hooks else [capture]
+        queue: asyncio.Queue[tuple[str, Any] | None] = asyncio.Queue()
+
+        async def _on_stream(delta: str) -> None:
+            queue.put_nowait(("text.delta", delta))
+
+        async def _on_stream_end(*args: Any, **kwargs: Any) -> None:
+            queue.put_nowait(None)  # sentinel
+
+        task = asyncio.create_task(
+            self._loop.process_direct(
+                message,
+                session_key=session_key,
+                on_stream=_on_stream,
+                on_stream_end=_on_stream_end,
+                extra_hooks=all_hooks,
+            )
+        )
+
+        return RunStream(task=task, queue=queue, capture=capture)
 
 
 def _make_provider(config: Any) -> Any:

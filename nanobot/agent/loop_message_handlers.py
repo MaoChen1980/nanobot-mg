@@ -56,7 +56,7 @@ class SystemMessageHandler:
     def __init__(self, loop):
         self._loop = loop
 
-    async def handle(self, msg, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None):
+    async def handle(self, msg, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None, extra_hooks=None):
         # Prefer origin channel/chat_id from metadata (set by _announce_result)
         # to avoid parsing issues with multi-colon channel values like "proxy:feishu:feishu1".
         if msg.metadata and msg.metadata.get("_origin_channel") and msg.metadata.get("_origin_chat_id"):
@@ -131,7 +131,7 @@ class SystemMessageHandler:
             context_state=cs,
             session_key=key,
         )
-        final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue)
+        final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue, extra_hooks=extra_hooks)
         # 不剥离 assess_me/DRC — _append_turn_to_session 会在 append 时过滤。
         # 预剥离会缩短 all_msgs 但 initial_msg_count 不变，导致索引错位。
         session.metadata["llm_request_count"] = session.metadata.get("llm_request_count", 0) + _total_llm_requests
@@ -151,7 +151,7 @@ class UserMessageHandler:
     def __init__(self, loop):
         self._loop = loop
 
-    async def handle(self, msg, session_key, on_progress, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None):
+    async def handle(self, msg, session_key, on_progress, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None, extra_hooks=None):
 
         if msg.media:
             # All media (images, files, etc.) → save to workspace, no auto-processing
@@ -278,6 +278,7 @@ class UserMessageHandler:
             metadata=msg.metadata,
             session_key=key,
             pending_queue=pending_queue,
+            extra_hooks=extra_hooks,
         )
         # 不剥离 assess_me/DRC — _append_turn_to_session/_finalize_turn 内部会过滤。
         # 预剥离会缩短 all_msgs 但 initial_msg_count 不变，导致索引错位。

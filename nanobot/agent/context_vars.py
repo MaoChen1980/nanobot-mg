@@ -21,3 +21,4 @@ _in_subagent: ContextVar[bool] = ContextVar("_in_subagent", default=False)
 
 # Flag: True when prompt debug is enabled for this session.
 _current_debug_enabled: ContextVar[bool] = ContextVar("_current_debug_enabled", default=False)
+

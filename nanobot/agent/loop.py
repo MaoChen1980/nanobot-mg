@@ -624,6 +624,7 @@ class AgentLoop:
         metadata: dict[str, Any] | None = None,
         session_key: str | None = None,
         pending_queue: asyncio.Queue | None = None,
+        extra_hooks: list[AgentHook] | None = None,
     ) -> tuple[str | None, list[str], list[dict], str, bool, int, int]:
         logger.info("RUN_DBG: _run_agent_loop start ({} messages)", len(initial_messages))
         """Run the agent iteration loop.
@@ -654,8 +655,10 @@ class AgentLoop:
             observe_think=observe_think,
             observe_tool=observe_tool,
         )
+        per_call_hooks = extra_hooks or []
+        all_extra = self._extra_hooks + per_call_hooks
         hook: AgentHook = (
-            CompositeHook([loop_hook] + self._extra_hooks) if self._extra_hooks else loop_hook
+            CompositeHook([loop_hook] + all_extra) if all_extra else loop_hook
         )
 
         # Reset retry counters at the start of each turn
@@ -1040,6 +1043,7 @@ class AgentLoop:
         await self._connect_mcp()
         logger.info("Agent loop started")
 
+        _loop_exit_clean = False
         try:
             while self._running:
                 # Check for restart flag at safe point (start of each iteration)
@@ -1139,6 +1143,8 @@ class AgentLoop:
         except BaseException:
             logger.exception("run() exiting due to unhandled exception")
             raise
+        finally:
+            await self.close_mcp()
 
     _PROACTIVE_CHECK_INTERVAL: float = 180.0     # LLM-triggering proactive check interval (~3 min)
 
@@ -1295,16 +1301,17 @@ class AgentLoop:
         on_reasoning: Callable[[str], Awaitable[None]] | None = None,
         on_reasoning_end: Callable[..., Awaitable[None]] | None = None,
         pending_queue: asyncio.Queue | None = None,
+        extra_hooks: list[AgentHook] | None = None,
     ) -> OutboundMessage | None:
         """Process a single inbound message and return the response."""
         self._refresh_provider_snapshot()
         if msg.channel == "system":
             return await self._system_handler.handle(
-                msg, on_stream, on_stream_end, on_reasoning, on_reasoning_end, pending_queue,
+                msg, on_stream, on_stream_end, on_reasoning, on_reasoning_end, pending_queue, extra_hooks=extra_hooks,
             )
         return await self._user_handler.handle(
             msg, session_key, on_progress, on_stream, on_stream_end,
-            on_reasoning, on_reasoning_end, pending_queue,
+            on_reasoning, on_reasoning_end, pending_queue, extra_hooks=extra_hooks,
         )
 
     def _sanitize_persisted_blocks(
@@ -1616,34 +1623,39 @@ class AgentLoop:
         on_stream_end: Callable[..., Awaitable[None]] | None = None,
         pending_queue: asyncio.Queue | None = None,
         ephemeral: bool = False,
+        extra_hooks: list[AgentHook] | None = None,
     ) -> OutboundMessage | None:
         """Process a message directly and return the outbound payload."""
         from nanobot.agent.context_vars import _current_inbound
 
         await self._connect_mcp()
-        msg = InboundMessage(
-            channel=channel, sender_id="user", chat_id=chat_id,
-            content=content, media=media or [], metadata=metadata or {},
-            session_key_override=session_key,
-            ephemeral=ephemeral,
-        )
-        _current_inbound.set(msg)
-        self._current_session_key = session_key
-        response = await self._process_message(
-            msg,
-            session_key=session_key,
-            on_progress=on_progress,
-            on_stream=on_stream,
-            on_stream_end=on_stream_end,
-            pending_queue=pending_queue,
-        )
-        # Same post-dispatch monitor trigger as _dispatch() — ensures proxy
-        # sessions also get proactive subagent checks.
-        if self.subagents.get_running_count_by_session(session_key) > 0:
-            now = time.time()
-            state = self._last_subagent_check.get(session_key)
-            last = state.last_check if state else 0
-            if now - last >= self._PROACTIVE_CHECK_INTERVAL:
-                self._last_subagent_check[session_key] = _SubagentCheckState(now, channel, chat_id)
-                await self._publish_subagent_check(session_key, channel, chat_id)
-        return response
+        try:
+            msg = InboundMessage(
+                channel=channel, sender_id="user", chat_id=chat_id,
+                content=content, media=media or [], metadata=metadata or {},
+                session_key_override=session_key,
+                ephemeral=ephemeral,
+            )
+            _current_inbound.set(msg)
+            self._current_session_key = session_key
+            response = await self._process_message(
+                msg,
+                session_key=session_key,
+                on_progress=on_progress,
+                on_stream=on_stream,
+                on_stream_end=on_stream_end,
+                pending_queue=pending_queue,
+                extra_hooks=extra_hooks,
+            )
+            # Same post-dispatch monitor trigger as _dispatch() — ensures proxy
+            # sessions also get proactive subagent checks.
+            if self.subagents.get_running_count_by_session(session_key) > 0:
+                now = time.time()
+                state = self._last_subagent_check.get(session_key)
+                last = state.last_check if state else 0
+                if now - last >= self._PROACTIVE_CHECK_INTERVAL:
+                    self._last_subagent_check[session_key] = _SubagentCheckState(now, channel, chat_id)
+                    await self._publish_subagent_check(session_key, channel, chat_id)
+            return response
+        finally:
+            await self.close_mcp()

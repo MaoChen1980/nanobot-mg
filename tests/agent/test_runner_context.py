@@ -1,8 +1,9 @@
 from nanobot.agent.runner_context import (
-    merge_message_content,
-    drop_orphan_tool_results,
-    strip_bypassed_tool_messages,
     backfill_missing_tool_results,
+    deduplicate_tool_call_ids,
+    drop_orphan_tool_results,
+    merge_message_content,
+    strip_bypassed_tool_messages,
 )
 
 
@@ -233,3 +234,83 @@ class TestBackfillMissingToolResults:
             {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "foo"}}]},
         ]
         assert backfill_missing_tool_results(msgs) is msgs
+
+
+class TestDeduplicateToolCallIds:
+    def test_no_tool_calls_passthrough(self) -> None:
+        msgs = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        assert deduplicate_tool_call_ids(msgs) is msgs
+
+    def test_single_call_passthrough(self) -> None:
+        msgs = [
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1", "function": {"name": "foo"}}]},
+            {"role": "tool", "tool_call_id": "call_1", "content": "ok"},
+        ]
+        assert deduplicate_tool_call_ids(msgs) is msgs
+
+    def test_duplicate_id_across_assistant_messages_stripped(self) -> None:
+        msgs = [
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1", "function": {"name": "foo"}}]},
+            {"role": "tool", "tool_call_id": "call_1", "content": "ok"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1", "function": {"name": "bar"}}]},
+        ]
+        result = deduplicate_tool_call_ids(msgs)
+        assert len(result) == 3
+        # Second assistant should have its tool_calls stripped
+        assert "tool_calls" not in result[2] or result[2]["tool_calls"] == []
+
+    def test_duplicate_id_within_same_assistant_stripped(self) -> None:
+        msgs = [
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "call_1", "function": {"name": "foo"}},
+                {"id": "call_1", "function": {"name": "foo_dup"}},
+            ]},
+        ]
+        result = deduplicate_tool_call_ids(msgs)
+        assert len(result[0]["tool_calls"]) == 1
+        assert result[0]["tool_calls"][0]["function"]["name"] == "foo"
+
+    def test_orphan_tool_result_dropped(self) -> None:
+        msgs = [
+            {"role": "user", "content": "do it"},
+            {"role": "tool", "tool_call_id": "orphan_1", "content": "should drop"},
+        ]
+        result = deduplicate_tool_call_ids(msgs)
+        assert len(result) == 1
+
+    def test_already_fulfilled_tool_result_dropped(self) -> None:
+        msgs = [
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1", "function": {"name": "foo"}}]},
+            {"role": "tool", "tool_call_id": "call_1", "content": "ok"},
+            {"role": "tool", "tool_call_id": "call_1", "content": "duplicate result"},
+        ]
+        result = deduplicate_tool_call_ids(msgs)
+        assert len(result) == 2
+
+    def test_multiple_tool_calls_some_duplicated(self) -> None:
+        msgs = [
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "a", "function": {"name": "foo"}},
+                {"id": "b", "function": {"name": "bar"}},
+            ]},
+            {"role": "tool", "tool_call_id": "a", "content": "r1"},
+            {"role": "tool", "tool_call_id": "b", "content": "r2"},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "a", "function": {"name": "foo_again"}},
+                {"id": "c", "function": {"name": "baz"}},
+            ]},
+            {"role": "tool", "tool_call_id": "c", "content": "r3"},
+        ]
+        result = deduplicate_tool_call_ids(msgs)
+        assert len(result) == 5
+        # Second assistant should only keep id "c"
+        assert result[3]["tool_calls"] == [{"id": "c", "function": {"name": "baz"}}]
+
+    def test_returns_original_when_no_changes(self) -> None:
+        msgs = [
+            {"role": "user", "content": "hi"},
+        ]
+        assert deduplicate_tool_call_ids(msgs) is msgs

@@ -157,3 +157,70 @@ def backfill_missing_tool_results(messages: list[dict[str, Any]]) -> list[dict[s
     return updated
 
 
+def deduplicate_tool_call_ids(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate tool_call IDs across the entire message history.
+
+    Ensures no two assistant messages declare the same tool_call ID and no
+    tool_result references an ID not declared by any assistant.  This is an
+    upfront governance pass that runs *before* ``drop_orphan_tool_results``.
+    """
+    all_declared: set[str] = set()
+    fulfilled: set[str] = set()
+    result: list[dict[str, Any]] = []
+
+    for msg in messages:
+        role = msg.get("role")
+
+        if role == "assistant":
+            tcs = msg.get("tool_calls")
+            if not tcs:
+                result.append(msg)
+                continue
+
+            new_tcs: list[dict[str, Any]] = []
+            changed = False
+            for tc in tcs:
+                if not isinstance(tc, dict):
+                    new_tcs.append(tc)
+                    continue
+                tid = tc.get("id")
+                if not tid:
+                    new_tcs.append(tc)
+                    continue
+                str_tid = str(tid)
+                if str_tid in all_declared or str_tid in fulfilled:
+                    changed = True
+                    continue  # strip — already declared or fulfilled
+                all_declared.add(str_tid)
+                new_tcs.append(tc)
+
+            if not changed and len(new_tcs) == len(tcs):
+                result.append(msg)
+            else:
+                d = dict(msg)
+                if new_tcs:
+                    d["tool_calls"] = new_tcs
+                else:
+                    d.pop("tool_calls", None)
+                result.append(d)
+
+        elif role == "tool":
+            tid = msg.get("tool_call_id")
+            if not tid:
+                result.append(msg)
+                continue
+            str_tid = str(tid)
+            if str_tid not in all_declared or str_tid in fulfilled:
+                # Orphan or duplicate tool result — drop it
+                continue
+            fulfilled.add(str_tid)
+            result.append(msg)
+
+        else:
+            result.append(msg)
+
+    if len(result) == len(messages) and all(a is b for a, b in zip(result, messages)):
+        return messages
+    return result
+
+

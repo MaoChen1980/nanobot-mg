@@ -607,6 +607,7 @@ class AnthropicProvider(LLMProvider):
     def _parse_response(response: Any) -> LLMResponse:
         content_parts: list[str] = []
         tool_calls: list[ToolCallRequest] = []
+        tool_call_ids: set[str] = set()
         thinking_blocks: list[dict[str, Any]] = []
         redacted_count = 0
 
@@ -614,6 +615,12 @@ class AnthropicProvider(LLMProvider):
             if isinstance(block, TextBlock):
                 content_parts.append(block.text)
             elif isinstance(block, ToolUseBlock):
+                # Dedupe tool_use ids: Anthropic rejects duplicates with 400,
+                # and a mis-assembled stream can surface the same tool_use block
+                # twice in one turn. Keep the first occurrence.
+                if block.id in tool_call_ids:
+                    continue
+                tool_call_ids.add(block.id)
                 tool_calls.append(ToolCallRequest(
                     id=block.id,
                     name=block.name,
@@ -628,6 +635,9 @@ class AnthropicProvider(LLMProvider):
             elif isinstance(block, RedactedThinkingBlock):
                 redacted_count += 1
             elif isinstance(block, ServerToolUseBlock):
+                if block.id in tool_call_ids:
+                    continue
+                tool_call_ids.add(block.id)
                 tool_calls.append(ToolCallRequest(
                     id=block.id,
                     name=block.name,

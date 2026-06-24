@@ -70,6 +70,7 @@ __all__ = [
 ]
 from .runner_context import (
     backfill_missing_tool_results,
+    deduplicate_tool_call_ids,
     drop_orphan_tool_results,
     strip_bypassed_tool_messages,
 )
@@ -469,6 +470,7 @@ class AgentRunner:
             # --- END PROACTIVE COMPRESSION ---
             try:
                 messages_for_model = strip_bypassed_tool_messages(messages)
+                messages_for_model = deduplicate_tool_call_ids(messages_for_model)
                 messages_for_model = drop_orphan_tool_results(messages_for_model)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
                 messages_for_model = split_thinking_messages(messages_for_model)
