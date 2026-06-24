@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import time
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -285,16 +286,27 @@ class UserMessageHandler:
         # 不剥离 assess_me/DRC — _append_turn_to_session/_finalize_turn 内部会过滤。
         # 预剥离会缩短 all_msgs 但 initial_msg_count 不变，导致索引错位。
 
-        # Stage 7: finalize — save, file cap, recovery clear, background schedule
-        if msg.ephemeral:
-            # Ephemeral messages (e.g. heartbeat) skip history persistence,
-            # but still clear any runtime checkpoint the loop may have set.
-            self._loop.lifecycle.finalize_ephemeral(session)
-        else:
-            await self._finalize_turn(session, all_msgs, initial_msg_count, user_persisted_early, final_content, _total_llm_requests)
+        # Stage 8 (first): build outbound — send response to user ASAP
+        _t1 = time.time()
+        result = self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)
+        _t2 = time.time()
+        if _t2 - _t1 > 0.5:
+            logger.info("TIMING: _build_outbound took {:.1f}s", _t2 - _t1)
 
-        # Stage 8: build outbound response
-        return self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)
+        # Stage 7 (after): finalize — save, file cap, recovery clear (response already sent)
+        if msg.ephemeral:
+            _t1 = time.time()
+            self._loop.lifecycle.finalize_ephemeral(session)
+            _t2 = time.time()
+            if _t2 - _t1 > 1:
+                logger.info("TIMING: finalize_ephemeral took {:.1f}s", _t2 - _t1)
+        else:
+            _t1 = time.time()
+            await self._finalize_turn(session, all_msgs, initial_msg_count, user_persisted_early, final_content, _total_llm_requests)
+            _t2 = time.time()
+            if _t2 - _t1 > 1:
+                logger.info("TIMING: _finalize_turn took {:.1f}s", _t2 - _t1)
+        return result
 
     def _prepare_session(self, msg, session_key):
         """Restore checkpoints, return session + derived context."""

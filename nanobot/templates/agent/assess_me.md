@@ -3,8 +3,7 @@
 {
   "status": "ok" | "findings",       // ok=正常  findings=发现问题
   "summary": "一句话总结",
-  "need_drc": false,                  // true=同一问题尝试3次仍未解决, 需深挖根因
-  "blocker": null | "当前遇到的阻塞问题描述",
+  "blocker": null | "阻塞描述: 反复尝试3次仍无法推进/无替代路径/未知错误, 需根因分析",
   "skill_pattern": null | "可复用模式(做什么+不做什么)",
   "needs_revision": false,            // true=最近一条 assistant 回复不准确/论据不足/逻辑不成立, 需修正
   "content": "详细分析(markdown)"
@@ -102,7 +101,7 @@ Output as a bullet list in `content`. Be factual — base each mark only on what
 - 不要提问——这是报告，不是问询
 - 发现问题时指出问题和修复方向，不要列出多个方案让下游选
 - 一切正常则 `status` 填 `"ok"`
-- 有阻塞则写 `blocker`；同一 blocker 反复 3 次未解决则额外 `need_drc: true`
+- `blocker` 条件：反复试 3+ 次卡住 / 无替代路径 / 工具全失败 / 未知错误
 
 ## Conversation
 

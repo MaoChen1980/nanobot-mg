@@ -639,6 +639,7 @@ class AgentLoop:
         extra_hooks: list[AgentHook] | None = None,
     ) -> tuple[str | None, list[str], list[dict], str, bool, int, int]:
         logger.info("RUN_DBG: _run_agent_loop start ({} messages)", len(initial_messages))
+        _t0 = time.time()
         """Run the agent iteration loop.
 
         *on_stream*: called with each content delta during streaming.
@@ -794,6 +795,9 @@ class AgentLoop:
                 lambda sk=session.key: self.subagents.get_running_count_by_session(sk)
             ) if session else None,
         ))
+        _runner_elapsed = time.time() - _t0
+        if _runner_elapsed > 15:
+            logger.info("TIMING: runner.run took {:.1f}s", _runner_elapsed)
         if result.overflow_summary:
             session._last_summary = result.overflow_summary
             session.metadata.pop("_summary_injected_key", None)
@@ -979,7 +983,7 @@ class AgentLoop:
                     messages.pop(i)
             messages.append(build_assessment_message(injection_text))
 
-            # DRC — blocker 非空即表示需要根因分析，无需额外 need_drc 开关
+            # DRC — blocker 非空即触发根因分析
             if parsed.get("blocker"):
                 blocker = parsed.get("blocker")
                 try:
@@ -1003,7 +1007,7 @@ class AgentLoop:
             return AssessResult(injected=True, needs_revision=needs_revision)
         return _cb
 
-    async def _spawn_skill_creator(self, assess_result: str, session_key: str | None = None) -> None:
+    async def _spawn_skill_creator(self, skill_pattern: str, session_key: str | None = None) -> None:
         """Spawn a background agent to create/update skill from assess_me observation."""
         from nanobot.agent.runner import AgentRunner, AgentRunSpec
         from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
@@ -1027,14 +1031,14 @@ class AgentLoop:
 
         system_prompt = render_template(
             "agent/_instructions/skill_creation.md",
-            assess_result=assess_result,
+            skill_pattern=skill_pattern,
             workspace_path=self.workspace.as_posix(),
         )
 
         spec = AgentRunSpec(
             initial_messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": assess_result},
+                {"role": "user", "content": f"根据以下可复用模式创建或更新 skill。不要闲聊，直接执行步骤。\n\n{skill_pattern}"},
             ],
             tools=tools,
             model=self.model,

@@ -785,7 +785,7 @@ class TestAssessMePipeline:
         with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
             mock_fn.return_value.content = (
                 '{"status": "ok", "summary": "一切正常", "content": "",'
-                '"need_drc": false, "blocker": null, "skill_pattern": null,'
+                '"blocker": null, "skill_pattern": null,'
                 '"needs_revision": false}'
             )
 
@@ -795,7 +795,6 @@ class TestAssessMePipeline:
 
             assert parsed is not None, f"assess_me returned non-JSON: {raw[:100]}"
             assert parsed["status"] == "ok"
-            assert parsed["need_drc"] is False
             assert parsed.get("skill_pattern") is None
 
     @pytest.mark.asyncio
@@ -805,7 +804,7 @@ class TestAssessMePipeline:
             mock_fn.return_value.content = (
                 '{"status": "findings", "summary": "agent 偏离任务",'
                 '"content": "agent 回复了无关内容，用户请求是分析数据",'
-                '"need_drc": false, "blocker": null, "skill_pattern": "always-check-tool-output",'
+                '"blocker": null, "skill_pattern": "always-check-tool-output",'
                 '"needs_revision": true}'
             )
 
@@ -824,7 +823,7 @@ class TestAssessMePipeline:
         with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
             mock_fn.return_value.content = (
                 '```json\n{"status": "ok", "summary": "all good", "content": "",'
-                '"need_drc": false, "blocker": null, "skill_pattern": null,'
+                '"blocker": null, "skill_pattern": null,'
                 '"needs_revision": false}\n```'
             )
 
@@ -963,17 +962,17 @@ class TestAssessMeTemplate:
 class TestSkillCreationTemplate:
     """Verify the skill_creation.md template renders correctly."""
 
-    def test_renders_with_assess_result(self) -> None:
-        """Template renders with assess_me output and workspace path."""
+    def test_renders_with_skill_pattern(self) -> None:
+        """Template renders with skill pattern and workspace path."""
         from nanobot.utils.prompt_templates import render_template
 
-        assess_result = "值得创建 skill: verify-api-response"
+        skill_pattern = "值得创建 skill: verify-api-response"
         content = render_template(
             "agent/_instructions/skill_creation.md",
-            assess_result=assess_result,
+            skill_pattern=skill_pattern,
             workspace_path="/tmp/workspace",
         )
-        assert assess_result in content
+        assert skill_pattern in content
         assert "## Steps" in content
         assert "## When to Use" in content
         assert "## Verification" in content
@@ -981,13 +980,13 @@ class TestSkillCreationTemplate:
         assert "**Self-optimization**" in content
         assert "skills/" in content
 
-    def test_renders_with_empty_result(self) -> None:
-        """Template renders with empty assess_me result (edge case)."""
+    def test_renders_with_empty_pattern(self) -> None:
+        """Template renders with empty skill pattern (edge case)."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
             "agent/_instructions/skill_creation.md",
-            assess_result="",
+            skill_pattern="",
             workspace_path="/tmp/workspace",
         )
         assert "## Steps" in content

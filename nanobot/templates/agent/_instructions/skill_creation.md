@@ -3,7 +3,7 @@
 
 ## 输入
 
-{{ assess_result }}
+{{ skill_pattern }}
 
 ## 步骤
 
