@@ -47,6 +47,10 @@ class DispatchManager:
                             media=response.media,
                             metadata={**response.metadata, "_session_key": msg.session_key},
                             buttons=response.buttons,
+                            tools_used=response.tools_used,
+                            usage=response.usage,
+                            stop_reason=response.stop_reason,
+                            error=response.error,
                         )
                     await self._loop.bus.publish_outbound(response)
                 elif msg.channel == "cli":

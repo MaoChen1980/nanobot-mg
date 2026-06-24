@@ -169,6 +169,8 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
+        self._last_tools_used: list[str] = []
+        self._last_error: str | None = None
         self._history_token_limit = (
             history_token_limit
             if history_token_limit is not None
@@ -292,6 +294,16 @@ class AgentLoop:
     def last_usage(self) -> dict[str, int]:
         """Token usage from the most recent provider call."""
         return self._last_usage
+
+    @property
+    def last_tools_used(self) -> list[str]:
+        """Tool names used in the most recent run."""
+        return self._last_tools_used
+
+    @property
+    def last_error(self) -> str | None:
+        """Error message from the most recent run, if any."""
+        return self._last_error
 
     @property
     def start_time(self) -> float:
@@ -785,6 +797,8 @@ class AgentLoop:
         # Track total retries and token usage across this turn
         self.retry_count += result.retry_count
         self._last_usage = result.usage
+        self._last_tools_used = result.tools_used
+        self._last_error = result.error
 
         # (IV markers re-entry and completion detection removed)
 

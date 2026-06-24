@@ -144,7 +144,9 @@ class SystemMessageHandler:
         outbound_metadata: dict[str, Any] = {}
         if effective_channel == "slack" and key.startswith("slack:") and key.count(":") >= 2:
             outbound_metadata["slack"] = {"thread_ts": key.split(":", 2)[2]}
-        return OutboundMessage(channel=effective_channel, chat_id=chat_id, content=content, buttons=buttons, metadata=outbound_metadata)
+        return OutboundMessage(channel=effective_channel, chat_id=chat_id, content=content, buttons=buttons, metadata=outbound_metadata,
+                               tools_used=self._loop._last_tools_used, usage=self._loop.last_usage, stop_reason=stop_reason,
+                               error=self._loop._last_error)
 
 
 class UserMessageHandler:
@@ -508,4 +510,7 @@ class UserMessageHandler:
         buttons: list = []
         if on_stream is not None and stop_reason != "error":
             meta["_streamed"] = True
-        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=final_content, metadata=meta, buttons=buttons)
+        error = self._loop._last_error
+        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=final_content, metadata=meta, buttons=buttons,
+                               tools_used=self._loop._last_tools_used, usage=self._loop.last_usage, stop_reason=stop_reason,
+                               error=error)

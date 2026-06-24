@@ -304,6 +304,10 @@ class GatewayApplication:
                     media=msg.media,
                     metadata=metadata,
                     buttons=msg.buttons,
+                    tools_used=msg.tools_used,
+                    usage=msg.usage,
+                    stop_reason=msg.stop_reason,
+                    error=msg.error,
                 )
             if (
                 record

@@ -227,6 +227,11 @@ def _response_renderable(content: str, render_markdown: bool, metadata: dict | N
     return Markdown(content)
 
 
+def _print_info(text: str) -> None:
+    """Print a compact info line (used for usage, errors, etc.)."""
+    console.print(f"[dim]{text}[/dim]")
+
+
 async def _print_interactive_line(text: str) -> None:
     """Print async interactive updates with prompt_toolkit-safe Rich styling."""
     def _write() -> None:
@@ -681,6 +686,19 @@ def agent(
                     render_markdown=markdown,
                     metadata=response.metadata if response else None,
                 )
+            if response and response.usage:
+                usage = response.usage
+                parts = []
+                if usage.get("prompt_tokens"):
+                    parts.append(f"↑{usage['prompt_tokens']}")
+                if usage.get("completion_tokens"):
+                    parts.append(f"↓{usage['completion_tokens']}")
+                if usage.get("cached_tokens"):
+                    parts.append(f"⚡{usage['cached_tokens']}")
+                if parts:
+                    _print_info(f"tokens: {' '.join(parts)}")
+            if response and response.error:
+                _print_info(f"error: {response.error[:200]}")
             await agent_loop.close_mcp()
 
         asyncio.run(run_once())

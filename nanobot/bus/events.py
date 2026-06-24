@@ -36,4 +36,8 @@ class OutboundMessage:
     media: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     buttons: list[list[str]] = field(default_factory=list)
+    tools_used: list[str] = field(default_factory=list)
+    usage: dict[str, int] | None = None
+    stop_reason: str | None = None
+    error: str | None = None
 
