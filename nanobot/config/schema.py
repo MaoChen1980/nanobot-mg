@@ -170,27 +170,27 @@ class AgentDefaults(Base):
     provider: str = (
         "auto"  # Provider name (e.g. "anthropic", "openrouter") or "auto" for auto-detection
     )
-    max_tokens: int = 40_000
-    context_window_tokens: int = 160_000
+    max_tokens: int = 30_000
+    context_window_tokens: int = 130_000
     context_block_limit: Optional[int] = None
     temperature: float = 0.1
-    max_tool_iterations: int = 200
+    max_tool_iterations: int = 2000
     max_tool_result_chars: int = 20_000
     provider_retry_mode: Literal["standard", "persistent"] = "persistent"
     reasoning_effort: Optional[str] = "high"  # low / medium / high / max / adaptive - enables LLM thinking mode
     timezone: str = _detect_timezone()  # IANA timezone, e.g. "Asia/Shanghai", "America/New_York"
     disabled_skills: list[str] = Field(default_factory=list)  # Skill names to exclude from loading (e.g. ["summarize", "skill-manager"])
     compress_trigger_tokens: int = Field(
-        default=130_000,
+        default=100_000,
         ge=1024,
     )  # History exceeds this → trigger compression (target: history_token_limit)
     history_token_limit: int = Field(
-        default=70_000,
+        default=50_000,
         ge=1024,
     )  # Target token count after compression
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
     self_review: SelfReviewConfig = Field(default_factory=SelfReviewConfig)
-    assess_interval: int = Field(default=10, ge=1)
+    assess_interval: int = Field(default=12, ge=1)
 
 
 class AgentsConfig(Base):
