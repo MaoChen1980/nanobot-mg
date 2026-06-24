@@ -896,6 +896,12 @@ class AgentLoop:
             except Exception:
                 _has_active = True
 
+            # 检查主 LLM 是否标记了跳过
+            last_msg = messages[-1] if messages else {}
+            if last_msg.get("role") == "assistant" and "<!-- no-assess -->" in (last_msg.get("content") or ""):
+                logger.info("assess_me: skipped per LLM signal")
+                return AssessResult()
+
             try:
                 logger.info("assess_me call start")
                 result = await assess_me(messages, has_active_task=_has_active)
