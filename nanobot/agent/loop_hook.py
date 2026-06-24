@@ -164,6 +164,13 @@ class _LoopHook(AgentHook):
                 if thought and self._on_reasoning:
                     await self._on_reasoning(thought)
 
+        logger.info(
+            "OBSERVE: _observe_tool={}, _observe_think={}, tools={}, on_progress={}",
+            self._observe_tool, self._observe_think,
+            [tc.name for tc in context.tool_calls],
+            self._on_progress is not None,
+        )
+
         # Send tool start events when /tool is on
         if self._observe_tool:
             tool_hint = self._loop._strip_think(self._loop._tool_hint(context.tool_calls))

@@ -1,12 +1,23 @@
-评估最近一条 assistant 回复的逻辑推理合理性、论据充分性，识别 blocker 和可复用 skill。输出 JSON 格式。
+评估最近一条 assistant 回复的逻辑推理合理性、论据充分性，识别 blocker 和可复用 skill。
 
+只输出纯 JSON，不要使用 markdown 代码块。
+
+字段说明：
+- status: "ok"（正常）或 "findings"（发现问题）
+- summary: 一句话总结
+- blocker: null 或阻塞描述（反复尝试3次无法推进/无替代路径/未知错误时填写）
+- skill_pattern: null 或可复用模式描述
+- needs_revision: true 或 false（回复不准确/论据不足时填 true）
+- content: 详细分析
+
+示例：
 {
-  "status": "ok" | "findings",       // ok=正常  findings=发现问题
-  "summary": "一句话总结",
-  "blocker": null | "阻塞描述: 反复尝试3次仍无法推进/无替代路径/未知错误, 需根因分析",
-  "skill_pattern": null | "可复用模式(做什么+不做什么)",
-  "needs_revision": false,            // true=最近一条 assistant 回复不准确/论据不足/逻辑不成立, 需修正
-  "content": "详细分析(markdown)"
+  "status": "ok",
+  "summary": "任务进展顺利，逻辑验证通过",
+  "blocker": null,
+  "skill_pattern": null,
+  "needs_revision": false,
+  "content": "分析内容"
 }
 
 ## 检查项

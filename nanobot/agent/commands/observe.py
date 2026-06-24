@@ -5,9 +5,17 @@ from __future__ import annotations
 from nanobot.bus.events import OutboundMessage
 
 
+def _observe_state(ctx, flag: str, default: bool = True) -> str:
+    """Get a human-readable observe state string."""
+    enabled = ctx.loop._session_observe[flag].get(ctx.key, default)
+    return f"🟢 **ON**" if enabled else f"🔴 **OFF**"
+
+
 def register_observe_commands(router) -> None:
     router.exact("/think", cmd_think)
+    router.exact("/think status", cmd_think_status)
     router.exact("/tool", cmd_tool)
+    router.exact("/tool status", cmd_tool_status)
     router.exact("/debug", cmd_debug)
 
 
@@ -28,6 +36,16 @@ async def cmd_think(ctx) -> OutboundMessage:
     )
 
 
+async def cmd_think_status(ctx) -> OutboundMessage:
+    """Show current /think state without toggling."""
+    return OutboundMessage(
+        channel=ctx.msg.channel,
+        chat_id=ctx.msg.chat_id,
+        content=f"🧠 /think is {_observe_state(ctx, '_observe_think')}",
+        metadata=dict(ctx.msg.metadata or {}),
+    )
+
+
 async def cmd_tool(ctx) -> OutboundMessage:
     """Toggle tool call start/end events visibility in the channel."""
     session_key = ctx.key
@@ -41,6 +59,16 @@ async def cmd_tool(ctx) -> OutboundMessage:
         content=(
             f"🔧 /tool {status} — Tool call events will{' ' if enabled else ' not '}be shown."
         ),
+        metadata=dict(ctx.msg.metadata or {}),
+    )
+
+
+async def cmd_tool_status(ctx) -> OutboundMessage:
+    """Show current /tool state without toggling."""
+    return OutboundMessage(
+        channel=ctx.msg.channel,
+        chat_id=ctx.msg.chat_id,
+        content=f"🔧 /tool is {_observe_state(ctx, '_observe_tool')}",
         metadata=dict(ctx.msg.metadata or {}),
     )
 

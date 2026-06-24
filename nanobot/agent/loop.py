@@ -838,11 +838,11 @@ class AgentLoop:
         # 1. Strip <think>…</think> blocks.
         s = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
-        # 2. Strip markdown code fences and any language tag.
-        if s.startswith("```"):
-            s = re.sub(r"^```\w*\n?", "", s)
-            s = re.sub(r"\n?```$", "", s)
-            s = s.strip()
+        # 2. Strip markdown code fences (at start or anywhere — some LLMs
+        #    prefix with newlines or invisible chars before the fence).
+        s = re.sub(r"^```\w*\n?", "", s)
+        s = re.sub(r"\n?```$", "", s)
+        s = s.strip()
 
         # 3. Locate the first JSON object ({).
         start = s.find("{")
