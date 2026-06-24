@@ -94,6 +94,9 @@ class MemoryExtractor:
         self.processed_dir = ensure_dir(self.prompts_dir / "processed")
         self._last_modified_files: list[str] = []
         self._pending_tool_scripts: list[dict[str, Any]] = []
+        # Persistent cache for recent_entries — preserves MEMORY.md Active/Recent
+        # sections across extraction runs that have no new findings.
+        self._recent_cache: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -178,7 +181,11 @@ class MemoryExtractor:
             await self._cleanup_check(modified_files=self._last_modified_files)
 
         if changed:
-            self._generate_memory_index(recent_entries or [])
+            # Merge new recent entries into cache, keep newest 12
+            if recent_entries:
+                merged = {r.get("content", ""): r for r in self._recent_cache + recent_entries}
+                self._recent_cache = sorted(merged.values(), key=lambda x: -(x.get("ts") or 0))[:12]
+            self._generate_memory_index(self._recent_cache)
             self._add_backlinks()
             await self._rebuild_indexes()
             if self.store.git.is_initialized():
@@ -1384,8 +1391,15 @@ class MemoryExtractor:
     def _generate_memory_index(self, recent_entries: list[dict[str, Any]]) -> None:
         """Scan memory/ and generate compact MEMORY.md for agent system prompt.
 
-        Format: Active (top progress) + Rules (pinned) + Index (keyword links) + Recent (dated).
+        Format: Active (current progress) + Pinned + Index (keyword links) + Recent (dated).
+        All four sections are always emitted for structural stability.
         """
+        # Filter out stale entries older than 14 days
+        now = time.time()
+        recent_entries = [
+            r for r in recent_entries
+            if r.get("ts") and now - r["ts"] < 14 * 86400
+        ]
         exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
 
         # Helpers
@@ -1464,25 +1478,24 @@ class MemoryExtractor:
         lines = ["# Memory\n", ""]
 
         # ── Active — top 3 recent entries (current progress) ──
+        lines.append("## Active\n")
         if recent_entries:
-            lines.append("## Active\n")
             for r in recent_entries[:3]:
                 text = r.get("content", "")
                 if not text:
                     continue
                 emoji, rest = _extract_emoji(text)
-                # Strip `"- "` list prefix that leaked from _format_finding_paragraph
                 rest = rest.lstrip("- ").strip()
                 trimmed = _trim_sentence(rest, 180)
                 display = f"{emoji} {trimmed}" if emoji else trimmed
                 lines.append(f"- {display}")
-            lines.append("")
+        lines.append("")
 
-        # ── Rules — pinned items ──
+        # ── Pinned — important findings (renamed from "Rules": contains all pinned types, not just instructions) ──
+        lines.append("## Pinned\n")
         if pinned:
-            lines.append("## Rules\n")
             lines.extend(pinned)
-            lines.append("")
+        lines.append("")
 
         # Build category index
         category_index: dict[str, list[tuple[str, str, str]]] = {}
@@ -1518,8 +1531,8 @@ class MemoryExtractor:
         lines.append("")
 
         # ── Recent — dated milestone entries ──
+        lines.append("## Recent\n")
         if recent_entries:
-            lines.append("## Recent\n")
             for r in recent_entries:
                 text = r.get("content", "")
                 ts_v = r.get("ts", 0)
@@ -1532,7 +1545,7 @@ class MemoryExtractor:
                 display = f"{emoji} {trimmed}" if emoji else trimmed
                 prefix = f"{date_str}: " if date_str else ""
                 lines.append(f"- {prefix}{display}")
-            lines.append("")
+        lines.append("")
 
         self.store.memory_file.write_text("\n".join(lines), encoding="utf-8")
         logger.info(

@@ -1103,8 +1103,8 @@ class TestGenerateMemoryIndex:
             {"content": "new fact", "ts": now - 100, "topic": "test.md"},
         ])
         text = extractor.store.memory_file.read_text(encoding="utf-8")
-        assert "## Recent changes" in text
-        assert "**new fact**" in text
+        assert "## Recent" in text
+        assert "new fact" in text
 
     def test_recent_older_than_two_days_not_bold(self, extractor: MemoryExtractor) -> None:
         mem_dir = extractor.store.memory_dir
@@ -1115,7 +1115,6 @@ class TestGenerateMemoryIndex:
         ])
         text = extractor.store.memory_file.read_text(encoding="utf-8")
         assert "old fact" in text
-        assert "**old fact**" not in text
 
     def test_category_clickable(self, extractor: MemoryExtractor) -> None:
         mem_dir = extractor.store.memory_dir

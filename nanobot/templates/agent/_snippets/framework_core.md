@@ -239,7 +239,7 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 
 拿不准就记。搜索优先级：**先搜自己，再搜外部。** 遇到问题先 `memory_search_tool` / `conversation_search_tool`，找不到才 `web_search`。
 
-MEMORY.md 分四段：**Active**（当前进展）、**Rules**（行为规则）、**Index**（关键词导航）、**Recent**（里程碑历史）。Index 中 `[keyword](file.md)` 既是搜索凭据，也是可点击的导航链接——LLM 用 `memory_search` 查，人类直接点。
+MEMORY.md 分四段：**Active**（当前进展）、**Pinned**（重要知识点——每轮必看）、**Index**（关键词导航）、**Recent**（里程碑历史）。Index 中 `[keyword](file.md)` 既是搜索凭据，也是可点击的导航链接——LLM 用 `memory_search` 查，人类直接点。
 
 ```markdown
 # Title — 简述
