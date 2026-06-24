@@ -27,7 +27,6 @@ class FakeContext:
         self.error = kwargs.get("error")
         self.final_content = kwargs.get("final_content")
         self.messages = kwargs.get("messages", [])
-        self.cost_usd = kwargs.get("cost_usd", 0.0)  # runner may inject this
 
 
 class TestCapture:
@@ -101,18 +100,6 @@ class TestCapture:
         entry = json.loads(hook.LOG_FILE.read_text())
         assert entry["discomfort_signals"] == [{"pattern": "error", "tool": "read_file_tool"}]
         assert entry["error_count"] == 1
-
-    def test_capture_cost_usd(self, hook):
-        ctx = FakeContext(
-            tool_calls=[],
-            tool_results=[],
-            usage={},
-            cost_usd=0.0025,
-            iteration=1,
-        )
-        hook._capture(ctx)
-        entry = json.loads(hook.LOG_FILE.read_text())
-        assert entry["cost_usd"] == 0.0025
 
 
 class TestPredicates:

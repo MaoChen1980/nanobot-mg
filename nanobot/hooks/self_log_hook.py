@@ -119,9 +119,6 @@ class SelfLogHook(AgentHook):
             elif hasattr(ev, "duration_ms") and ev.duration_ms:
                 duration_sec += ev.duration_ms / 1000.0
 
-        # cost_usd: runner should set context.cost_usd; fallback to 0 until then
-        cost_usd = getattr(context, "cost_usd", 0.0) or 0.0
-
         entry = {
             "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "iteration": context.iteration,
@@ -134,7 +131,6 @@ class SelfLogHook(AgentHook):
             "completion_tokens": completion_tokens,
             "total_tokens": total_tokens,
             "duration_sec": round(duration_sec, 3),
-            "cost_usd": round(cost_usd, 6),
             "has_error": context.error is not None,
             "has_final_content": context.final_content is not None,
             "message_count": len(context.messages),

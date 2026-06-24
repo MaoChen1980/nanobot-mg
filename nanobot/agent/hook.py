@@ -29,7 +29,6 @@ class AgentHookContext:
     workspace: Path | None = None
     # Per-iteration aggregate
     duration_sec: float = 0.0  # total tool call duration in this iteration (set by SelfLogHook)
-    cost_usd: float = 0.0  # estimated LLM call cost for this iteration
 
 
 class AgentHook:
