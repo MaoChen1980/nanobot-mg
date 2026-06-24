@@ -526,6 +526,9 @@ class CronService:
     def register_system_job(self, job: CronJob) -> CronJob:
         """Register an internal system job (idempotent on restart)."""
         store = self._load_store()
+        if store is None:
+            store = CronStore(version=1, jobs=[])
+            self._store = store
         now = _now_ms()
         job.state = CronJobState(next_run_at_ms=_compute_next_run(job.schedule, now))
         job.created_at_ms = now
