@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from loguru import logger
@@ -88,6 +89,7 @@ async def assess_me(
 
     resp = await chat_stream_with_retry(
         [{"role": "user", "content": prompt}],
+        reasoning_effort="none",
     )
     if resp.finish_reason == "error":
         logger.warning("assess_me LLM call failed: {}", (resp.content or "")[:200])
@@ -98,7 +100,35 @@ async def assess_me(
             resp.finish_reason,
         )
         return ""
-    return resp.content.strip()
+
+    content = resp.content.strip()
+
+    # Quick validity check: after stripping <think> tags, the response
+    # must contain a JSON object — if not, retry once with a stricter
+    # instruction. Some models occasionally output chat text instead of
+    # JSON for very short/simple conversations.
+    stripped = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+    if "{" not in stripped:
+        logger.warning(
+            "assess_me response not JSON, retrying once (preview={})",
+            content[:100],
+        )
+        retry_prompt = (
+            prompt
+            + "\n\n---\n"
+            "注意：你的上一条回复没有输出合法 JSON。"
+            "请严格按照要求输出上述 JSON 格式，不要输出任何其他内容。"
+        )
+        resp = await chat_stream_with_retry(
+            [{"role": "user", "content": retry_prompt}],
+            reasoning_effort="none",
+        )
+        if resp.finish_reason == "error" or not resp.content:
+            return ""
+        content = resp.content.strip()
+
+    logger.debug("assess_me raw response (len={}, preview={})", len(content), content[:200])
+    return content
 
 
 def build_assessment_message(text: str) -> dict[str, Any]:

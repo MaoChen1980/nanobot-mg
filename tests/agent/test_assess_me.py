@@ -405,15 +405,33 @@ class TestIsAssessmentMessage:
 class TestAssessMe:
     @pytest.mark.asyncio
     async def test_success(self) -> None:
+        """Returns content from LLM call as-is."""
         with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
-            mock_fn.return_value.content = "**1. What I have done:**\n- Read file x\n- Modified file y"
+            mock_fn.return_value.content = '{"status": "ok", "summary": "all good", "content": ""}'
 
             result = await assess_me(
                 [{"role": "user", "content": "hello"}],
             )
             assert result is not None
-            assert "What I have done" in result
-            mock_fn.assert_called_once()
+            assert '"status": "ok"' in result
+            mock_fn.assert_called_once()  # JSON detected, no retry
+
+    @pytest.mark.asyncio
+    async def test_retries_on_non_json(self) -> None:
+        """Non-JSON response triggers a retry with stricter instruction."""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            # First call returns chat text, second returns JSON
+            mock_fn.side_effect = [
+                AsyncMock(content="Hi, how can I help?", finish_reason="stop"),
+                AsyncMock(content='{"status": "ok", "summary": "retried"}', finish_reason="stop"),
+            ]
+
+            result = await assess_me(
+                [{"role": "user", "content": "hello"}],
+            )
+            assert result is not None
+            assert '"status": "ok"' in result
+            assert mock_fn.call_count == 2  # first failed, retried once
 
     @pytest.mark.asyncio
     async def test_empty_response_returns_empty(self) -> None:
@@ -438,7 +456,7 @@ class TestAssessMe:
     @pytest.mark.asyncio
     async def test_passes_conversation_to_provider(self) -> None:
         with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
-            mock_fn.return_value.content = "analysis"
+            mock_fn.return_value.content = '{"status": "ok", "summary": "analysis"}'
 
             messages = [
                 {"role": "user", "content": "first"},
@@ -452,6 +470,19 @@ class TestAssessMe:
             assert prompt_messages[0]["role"] == "user"
             assert "first" in prompt_messages[0]["content"]
             assert "response" in prompt_messages[0]["content"]
+
+    @pytest.mark.asyncio
+    async def test_disables_reasoning_for_assess_me(self) -> None:
+        """assess_me passes reasoning_effort='none' to disable chain-of-thought."""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = '{"status": "ok"}'
+
+            await assess_me(
+                [{"role": "user", "content": "hello"}],
+            )
+
+            _, kwargs = mock_fn.call_args
+            assert kwargs.get("reasoning_effort") == "none"
 
 
 # =========================================================================
@@ -743,6 +774,87 @@ class TestExtractAssessJson:
 
         result = AgentLoop._extract_assess_json(input_text)
         assert result == expected, f"Input: {input_text!r}\nExpected: {expected!r}\nGot: {result!r}"
+
+
+class TestAssessMePipeline:
+    """Integration-style: assess_me() → _extract_assess_json() with realistic response."""
+
+    @pytest.mark.asyncio
+    async def test_pipeline_ok_json(self) -> None:
+        """Full pipeline: assess_me returns valid JSON → extract parses it."""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = (
+                '{"status": "ok", "summary": "一切正常", "content": "",'
+                '"need_drc": false, "blocker": null, "skill_pattern": null,'
+                '"needs_revision": false}'
+            )
+
+            from nanobot.agent.loop import AgentLoop
+            raw = await assess_me([{"role": "user", "content": "hello"}])
+            parsed = AgentLoop._extract_assess_json(raw)
+
+            assert parsed is not None, f"assess_me returned non-JSON: {raw[:100]}"
+            assert parsed["status"] == "ok"
+            assert parsed["need_drc"] is False
+            assert parsed.get("skill_pattern") is None
+
+    @pytest.mark.asyncio
+    async def test_pipeline_findings_json(self) -> None:
+        """Full pipeline: findings JSON with content is parsed correctly."""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = (
+                '{"status": "findings", "summary": "agent 偏离任务",'
+                '"content": "agent 回复了无关内容，用户请求是分析数据",'
+                '"need_drc": false, "blocker": null, "skill_pattern": "always-check-tool-output",'
+                '"needs_revision": true}'
+            )
+
+            from nanobot.agent.loop import AgentLoop
+            raw = await assess_me([{"role": "user", "content": "分析数据"}])
+            parsed = AgentLoop._extract_assess_json(raw)
+
+            assert parsed is not None
+            assert parsed["status"] == "findings"
+            assert parsed["needs_revision"] is True
+            assert parsed["skill_pattern"] == "always-check-tool-output"
+
+    @pytest.mark.asyncio
+    async def test_pipeline_code_fence_response(self) -> None:
+        """assess_me wrapped in ```json code fence — still parses."""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = (
+                '```json\n{"status": "ok", "summary": "all good", "content": "",'
+                '"need_drc": false, "blocker": null, "skill_pattern": null,'
+                '"needs_revision": false}\n```'
+            )
+
+            from nanobot.agent.loop import AgentLoop
+            raw = await assess_me([{"role": "user", "content": "hello"}])
+            parsed = AgentLoop._extract_assess_json(raw)
+
+            assert parsed is not None
+            assert parsed["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_pipeline_non_json_response(self) -> None:
+        """assess_me returns plain text → extract returns None (not crash)."""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = "Hi, how can I help you today?"
+
+            from nanobot.agent.loop import AgentLoop
+            raw = await assess_me([{"role": "user", "content": "hi"}])
+            parsed = AgentLoop._extract_assess_json(raw)
+
+            assert parsed is None  # non-JSON gracefully handled
+
+    @pytest.mark.asyncio
+    async def test_pipeline_empty_response(self) -> None:
+        """assess_me returns empty string → extract returns None."""
+        with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
+            mock_fn.return_value.content = ""
+
+            raw = await assess_me([{"role": "user", "content": "hi"}])
+            assert raw == ""  # assess_me returns empty on empty content
 
 
 class TestRunnerAssessMeSpec:
