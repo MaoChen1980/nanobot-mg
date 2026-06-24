@@ -52,16 +52,17 @@ class TestLoadJobs:
         store_path = tmp_path / "cron_store.json"
         store_path.write_text("{invalid json", encoding="utf-8")
         service = CronService(store_path=store_path)
-        jobs, version = service._load_jobs()
-        assert jobs == []
-        assert version == 1
+        result = service._load_jobs()
+        assert result is None
+        # Verifies the corrupt file was preserved with a .corrupt-<ts> suffix
+        corrupt_files = list(tmp_path.glob("cron_store.json.corrupt-*"))
+        assert len(corrupt_files) == 1
 
     def test_handles_missing_file(self, tmp_path):
         store_path = tmp_path / "nonexistent.json"
         service = CronService(store_path=store_path)
-        jobs, version = service._load_jobs()
-        assert jobs == []
-        assert version == 1
+        result = service._load_jobs()
+        assert result == ([], 1)
 
     def test_loads_valid_store(self, tmp_path):
         store_path = tmp_path / "cron_store.json"

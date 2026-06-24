@@ -79,6 +79,7 @@ async def test_chat_with_retry_returns_final_error_after_retries(monkeypatch) ->
         delays.append(delay)
 
     monkeypatch.setattr("nanobot.providers.base.asyncio.sleep", _fake_sleep)
+    monkeypatch.setattr("nanobot.providers.base.LLMProvider._STANDARD_RETRY_DELAYS", (5, 15, 30))
 
     response = await provider.chat_with_retry(messages=[{"role": "user", "content": "hello"}])
 
@@ -104,6 +105,7 @@ async def test_chat_with_retry_emits_terminal_progress_when_standard_retries_exh
         progress.append(msg)
 
     monkeypatch.setattr("nanobot.providers.base.asyncio.sleep", _fake_sleep)
+    monkeypatch.setattr("nanobot.providers.base.LLMProvider._STANDARD_RETRY_DELAYS", (5, 15, 30))
 
     response = await provider.chat_with_retry(
         messages=[{"role": "user", "content": "hello"}],

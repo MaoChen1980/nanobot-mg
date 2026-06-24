@@ -566,8 +566,15 @@ class LLMProvider(ABC):
         on_reasoning_delta: Callable[[str], Awaitable[None]] | None = None,
         retry_mode: str = "standard",
         on_retry_wait: Callable[[str], Awaitable[None]] | None = None,
+        on_stream_recover: Callable[[], Awaitable[None]] | None = None,
     ) -> LLMResponse:
-        """Call chat_stream() with retry on transient provider failures."""
+        """Call chat_stream() with retry on transient provider failures.
+
+        Stream-aware retry: if content has already been streamed and the
+        error is a transient timeout, the stream segment recovers by
+        suppressing duplicate delta callbacks.  Non-timeout errors after
+        content has been streamed skip retry to avoid duplicate output.
+        """
         if max_tokens is self._SENTINEL or max_tokens is None:
             max_tokens = self.generation.max_tokens
         if temperature is self._SENTINEL or temperature is None:
@@ -575,11 +582,26 @@ class LLMProvider(ABC):
         if reasoning_effort is self._SENTINEL:
             reasoning_effort = self.generation.reasoning_effort
 
+        has_streamed_content = False
+
+        async def _tracking_delta(text: str) -> None:
+            nonlocal has_streamed_content
+            if text:
+                has_streamed_content = True
+            if on_content_delta:
+                await on_content_delta(text)
+
+        async def _recover_stream() -> None:
+            nonlocal has_streamed_content
+            if on_stream_recover:
+                await on_stream_recover()
+            has_streamed_content = False
+
         kw: dict[str, Any] = dict(
             messages=messages, tools=tools, model=model,
             max_tokens=max_tokens, temperature=temperature,
             reasoning_effort=reasoning_effort, tool_choice=tool_choice,
-            on_content_delta=on_content_delta,
+            on_content_delta=_tracking_delta if on_content_delta is not None else None,
             on_reasoning_delta=on_reasoning_delta,
         )
         return await self._run_with_retry(
@@ -588,6 +610,8 @@ class LLMProvider(ABC):
             messages,
             retry_mode=retry_mode,
             on_retry_wait=on_retry_wait,
+            should_retry_guard=lambda: not has_streamed_content,
+            on_stream_recover=_recover_stream if on_stream_recover else None,
         )
 
     async def chat_with_retry(
@@ -786,6 +810,8 @@ class LLMProvider(ABC):
         *,
         retry_mode: str,
         on_retry_wait: Callable[[str], Awaitable[None]] | None,
+        should_retry_guard: Callable[[], bool] | None = None,
+        on_stream_recover: Callable[[], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         attempt = 0
         persistent = retry_mode == "persistent"
@@ -823,6 +849,30 @@ class LLMProvider(ABC):
                         self._replace_image_content_inplace(original_messages)
                     return result
                 return response
+
+            if should_retry_guard is not None and not should_retry_guard():
+                is_timeout = (response.error_kind or "").lower() == "timeout"
+                if is_timeout:
+                    if on_stream_recover:
+                        logger.warning(
+                            "LLM stream stalled after content was emitted; "
+                            "starting a new stream segment and retrying"
+                        )
+                        await on_stream_recover()
+                    else:
+                        logger.warning(
+                            "LLM stream stalled after content was emitted; "
+                            "suppressing delta callbacks and retrying"
+                        )
+                        kw.setdefault("on_content_delta", None)
+                        kw["on_content_delta"] = None
+                        kw["on_reasoning_delta"] = None
+                        should_retry_guard = None
+                else:
+                    logger.warning(
+                        "LLM stream failed after content was emitted; skipping retry"
+                    )
+                    return response
 
             if persistent and identical_error_count >= self._PERSISTENT_IDENTICAL_ERROR_LIMIT:
                 logger.warning(
