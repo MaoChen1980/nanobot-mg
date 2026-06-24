@@ -27,8 +27,10 @@ from nanobot.config.paths import get_workspace_path
             "Defaults to the current conversation chat.",
         ),
         media=p("array",
-            "Optional: list of absolute file paths to attach. Supports images, video, audio, documents.",
-            items=p("string", "Absolute path to a file"),
+            "Optional: list of absolute file paths to send as attachments. "
+            "Use this to send documents (PDF, DOCX, XLSX, PPTX), images, or any other file to the user. "
+            "The framework handles platform-specific upload automatically.",
+            items=p("string", "Absolute path to the file on disk"),
         ),
         buttons=p("array",
             "Optional: inline keyboard buttons as list of rows, each row is list of button labels. "
@@ -112,11 +114,14 @@ class MessageTool(Tool):
     name = "message_tool"
 
     description = (
-        "**Purpose**: Send a message to the user, then continue working. "
+        "**Purpose**: Send a message to the user, optionally with file attachments, "
+        "then continue working. "
         "Unlike natural text output (which ends the turn and waits for user reply), "
         "this tool delivers the message immediately while the agent loop continues.\n\n"
         "**When to use**:\n"
-        "- You need to send a message without stopping the agent loop\n"
+        "- You need to send a text message without stopping the agent loop\n"
+        "- You need to send files (documents, images, PDFs, spreadsheets, etc.) to the user — "
+        "pass their absolute paths via the **media** parameter\n"
         "**When NOT to use**:\n"
         "- If you're done working and just want to reply — use natural text output instead\n"
     )
