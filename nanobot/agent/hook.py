@@ -13,6 +13,21 @@ from nanobot.utils.compat import dataclass
 
 
 @dataclass(slots=True)
+class AgentRunHookContext:
+    """Run-level state snapshot exposed to runner hooks."""
+
+    messages: list[dict[str, Any]]
+    final_content: str | None = None
+    tools_used: list[str] = field(default_factory=list)
+    usage: dict[str, int] = field(default_factory=dict)
+    stop_reason: str | None = None
+    error: str | None = None
+    tool_events: list[dict[str, str]] = field(default_factory=list)
+    had_injections: bool = False
+    exception: BaseException | None = None
+
+
+@dataclass(slots=True)
 class AgentHookContext:
     """Mutable per-iteration state exposed to runner hooks."""
 
@@ -39,6 +54,18 @@ class AgentHook:
 
     def wants_streaming(self) -> bool:
         return False
+
+    async def before_run(self, context: AgentRunHookContext) -> None:
+        pass
+
+    async def after_run(self, context: AgentRunHookContext) -> None:
+        pass
+
+    async def on_error(self, context: AgentRunHookContext) -> None:
+        pass
+
+    async def on_finally(self, context: AgentRunHookContext) -> None:
+        pass
 
     async def before_iteration(self, context: AgentHookContext) -> None:
         pass
@@ -122,6 +149,18 @@ class CompositeHook(AgentHook):
                 await getattr(h, method_name)(*args, **kwargs)
             except Exception:
                 logger.exception("AgentHook.{} error in {}", method_name, type(h).__name__)
+
+    async def before_run(self, context: AgentRunHookContext) -> None:
+        await self._for_each_hook_safe("before_run", context)
+
+    async def after_run(self, context: AgentRunHookContext) -> None:
+        await self._for_each_hook_safe("after_run", context)
+
+    async def on_error(self, context: AgentRunHookContext) -> None:
+        await self._for_each_hook_safe("on_error", context)
+
+    async def on_finally(self, context: AgentRunHookContext) -> None:
+        await self._for_each_hook_safe("on_finally", context)
 
     async def before_iteration(self, context: AgentHookContext) -> None:
         await self._for_each_hook_safe("before_iteration", context)

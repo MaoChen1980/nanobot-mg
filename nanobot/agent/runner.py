@@ -20,7 +20,7 @@ from nanobot.agent.assess_me import (
 )
 from nanobot.agent.assess_me import assess_me as _run_assess_me
 from nanobot.agent.context_vars import _current_messages_for_subagent
-from nanobot.agent.hook import AgentHook, AgentHookContext
+from nanobot.agent.hook import AgentHook, AgentHookContext, AgentRunHookContext
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.providers.base import LLMProvider
 from nanobot.session.manager import Session
@@ -457,6 +457,28 @@ class AgentRunner:
         self._current_spec = spec
         hook = spec.hook or AgentHook()
         messages = list(spec.initial_messages)
+        run_context = AgentRunHookContext(messages=list(messages))
+        await hook.before_run(run_context)
+
+        try:
+            return await self._run_core(spec, hook, messages)
+        except BaseException as _hook_exc:
+            run_context.messages = list(messages)
+            run_context.stop_reason = "error"
+            run_context.error = f"Error: {type(_hook_exc).__name__}: {_hook_exc}"
+            run_context.exception = _hook_exc
+            await hook.on_error(run_context)
+            raise
+        finally:
+            run_context.messages = list(messages)
+            await hook.on_finally(run_context)
+
+    async def _run_core(
+        self,
+        spec: AgentRunSpec,
+        hook: AgentHook,
+        messages: list[dict],
+    ) -> AgentRunResult:
         initial_msg_count = len(messages)
         final_content: str | None = None
         tools_used: list[str] = []
