@@ -80,6 +80,12 @@ class ProviderSpec:
     # whose API returns the actual answer in "reasoning" instead of "content".
     reasoning_as_content: bool = False
 
+    # Stream idle timeout (seconds).  0 = use provider default (30s).
+    # Some providers (MiniMax with reasoning_split, deep-thinking models)
+    # take longer than 30s to emit their first chunk.  Raise this when
+    # you see repeated "stream stalled" warnings.
+    stream_idle_timeout: int = 0
+
     @property
     def label(self) -> str:
         return self.display_name or self.name.title()
@@ -345,6 +351,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.minimax.io/v1",
         thinking_style="reasoning_split",
+        stream_idle_timeout=90,
     ),
     # MiniMax Anthropic-compatible endpoint: supports thinking mode
     ProviderSpec(
@@ -364,6 +371,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.minimaxi.com/v1",
         thinking_style="reasoning_split",
+        stream_idle_timeout=90,
     ),
     # MiniMax-cn Anthropic-compatible endpoint: supports thinking mode
     ProviderSpec(
