@@ -39,7 +39,7 @@ pip install -e .
 
 In `~/.nanobot/config.json`:
 
-```json
+```
 { "channels": { "websocket": { "enabled": true } } }
 ```
 

@@ -52,7 +52,7 @@ This creates the default config at `~/.nanobot/config.json` and workspace direct
 
 Edit `~/.nanobot/config.json` -- set your API key and model:
 
-```json
+```
 {
   "providers": {
     "openrouter": {
@@ -186,7 +186,7 @@ Config file: `~/.nanobot/config.json` (JSON format, camelCase keys).
 
 Environment variables can be referenced with `${VAR_NAME}` syntax:
 
-```json
+```
 {
   "agents": {
     "defaults": {

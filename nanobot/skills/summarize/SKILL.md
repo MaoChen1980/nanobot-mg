@@ -57,7 +57,7 @@ Fast CLI for summarizing URLs, local files, and YouTube links.
    - `--youtube auto` — uses Apify as fallback if `APIFY_API_TOKEN` is set
 
 7. **Optional configuration file** at `~/.summarize/config.json`:
-   ```json
+   ```
    { "model": "openai/gpt-5.2" }
    ```
 

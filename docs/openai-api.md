@@ -20,7 +20,7 @@ By default, the API binds to `127.0.0.1:8900`. You can change this in `config.js
 
 Example tool call for cross-channel delivery from an API session:
 
-```json
+```
 {
   "content": "Build finished successfully.",
   "channel": "telegram",

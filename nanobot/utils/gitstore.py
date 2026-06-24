@@ -452,7 +452,7 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
         "# tree.json Schema Reference\n\n"
         "tree.json is the task tree data file at `tasks/tree.json`.\n\n"
         "## Structure\n\n"
-        "```json\n"
+        "```\n"
         '{\n  "schema_version": 1,\n  "items": [\n'
         '    {\n      "id": "unique-node-id",\n'
         '      "name": "Node display name",\n'

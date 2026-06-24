@@ -1,7 +1,7 @@
 """Real API test for MemoryExtractor — verify JSON extraction from MiniMax output.
 
 Checks that ``_extract_json_from_llm_output`` can parse the real LLM output
-from the analysis prompt, which requests JSON inside ```json code fences.
+from the analysis prompt, which requests JSON inside ``` code fences.
 
 Run with: pytest tests/real_api/test_memory_extractor_real.py -v -x --no-header
 """

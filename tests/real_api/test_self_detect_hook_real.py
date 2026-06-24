@@ -113,13 +113,13 @@ async def test_parse_findings_still_works_with_known_tag_variants():
     f1, d1 = hook._parse_findings(r1)
     assert d1 == "ok", f"Case 1 failed: {d1}"
 
-    # Case 2: JSON inside ```json code fences
-    r2 = '```json\n{"findings": [{"type": "behavior", "content": "test", "relevance": "test"}]}\n```'
+    # Case 2: JSON inside ``` code fences
+    r2 = '```\n{"findings": [{"type": "behavior", "content": "test", "relevance": "test"}]}\n```'
     f2, d2 = hook._parse_findings(r2)
     assert d2 == "ok", f"Case 2 failed: {d2}"
 
     # Case 3: <think> tags + JSON inside code fences
-    r3 = "<think>Let me analyze...</think>\n```json\n{\"findings\": [{\"type\": \"behavior\", \"content\": \"test\", \"relevance\": \"test\"}]}\n```"
+    r3 = "<think>Let me analyze...</think>\n```\n{\"findings\": [{\"type\": \"behavior\", \"content\": \"test\", \"relevance\": \"test\"}]}\n```"
     f3, d3 = hook._parse_findings(r3)
     assert d3 == "ok", f"Case 3 failed: {d3}"
 

@@ -75,7 +75,7 @@ By default, the CLI reads `playwright-cli.json` from the current directory. Use 
 
 Minimal example:
 
-```json
+```
 {
   "browser": {
     "launchOptions": {

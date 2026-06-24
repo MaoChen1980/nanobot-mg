@@ -37,7 +37,7 @@ This file is:
 
 Each line is a JSON object:
 
-```json
+```
 {"cursor": 42, "timestamp": "2026-04-03 00:02", "content": "- User prefers dark mode\n- Decided to use PostgreSQL"}
 ```
 
@@ -142,7 +142,7 @@ That turns memory from a silent mutation into an auditable process.
 
 Dream is configured under `agents.defaults.dream`:
 
-```json
+```
 {
   "agents": {
     "defaults": {

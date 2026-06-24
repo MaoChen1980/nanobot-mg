@@ -2,7 +2,7 @@
 
 To create a dark-themed diagram, use a massive dark background rectangle as the **first element** in the array. Make it large enough to cover any viewport:
 
-```json
+```
 {
   "type": "rectangle", "id": "darkbg",
   "x": -4000, "y": -3000, "width": 10000, "height": 7500,
@@ -43,7 +43,7 @@ For subtle shape borders, use `#555555`.
 
 Use container binding (NOT the `"label"` property, which doesn't work). On dark backgrounds, set text `strokeColor` to `"#e5e5e5"` so it's visible:
 
-```json
+```
 [
   {
     "type": "rectangle", "id": "r1",

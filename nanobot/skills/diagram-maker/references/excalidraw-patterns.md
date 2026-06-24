@@ -2,7 +2,7 @@
 
 Envelope:
 
-```json
+```
 {
   "type": "excalidraw",
   "version": 2,
@@ -14,7 +14,7 @@ Envelope:
 
 Labeled rounded rectangle:
 
-```json
+```
 {
   "type": "rectangle",
   "id": "svc",
@@ -34,7 +34,7 @@ Labeled rounded rectangle:
 
 Bound text:
 
-```json
+```
 {
   "type": "text",
   "id": "svc_text",
@@ -56,7 +56,7 @@ Bound text:
 
 Bound arrow:
 
-```json
+```
 {
   "type": "arrow",
   "id": "a1",

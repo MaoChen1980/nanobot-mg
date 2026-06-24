@@ -69,7 +69,7 @@ nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test
 
 Example config:
 
-```json
+```
 {
   "agents": {
     "defaults": {

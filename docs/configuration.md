@@ -11,7 +11,7 @@ Config file: `~/.nanobot/config.json`
 
 Instead of storing secrets directly in `config.json`, you can use `${VAR_NAME}` references that are resolved from environment variables at startup:
 
-```json
+```
 {
   "channels": {
     "telegram": { "token": "${TELEGRAM_TOKEN}" },
@@ -99,7 +99,7 @@ nanobot provider login openai-codex
 ```
 
 **2. Set model** (merge into `~/.nanobot/config.json`):
-```json
+```
 {
   "agents": {
     "defaults": {
@@ -137,7 +137,7 @@ nanobot provider login github-copilot
 ```
 
 **2. Set model** (merge into `~/.nanobot/config.json`):
-```json
+```
 {
   "agents": {
     "defaults": {
@@ -167,7 +167,7 @@ nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test -
 
 Connects directly to any OpenAI-compatible endpoint — llama.cpp, Together AI, Fireworks, Azure OpenAI, or any self-hosted server. Model name is passed as-is.
 
-```json
+```
 {
   "providers": {
     "custom": {
@@ -189,7 +189,7 @@ Connects directly to any OpenAI-compatible endpoint — llama.cpp, Together AI, 
 >
 > If your proxy or gateway is specifically Responses-API-compatible, use the `azure_openai` provider shape instead and point `apiBase` at that endpoint:
 >
-> ```json
+> ```
 > {
 >   "providers": {
 >     "azure_openai": {
@@ -222,7 +222,7 @@ ollama run llama3.2
 ```
 
 **2. Add to config** (partial — merge into `~/.nanobot/config.json`):
-```json
+```
 {
   "providers": {
     "ollama": {
@@ -254,7 +254,7 @@ ollama run llama3.2
 - Click "Start Server" (default port: 1234)
 
 **2. Add to config** (partial — merge into `~/.nanobot/config.json`):
-```json
+```
 {
   "providers": {
     "lm_studio": {
@@ -331,7 +331,7 @@ docker run -d \
 
 **3. Add to config** (partial — merge into `~/.nanobot/config.json`):
 
-```json
+```
 {
   "providers": {
     "ovms": {
@@ -364,7 +364,7 @@ vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000
 **2. Add to config** (partial — merge into `~/.nanobot/config.json`):
 
 *Provider (set API key to null for local servers):*
-```json
+```
 {
   "providers": {
     "vllm": {
@@ -376,7 +376,7 @@ vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000
 ```
 
 *Model:*
-```json
+```
 {
   "agents": {
     "defaults": {
@@ -435,7 +435,7 @@ That's it! Environment variables, model routing, config matching, and `nanobot s
 
 Global settings that apply to all channels. Configure under the `channels` section in `~/.nanobot/config.json`:
 
-```json
+```
 {
   "channels": {
     "sendProgress": true,
@@ -480,7 +480,7 @@ When a channel `send()` raises, nanobot retries at the channel-manager layer. By
 
 > [!TIP]
 > Use `proxy` in `tools.web` to route all web requests (search + fetch) through a proxy:
-> ```json
+> ```
 > { "tools": { "web": { "proxy": "http://127.0.0.1:7890" } } }
 > ```
 
@@ -492,7 +492,7 @@ If you want to disable all built-in web tools entirely, set `tools.web.enable` t
 
 If you need to allow trusted private ranges such as Tailscale / CGNAT addresses, you can explicitly exempt them from SSRF blocking with `tools.ssrfWhitelist`:
 
-```json
+```
 {
   "tools": {
     "ssrfWhitelist": ["100.64.0.0/10"]
@@ -510,7 +510,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 | `duckduckgo` (default) | — | — | Yes |
 
 **Disable all built-in web tools:**
-```json
+```
 {
   "tools": {
     "web": {
@@ -521,7 +521,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 ```
 
 **Brave:**
-```json
+```
 {
   "tools": {
     "web": {
@@ -535,7 +535,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 ```
 
 **Tavily:**
-```json
+```
 {
   "tools": {
     "web": {
@@ -549,7 +549,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 ```
 
 **Jina** (free tier with 10M tokens):
-```json
+```
 {
   "tools": {
     "web": {
@@ -563,7 +563,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 ```
 
 **Kagi:**
-```json
+```
 {
   "tools": {
     "web": {
@@ -577,7 +577,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 ```
 
 **SearXNG** (self-hosted, no API key needed):
-```json
+```
 {
   "tools": {
     "web": {
@@ -591,7 +591,7 @@ If you need to allow trusted private ranges such as Tailscale / CGNAT addresses,
 ```
 
 **DuckDuckGo** (zero config):
-```json
+```
 {
   "tools": {
     "web": {
@@ -626,7 +626,7 @@ nanobot supports [MCP](https://modelcontextprotocol.io/) — connect external to
 
 Add MCP servers to your `config.json`:
 
-```json
+```
 {
   "tools": {
     "mcpServers": {
@@ -654,7 +654,7 @@ Two transport modes are supported:
 
 Use `toolTimeout` to override the default 30s per-call timeout for slow servers:
 
-```json
+```
 {
   "tools": {
     "mcpServers": {
@@ -669,7 +669,7 @@ Use `toolTimeout` to override the default 30s per-call timeout for slow servers:
 
 Use `enabledTools` to register only a subset of tools from an MCP server:
 
-```json
+```
 {
   "tools": {
     "mcpServers": {
@@ -715,7 +715,7 @@ MCP tools are automatically discovered and registered on startup. The LLM can us
 
 When a user is idle for longer than a configured threshold, nanobot **proactively** compresses the older part of the session context into a summary while keeping a recent legal suffix of live messages. This reduces token cost and first-token latency when the user returns — instead of re-processing a long stale context with an expired KV cache, the model receives a compact summary, the most recent live context, and fresh input.
 
-```json
+```
 {
   "agents": {
     "defaults": {
@@ -750,7 +750,7 @@ Time is context. Context should be precise.
 
 By default, nanobot uses `UTC` for runtime time context. If you want the agent to think in your local time, set `agents.defaults.timezone` to a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones):
 
-```json
+```
 {
   "agents": {
     "defaults": {
@@ -772,7 +772,7 @@ Common examples: `UTC`, `America/New_York`, `America/Los_Angeles`, `Europe/Londo
 
 nanobot ships with built-in skills, and your workspace can also define custom skills under `skills/`. If you want to hide specific skills from the agent, set `agents.defaults.disabledSkills` to a list of skill directory names:
 
-```json
+```
 {
   "agents": {
     "defaults": {

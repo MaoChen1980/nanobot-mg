@@ -89,7 +89,7 @@ Every HTML slide must include proper body dimensions:
 
 **Rasterizing Icons with Sharp:**
 
-```javascript
+```avascript
 const React = require('react');
 const ReactDOMServer = require('react-dom/server');
 const sharp = require('sharp');
@@ -115,7 +115,7 @@ const iconPath = await rasterizeIconPng(FaHome, "4472c4", "256", "home-icon.png"
 
 **Rasterizing Gradients with Sharp:**
 
-```javascript
+```avascript
 const sharp = require('sharp');
 
 async function createGradientBackground(filename) {
@@ -191,7 +191,7 @@ These libraries have been globally installed and are available to use:
 
 ### Basic Usage
 
-```javascript
+```avascript
 const pptxgen = require('pptxgenjs');
 const html2pptx = require('./html2pptx');
 
@@ -211,7 +211,7 @@ await pptx.writeFile('output.pptx');
 ### API Reference
 
 #### Function Signature
-```javascript
+```avascript
 await html2pptx(htmlFile, pres, options)
 ```
 
@@ -223,7 +223,7 @@ await html2pptx(htmlFile, pres, options)
   - `slide` (object): Existing slide to reuse (default: creates new slide)
 
 #### Returns
-```javascript
+```avascript
 {
     slide: pptxgenSlide,           // The created/updated slide
     placeholders: [                 // Array of placeholder positions
@@ -246,7 +246,7 @@ The library automatically validates and collects all errors before throwing:
 
 ### Working with Placeholders
 
-```javascript
+```avascript
 const { slide, placeholders } = await html2pptx('slide.html', pptx);
 
 // Use first placeholder
@@ -259,7 +259,7 @@ slide.addChart(pptx.charts.LINE, data, chartArea);
 
 ### Complete Example
 
-```javascript
+```avascript
 const pptxgen = require('pptxgenjs');
 const html2pptx = require('./html2pptx');
 
@@ -314,7 +314,7 @@ After converting HTML to slides with `html2pptx`, you'll use PptxGenJS to add dy
 
 Always calculate aspect ratios from actual image dimensions:
 
-```javascript
+```avascript
 // Get image dimensions: identify image.png | grep -o '[0-9]* x [0-9]*'
 const imgWidth = 1860, imgHeight = 1519;  // From actual file
 const aspectRatio = imgWidth / imgHeight;
@@ -328,7 +328,7 @@ slide.addImage({ path: "chart.png", x, y: 1.5, w, h });
 
 ### Adding Text
 
-```javascript
+```avascript
 // Rich text with formatting
 slide.addText([
     { text: "Bold ", options: { bold: true } },
@@ -341,7 +341,7 @@ slide.addText([
 
 ### Adding Shapes
 
-```javascript
+```avascript
 // Rectangle
 slide.addShape(pptx.shapes.RECTANGLE, {
     x: 1, y: 1, w: 3, h: 2,
@@ -378,7 +378,7 @@ slide.addShape(pptx.shapes.ROUNDED_RECTANGLE, {
 - **> 365 days**: Use yearly grouping (e.g., "2023", "2024")
 - **Validate**: Charts with only 1 data point likely indicate incorrect aggregation for the time period
 
-```javascript
+```avascript
 const { slide, placeholders } = await html2pptx('slide.html', pptx);
 
 // CORRECT: Single series with all labels
@@ -413,7 +413,7 @@ slide.addChart(pptx.charts.BAR, [{
 
 **IMPORTANT**: Scatter chart data format is unusual - first series contains X-axis values, subsequent series contain Y-values:
 
-```javascript
+```avascript
 // Prepare data
 const data1 = [{ x: 10, y: 20 }, { x: 15, y: 25 }, { x: 20, y: 30 }];
 const data2 = [{ x: 12, y: 18 }, { x: 18, y: 22 }];
@@ -439,7 +439,7 @@ slide.addChart(pptx.charts.SCATTER, [
 
 #### Line Chart
 
-```javascript
+```avascript
 slide.addChart(pptx.charts.LINE, [{
     name: "Temperature",
     labels: ["Jan", "Feb", "Mar", "Apr"],
@@ -467,7 +467,7 @@ slide.addChart(pptx.charts.LINE, [{
 
 **CRITICAL**: Pie charts require a **single data series** with all categories in the `labels` array and corresponding values in the `values` array.
 
-```javascript
+```avascript
 slide.addChart(pptx.charts.PIE, [{
     name: "Market Share",
     labels: ["Product A", "Product B", "Other"],  // All categories in one array
@@ -483,7 +483,7 @@ slide.addChart(pptx.charts.PIE, [{
 
 #### Multiple Data Series
 
-```javascript
+```avascript
 slide.addChart(pptx.charts.LINE, [
     {
         name: "Product A",
@@ -513,7 +513,7 @@ slide.addChart(pptx.charts.LINE, [
 - Readability against slide backgrounds
 - Accessibility (avoid red-green only combinations)
 
-```javascript
+```avascript
 // Example: Ocean palette-inspired chart colors (adjusted for contrast)
 const chartColors = ["16A085", "FF6B9D", "2C3E50", "F39C12", "9B59B6"];
 
@@ -544,7 +544,7 @@ Tables can be added with basic or advanced formatting:
 
 #### Basic Table
 
-```javascript
+```avascript
 slide.addTable([
     ["Header 1", "Header 2", "Header 3"],
     ["Row 1, Col 1", "Row 1, Col 2", "Row 1, Col 3"],
@@ -561,7 +561,7 @@ slide.addTable([
 
 #### Table with Custom Formatting
 
-```javascript
+```avascript
 const tableData = [
     // Header row with custom styling
     [
@@ -591,7 +591,7 @@ slide.addTable(tableData, {
 
 #### Table with Merged Cells
 
-```javascript
+```avascript
 const mergedTableData = [
     [
         { text: "Q1 Results", options: { colspan: 3, fill: { color: "4472C4" }, color: "FFFFFF", bold: true } }

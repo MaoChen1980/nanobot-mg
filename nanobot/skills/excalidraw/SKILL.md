@@ -32,7 +32,7 @@ Generate `.excalidraw` files for architecture diagrams, flowcharts, sequence dia
 
 Wrap your elements array in the standard `.excalidraw` envelope and save with `write_file`:
 
-```json
+```
 {
   "type": "excalidraw",
   "version": 2,
@@ -76,19 +76,19 @@ Canvas background is white.
 ### Element Types
 
 **Rectangle**:
-```json
+```
 { "type": "rectangle", "id": "r1", "x": 100, "y": 100, "width": 200, "height": 100 }
 ```
 - `roundness: { "type": 3 }` for rounded corners
 - `backgroundColor: "#a5d8ff"`, `fillStyle: "solid"` for filled
 
 **Ellipse**:
-```json
+```
 { "type": "ellipse", "id": "e1", "x": 100, "y": 100, "width": 150, "height": 150 }
 ```
 
 **Diamond**:
-```json
+```
 { "type": "diamond", "id": "d1", "x": 100, "y": 100, "width": 150, "height": 150 }
 ```
 
@@ -99,7 +99,7 @@ Canvas background is white.
 > use the container binding approach below.
 
 The shape needs `boundElements` listing the text, and the text needs `containerId` pointing back:
-```json
+```
 { "type": "rectangle", "id": "r1", "x": 100, "y": 100, "width": 200, "height": 80,
   "roundness": { "type": 3 }, "backgroundColor": "#a5d8ff", "fillStyle": "solid",
   "boundElements": [{ "id": "t_r1", "type": "text" }] },
@@ -115,7 +115,7 @@ The shape needs `boundElements` listing the text, and the text needs `containerI
 - Always include `fontFamily: 1` (Virgil/hand-drawn font)
 
 **Labeled arrow** -- same container binding approach:
-```json
+```
 { "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0,
   "points": [[0,0],[200,0]], "endArrowhead": "arrow",
   "boundElements": [{ "id": "t_a1", "type": "text" }] },
@@ -126,7 +126,7 @@ The shape needs `boundElements` listing the text, and the text needs `containerI
 ```
 
 **Standalone text** (titles and annotations only -- no container):
-```json
+```
 { "type": "text", "id": "t1", "x": 150, "y": 138, "text": "Hello", "fontSize": 20,
   "fontFamily": 1, "strokeColor": "#1e1e1e", "originalText": "Hello", "autoResize": true }
 ```
@@ -134,7 +134,7 @@ The shape needs `boundElements` listing the text, and the text needs `containerI
 - Do NOT rely on `textAlign` or `width` for positioning
 
 **Arrow**:
-```json
+```
 { "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 200, "height": 0,
   "points": [[0,0],[200,0]], "endArrowhead": "arrow" }
 ```
@@ -144,7 +144,7 @@ The shape needs `boundElements` listing the text, and the text needs `containerI
 
 ### Arrow Bindings (connect arrows to shapes)
 
-```json
+```
 {
   "type": "arrow", "id": "a1", "x": 300, "y": 150, "width": 150, "height": 0,
   "points": [[0,0],[150,0]], "endArrowhead": "arrow",

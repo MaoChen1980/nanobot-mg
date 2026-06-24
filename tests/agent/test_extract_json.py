@@ -10,13 +10,13 @@ def _extract(text: str) -> str:
 
 
 def test_fence_basic() -> None:
-    raw = '```json\n{"name": "foo", "value": 42}\n```'
+    raw = '```\n{"name": "foo", "value": 42}\n```'
     assert json.loads(_extract(raw)) == {"name": "foo", "value": 42}
 
 
 def test_fence_nested_triple_backtick_in_string() -> None:
     """Nested ``` inside a JSON string value must not break extraction."""
-    raw = '''```json
+    raw = '''```
 {
   "skills": [
     {
@@ -33,7 +33,7 @@ def test_fence_nested_triple_backtick_in_string() -> None:
 
 def test_fence_without_closing() -> None:
     """LLM sometimes omits the closing ```."""
-    raw = '```json\n{"key": "value"}\n'
+    raw = '```\n{"key": "value"}\n'
     assert json.loads(_extract(raw)) == {"key": "value"}
 
 
@@ -48,7 +48,7 @@ def test_think_tag() -> None:
 
 
 def test_think_tag_with_fence() -> None:
-    raw = '<think>reasoning</think>\n```json\n{"a": 1}\n```'
+    raw = '<think>reasoning</think>\n```\n{"a": 1}\n```'
     assert json.loads(_extract(raw)) == {"a": 1}
 
 

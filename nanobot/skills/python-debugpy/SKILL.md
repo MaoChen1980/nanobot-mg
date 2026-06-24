@@ -240,7 +240,7 @@ This is fine for one-off automation but painful as an interactive UX.
 
 **Option 2: Attach from VS Code / Cursor / Zed** — if the user has one open, they can add a `launch.json`:
 
-```json
+```
 {
   "name": "Attach to Hermes",
   "type": "debugpy",

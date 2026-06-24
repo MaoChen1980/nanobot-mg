@@ -50,7 +50,7 @@ for i, page in enumerate(pdf):
 pdf-lib is a powerful JavaScript library for creating and modifying PDF documents in any JavaScript environment.
 
 #### Load and Manipulate Existing PDF
-```javascript
+```avascript
 import { PDFDocument } from 'pdf-lib';
 import fs from 'fs';
 
@@ -78,7 +78,7 @@ async function manipulatePDF() {
 ```
 
 #### Create Complex PDFs from Scratch
-```javascript
+```avascript
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import fs from 'fs';
 
@@ -139,7 +139,7 @@ async function createPDF() {
 ```
 
 #### Advanced Merge and Split Operations
-```javascript
+```avascript
 import { PDFDocument } from 'pdf-lib';
 import fs from 'fs';
 
@@ -172,7 +172,7 @@ async function mergePDFs() {
 PDF.js is Mozilla's JavaScript library for rendering PDFs in the browser.
 
 #### Basic PDF Loading and Rendering
-```javascript
+```avascript
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Configure worker (important for performance)
@@ -206,7 +206,7 @@ async function renderPDF() {
 ```
 
 #### Extract Text with Coordinates
-```javascript
+```avascript
 import * as pdfjsLib from 'pdfjs-dist';
 
 async function extractText() {
@@ -242,7 +242,7 @@ async function extractText() {
 ```
 
 #### Extract Annotations and Forms
-```javascript
+```avascript
 import * as pdfjsLib from 'pdfjs-dist';
 
 async function extractAnnotations() {

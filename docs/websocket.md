@@ -18,7 +18,7 @@ Nanobot can act as a WebSocket server, allowing external clients (web apps, CLIs
 
 Add to `config.json` under `channels.websocket`:
 
-```json
+```
 {
   "channels": {
     "websocket": {
@@ -85,7 +85,7 @@ All frames are JSON text. Each message has an `event` field.
 
 **`ready`** — sent immediately after connection is established:
 
-```json
+```
 {
   "event": "ready",
   "chat_id": "uuid-v4",
@@ -95,7 +95,7 @@ All frames are JSON text. Each message has an `event` field.
 
 **`message`** — full agent response:
 
-```json
+```
 {
   "event": "message",
   "chat_id": "uuid-v4",
@@ -109,7 +109,7 @@ All frames are JSON text. Each message has an `event` field.
 
 **`delta`** — streaming text chunk (only when `streaming: true`):
 
-```json
+```
 {
   "event": "delta",
   "chat_id": "uuid-v4",
@@ -120,7 +120,7 @@ All frames are JSON text. Each message has an `event` field.
 
 **`stream_end`** — signals the end of a streaming segment:
 
-```json
+```
 {
   "event": "stream_end",
   "chat_id": "uuid-v4",
@@ -130,13 +130,13 @@ All frames are JSON text. Each message has an `event` field.
 
 **`attached`** — confirmation for `new_chat` / `attach` inbound envelopes (see [Multi-chat multiplexing](#multi-chat-multiplexing)):
 
-```json
+```
 {"event": "attached", "chat_id": "uuid-v4"}
 ```
 
 **`error`** — soft error for malformed inbound envelopes. The connection stays open:
 
-```json
+```
 {"event": "error", "detail": "invalid chat_id"}
 ```
 
@@ -144,11 +144,11 @@ All frames are JSON text. Each message has an `event` field.
 
 **Legacy (default chat):** send a plain string, or a JSON object with a recognized text field:
 
-```json
+```
 "Hello nanobot!"
 ```
 
-```json
+```
 {"content": "Hello nanobot!"}
 ```
 
@@ -223,7 +223,7 @@ For production deployments where `websocketRequiresToken: true`, use short-lived
 1. Client sends `GET {tokenIssuePath}` with `Authorization: Bearer {tokenIssueSecret}` (or `X-Nanobot-Auth` header).
 2. Server responds with a one-time-use token:
 
-```json
+```
 {"token": "nbwt_aBcDeFg...", "expires_in": 300}
 ```
 
@@ -232,7 +232,7 @@ For production deployments where `websocketRequiresToken: true`, use short-lived
 
 ### Example setup
 
-```json
+```
 {
   "channels": {
     "websocket": {
@@ -327,7 +327,7 @@ Outbound `message` events may include a `media` field containing local filesyste
 
 ### Trusted local network (no auth)
 
-```json
+```
 {
   "channels": {
     "websocket": {
@@ -344,7 +344,7 @@ Outbound `message` events may include a `media` field containing local filesyste
 
 ### Static token (simple auth)
 
-```json
+```
 {
   "channels": {
     "websocket": {
@@ -360,7 +360,7 @@ Clients connect with `?token=my-shared-secret&client_id=alice`.
 
 ### Public endpoint with issued tokens
 
-```json
+```
 {
   "channels": {
     "websocket": {
@@ -381,7 +381,7 @@ Clients connect with `?token=my-shared-secret&client_id=alice`.
 
 ### Custom path
 
-```json
+```
 {
   "channels": {
     "websocket": {

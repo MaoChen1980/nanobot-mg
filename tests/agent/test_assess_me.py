@@ -747,11 +747,11 @@ class TestExtractAssessJson:
         # Multi-line <think>
         ('<think>\nline1\nline2\n</think>\n{"status": "findings"}', {"status": "findings"}),
         # Code fences with json tag
-        ('```json\n{"status": "ok"}\n```', {"status": "ok"}),
+        ('```\n{"status": "ok"}\n```', {"status": "ok"}),
         # Code fences without tag
         ('```\n{"status": "ok"}\n```', {"status": "ok"}),
         # Code fence + trailing text after closing
-        ('```json\n{"s": "ok"}\n```\nsome text', {"s": "ok"}),
+        ('```\n{"s": "ok"}\n```\nsome text', {"s": "ok"}),
         # Leading markdown heading
         ('## 评估结果\n\n{"status": "findings", "summary": "test"}', {"status": "findings", "summary": "test"}),
         # Nested braces in JSON string value
@@ -819,10 +819,10 @@ class TestAssessMePipeline:
 
     @pytest.mark.asyncio
     async def test_pipeline_code_fence_response(self) -> None:
-        """assess_me wrapped in ```json code fence — still parses."""
+        """assess_me wrapped in ``` code fence — still parses."""
         with patch("nanobot.agent.assess_me.chat_stream_with_retry", new_callable=AsyncMock) as mock_fn:
             mock_fn.return_value.content = (
-                '```json\n{"status": "ok", "summary": "all good", "content": "",'
+                '```\n{"status": "ok", "summary": "all good", "content": "",'
                 '"blocker": null, "skill_pattern": null,'
                 '"needs_revision": false}\n```'
             )

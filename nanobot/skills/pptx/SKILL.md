@@ -260,7 +260,7 @@ When you need to create a presentation that follows an existing template's desig
    * **Read text-inventory.json**: Read the entire text-inventory.json file to understand all shapes and their properties. **NEVER set any range limits when reading this file.**
 
    * The inventory JSON structure:
-      ```json
+      ```
         {
           "slide-0": {
             "shape-0": {
@@ -331,7 +331,7 @@ When you need to create a presentation that follows an existing template's desig
    - **WARNING**: Different template layouts have different shape counts - always check the actual inventory before creating replacements
 
    Example paragraphs field showing proper formatting:
-   ```json
+   ```
    "paragraphs": [
      {
        "text": "New presentation title text",
@@ -362,7 +362,7 @@ When you need to create a presentation that follows an existing template's desig
    ```
 
    **Shapes not listed in the replacement JSON are automatically cleared**:
-   ```json
+   ```
    {
      "slide-0": {
        "shape-0": {

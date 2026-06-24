@@ -160,7 +160,7 @@ nanobot onboard           # auto-adds default config for detected plugins
 
 Edit `~/.nanobot/config.json`:
 
-```json
+```
 {
   "channels": {
     "webhook": {
@@ -329,7 +329,7 @@ class WebhookChannel(BaseChannel):
 
 Enable streaming per channel:
 
-```json
+```
 {
   "channels": {
     "webhook": {

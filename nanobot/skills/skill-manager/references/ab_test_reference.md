@@ -28,7 +28,7 @@ The `SpawnTool` has the same pattern — it accesses `self._manager` which holds
 
 ## Interpreting Results
 
-```json
+```
 {
   "task": "...",
   "skill": "...",

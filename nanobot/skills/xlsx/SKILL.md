@@ -246,7 +246,7 @@ Quick checks to ensure formulas work correctly:
 
 ### Interpreting recalc.py Output
 The script returns JSON with error details:
-```json
+```
 {
   "status": "success",           // or "errors_found"
   "total_errors": 0,              // Total error count

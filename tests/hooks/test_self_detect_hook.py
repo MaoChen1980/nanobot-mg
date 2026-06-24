@@ -169,7 +169,7 @@ class TestRunTurnReflection:
 
 class TestParseFindings:
     def test_from_code_block(self):
-        raw = '```json\n{"findings": [{"type": "behavior", "content": "repeated tool"}]}\n```'
+        raw = '```\n{"findings": [{"type": "behavior", "content": "repeated tool"}]}\n```'
         result, diagnostic = SelfDetectHook._parse_findings(raw)
         assert diagnostic == "ok"
         assert len(result) == 1

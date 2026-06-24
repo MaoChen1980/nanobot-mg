@@ -28,7 +28,7 @@ Connect nanobot to your favorite chat platform. Want to build your own? See the 
 
 **2. Configure**
 
-```json
+```
 {
   "channels": {
     "telegram": {
@@ -84,7 +84,7 @@ If you prefer to configure manually, add the following to `~/.nanobot/config.jso
 
 > Keep `claw_token` private. It should only be sent in `X-Claw-Token` header to your Mochat API endpoint.
 
-```json
+```
 {
   "channels": {
     "mochat": {
@@ -127,7 +127,7 @@ If you prefer to configure manually, add the following to `~/.nanobot/config.jso
 
 **4. Configure**
 
-```json
+```
 {
   "channels": {
     "discord": {
@@ -197,7 +197,7 @@ for reliable encryption, password login is recommended instead. If the
 
 **3. Configure**
 
-```json
+```
 {
   "channels": {
     "matrix": {
@@ -252,7 +252,7 @@ nanobot channels login whatsapp
 
 **2. Configure**
 
-```json
+```
 {
   "channels": {
     "whatsapp": {
@@ -298,7 +298,7 @@ Uses **WebSocket** long connection — no public IP required.
 
 **2. Configure**
 
-```json
+```
 {
   "channels": {
     "feishu": {
@@ -360,7 +360,7 @@ Uses **botpy SDK** with WebSocket — no public IP required. Currently supports 
 > - `msgFormat`: Optional. Use `"plain"` (default) for maximum compatibility with legacy QQ clients, or `"markdown"` for richer formatting on newer clients.
 > - For production: submit a review in the bot console and publish. See [QQ Bot Docs](https://bot.q.qq.com/wiki/) for the full publishing flow.
 
-```json
+```
 {
   "channels": {
     "qq": {
@@ -400,7 +400,7 @@ Uses **Stream Mode** — no public IP required.
 
 **2. Configure**
 
-```json
+```
 {
   "channels": {
     "dingtalk": {
@@ -443,7 +443,7 @@ Uses **Socket Mode** — no public URL required.
 
 **3. Configure nanobot**
 
-```json
+```
 {
   "channels": {
     "slack": {
@@ -491,7 +491,7 @@ Give nanobot its own email account. It polls **IMAP** for incoming mail and repl
 > - `maxAttachmentSize`: Max size per attachment in bytes (default `2000000` / 2MB).
 > - `maxAttachmentsPerEmail`: Max attachments to save per email (default `5`).
 
-```json
+```
 {
   "channels": {
     "email": {
@@ -535,7 +535,7 @@ pip install "nanobot-ai[weixin]"
 
 **2. Configure**
 
-```json
+```
 {
   "channels": {
     "weixin": {
@@ -591,7 +591,7 @@ Go to the WeCom admin console → Intelligent Robot → Create Robot → select 
 
 **3. Configure**
 
-```json
+```
 {
   "channels": {
     "wecom": {
@@ -630,7 +630,7 @@ Create or reuse a Microsoft Teams / Azure bot app registration. Set the bot mess
 
 **3. Configure**
 
-```json
+```
 {
   "channels": {
     "msteams": {

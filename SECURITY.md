@@ -38,7 +38,7 @@ chmod 600 ~/.nanobot/config.json
 
 **IMPORTANT**: Always configure `allowFrom` lists for production use.
 
-```json
+```
 {
   "channels": {
     "telegram": {

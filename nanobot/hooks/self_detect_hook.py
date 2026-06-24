@@ -34,7 +34,7 @@ REFLECTION_SYSTEM_PROMPT = """\
 ## 输出要求
 按以下 JSON 格式输出 findings：
 
-```json
+```
 {
   "findings": [
     {

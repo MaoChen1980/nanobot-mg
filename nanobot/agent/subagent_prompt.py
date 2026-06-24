@@ -112,7 +112,7 @@ def build_subagent_prompt(
         parts.append(
             "## Output Schema\n\n"
             "Your final response MUST conform to this JSON schema:\n\n"
-            f"```json\n{output_schema}\n```\n\n"
+            f"```\n{output_schema}\n```\n\n"
             "Return valid JSON matching this schema. "
             "Do NOT include any text outside the JSON code block."
         )

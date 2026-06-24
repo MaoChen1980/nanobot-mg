@@ -2,7 +2,7 @@
 
 Complete, copy-pasteable examples. Wrap each in the `.excalidraw` envelope before saving:
 
-```json
+```
 {
   "type": "excalidraw",
   "version": 2,
@@ -21,7 +21,7 @@ Complete, copy-pasteable examples. Wrap each in the `.excalidraw` envelope befor
 
 A minimal flowchart with two boxes and an arrow between them.
 
-```json
+```
 [
   { "type": "text", "id": "title", "x": 280, "y": 30, "text": "Simple Flow", "fontSize": 28, "fontFamily": 1, "strokeColor": "#1e1e1e", "originalText": "Simple Flow", "autoResize": true },
   { "type": "rectangle", "id": "b1", "x": 100, "y": 100, "width": 200, "height": 100, "roundness": { "type": 3 }, "backgroundColor": "#a5d8ff", "fillStyle": "solid", "boundElements": [{ "id": "t_b1", "type": "text" }, { "id": "a1", "type": "arrow" }] },
@@ -38,7 +38,7 @@ A minimal flowchart with two boxes and an arrow between them.
 
 A larger diagram with background zones, multiple nodes, and directional arrows showing inputs/outputs.
 
-```json
+```
 [
   {"type":"text","id":"ti","x":280,"y":10,"text":"Photosynthesis","fontSize":28,"fontFamily":1,"strokeColor":"#1e1e1e","originalText":"Photosynthesis","autoResize":true},
   {"type":"text","id":"fo","x":245,"y":48,"text":"6CO2 + 6H2O --> C6H12O6 + 6O2","fontSize":16,"fontFamily":1,"strokeColor":"#757575","originalText":"6CO2 + 6H2O --> C6H12O6 + 6O2","autoResize":true},
@@ -93,7 +93,7 @@ A larger diagram with background zones, multiple nodes, and directional arrows s
 
 Demonstrates a sequence diagram with actors, dashed lifelines, and message arrows.
 
-```json
+```
 [
   {"type":"text","id":"title","x":200,"y":15,"text":"MCP Apps -- Sequence Flow","fontSize":24,"fontFamily":1,"strokeColor":"#1e1e1e","originalText":"MCP Apps -- Sequence Flow","autoResize":true},
 

@@ -8,7 +8,7 @@ Generate .docx files with JavaScript/TypeScript.
 Assumes docx is already installed globally
 If not installed: `npm install -g docx`
 
-```javascript
+```avascript
 const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun, Media, 
         Header, Footer, AlignmentType, PageOrientation, LevelFormat, ExternalHyperlink, 
         InternalHyperlink, TableOfContents, HeadingLevel, BorderStyle, WidthType, TabStopType, 
@@ -22,7 +22,7 @@ Packer.toBlob(doc).then(blob => { /* download logic */ }); // Browser
 ```
 
 ## Text & Formatting
-```javascript
+```avascript
 // IMPORTANT: Never use \n for line breaks - always use separate Paragraph elements
 // ❌ WRONG: new TextRun("Line 1\nLine 2")
 // ✅ CORRECT: new Paragraph({ children: [new TextRun("Line 1")] }), new Paragraph({ children: [new TextRun("Line 2")] })
@@ -50,7 +50,7 @@ new Paragraph({
 
 ## Styles & Professional Formatting
 
-```javascript
+```avascript
 const doc = new Document({
   styles: {
     default: { document: { run: { font: "Arial", size: 24 } } }, // 12pt default
@@ -107,7 +107,7 @@ const doc = new Document({
 
 
 ## Lists (ALWAYS USE PROPER LISTS - NEVER USE UNICODE BULLETS)
-```javascript
+```avascript
 // Bullets - ALWAYS use the numbering config, NOT unicode symbols
 // CRITICAL: Use LevelFormat.BULLET constant, NOT the string "bullet"
 const doc = new Document({
@@ -156,7 +156,7 @@ const doc = new Document({
 ```
 
 ## Tables
-```javascript
+```avascript
 // Complete table with margins, borders, headers, and bullet points
 const tableBorder = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" };
 const cellBorders = { top: tableBorder, bottom: tableBorder, left: tableBorder, right: tableBorder };
@@ -227,7 +227,7 @@ new Table({
 - **3 columns:** `columnWidths: [3120, 3120, 3120]` (equal width)
 
 ## Links & Navigation
-```javascript
+```avascript
 // TOC (requires headings) - CRITICAL: Use HeadingLevel only, NOT custom styles
 // ❌ WRONG: new Paragraph({ heading: HeadingLevel.HEADING_1, style: "customHeader", children: [new TextRun("Title")] })
 // ✅ CORRECT: new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Title")] })
@@ -255,7 +255,7 @@ new Paragraph({
 ```
 
 ## Images & Media
-```javascript
+```avascript
 // Basic image with sizing & positioning
 // CRITICAL: Always specify 'type' parameter - it's REQUIRED for ImageRun
 new Paragraph({
@@ -270,7 +270,7 @@ new Paragraph({
 ```
 
 ## Page Breaks
-```javascript
+```avascript
 // Manual page break
 new Paragraph({ children: [new PageBreak()] }),
 
@@ -286,7 +286,7 @@ new Paragraph({
 ```
 
 ## Headers/Footers & Page Setup
-```javascript
+```avascript
 const doc = new Document({
   sections: [{
     properties: {
@@ -314,7 +314,7 @@ const doc = new Document({
 ```
 
 ## Tabs
-```javascript
+```avascript
 new Paragraph({
   tabStops: [
     { type: TabStopType.LEFT, position: TabStopPosition.MAX / 4 },

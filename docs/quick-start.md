@@ -73,7 +73,7 @@ Use `nanobot onboard --wizard` if you want the interactive setup wizard.
 Configure these **two parts** in your config (other options have defaults).
 
 *Set your API key* (e.g. OpenRouter, recommended for global users):
-```json
+```
 {
   "providers": {
     "openrouter": {
@@ -84,7 +84,7 @@ Configure these **two parts** in your config (other options have defaults).
 ```
 
 *Set your model* (optionally pin a provider — defaults to auto-detection):
-```json
+```
 {
   "agents": {
     "defaults": {

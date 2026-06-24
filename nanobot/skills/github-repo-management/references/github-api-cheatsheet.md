@@ -41,7 +41,7 @@ source "${HERMES_HOME:-$HOME/.hermes}/skills/github/github-auth/scripts/gh-env.s
 
 ### PR Merge Body
 
-```json
+```
 {"merge_method": "squash", "commit_title": "feat: description (#N)"}
 ```
 

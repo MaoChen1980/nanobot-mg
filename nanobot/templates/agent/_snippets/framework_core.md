@@ -72,7 +72,7 @@ Preview:
 
 所有工具结果返回统一 JSON 格式：
 
-```json
+```
 {
   "status": "ok",
   "tool": "grep_tool",

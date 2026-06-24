@@ -6,19 +6,19 @@ Reference for creating and reading all common Notion block types via the API.
 
 Use `PATCH /v1/blocks/{page_id}/children` with a `children` array. Each block follows this structure:
 
-```json
+```
 {"object": "block", "type": "<type>", "<type>": { ... }}
 ```
 
 ### Paragraph
 
-```json
+```
 {"type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": "Hello world"}}]}}
 ```
 
 ### Headings
 
-```json
+```
 {"type": "heading_1", "heading_1": {"rich_text": [{"text": {"content": "Title"}}]}}
 {"type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "Section"}}]}}
 {"type": "heading_3", "heading_3": {"rich_text": [{"text": {"content": "Subsection"}}]}}
@@ -26,61 +26,61 @@ Use `PATCH /v1/blocks/{page_id}/children` with a `children` array. Each block fo
 
 ### Bulleted list
 
-```json
+```
 {"type": "bulleted_list_item", "bulleted_list_item": {"rich_text": [{"text": {"content": "Item"}}]}}
 ```
 
 ### Numbered list
 
-```json
+```
 {"type": "numbered_list_item", "numbered_list_item": {"rich_text": [{"text": {"content": "Step 1"}}]}}
 ```
 
 ### To-do / checkbox
 
-```json
+```
 {"type": "to_do", "to_do": {"rich_text": [{"text": {"content": "Task"}}], "checked": false}}
 ```
 
 ### Quote
 
-```json
+```
 {"type": "quote", "quote": {"rich_text": [{"text": {"content": "Something wise"}}]}}
 ```
 
 ### Callout
 
-```json
+```
 {"type": "callout", "callout": {"rich_text": [{"text": {"content": "Important note"}}], "icon": {"emoji": "💡"}}}
 ```
 
 ### Code
 
-```json
+```
 {"type": "code", "code": {"rich_text": [{"text": {"content": "print('hello')"}}], "language": "python"}}
 ```
 
 ### Toggle
 
-```json
+```
 {"type": "toggle", "toggle": {"rich_text": [{"text": {"content": "Click to expand"}}]}}
 ```
 
 ### Divider
 
-```json
+```
 {"type": "divider", "divider": {}}
 ```
 
 ### Bookmark
 
-```json
+```
 {"type": "bookmark", "bookmark": {"url": "https://example.com"}}
 ```
 
 ### Image (external URL)
 
-```json
+```
 {"type": "image", "image": {"type": "external", "external": {"url": "https://example.com/photo.png"}}}
 ```
 
