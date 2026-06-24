@@ -10,7 +10,7 @@ import secrets
 import string
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import json_repair
 from loguru import logger
@@ -33,6 +33,9 @@ from anthropic.types import (
 from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
 from nanobot.providers._tool_call_parser import extract_xml_tool_calls
 
+if TYPE_CHECKING:
+    from nanobot.providers.registry import ProviderSpec
+
 _ALNUM = string.ascii_letters + string.digits
 
 
@@ -53,10 +56,12 @@ class AnthropicProvider(LLMProvider):
         api_base: str | None = None,
         default_model: str = "claude-sonnet-4-20250514",
         extra_headers: dict[str, str] | None = None,
+        spec: ProviderSpec | None = None,
     ):
         super().__init__(api_key, api_base)
         self.default_model = default_model
         self.extra_headers = extra_headers or {}
+        self._supports_prompt_caching = spec.supports_prompt_caching if spec else True
 
         from anthropic import AsyncAnthropic
 
@@ -488,7 +493,7 @@ class AnthropicProvider(LLMProvider):
         temperature: float,
         reasoning_effort: str | None,
         tool_choice: str | dict[str, Any] | None,
-        supports_caching: bool = True,
+        supports_caching: bool | None = None,
         output_format: dict[str, Any] | None = None,
         service_tier: str | None = None,
         stop_sequences: list[str] | None = None,
@@ -498,7 +503,7 @@ class AnthropicProvider(LLMProvider):
         system, anthropic_msgs = self._convert_messages(self._sanitize_empty_content(messages))
         anthropic_tools = self._convert_tools(tools)
 
-        if supports_caching:
+        if supports_caching if supports_caching is not None else self._supports_prompt_caching:
             system, anthropic_msgs, anthropic_tools = self._apply_cache_control(
                 system, anthropic_msgs, anthropic_tools,
             )

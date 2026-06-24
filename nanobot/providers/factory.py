@@ -59,6 +59,7 @@ def make_provider(config: Config) -> LLMProvider:
             api_base=config.get_api_base(model),
             default_model=model,
             extra_headers=p.extra_headers if p else None,
+            spec=spec,
         )
     else:
         from nanobot.providers.openai_compat_provider import OpenAICompatProvider
