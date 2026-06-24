@@ -1143,3 +1143,42 @@ class TestGenerateMemoryIndex:
         extractor._generate_memory_index([])
         text = extractor.store.memory_file.read_text(encoding="utf-8")
         assert "topic" in text
+
+
+# ---------------------------------------------------------------------------
+# _materialize_skills — early return guards
+# ---------------------------------------------------------------------------
+
+
+class TestMaterializeSkills:
+    """Test _materialize_skills early-return paths (no sub-agent needed)."""
+
+    @pytest.mark.asyncio
+    async def test_no_pending_file_returns_false(self, extractor: MemoryExtractor) -> None:
+        """No pending_skills.md → False."""
+        result = await extractor._materialize_skills()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_empty_pending_returns_false(self, extractor: MemoryExtractor) -> None:
+        """pending_skills.md exists but is empty → False."""
+        pending = extractor.store.memory_dir / "pending_skills.md"
+        pending.write_text("   ", encoding="utf-8")
+        result = await extractor._materialize_skills()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_empty_string_pending_returns_false(self, extractor: MemoryExtractor) -> None:
+        """pending_skills.md exists but is blank/whitespace → False."""
+        pending = extractor.store.memory_dir / "pending_skills.md"
+        pending.write_text("\n\n  \n", encoding="utf-8")
+        result = await extractor._materialize_skills()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_provider_not_available_returns_false(self, extractor: MemoryExtractor) -> None:
+        """_llm_provider ContextVar not set (LookupError) → False, no crash."""
+        pending = extractor.store.memory_dir / "pending_skills.md"
+        pending.write_text("- **test-skill**: a test skill\n", encoding="utf-8")
+        result = await extractor._materialize_skills()
+        assert result is False

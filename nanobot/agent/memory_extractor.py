@@ -858,9 +858,10 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def _materialize_skills(self) -> bool:
-        """Convert pending_skills.md entries to real skills/<name>/SKILL.md files.
+        """Convert pending_skills.md entries to real skills via sub-agent.
 
-        Returns True if any skills were created (and thus pending_skills.md was modified).
+        Spawns a sub-agent with file tools to read existing skills and decide
+        create/update/merge/skip. Returns True if any changes were made.
         """
         pending_path = self.store.memory_dir / "pending_skills.md"
         if not pending_path.exists():
@@ -870,97 +871,95 @@ class MemoryExtractor:
         if not pending_text:
             return False
 
-        # Scan existing skills for dedup
+        # Snapshot skills dir before, to detect changes after
         skills_dir = self.store.workspace / "skills"
-        existing_skills: list[dict[str, str]] = []
+        dir_before: set[str] = set()
         if skills_dir.is_dir():
-            for child in sorted(skills_dir.iterdir()):
-                if not child.is_dir():
-                    continue
-                skill_file = child / "SKILL.md"
-                if skill_file.exists():
-                    content = skill_file.read_text(encoding="utf-8")
-                    name = ""
-                    desc = ""
-                    for line in content.split("\n"):
-                        if line.startswith("name:"):
-                            name = line.split(":", 1)[1].strip()
-                        elif line.startswith("description:"):
-                            desc = line.split(":", 1)[1].strip()
-                    existing_skills.append({"name": name, "description": desc, "path": child.name})
+            for child in skills_dir.iterdir():
+                if child.is_dir():
+                    dir_before.add(child.name)
 
-        existing_text = "\n".join(
-            f"- {s['name']}: {s['description']}" for s in existing_skills
-        ) if existing_skills else "(none)"
+        # Get provider from ContextVar (set by AgentLoop at startup)
+        from nanobot.agent.llm_context import _llm_provider, _llm_model
+        try:
+            provider = _llm_provider.get()
+            model = _llm_model.get()
+        except LookupError:
+            logger.warning(
+                "MemoryExtractor: LLM provider not available, "
+                "skipping skill materialization"
+            )
+            return False
+
+        from nanobot.agent.runner import AgentRunner, AgentRunSpec
+        from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
+        from nanobot.agent.tools.registry import ToolRegistry
+        from nanobot.agent.tools.search import GlobTool, GrepTool
+        from nanobot.agent.tools.shell.shell import ExecTool
+
+        tools = ToolRegistry()
+        tools.register(ReadFileTool(workspace=self.store.workspace))
+        tools.register(WriteFileTool(workspace=self.store.workspace))
+        tools.register(EditFileTool(workspace=self.store.workspace))
+        tools.register(GlobTool(workspace=self.store.workspace))
+        tools.register(GrepTool(workspace=self.store.workspace))
+        tools.register(ExecTool(
+            working_dir=str(self.store.workspace),
+            timeout=120,
+        ))
+
+        ws_path = self.store.workspace.expanduser().resolve().as_posix()
+        system_prompt = render_template(
+            "agent/extractor_skill_creator.md",
+            workspace_path=ws_path,
+        )
 
         user_content = (
             f"## Pending skill entries\n\n{pending_text}\n\n"
-            f"## Existing skills\n\n{existing_text}"
+            "以上是 MemoryExtractor 从对话快照中提取的待处理 skill 需求。"
+            "请按以下步骤处理每个 candidate：\n\n"
+            "1. 用 glob_tool 检查 workspace/skills/ 下已有 skill\n"
+            "2. 对每个 candidate，如果有同名或功能相似的已有 skill，"
+            "用 read_file 读完整内容对比\n"
+            "3. 参考 skill-manager 流程决策：新建 / 更新 / 合并 / 跳过\n"
+            "4. 用 write_file/edit_file 执行决策，直接写 SKILL.md\n"
+            "5. 完成后清理 pending_skills.md 中已处理的条目"
         )
 
-        ws_path = self.store.workspace.expanduser().resolve().as_posix()
-        prompt = render_template("agent/extractor_skill_creator.md", workspace_path=ws_path)
-        try:
-            response = await chat_stream_with_retry(
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": user_content},
-                ],
+        spec = AgentRunSpec(
+            initial_messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            tools=tools,
+            model=model,
+            max_iterations=50,
+            max_tool_result_chars=10000,
+        )
+
+        runner = AgentRunner(provider)
+        result = await runner.run(spec)
+
+        if result.final_content:
+            logger.info(
+                "Skill materialization sub-agent: {}",
+                result.final_content[:200],
             )
-        except Exception:
-            logger.exception("MemoryExtractor: skill creation LLM call failed")
-            return False
 
-        if response.finish_reason == "error":
-            return False
+        # Detect changes: new skill dirs or modified pending_skills.md
+        dir_after: set[str] = set()
+        if skills_dir.is_dir():
+            for child in skills_dir.iterdir():
+                if child.is_dir():
+                    dir_after.add(child.name)
 
-        raw = (response.content or "").strip()
-        if not raw:
-            return False
-
-        try:
-            raw_clean = self._extract_json_from_llm_output(raw)
-            parsed = json.loads(raw_clean)
-        except json.JSONDecodeError:
-            logger.warning("MemoryExtractor: failed to parse skill creator JSON output (raw[:300]={}..., cleaned={})", raw[:300], raw_clean[:800])
-            return False
-
-        skills = parsed.get("skills", []) if isinstance(parsed, dict) else []
-        if not skills:
-            logger.info("MemoryExtractor: no skills to create (all deduped or skipped)")
-            return False
-
-        created: list[str] = []
-        for skill in skills:
-            name = skill.get("name", "").strip()
-            content = skill.get("content", "").strip()
-            if not name or not content:
-                continue
-
-            skill_dir = skills_dir / name
-            if skill_dir.exists():
-                logger.info("MemoryExtractor: skill dir already exists, skipping: {}", name)
-                continue
-
-            skill_dir.mkdir(parents=True, exist_ok=True)
-            (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
-            created.append(name)
-            logger.info("MemoryExtractor: created skill: {}", name)
-
-        if not created:
-            return False
-
-        # Remove materialized entries from pending_skills.md
-        self._remove_materialized_from_pending(pending_path, created)
-
-        # Git commit the new skills
-        from nanobot.utils.gitstore import commit_workspace_changes
-        commit_workspace_changes(
-            self.store.workspace,
-            rel_dirs=["skills", "memory/pending_skills.md"],
-            message=f"skill: create {', '.join(created)}",
+        current_pending = (
+            pending_path.read_text(encoding="utf-8").strip()
+            if pending_path.exists()
+            else ""
         )
-        return True
+
+        return bool(dir_before ^ dir_after) or current_pending != pending_text
 
     @staticmethod
     def _extract_json_from_llm_output(text: str) -> str:
@@ -997,32 +996,6 @@ class MemoryExtractor:
                             return search_in[brace_start : i + 1]
         # Step 4: return as-is and let json.loads fail if invalid
         return search_in
-
-    @staticmethod
-    def _remove_materialized_from_pending(pending_path: Path, created_names: list[str]) -> None:
-        """Remove materialized skill entries from pending_skills.md."""
-        text = pending_path.read_text(encoding="utf-8")
-        lines = text.split("\n")
-        kept: list[str] = []
-        removed = 0
-        for line in lines:
-            stripped = line.lstrip()
-            skip = False
-            for name in created_names:
-                if stripped.startswith(f"- **{name}**:") or stripped.startswith(f"* **{name}**:"):
-                    skip = True
-                    break
-            if skip:
-                removed += 1
-                continue
-            kept.append(line)
-
-        if removed:
-            pending_path.write_text("\n".join(kept), encoding="utf-8")
-            logger.info(
-                "MemoryExtractor: removed {} materialized entry(ies) from pending_skills.md",
-                removed,
-            )
 
     # ------------------------------------------------------------------
     # Memory consolidation — merge narrow topic files

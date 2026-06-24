@@ -96,6 +96,25 @@ version: 0.1.0
 1. 与用户确认
 2. `exec(rm -rf $WORKSPACE/skills/<name>)`
 
+### Compare and merge skills
+当有新的 skill candidate 与已有 skill 功能重复时，需要对比后决策。这个流程被 assess_me 和 MemoryExtractor 的子 agent 引用：
+
+1. **读两边完整内容**：`read_file("$WORKSPACE/skills/<existing>/SKILL.md")` 和 candidate 的描述
+2. **逐维度对比**：
+
+   | 维度 | 新 candidate | 已有 skill |
+   |------|-------------|------------|
+   | Trigger 是否明确 | 外部信号清晰？ | 已有描述够具体？ |
+   | 步骤是否完整 | 覆盖了哪些场景？ | 缺少哪些角度？ |
+   | Verification 是否可执行 | 有可验证的成功标准？ | 验证项是否过时？ |
+   | 信息是否准确 | 命令/路径/参数正确？ | 有没有过期内容？ |
+
+3. **决策**：
+   - 新 candidate 明显更好 → **替换**（write_file 覆盖）
+   - 各有价值 → **合并**（读原有内容，整合 Steps/Pitfalls/Verification，write_file 写回）
+   - 已有 skill 已完整覆盖 → **跳过**
+4. **合并注意事项**：保留两边的 Pitfalls 去重、Verification 取并集、Steps 按顺序整合
+
 ### Add supporting files
 `write_file(path="$WORKSPACE/skills/<name>/references/<filename>.md", content="...")`
 `write_file(path="$WORKSPACE/skills/<name>/scripts/<filename>.py", content="...")`

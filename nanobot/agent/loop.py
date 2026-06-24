@@ -1014,11 +1014,10 @@ class AgentLoop:
         tools.register(EditFileTool(workspace=self.workspace))
         tools.register(GlobTool(workspace=self.workspace))
         tools.register(GrepTool(workspace=self.workspace))
-        if self.exec_config and self.exec_config.enable:
-            tools.register(ExecTool(
-                working_dir=str(self.workspace),
-                timeout=self.exec_config.timeout,
-            ))
+        tools.register(ExecTool(
+            working_dir=str(self.workspace),
+            timeout=self.exec_config.timeout,
+        ))
 
         system_prompt = render_template(
             "agent/_instructions/skill_creation.md",

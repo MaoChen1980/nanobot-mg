@@ -862,8 +862,11 @@ class TestSkillCreationTemplate:
             workspace_path="/tmp/workspace",
         )
         assert assess_result in content
-        assert "## Action" in content
+        assert "## Steps" in content
+        assert "## When to Use" in content
         assert "## Verification" in content
+        assert "## Pitfalls" in content
+        assert "**Self-optimization**" in content
         assert "skills/" in content
 
     def test_renders_with_empty_result(self) -> None:
@@ -875,5 +878,39 @@ class TestSkillCreationTemplate:
             assess_result="",
             workspace_path="/tmp/workspace",
         )
-        assert "## Action" in content
+        assert "## Steps" in content
+        assert "## When to Use" in content
         assert "## Verification" in content
+        assert "## Pitfalls" in content
+        assert "**Self-optimization**" in content
+
+
+# ---------------------------------------------------------------------------
+# Extractor skill creation template -- integration check
+# ---------------------------------------------------------------------------
+
+
+class TestExtractorSkillCreatorTemplate:
+    """Verify the extractor_skill_creator.md template renders correctly."""
+
+    def test_renders_with_workspace_path(self) -> None:
+        """Template renders with workspace_path variable."""
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/extractor_skill_creator.md",
+            workspace_path="/tmp/workspace",
+        )
+        assert "## 流程" in content
+        assert "glob_tool" in content
+        assert "exec_tool" in content
+        assert "grep_tool" in content
+        assert "read_file" in content
+        assert "write_file" in content
+        assert "edit_file" in content
+        assert "## Steps" in content or "步骤" in content
+        assert "## 决策指引" in content
+        assert "## Skill 格式" in content
+        assert "## Pitfalls" in content or "Pitfalls" in content
+        assert "**Self-optimization**" in content
+        assert "/tmp/workspace" in content
