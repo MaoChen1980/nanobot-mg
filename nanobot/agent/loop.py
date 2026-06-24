@@ -790,6 +790,9 @@ class AgentLoop:
             instructions=instructions,
             prompts_dir=self.prompts_dir,
             pt_save_interval=self._pt_save_interval,
+            subagent_running_callback=(
+                lambda sk=session.key: self.subagents.get_running_count_by_session(sk)
+            ) if session else None,
         ))
         if result.overflow_summary:
             session._last_summary = result.overflow_summary
@@ -1160,7 +1163,7 @@ class AgentLoop:
         finally:
             await self.close_mcp()
 
-    _PROACTIVE_CHECK_INTERVAL: float = 180.0     # LLM-triggering proactive check interval (~3 min)
+    _PROACTIVE_CHECK_INTERVAL: float = 60.0      # LLM-triggering proactive check interval
 
     async def _publish_subagent_check(self, session_key: str, channel: str, chat_id: str) -> None:
         """Publish a proactive subagent check message to the bus.

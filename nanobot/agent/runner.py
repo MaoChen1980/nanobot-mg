@@ -8,7 +8,7 @@ import time
 from dataclasses import field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from loguru import logger
 
@@ -127,6 +127,9 @@ class AgentRunSpec:
     instructions: str | None = None  # injected at index 1 each iteration; can be a callable () -> str | None for per-iteration refresh
     prompts_dir: Path | None = None  # save .pt snapshots in runner loop
     pt_save_interval: int = 30  # .pt snapshot: every N LLM responses
+    # Subagent lifecycle: callback returns active subagent count for the current session
+    subagent_running_callback: Callable[[], int] | None = None
+    subagent_wait_timeout: int = 600  # max seconds to wait for subagents before forcing break
 
 
 @dataclass(slots=True)
@@ -363,6 +366,92 @@ class AgentRunner:
             len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
         )
         return True, injection_cycles
+
+    async def _wait_subagents(
+        self,
+        spec: AgentRunSpec,
+        injection_cycles: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Wait for subagents to complete. No LLM calls during wait.
+
+        Drains injection queue — when subagent results arrive they get
+        picked up naturally. Returns injected messages or empty list.
+        """
+        if not spec.subagent_running_callback:
+            return []
+        deadline = time.monotonic() + spec.subagent_wait_timeout
+        poll = 2.0
+        last_progress = 0.0
+        while time.monotonic() < deadline:
+            try:
+                active = spec.subagent_running_callback()
+            except Exception:
+                logger.exception("subagent_running_callback failed")
+                break
+
+            if injection_cycles >= _MAX_INJECTION_CYCLES:
+                logger.warning(
+                    "Injection cycle limit reached ({}) while waiting for subagents, "
+                    "breaking wait (session={})",
+                    _MAX_INJECTION_CYCLES, spec.session_key or "?",
+                )
+                break
+
+            if active == 0:
+                # Yield event loop so AgentLoop.run() can drain any just-completed
+                # subagent bus messages into the injection queue.
+                await asyncio.sleep(0)
+                residual = await drain_injections(spec)
+                if residual:
+                    logger.info("Drained {} residual subagent result(s)", len(residual))
+                    return residual
+                # Subagent task completed but results may not have propagated
+                # through the async delivery chain yet. Retry before giving up.
+                for _ in range(3):
+                    await asyncio.sleep(0.2)
+                    residual = await drain_injections(spec)
+                    if residual:
+                        logger.info(
+                            "Drained {} residual subagent result(s) after retry",
+                            len(residual),
+                        )
+                        return residual
+                return []
+
+            # Drain injection queue — subagent results arrive here
+            injections = await drain_injections(spec)
+            if injections:
+                logger.info("Got {} subagent result(s) after wait", len(injections))
+                return injections
+
+            # Progress notification to user (every 10s)
+            now = time.monotonic()
+            if now - last_progress >= 10.0:
+                last_progress = now
+                msg = f"Waiting for {active} subagent(s) to complete..."
+                if spec.progress_callback:
+                    try:
+                        await spec.progress_callback(
+                            msg,
+                            tool_hint=False,
+                            tool_events=None,
+                        )
+                    except Exception:
+                        logger.exception("progress_callback failed")
+                logger.info("Waiting for {} subagent(s) to complete", active)
+
+            await asyncio.sleep(poll)
+            poll = min(poll * 1.5, 10.0)
+
+        try:
+            remaining = spec.subagent_running_callback()
+        except Exception:
+            remaining = -1
+        logger.warning(
+            "Timed out waiting for subagents ({} active, timeout={}s, session={})",
+            remaining, spec.subagent_wait_timeout, spec.session_key or "?",
+        )
+        return []
 
     async def run(self, spec: AgentRunSpec) -> AgentRunResult:
         self._current_spec = spec
@@ -1032,6 +1121,43 @@ class AgentRunner:
                         "End-of-loop assess injected context (iter={}, session={})",
                         iteration, spec.session_key or "default",
                     )
+
+            # Before breaking: check for pending subagents. If any are still
+            # running, wait for them (no LLM calls during wait). Subagent
+            # results arrive via the injection queue and re-enter the main loop.
+            if spec.subagent_running_callback:
+                try:
+                    has_active = spec.subagent_running_callback() > 0
+                except Exception:
+                    logger.exception("subagent_running_callback failed at break check")
+                    has_active = False
+                if has_active:
+                    injections = await self._wait_subagents(spec, injection_cycles)
+                    if injections:
+                        injection_cycles += 1
+                        append_injected_messages(messages, injections, assistant_message)
+                        _end_assess_ran = False
+                        await hook.after_iteration(context)
+                        continue
+                    # Timeout: subagents still running. Tell the LLM and let it decide.
+                    try:
+                        remaining = spec.subagent_running_callback()
+                    except Exception:
+                        remaining = -1
+                    if remaining > 0:
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                f"## Instructions\n\n"
+                                f"Subagent wait timed out after "
+                                f"{spec.subagent_wait_timeout}s — {remaining} subagent(s) "
+                                f"still running. Decide how to proceed: cancel hung "
+                                f"subagents, wait more, or continue without results."
+                            ),
+                        })
+                        _end_assess_ran = False
+                        await hook.after_iteration(context)
+                        continue
             break
 
         else:
