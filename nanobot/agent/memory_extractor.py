@@ -403,8 +403,8 @@ class MemoryExtractor:
 
             ts_raw = finding.get("ts", "")
             ts_num = _parse_ts(ts_raw) or time.time()
-            pinned = bool(finding.get("pinned"))
-            recent = bool(finding.get("recent"))
+            pinned = finding.get("pinned") is True
+            recent = finding.get("recent") is True
             paragraph = self._format_finding_paragraph(ftype, content)
             # Append ts marker
             paragraph += f"\n<!--ts:{ts_num}-->"
@@ -1162,6 +1162,8 @@ class MemoryExtractor:
             return False
 
         operations = parsed.get("operations", []) if isinstance(parsed, dict) else []
+        if not isinstance(operations, list):
+            operations = []
         if not operations:
             logger.info("MemoryExtractor: no consolidation operations suggested")
             return False
@@ -1791,7 +1793,7 @@ class MemoryExtractor:
                 if target and target in current:
                     if action == "remove":
                         new_content = current.replace(target, "", 1)
-                    elif action == "rewrite" and replacement:
+                    elif action == "rewrite" and replacement and replacement != "null":
                         new_content = current.replace(target, replacement, 1)
                     else:
                         continue

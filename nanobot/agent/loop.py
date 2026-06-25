@@ -927,13 +927,13 @@ class AgentLoop:
                 return AssessResult()
 
             status = parsed.get("status", "findings")
-            needs_revision = parsed.get("needs_revision", False)
+            needs_revision = parsed.get("needs_revision") is True
 
             # ── orthogonal actions (independent of status) ──
 
             # Skill creation — always check if a reusable pattern was found
             skill_pattern = parsed.get("skill_pattern")
-            if skill_pattern:
+            if skill_pattern and skill_pattern != "null":
                 if not isinstance(skill_pattern, str):
                     skill_pattern = json.dumps(skill_pattern, ensure_ascii=False)
                 dedup_key = hashlib.md5(skill_pattern.encode()).hexdigest()
@@ -962,10 +962,10 @@ class AgentLoop:
             # status == "findings" — inject assessment context for next turn
             parts = []
             summary = parsed.get("summary", "")
-            if summary:
+            if summary and summary != "null":
                 parts.append(f"## {summary}")
             content = parsed.get("content", "")
-            if content:
+            if content and content != "null":
                 parts.append(content)
             injection_text = "\n\n".join(parts) if parts else result
 
@@ -984,7 +984,7 @@ class AgentLoop:
             messages.append(build_assessment_message(injection_text))
 
             # DRC — blocker 非空即触发根因分析
-            if parsed.get("blocker"):
+            if parsed.get("blocker") and parsed.get("blocker") != "null":
                 blocker = parsed.get("blocker")
                 try:
                     from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
