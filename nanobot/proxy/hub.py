@@ -11,7 +11,7 @@ import asyncio
 import json
 import socket
 import time
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
@@ -75,6 +75,7 @@ class HubTCPServer:
                 del self._session_locks[key]
                 self._session_pending_queues.pop(key, None)
                 self._session_tasks.pop(key, None)
+                self._session_stopped.discard(key)
                 removed += 1
 
     def __init__(
@@ -105,6 +106,10 @@ class HubTCPServer:
         # Per-session running task — tracked so /stop can cancel the current
         # processing instead of being queued for mid-turn injection.
         self._session_tasks: dict[str, asyncio.Task] = {}
+        # Sessions where a /stop was processed.  On the next message for this
+        # session, "/stop, 暂停当前任务" is prepended so the LLM understands
+        # why context was lost.
+        self._session_stopped: set[str] = set()
 
     async def start(self) -> None:
         """Start the TCP server and begin accepting proxy connections.
@@ -307,39 +312,63 @@ class HubTCPServer:
                 for k in list(self._session_pending_queues.keys()):
                     if k.startswith(prefix):
                         del self._session_pending_queues[k]
+                for k in list(self._session_stopped):
+                    if k.startswith(prefix):
+                        self._session_stopped.discard(k)
                 logger.debug("Cleaned up session state for proxy {}", proxy_key)
 
-    async def _deliver_stop_response(
-        self,
+    @staticmethod
+    def _make_progress_callback(
+        proxy_manager: ProxyManager,
         proxy_key: str,
-        msg: ProxyMessage,
-        session_key: str,
-        session_lock: asyncio.Lock,
-    ) -> None:
-        """Process /stop through LLM and deliver the response to the proxy."""
-        try:
-            async with session_lock:
-                response = await self._agent_loop.process_direct(
-                    content="/stop",
-                    session_key=session_key,
-                    channel=msg.channel,
-                    chat_id=msg.chat_id,
-                    metadata={"_stop_redispatch": True},
-                )
-            if response and response.content:
-                await self._proxy_manager.deliver_to_proxy(proxy_key, {
+        chat_id: str,
+    ) -> Callable[..., Awaitable[None]]:
+        """Build a progress callback that delivers events to a proxy connection.
+
+        This is shared between the main route path and /stop handling so that
+        both report tool events and thinking text to the user.
+        """
+        async def _on_progress(
+            content: str,
+            *,
+            tool_hint: bool = False,
+            tool_events: list | None = None,
+        ) -> None:
+            _user_tools = frozenset(["message_tool"])
+            has_non_user_event = False
+            if tool_events:
+                for te in tool_events:
+                    if not isinstance(te, dict):
+                        continue
+                    phase = te.get("phase", "")
+                    name = te.get("name", "tool")
+                    if name in _user_tools:
+                        continue
+                    has_non_user_event = True
+                    args = te.get("arguments", {})
+                    if isinstance(args, dict) and args:
+                        hint = format_single_tool_hint(name, args)
+                    else:
+                        hint = name
+                    if phase == "end":
+                        text = f"✅ {hint} completed"
+                    elif phase == "error":
+                        error = te.get("error", "")
+                        text = f"❌ {hint}: {error}" if error else f"❌ {hint} failed"
+                    else:
+                        continue
+                    await proxy_manager.deliver_to_proxy(proxy_key, {
+                        "type": "deliver",
+                        "chat_id": chat_id,
+                        "content": text,
+                    })
+            if content and (not tool_events or has_non_user_event):
+                await proxy_manager.deliver_to_proxy(proxy_key, {
                     "type": "deliver",
-                    "chat_id": msg.chat_id,
-                    "content": response.content,
+                    "chat_id": chat_id,
+                    "content": content,
                 })
-        except Exception as e:
-            logger.warning("Error processing /stop through LLM: {}", e)
-            # Fallback: send simple confirmation
-            await self._proxy_manager.deliver_to_proxy(proxy_key, {
-                "type": "deliver",
-                "chat_id": msg.chat_id,
-                "content": "✅ 已停止",
-            })
+        return _on_progress
 
     async def _route_message(
         self,
@@ -390,54 +419,9 @@ class HubTCPServer:
             session_key, msg.content[:50], session_key,
         )
 
-        # Progress callback delivers /think and /tool observe events
-        # to the proxy in real-time while the main request is processing.
-        async def _on_progress(
-            content: str,
-            *,
-            tool_hint: bool = False,
-            tool_events: list | None = None,
-        ) -> None:
-            # User-facing tools must not leak any progress notifications into
-            # the chat — their output IS the response.
-            _user_tools = frozenset(["message_tool"])
-
-            has_non_user_event = False
-            if tool_events:
-                for te in tool_events:
-                    if not isinstance(te, dict):
-                        continue
-                    phase = te.get("phase", "")
-                    name = te.get("name", "tool")
-                    if name in _user_tools:
-                        continue
-                    has_non_user_event = True
-                    args = te.get("arguments", {})
-                    if isinstance(args, dict) and args:
-                        hint = format_single_tool_hint(name, args)
-                    else:
-                        hint = name
-                    if phase == "end":
-                        text = f"✅ {hint} completed"
-                    elif phase == "error":
-                        error = te.get("error", "")
-                        text = f"❌ {hint}: {error}" if error else f"❌ {hint} failed"
-                    else:
-                        continue
-                    await self._proxy_manager.deliver_to_proxy(proxy_key, {
-                        "type": "deliver",
-                        "chat_id": msg.chat_id,
-                        "content": text,
-                    })
-            # Send thinking text / tool hints only when not exclusively about
-            # user-facing tools.  When ``tool_events`` is None/empty the
-            # content is genuine thinking text and should always be shown.
-            if content and (not tool_events or has_non_user_event):
-                await self._proxy_manager.deliver_to_proxy(proxy_key, {
-                    "type": "deliver",
-                    "chat_id": msg.chat_id,
-                    "content": content,
-                })
+        _on_progress = self._make_progress_callback(
+            self._proxy_manager, proxy_key, msg.chat_id,
+        )
 
         inbound = msg.to_inbound_message()
 
@@ -456,24 +440,23 @@ class HubTCPServer:
         # which cancels the running task immediately.
         if session_lock.locked():
             if msg.content.strip() == "/stop":
-                # Lock held — the running task registered itself via
-                # _session_tasks when it acquired the lock.  Read (not
-                # overwrite) that reference so we cancel the right task.
                 task = self._session_tasks.get(session_key)
                 if task and not task.done():
                     task.cancel()
                     logger.info("Stopped session {} via /stop", session_key)
                     try:
-                        await task  # wait for full unwind
+                        await task
                     except asyncio.CancelledError:
                         pass
                     except Exception:
                         logger.exception("Unexpected error awaiting cancelled session task")
-                # Process /stop through LLM so it can update tree.json
-                # and confirm with the user over this proxy connection.
-                asyncio.create_task(self._deliver_stop_response(
-                    proxy_key, msg, session_key, session_lock,
-                ))
+                # Deliver stop confirmation directly — no LLM call.
+                self._session_stopped.add(session_key)
+                await self._proxy_manager.deliver_to_proxy(proxy_key, {
+                    "type": "deliver",
+                    "chat_id": msg.chat_id,
+                    "content": "✅ 已停止",
+                })
                 return
             logger.debug("Session {} busy, enqueuing for mid-turn injection", session_key)
             queue = self._session_pending_queues.setdefault(session_key, asyncio.Queue())
@@ -488,6 +471,12 @@ class HubTCPServer:
         # create their own queue, and a third message's mid-turn injection
         # ends up in the wrong one).
         pending_queue = self._session_pending_queues.setdefault(session_key, asyncio.Queue())
+
+        # If the previous turn was stopped via /stop, prepend context so the
+        # LLM understands why its workspace state was interrupted.
+        if session_key in self._session_stopped:
+            self._session_stopped.discard(session_key)
+            inbound.content = "/stop, 暂停当前任务\n\n" + inbound.content
 
         try:
             async with session_lock:
