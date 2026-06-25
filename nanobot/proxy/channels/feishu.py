@@ -102,8 +102,8 @@ class FeishuProxyChannel(BaseProxyChannel):
     def __init__(self, config: dict, hub_tcp_host: str, hub_tcp_port: int, channel: str, bot: str):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
         self._client: Any = None  # lark_oapi Client, set in start()
-        self._reaction_emoji = config.get("react_emoji", "THUMBSUP")
-        self._hub_emoji = config.get("hub_emoji", "OK")
+        self._reaction_emoji = config.get("reactEmoji", "THUMBSUP")
+        self._hub_emoji = config.get("doneEmoji", "OK")
         self._replied_messages: dict[str, None] = {}  # FIFO-ordered set: messages that got hub-received reaction
         self._domain = (
             "https://open.feishu.cn"
@@ -185,8 +185,13 @@ class FeishuProxyChannel(BaseProxyChannel):
 
             # Skip stale messages (platform sometimes redelivers old messages)
             create_time = getattr(message, "create_time", None)
-            if create_time and self._is_stale_message(float(create_time), self._max_message_age):
-                return
+            if create_time:
+                try:
+                    create_time_f = float(create_time)
+                except (ValueError, TypeError):
+                    create_time_f = 0
+                if self._is_stale_message(create_time_f, self._max_message_age):
+                    return
 
             # Group @mention policy: skip non-mentioned messages in groups
             chat_type = getattr(message, "chat_type", "")

@@ -154,6 +154,8 @@ class DingTalkProxyChannel(BaseProxyChannel):
             ".xls": "application/vnd.ms-excel",
             ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             ".txt": "text/plain",
+            ".htm": "text/html",
+            ".html": "text/html",
             ".zip": "application/zip",
             ".csv": "text/csv",
         }
