@@ -68,7 +68,14 @@ class MemorySearchTool(Tool):
             return "Please provide a query."
 
         results = self._store.vector_index.search(query, k=k)
-        if not results:
+
+        # Also search tasks/ index if available
+        tasks_results: list[dict[str, Any]] = []
+        tasks_index = getattr(self._store, "tasks_index", None)
+        if tasks_index is not None:
+            tasks_results = tasks_index.search(query, k=min(k, 3))
+
+        if not results and not tasks_results:
             return "No relevant knowledge found."
 
         for r in results:
@@ -120,5 +127,19 @@ class MemorySearchTool(Tool):
             if crossrefs:
                 for ref in crossrefs:
                     parts.append(f"  Related: {ref}")
+
+        if tasks_results:
+            if parts:
+                parts.append("---")
+            for r in tasks_results:
+                source = r.get("source", "")
+                heading = r.get("heading", "")
+                score = r.get("score", 0)
+                label = f"tasks/{source} — {heading}" if heading else f"tasks/{source}"
+                parts.append(f"**{label}** [score={score:.2f}]")
+                text = r.get("text", "")
+                if len(text) > 400:
+                    text = text[:397] + "..."
+                parts.append(f"> {text}\n")
 
         return "\n".join(parts)
