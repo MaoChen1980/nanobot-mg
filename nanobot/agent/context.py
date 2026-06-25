@@ -326,10 +326,9 @@ class ContextBuilder:
             if always_content:
                 sections.append(
                     "## Active Skills\n\n"
-                    "> **Always 审查**：以下 skill 标记为 always=true，每轮自动注入。\n"
-                    "> 定期评估每个 always-skill：如果其行为已成为你的自然倾向（不注入也能正确执行），\n"
-                    "> 用 edit_file_tool 将其 frontmatter 的 `always: true` 改为 `false`，减少上下文开销。\n\n"
-                    f"{always_content}"
+                    f"{always_content}\n\n"
+                    "> **Always 调优**：根据当前的工作场景，如果某个 skill 值得常驻或不再需要常驻，"
+                    "直接用 edit_file_tool 修改其 SKILL.md frontmatter 的 `always` 字段，下次会自动注入或移除。"
                 )
 
         # Available skills summary — dynamically built, excludes always-skills
