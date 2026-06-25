@@ -115,7 +115,7 @@ class FeishuProxyChannel(BaseProxyChannel):
         self._notified_chats: set[str] = set()  # chat_ids already sent ready notification
         self._consumed_qids: set[str] = set()  # chat-scoped QIDs already clicked
         self._last_chat_id: str = self._load_last_chat_id()  # last chat that sent a message → used for ready notification
-        self._group_policy: str = config.get("group_policy", "mention")
+        self._group_policy: str = config.get("groupPolicy", "mention")
 
     # ------------------------------------------------------------------
     # State persistence (last chat for startup notification)
@@ -199,10 +199,11 @@ class FeishuProxyChannel(BaseProxyChannel):
                          if hasattr(message, a)}
             logger.debug("Feishu message attrs: {}", msg_attrs)
             body = getattr(message, "body", None)
-            content = getattr(body, "content", "") if body else getattr(message, "content", "")
+            raw_content = getattr(body, "content", "") if body else getattr(message, "content", "")
+            content = raw_content or ""
             logger.debug("Feishu content extraction: has_body={}, has_content={}, content_len={}, content_preview={!r}",
                          body is not None, hasattr(message, "content"),
-                         len(content) if content else 0, (content or "")[:200])
+                         len(content) if content else 0, content[:200])
             # WS event: EventMessage uses "message_type"; REST API: Message uses "msg_type"
             msg_type = getattr(message, "msg_type", None) or getattr(message, "message_type", None) or "text"
             file_key = None

@@ -59,7 +59,7 @@ class WecomProxyChannel(BaseProxyChannel):
                     content_parts.append("[voice]")
             elif msg_type == "file":
                 file_info = body.get("file", {}) if isinstance(body.get("file"), dict) else {}
-                file_name = file_info.get("name", "unknown")
+                file_name = file_info.get("name") or "unknown"
                 content_parts.append(f"[file: {file_name}]" if file_info.get("url") else f"[file: {file_name}: download failed]")
             elif msg_type == "mixed":
                 msg_items = body.get("mixed", {}).get("msg_item", [])
@@ -96,7 +96,11 @@ class WecomProxyChannel(BaseProxyChannel):
             return
         try:
             stream_id = self._generate_req_id("stream")
-            self._client.reply_stream(frame, stream_id, content, finish=True)
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                self._client.reply_stream(frame, stream_id, content, finish=True),
+                self._ws_loop,
+            )
         except Exception as e:
             logger.error("WeCom reply error: {}", e)
 
@@ -143,14 +147,14 @@ class WecomProxyChannel(BaseProxyChannel):
         client.on("message.mixed", lambda f: self._process_message(f, "mixed"))
 
         import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        self._ws_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._ws_loop)
         try:
-            loop.run_until_complete(client.connect_async())
+            self._ws_loop.run_until_complete(client.connect_async())
         except Exception as e:
             logger.error("WeCom WS error: {}", e)
         finally:
-            loop.close()
+            self._ws_loop.close()
 
 
 def main() -> None:

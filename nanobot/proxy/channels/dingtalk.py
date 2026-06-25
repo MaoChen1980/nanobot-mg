@@ -300,6 +300,10 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 if media_id:
                     ext = Path(file_path).suffix.lower()
                     file_name = file_info.get("name", os.path.basename(file_path))
+                    if ext in self._ZIP_BEFORE_UPLOAD_EXTS:
+                        stem = Path(file_path).stem
+                        ext = ".zip"
+                        file_name = f"{stem}.zip"
                     media_items.append((media_id, "file", ext, file_name))
                     return f"[文件: {file_name}]"
             except json.JSONDecodeError:
@@ -326,7 +330,11 @@ class DingTalkProxyChannel(BaseProxyChannel):
             elif ext in FILE_EXTENSIONS:
                 media_id = self._upload_media(path, "file")
                 if media_id:
-                    media_items.append((media_id, "file", ext, os.path.basename(path)))
+                    if ext in self._ZIP_BEFORE_UPLOAD_EXTS:
+                        stem = Path(path).stem
+                        media_items.append((media_id, "file", ".zip", f"{stem}.zip"))
+                    else:
+                        media_items.append((media_id, "file", ext, os.path.basename(path)))
                     return f"[文件: {os.path.basename(path)}]"
             return match.group(0)
 
