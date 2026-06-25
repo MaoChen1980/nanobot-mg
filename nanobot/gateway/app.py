@@ -395,6 +395,18 @@ class GatewayApplication:
                     logger.exception("MemoryExtractor cron job failed")
                 return None
 
+            if job.name == "self-evolution":
+                from nanobot.hooks.self_evolution import SelfEvolutionEngine
+                try:
+                    engine = SelfEvolutionEngine(
+                        store=self.agent.context.store,
+                        project_root=Path(__file__).resolve().parent.parent.parent,
+                    )
+                    await engine.run()
+                except Exception:
+                    logger.exception("SelfEvolution cron job failed")
+                return None
+
             if job.name == "log_check":
                 await self._monitor_log_errors(_deliver_to_channel)
                 return None
@@ -427,7 +439,7 @@ class GatewayApplication:
                     dry_run = not bool(job_deliver)
                     # Self-evolution jobs need to execute real tools (edit/write)
                     # even when no delivery channel is configured
-                    if dry_run and job.name in ("daily-evolution", "daily-self-review"):
+                    if dry_run and job.name in ("self-evolution", "daily-evolution", "daily-self-review"):
                         dry_run = False
                 except Exception as e:
                     logger.warning("Failed to access job.payload.deliver: {}, job.payload={}", e, job.payload)
@@ -633,6 +645,18 @@ class GatewayApplication:
                 ),
             ),
             CronJob(
+                id="self-evolution",
+                name="self-evolution",
+                schedule=CronSchedule(kind="cron", expr="40 5 * * *", tz=tz),
+                payload=CronPayload(
+                    deliver=deliver,
+                    channel=cfg.channel,
+                    to=cfg.to,
+                    session_key=cfg.session_key,
+                    message="self-evolution",
+                ),
+            ),
+            CronJob(
                 id="daily-tool-optimizer",
                 name="daily-tool-optimizer",
                 schedule=CronSchedule(kind="cron", expr="0 5 * * *", tz=tz),
@@ -717,7 +741,7 @@ class GatewayApplication:
 
         console.print(
             "[green]✓[/green] Self-review: daily-self-review(04:00), "
-            "tool-optimizer(05:00), daily-evolution(05:20)"
+            "tool-optimizer(05:00), daily-evolution(05:20), self-evolution(05:40)"
         )
 
     async def _monitor_log_errors(self, deliver_fn) -> None:
