@@ -374,6 +374,9 @@ class GatewayApplication:
                         "Failed to deliver to proxy {}, message dropped",
                         proxy_key,
                     )
+                    raise RuntimeError(
+                        f"Proxy {proxy_key} not connected — message not delivered"
+                    )
                 return
 
             await self.bus.publish_outbound(msg)

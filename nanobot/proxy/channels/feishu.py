@@ -41,14 +41,15 @@ class FeishuProxyChannel(BaseProxyChannel):
         super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
         self._client: Any = None  # lark_oapi Client, set in start()
         self._reaction_emoji = config.get("react_emoji", "THUMBSUP")
-        self._done_emoji = config.get("done_emoji")
+        self._hub_emoji = config.get("hub_emoji", "OK")
+        self._replied_messages: dict[str, None] = {}  # FIFO-ordered set: messages that got hub-received reaction
         self._domain = (
             "https://open.feishu.cn"
             if config.get("domain", "feishu") == "feishu"
             else "https://open.larksuite.com"
         )
         self._thread_pool = ThreadPoolExecutor(max_workers=8)
-        self._api_lock = threading.Lock()  # serialize Feishu API calls across concurrent paths
+        self._client_lock = threading.Lock()  # lark_oapi Client is not thread-safe
         self._notified_chats: set[str] = set()  # chat_ids already sent ready notification
         self._consumed_qids: set[str] = set()  # chat-scoped QIDs already clicked
         self._last_chat_id: str = self._load_last_chat_id()  # last chat that sent a message → used for ready notification
@@ -259,7 +260,8 @@ class FeishuProxyChannel(BaseProxyChannel):
         try:
             from lark_oapi.api.im.v1 import GetMessageRequest
             request = GetMessageRequest.builder().message_id(message_id).build()
-            response = self._client.im.v1.message.get(request)
+            with self._client_lock:
+                response = self._client.im.v1.message.get(request)
             if response.success():
                 items = response.data.items
                 if items:
@@ -300,11 +302,12 @@ class FeishuProxyChannel(BaseProxyChannel):
             logger.warning("Feishu _handle_deliver: dropped (empty content+media for {})", chat_id[:20])
             return
 
-        # Final bot response (has reply_to) — clean up processing reaction
-        if reply_to:
-            self._thread_pool.submit(self._remove_reaction, reply_to)
-            if self._done_emoji:
-                self._thread_pool.submit(self._add_reaction, reply_to, self._done_emoji)
+        # First delivery for this message — hub received it and entered AgentLoop
+        if reply_to and reply_to not in self._replied_messages:
+            self._replied_messages[reply_to] = None
+            if len(self._replied_messages) > 1000:
+                self._replied_messages.pop(next(iter(self._replied_messages)))
+            self._thread_pool.submit(self._add_reaction, reply_to, self._hub_emoji)
 
         # Convert structured buttons to ---quick-replies format for _send_formatted_reply
         if buttons and content:
@@ -323,19 +326,27 @@ class FeishuProxyChannel(BaseProxyChannel):
         logger.info("Enqueued deliver to {}: content={} media={} buttons={} reply_to={}", chat_id, content[:60] if content else "", len(media), len(buttons), reply_to[:20] if reply_to else "")
 
     def _process_send(self, item: dict) -> None:
-        """Send queued message to Feishu."""
+        """Send queued message to Feishu.
+
+        Text content is sent inline on the worker thread to preserve FIFO
+        ordering for thinking / tool events / final reply.
+
+        Media uploads (potentially slow HTTP) are offloaded to the thread pool
+        so a large file upload doesn't block the entire send queue for all
+        subsequent messages.
+        """
         content = item.get("content", "")
-        # Send each media item individually with its own msg_type.
-        # Grouping by type would be more efficient but the Feishu upload API
-        # is strict about file format (rejects a .md file when msg_type is image).
+        # Offload media uploads to thread pool — don't block text delivery
         media_list = item.get("media")
         if media_list:
-            logger.info("Feishu _process_send: sending {} media items to chat {}",
+            logger.info("Feishu _process_send: scheduling {} media items to chat {}",
                         len(media_list), item["chat_id"])
             for path in media_list:
                 is_image = path.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"))
-                self._send_media(item["chat_id"], item.get("root_id"), [path],
-                                 msg_type="image" if is_image else "file")
+                self._thread_pool.submit(
+                    self._send_media, item["chat_id"], item.get("root_id"), [path],
+                    msg_type="image" if is_image else "file",
+                )
         if content:
             self._send_formatted_reply(
                 chat_id=item["chat_id"],
@@ -373,7 +384,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .type("image" if msg_type == "image" else "file")
                 .build()
             )
-            resp = self._client.im.v1.message_resource.get(request)
+            with self._client_lock:
+                resp = self._client.im.v1.message_resource.get(request)
 
             if not resp.success():
                 logger.warning("Feishu media download failed: code={} msg={}", resp.code, resp.msg)
@@ -571,7 +583,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                     .request_body(body)
                     .build()
                 )
-                resp = self._client.im.v1.message.create(request)
+                with self._client_lock:
+                    resp = self._client.im.v1.message.create(request)
                 if resp.code != 0:
                     logger.error("Feishu send media failed: code={} msg={}", resp.code, resp.msg)
                 else:
@@ -725,8 +738,12 @@ class FeishuProxyChannel(BaseProxyChannel):
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
             header_text, body = self._extract_header(content)
+            # Escape $ to \$ — Feishu card markdown treats $ as inline math
+            # delimiter ($...$), which silently breaks rendering when content
+            # starts with $ (e.g. tool hints like "$ python3 -c '...'").
+            md_content = (body or content).replace("$", "\\$")
             elements: list[dict[str, Any]] = [
-                {"tag": "markdown", "content": body or content},
+                {"tag": "markdown", "content": md_content},
             ]
 
             if quick_replies:
@@ -775,7 +792,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .request_body(body)
                 .build()
             )
-            resp = self._client.im.v1.message.create(request)
+            with self._client_lock:
+                resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu card sent OK to chat={} content_len={}", chat_id, len(content))
                 return True
@@ -816,7 +834,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .request_body(body)
                 .build()
             )
-            resp = self._client.im.v1.message.create(request)
+            with self._client_lock:
+                resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu post sent OK to chat={} content_len={}", chat_id, len(content))
                 return True
@@ -845,7 +864,8 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .request_body(body)
                 .build()
             )
-            resp = self._client.im.v1.message.create(request)
+            with self._client_lock:
+                resp = self._client.im.v1.message.create(request)
             if resp.success():
                 logger.info("Feishu plain text sent OK to chat={} content_len={}", chat_id, len(content))
             else:
@@ -867,20 +887,13 @@ class FeishuProxyChannel(BaseProxyChannel):
         forced and buttons are rendered from the parsed labels.
 
         Falls back through the chain: card → post → plain text.
-
-        Note: ``_api_lock`` is only held for the strategy decision (pure Python,
-        no I/O), NOT during the HTTP calls. This prevents a single Feishu API
-        timeout from stalling the entire send queue.
         """
-        # Strategy decision — fast, no I/O
-        with self._api_lock:
-            cleaned, qrs = self._parse_quick_replies(content)
-            render_mode = self.config.get("renderMode", "card")
-            use_card = qrs is not None or render_mode == "card" or (
-                render_mode == "auto" and self._has_rich_content(cleaned)
-            )
+        cleaned, qrs = self._parse_quick_replies(content)
+        render_mode = self.config.get("renderMode", "card")
+        use_card = qrs is not None or render_mode == "card" or (
+            render_mode == "auto" and self._has_rich_content(cleaned)
+        )
 
-        # Execute chosen strategy — HTTP calls happen outside the lock
         if use_card:
             if self._send_card_reply(chat_id, cleaned, root_id=root_id, quick_replies=qrs):
                 return
@@ -891,10 +904,10 @@ class FeishuProxyChannel(BaseProxyChannel):
 
         self._send_plain_text(chat_id, processed, root_id=root_id)
 
-    def _add_reaction(self, message_id: str, emoji: str) -> None:
-        """Add reaction emoji to message."""
+    def _add_reaction(self, message_id: str, emoji: str) -> str | None:
+        """Add reaction emoji to message, return reaction_id or None."""
         if not emoji:
-            return
+            return None
         try:
             from lark_oapi.api.im.v1 import (
                 CreateMessageReactionRequest,
@@ -911,20 +924,30 @@ class FeishuProxyChannel(BaseProxyChannel):
                 )
                 .build()
             )
-            self._client.im.v1.message_reaction.create(request)
+            with self._client_lock:
+                response = self._client.im.v1.message_reaction.create(request)
+            if response and getattr(response, "success", lambda: False)():
+                data = getattr(response, "data", None)
+                if data:
+                    return getattr(data, "reaction_id", None)
         except Exception as e:
             logger.debug("Failed to add reaction: {}", e)
+        return None
 
-    def _remove_reaction(self, message_id: str) -> None:
-        """Remove reactions from message (best-effort)."""
+    def _remove_reaction(self, message_id: str, reaction_id: str) -> None:
+        """Remove reaction from message by reaction_id (best-effort)."""
+        if not reaction_id:
+            return
         try:
             from lark_oapi.api.im.v1 import DeleteMessageReactionRequest
             request = (
                 DeleteMessageReactionRequest.builder()
                 .message_id(message_id)
+                .reaction_id(reaction_id)
                 .build()
             )
-            self._client.im.v1.message_reaction.delete(request)
+            with self._client_lock:
+                self._client.im.v1.message_reaction.delete(request)
         except Exception as e:
             logger.debug("Failed to remove reaction: {}", e)
 
@@ -992,17 +1015,31 @@ class FeishuProxyChannel(BaseProxyChannel):
         def run_ws() -> None:
             import lark_oapi.ws as _lark_ws
 
-            logger.info("Feishu WS loop starting, connecting to {}...", self._domain)
-            ws_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(ws_loop)
-            _lark_ws.client.loop = ws_loop
+            previous_loop = getattr(_lark_ws.client, "loop", None)
+            delay = 1
             try:
-                ws_client.start()
-                logger.info("Feishu WS: client.start() returned (should not happen)")
-            except Exception as e:
-                logger.error("Feishu WS error: {}", e)
+                while True:
+                    logger.info("Feishu WS connecting to {}...", self._domain)
+                    ws_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(ws_loop)
+                    _lark_ws.client.loop = ws_loop
+                    try:
+                        ws_client.start()
+                        logger.info("Feishu WS disconnected (clean close)")
+                        delay = 1
+                    except Exception as e:
+                        logger.warning("Feishu WS error: {} — reconnecting in {}s", e, delay)
+                        delay = min(delay * 2, 30)
+                    finally:
+                        _lark_ws.client.loop = previous_loop
+                        try:
+                            asyncio.set_event_loop(None)
+                        except RuntimeError:
+                            pass
+                        ws_loop.close()
+                    time.sleep(delay)
             finally:
-                ws_loop.close()
+                _lark_ws.client.loop = previous_loop
                 logger.info("Feishu WS loop ended")
 
         thread = threading.Thread(target=run_ws, daemon=True)
