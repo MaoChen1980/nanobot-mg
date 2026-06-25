@@ -31,6 +31,68 @@ _MSG_TYPE_LABELS = {
 }
 
 
+def _extract_post_content(content_json: dict) -> tuple[str, list[str]]:
+    """Extract text and image keys from Feishu post (rich text) message.
+
+    Handles three payload shapes:
+    - Direct:    {"title": "...", "content": [[...]]}
+    - Localized: {"zh_cn": {"title": "...", "content": [...]}}
+    - Wrapped:   {"post": {"zh_cn": {"title": "...", "content": [...]}}}
+    """
+
+    def _parse_block(block: dict) -> tuple[str | None, list[str]]:
+        if not isinstance(block, dict) or not isinstance(block.get("content"), list):
+            return None, []
+        texts, images = [], []
+        if title := block.get("title"):
+            texts.append(title)
+        for row in block["content"]:
+            if not isinstance(row, list):
+                continue
+            for el in row:
+                if not isinstance(el, dict):
+                    continue
+                tag = el.get("tag")
+                if tag in ("text", "a"):
+                    texts.append(el.get("text", ""))
+                elif tag == "at":
+                    texts.append(f"@{el.get('user_name', 'user')}")
+                elif tag == "code_block":
+                    lang = el.get("language", "")
+                    code_text = el.get("text", "")
+                    texts.append(f"\n```{lang}\n{code_text}\n```\n")
+                elif tag == "img" and (key := el.get("image_key")):
+                    images.append(key)
+        return (" ".join(texts).strip() or None), images
+
+    # Unwrap optional {"post": ...} envelope
+    root = content_json
+    if isinstance(root, dict) and isinstance(root.get("post"), dict):
+        root = root["post"]
+    if not isinstance(root, dict):
+        return "", []
+
+    # Direct format
+    if "content" in root:
+        text, imgs = _parse_block(root)
+        if text or imgs:
+            return text or "", imgs
+
+    # Localized: prefer known locales, then fall back to any dict child
+    for key in ("zh_cn", "en_us", "ja_jp"):
+        if key in root:
+            text, imgs = _parse_block(root[key])
+            if text or imgs:
+                return text or "", imgs
+    for val in root.values():
+        if isinstance(val, dict):
+            text, imgs = _parse_block(val)
+            if text or imgs:
+                return text or "", imgs
+
+    return "", []
+
+
 class FeishuProxyChannel(BaseProxyChannel):
     """Feishu message events forwarded to Hub via TCP."""
 
@@ -53,6 +115,7 @@ class FeishuProxyChannel(BaseProxyChannel):
         self._notified_chats: set[str] = set()  # chat_ids already sent ready notification
         self._consumed_qids: set[str] = set()  # chat-scoped QIDs already clicked
         self._last_chat_id: str = self._load_last_chat_id()  # last chat that sent a message → used for ready notification
+        self._group_policy: str = config.get("group_policy", "mention")
 
     # ------------------------------------------------------------------
     # State persistence (last chat for startup notification)
@@ -125,6 +188,12 @@ class FeishuProxyChannel(BaseProxyChannel):
             if create_time and self._is_stale_message(float(create_time), self._max_message_age):
                 return
 
+            # Group @mention policy: skip non-mentioned messages in groups
+            chat_type = getattr(message, "chat_type", "")
+            if chat_type == "group" and self._group_policy != "open" and not self._is_bot_mentioned(message):
+                logger.debug("Skipping group message (not mentioned): {}", message_id)
+                return
+
             # Dump raw message attrs (exclude content — logged separately with truncation)
             msg_attrs = {a: getattr(message, a) for a in ['message_id', 'message_type', 'chat_id', 'root_id', 'parent_id', 'chat_type']
                          if hasattr(message, a)}
@@ -142,9 +211,15 @@ class FeishuProxyChannel(BaseProxyChannel):
                 if msg_type in ("image", "file", "audio", "video") and isinstance(content_obj, dict):
                     file_key = (content_obj.get("file_key") or content_obj.get("image_key")
                                 or content_obj.get("key") or content_obj.get("token"))
-                if msg_type == "text" and isinstance(content_obj, dict):
+                mentions = getattr(message, "mentions", None)
+
+                if msg_type == "post" and isinstance(content_obj, dict):
+                    post_text, post_images = _extract_post_content(content_obj)
+                    text = post_text or f"[富文本消息]\n{content}"
+                    if post_images and not file_key:
+                        file_key = post_images[0]
+                elif msg_type == "text" and isinstance(content_obj, dict):
                     text = content_obj.get("text", "")
-                    mentions = getattr(message, "mentions", None)
                     if mentions:
                         text = self._strip_leading_bot_mention(text, mentions)
                 elif isinstance(content_obj, dict) and content:
@@ -152,6 +227,10 @@ class FeishuProxyChannel(BaseProxyChannel):
                     text = f"[{label}]\n{content}"  # 非 text → 带类型标签的原始 JSON
                 else:
                     text = str(content_obj) if isinstance(content_obj, dict) else content
+
+                # Resolve @_user_N placeholders after bot mention stripping
+                if mentions and msg_type == "text":
+                    text = self._resolve_mentions(text, mentions)
             except Exception:
                 text = content
 
@@ -183,12 +262,12 @@ class FeishuProxyChannel(BaseProxyChannel):
 
                     self.send_to_hub(msg_data)  # fire-and-forget — reply arrives via _handle_deliver
                 except Exception as e:
-                    logger.error("Feishu on_message process error: {}", e)
+                    logger.exception("Feishu on_message process error: {}", e)
 
             self._thread_pool.submit(_process)
 
         except Exception as e:
-            logger.error("Feishu proxy message handler error: {}", e)
+            logger.exception("Feishu proxy message handler error: {}", e)
 
     def on_reaction(self, data: Any) -> None:
         """Handle reaction events (im.message.reaction.created_v1)."""
@@ -243,7 +322,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 lambda: self._process_card_action(chat_id, sender_id, reply_text, action.name or "")
             )
         except Exception as e:
-            logger.error("Failed to handle card action: {}", e)
+            logger.exception("Failed to handle card action: {}", e)
 
     def _process_card_action(self, chat_id: str, sender_id: str, reply_text: str, action_name: str) -> None:
         """Process card action after dedup — runs on thread pool."""
@@ -252,7 +331,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             msg_data = self.build_message(sender_id, chat_id, reply_text, f"card_{action_name}")
             self.send_to_hub(msg_data)
         except Exception as e:
-            logger.error("Failed to process card action: {}", e)
+            logger.exception("Failed to process card action: {}", e)
 
     # ------------------------------------------------------------------
     # Bot mention handling
@@ -283,10 +362,22 @@ class FeishuProxyChannel(BaseProxyChannel):
         if not mention_open_id:
             return False
         bot_open_id = self._get_bot_open_id()
-        return mention_open_id == bot_open_id if bot_open_id else mention_open_id.startswith("ou_")
+        if bot_open_id:
+            return mention_open_id == bot_open_id
+        # Fallback: bot mentions typically have no user_id and start with ou_
+        return not getattr(mention.id, "user_id", None) and mention_open_id.startswith("ou_")
 
-    @staticmethod
-    def _strip_leading_bot_mention(text: str, mentions: list | None) -> str:
+    def _is_bot_mentioned(self, message: Any) -> bool:
+        """Check if the bot is @mentioned (or @all) in the message."""
+        raw_content = getattr(message, "content", "") or ""
+        if "@_all" in raw_content:
+            return True
+        for mention in getattr(message, "mentions", None) or []:
+            if self._is_bot_mention(mention):
+                return True
+        return False
+
+    def _strip_leading_bot_mention(self, text: str, mentions: list | None) -> str:
         """Remove the leading bot @mention from group message text."""
         if not mentions or not text:
             return text
@@ -295,10 +386,34 @@ class FeishuProxyChannel(BaseProxyChannel):
             key = getattr(mention, "key", None) or ""
             if not key or not candidate.startswith(key):
                 continue
-            # Only strip if followed by a non-identifier char (end of placeholder)
+            if not self._is_bot_mention(mention):
+                continue
             rest = candidate[len(key):].lstrip()
             if rest != candidate:
                 return rest or text
+        return text
+
+    def _resolve_mentions(self, text: str, mentions: list | None) -> str:
+        """Replace @_user_N placeholders with actual user info from mentions."""
+        if not mentions or not text:
+            return text
+        for mention in mentions:
+            key = getattr(mention, "key", None) or ""
+            if not key or key not in text:
+                continue
+            name = getattr(mention, "name", None) or key
+            mid = getattr(mention, "id", None)
+            if not mid:
+                continue
+            open_id = getattr(mid, "open_id", None) or ""
+            user_id = getattr(mid, "user_id", None) or ""
+            if open_id and user_id:
+                replacement = f"@{name} ({open_id}, user id: {user_id})"
+            elif open_id:
+                replacement = f"@{name} ({open_id})"
+            else:
+                replacement = f"@{name}"
+            text = text.replace(key, replacement)
         return text
 
     # ------------------------------------------------------------------
@@ -477,7 +592,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             logger.info("Feishu media downloaded: {} bytes → {}", len(data_bytes), local_path)
             return str(local_path)
         except Exception as e:
-            logger.error("Feishu media download failed for key={}: {}", file_key, e)
+            logger.exception("Feishu media download failed for key={}: {}", file_key, e)
             return None
 
     def _guess_ext_from_resp(self, resp, msg_type: str, file_key: str) -> str:
@@ -553,7 +668,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             logger.error("Feishu media upload: no key in response: {}", body)
             return None
         except Exception as e:
-            logger.error("Feishu media upload error: {}", e)
+            logger.exception("Feishu media upload error: {}", e)
             return None
 
     def _get_tenant_access_token(self) -> str | None:
@@ -571,7 +686,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                     return resp.json().get("tenant_access_token")
                 logger.error("Feishu tenant token failed: {} - {}", resp.status_code, resp.text[:200])
         except Exception as e:
-            logger.error("Feishu tenant token error: {}", e)
+            logger.exception("Feishu tenant token error: {}", e)
         return None
 
     @staticmethod
@@ -616,7 +731,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             try:
                 from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
-                receive_id_type = self.config.get("receiveIdType", "chat_id")
+                receive_id_type = self._receive_id_type(chat_id)
                 key_field = "image_key" if msg_type == "image" else "file_key"
                 body = (
                     CreateMessageRequestBody.builder()
@@ -640,7 +755,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 else:
                     logger.info("Feishu media sent: {} → chat={}", os.path.basename(path), chat_id)
             except Exception as e:
-                logger.error("Feishu media send error: {}", e)
+                logger.exception("Feishu media send error: {}", e)
 
     # ------------------------------------------------------------------
     # Reply / reaction helpers
@@ -854,7 +969,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 return True
             logger.warning("Feishu card send failed ({}): {} - will fall back", resp.code, resp.msg)
         except Exception as e:
-            logger.error("Feishu card send exception: {}", e)
+            logger.exception("Feishu card send exception: {}", e)
         return False
 
     def _send_post_reply(self, chat_id: str, content: str, root_id: str | None = None) -> bool:
@@ -896,7 +1011,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 return True
             logger.warning("Feishu post send failed ({}): {} - will fall back", resp.code, resp.msg)
         except Exception as e:
-            logger.error("Post send exception: {}", e)
+            logger.exception("Post send exception: {}", e)
         return False
 
     def _send_plain_text(self, chat_id: str, content: str, root_id: str | None = None) -> None:
@@ -926,7 +1041,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             else:
                 logger.error("Feishu plain text send failed ({}): {}", resp.code, resp.msg)
         except Exception as e:
-            logger.error("Feishu plain-text fallback exception: {}", e)
+            logger.exception("Feishu plain-text fallback exception: {}", e)
 
     # ── Public send ────────────────────────────────────────────────────
 
@@ -1027,7 +1142,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             )
             logger.info("Startup notification sent to {}", self._last_chat_id)
         except Exception as e:
-            logger.error("Failed to send startup notification: {}", e)
+            logger.exception("Failed to send startup notification: {}", e)
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -10,6 +10,8 @@ import sys
 import threading
 import time
 import uuid
+import zipfile
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,8 @@ class DingTalkProxyChannel(BaseProxyChannel):
 
     CHANNEL_NAME = "DingTalk"
     REQUIRED_CONFIG_FIELDS = ["clientId", "clientSecret"]
+
+    _ZIP_BEFORE_UPLOAD_EXTS = {".htm", ".html"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -74,13 +78,18 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 logger.warning(f"File too large: {file_path} ({file_size} bytes)")
                 return None
 
+            # Normalize upload payload (e.g. zip HTML files that DingTalk rejects raw)
+            file_data, upload_name, upload_mime = self._normalize_upload_payload(
+                os.path.basename(file_path), file_data, None
+            )
+
             # Upload via DingTalk OAPI media endpoint
             import httpx
 
             url = f"https://oapi.dingtalk.com/media/upload?access_token={token}"
 
             files = {
-                "media": (os.path.basename(file_path), file_data, self._get_mime_type(ext)),
+                "media": (upload_name, file_data, upload_mime or self._get_mime_type(ext)),
             }
             data = {"type": api_type}
 
@@ -105,6 +114,30 @@ class DingTalkProxyChannel(BaseProxyChannel):
         except Exception:
             logger.exception(f"Failed to upload media: {file_path}")
         return None
+
+    @staticmethod
+    def _zip_bytes(filename: str, data: bytes) -> tuple[bytes, str, str]:
+        """Zip a byte blob and return (zipped_data, zip_name, 'application/zip')."""
+        stem = Path(filename).stem or "attachment"
+        safe_name = filename or "attachment.bin"
+        zip_name = f"{stem}.zip"
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(safe_name, data)
+        return buffer.getvalue(), zip_name, "application/zip"
+
+    def _normalize_upload_payload(
+        self,
+        filename: str,
+        data: bytes,
+        content_type: str | None,
+    ) -> tuple[bytes, str, str | None]:
+        """Normalize upload payload — zip HTML files that DingTalk rejects."""
+        ext = Path(filename).suffix.lower()
+        if ext in self._ZIP_BEFORE_UPLOAD_EXTS or (content_type and content_type == "text/html"):
+            logger.info("Zipping {} before upload (DingTalk rejects raw HTML)", filename)
+            return self._zip_bytes(filename, data)
+        return data, filename, content_type
 
     def _get_mime_type(self, ext: str) -> str:
         """Get MIME type from file extension."""

@@ -42,11 +42,32 @@ class WecomProxyChannel(BaseProxyChannel):
                 text_content = text.get("content", "")
                 if text_content:
                     content_parts.append(text_content)
+            elif msg_type == "image":
+                image_info = body.get("image", {}) if isinstance(body.get("image"), dict) else {}
+                content_parts.append("[image]" if image_info.get("url") else "[image: download failed]")
             elif msg_type == "voice":
                 voice = body.get("voice", {}) if isinstance(body.get("voice"), dict) else {}
                 voice_content = voice.get("content", "")
                 if voice_content:
                     content_parts.append(f"[voice] {voice_content}")
+                else:
+                    content_parts.append("[voice]")
+            elif msg_type == "file":
+                file_info = body.get("file", {}) if isinstance(body.get("file"), dict) else {}
+                file_name = file_info.get("name", "unknown")
+                content_parts.append(f"[file: {file_name}]" if file_info.get("url") else f"[file: {file_name}: download failed]")
+            elif msg_type == "mixed":
+                msg_items = body.get("mixed", {}).get("msg_item", [])
+                for item in msg_items:
+                    item_type = item.get("msgtype", "")
+                    if item_type == "text":
+                        text = item.get("text", {}).get("content", "")
+                        if text:
+                            content_parts.append(text)
+                    elif item_type == "image":
+                        content_parts.append("[image]")
+                    else:
+                        content_parts.append(f"[{item_type}]")
 
             content = "\n".join(content_parts) if content_parts else ""
             if not content:
@@ -63,7 +84,7 @@ class WecomProxyChannel(BaseProxyChannel):
             self.send_to_hub(msg_data)
 
         except Exception as e:
-            logger.error("WeCom proxy message handler error: {}", e)
+            logger.exception("WeCom proxy message handler error: {}", e)
 
     def _send_reply(self, frame: Any, content: str) -> None:
         if not self._client:
@@ -86,6 +107,8 @@ class WecomProxyChannel(BaseProxyChannel):
             frame = self._chat_frames.get(chat_id)
             if frame:
                 self._enqueue_send({"frame": frame, "content": content})
+            else:
+                logger.warning("WeCom proactive send: no stored frame for chat_id={}, message dropped", chat_id)
 
     @staticmethod
     def _generate_req_id(prefix: str) -> str:
