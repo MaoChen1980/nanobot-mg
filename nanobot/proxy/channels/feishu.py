@@ -338,18 +338,30 @@ class FeishuProxyChannel(BaseProxyChannel):
     # ------------------------------------------------------------------
 
     def _get_bot_open_id(self) -> str:
-        """Get bot's own open_id by calling bot info API (best-effort, cached)."""
+        """Get bot's own open_id via GET /open-apis/bot/v3/info (best-effort, cached)."""
         cached = getattr(self, "_bot_open_id", None)
         if cached:
             return cached
         try:
-            from lark_oapi.api.contact.v3 import GetUserRequest
-            request = GetUserRequest.builder().user_id_type("open_id").build()
+            import lark_oapi as lark
+
+            request = (
+                lark.BaseRequest.builder()
+                .http_method(lark.HttpMethod.GET)
+                .uri("/open-apis/bot/v3/info")
+                .token_types({lark.AccessTokenType.APP})
+                .build()
+            )
             with self._client_lock:
-                resp = self._client.contact.v3.user.get(request)
-            if resp.success() and resp.data:
-                self._bot_open_id = resp.data.open_id or ""
+                response = self._client.request(request)
+            if response.success():
+                import json
+
+                data = json.loads(response.raw.content)
+                bot = (data.get("data") or data).get("bot") or {}
+                self._bot_open_id = bot.get("open_id", "") or ""
                 return self._bot_open_id
+            logger.debug("Failed to get bot info: code={} msg={}", response.code, response.msg)
         except Exception as e:
             logger.debug("Failed to get bot open_id: {}", e)
         return ""
@@ -384,13 +396,12 @@ class FeishuProxyChannel(BaseProxyChannel):
         candidate = text.lstrip()
         for mention in mentions:
             key = getattr(mention, "key", None) or ""
-            if not key or not candidate.startswith(key):
+            if not key or not re.match(rf"{re.escape(key)}(?![A-Za-z0-9_])", candidate):
                 continue
             if not self._is_bot_mention(mention):
                 continue
-            rest = candidate[len(key):].lstrip()
-            if rest != candidate:
-                return rest or text
+            stripped = candidate[len(key):].strip()
+            return stripped or text
         return text
 
     def _resolve_mentions(self, text: str, mentions: list | None) -> str:
@@ -399,7 +410,12 @@ class FeishuProxyChannel(BaseProxyChannel):
             return text
         for mention in mentions:
             key = getattr(mention, "key", None) or ""
-            if not key or key not in text:
+            if not key:
+                continue
+            # Feishu placeholders are numbered keys like @_user_1. Use word
+            # boundary to avoid partial match (e.g. @_user_1 matching @_user_10).
+            pattern = rf"{re.escape(key)}(?![A-Za-z0-9_])"
+            if not re.search(pattern, text):
                 continue
             name = getattr(mention, "name", None) or key
             mid = getattr(mention, "id", None)
@@ -413,7 +429,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 replacement = f"@{name} ({open_id})"
             else:
                 replacement = f"@{name}"
-            text = text.replace(key, replacement)
+            text = re.sub(pattern, replacement, text)
         return text
 
     # ------------------------------------------------------------------

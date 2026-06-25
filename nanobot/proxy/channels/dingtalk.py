@@ -80,7 +80,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
 
             # Normalize upload payload (e.g. zip HTML files that DingTalk rejects raw)
             file_data, upload_name, upload_mime = self._normalize_upload_payload(
-                os.path.basename(file_path), file_data, None
+                os.path.basename(file_path), file_data, self._get_mime_type(ext)
             )
 
             # Upload via DingTalk OAPI media endpoint

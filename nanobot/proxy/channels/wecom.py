@@ -23,7 +23,12 @@ class WecomProxyChannel(BaseProxyChannel):
 
     def _process_message(self, frame: Any, msg_type: str) -> None:
         try:
-            body = frame.body if hasattr(frame, "body") else (frame.get("body") if isinstance(frame, dict) else frame)
+            if hasattr(frame, "body"):
+                body = frame.body or {}
+            elif isinstance(frame, dict):
+                body = frame.get("body", frame)
+            else:
+                body = {}
             if not isinstance(body, dict):
                 return
 
