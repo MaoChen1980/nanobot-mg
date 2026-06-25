@@ -22,7 +22,9 @@
 - **代码文件**：在 `{{ project_root }}/nanobot/*.py`，用 `grep` + `read_file` 定位。
 
 ### Step 2: 识别缺陷
-对比"实际发生了什么"（.pt）和"应该怎么运作"（模板、代码、skill）：
+对比"实际发生了什么"（.pt）和"应该怎么运作"（模板、代码、skill）。
+
+在报出缺陷之前，先 review 一次自己的判断——很多初看像问题的地方，review 后会发现并不是什么问题。
 
 **prompt 层** (`{{ project_root }}/nanobot/templates/agent/*.md`)：
 - 模糊用词：用了"最好"、"尽量"、"应当"但应该用精确条件
@@ -38,13 +40,17 @@
 - 触发条件过宽/过窄、行为描述过时
 - 如果 `{{ workspace_path }}/skills/` 目录不存在则跳过此层
 
-### Step 3: 置信度判定
-- **同一问题在 ≥2 个 .pt 中出现** → 高置信度，直接修
-- **只出现一次但影响严重**（报错、循环、费用高）→ 直接修
-- **只出现一次且影响轻微** → 不修
+### Step 3: 判定是否修复
+不考虑出现频率，按以下三个标准判断：
+
+1. **值得修** — 是真正的 bug 或设计缺陷，修复后提升质量
+2. **不修会后悔** — 现在放过，将来一定在这里出问题
+3. **顺手修** — 改动小、风险低，看到了就修
+
+满足任意一条就修。重要的是问题本身的重要性，不是它出现了几次。
 
 ### Step 4: 修复
-用 `edit_file` 定点修改。路径必须用绝对路径：
+定点修改。路径必须用绝对路径：
 
 - **prompt**：`{{ project_root }}/nanobot/templates/agent/xxx.md`
   - `最好不做` → `仅当 X 和 Y 都满足时才做`
@@ -52,11 +58,13 @@
   - 按数据流/控制流分析确定最优改点
 - **skill**：`{{ workspace_path }}/skills/xxx/SKILL.md`
 
-每次最多修 2 处。
+不限制每次修多少处，但每处修改都要有明确依据。
 
 ### Step 5: 验证
-- .py 文件：`python -c "import ast; ast.parse(open('{{ project_root }}/nanobot/path/to/modified.py').read())"` 检查语法
-- `.md` 文件：不需要语法检查，但确认改动有效
+- 对所有修改过的 .py 文件做语法验证：`python -c "import ast; ast.parse(open('{{ project_root }}/nanobot/path/to/modified.py').read())"`
+- review 改动本身，确认修改正确且完整
+- 对修改涉及的代码做数据流/控制流分析，追踪上下游和相关模块，确认没有引入回归
+- 对修改过的 prompt（.md）模板，放入 context 中 review 检查
 - 验证失败 → 回退改动
 
 ### Step 6: 记录
@@ -69,5 +77,4 @@
 
 ## 约束
 - 只修过去 24h 的 .pt 中能发现的问题
-- 不要添加新文件
 - 找不到可修之处 → 只记录 `evolution_changelog.md: 今日无事可修`
