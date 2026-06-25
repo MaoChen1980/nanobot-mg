@@ -32,6 +32,11 @@ class DingTalkProxyChannel(BaseProxyChannel):
     CHANNEL_NAME = "DingTalk"
     REQUIRED_CONFIG_FIELDS = ["clientId", "clientSecret"]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._access_token: str | None = None
+        self._token_expiry: float = 0
+
     # ------------------------------------------------------------------
     # Media upload/download
     # ------------------------------------------------------------------
@@ -84,6 +89,10 @@ class DingTalkProxyChannel(BaseProxyChannel):
 
             if resp.status_code == 200:
                 result = resp.json()
+                errcode = result.get("errcode")
+                if errcode not in (None, 0):
+                    logger.warning("Upload API error: errcode={} errmsg={}", errcode, result.get("errmsg", ""))
+                    return None
                 media_id = result.get("mediaId") or result.get("media_id")
                 if media_id:
                     logger.info(f"Uploaded {file_path} -> media_id: {media_id}")
@@ -117,26 +126,15 @@ class DingTalkProxyChannel(BaseProxyChannel):
         }
         return mime_map.get(ext.lower(), "application/octet-stream")
 
-    def _download_media(self, download_code: str, media_type: str = "image", file_name: str = "") -> str | None:
-        """Download media from DingTalk using downloadCode.
+    async def _download_media(self, download_code: str, media_type: str = "image", file_name: str = "") -> str | None:
+        """Download media from DingTalk using downloadCode (async).
 
-        The DingTalk Robot API ``/v1.0/robot/messageFiles/download`` returns a
-        JSON body with a ``downloadUrl`` pointing to the actual file content,
-        so this method does a two-step fetch: get the URL, then download the
-        binary.
-
-        Args:
-            download_code: The download code from the message
-            media_type: 'image' or 'file'
-            file_name: Original filename from message content (fallback if Content-Disposition lacks one)
-
-        Returns:
-            Local file path on success, None on failure
+        Two-step: exchange downloadCode for a downloadUrl, then fetch the binary.
         """
         try:
             import httpx
 
-            token = self._get_access_token()
+            token = await asyncio.to_thread(self._get_access_token)
             if not token:
                 return None
 
@@ -151,27 +149,30 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 "robotCode": self.config.get("clientId", ""),
             }
 
-            with httpx.Client(timeout=60) as client:
-                resp = client.post(url, json=payload, headers=headers)
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(url, json=payload, headers=headers)
 
             if resp.status_code != 200:
                 logger.warning(f"Download URL request failed: {resp.status_code} - {resp.text[:200]}")
                 return None
 
             result = resp.json()
-            download_url = result.get("downloadUrl") or result.get("downloadUrl", "")
+            errcode = result.get("errcode")
+            if errcode not in (None, 0):
+                logger.warning("Download URL API error: errcode={} errmsg={}", errcode, result.get("errmsg", ""))
+                return None
+            download_url = result.get("downloadUrl") or result.get("download_url", "")
             if not download_url:
                 logger.warning(f"Download URL missing in response: {result}")
                 return None
 
-            # Step 2: download the actual file content from the URL
-            with httpx.Client(timeout=120, follow_redirects=True) as client:
-                file_resp = client.get(download_url)
+            # Step 2: download the actual file content
+            async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+                file_resp = await client.get(download_url)
                 if file_resp.status_code != 200:
                     logger.warning(f"File download failed: {file_resp.status_code} - {file_resp.text[:200]}")
                     return None
 
-            # Determine extension from Content-Type header of the download
             content_type = file_resp.headers.get("Content-Type", "")
             ext = self._guess_extension_from_mime(content_type) or ".bin"
 
@@ -179,8 +180,6 @@ class DingTalkProxyChannel(BaseProxyChannel):
             temp_dir = Path(ws) / "incoming"
             temp_dir.mkdir(parents=True, exist_ok=True)
 
-            # Try original filename from Content-Disposition header first,
-            # then fall back to fileName from message content, then generate one.
             cd = file_resp.headers.get("Content-Disposition", "")
             orig_name = ""
             if cd:
@@ -359,10 +358,15 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     resp = client.post(url, json=payload, headers=headers)
                     if resp.status_code >= 400:
                         logger.warning("DingTalk markdown send failed: {} - {}", resp.status_code, resp.text[:200])
+                    else:
+                        result = resp.json()
+                        errcode = result.get("errcode")
+                        if errcode not in (None, 0):
+                            logger.warning("DingTalk markdown send API error: errcode={} errmsg={}", errcode, result.get("errmsg", ""))
 
             # Send each media item as a native DingTalk message:
-            #   - images -> sampleImage  with photoURL=media_id
-            #   - files  -> sampleFile   with mediaId + fileName + fileType
+            #   - images -> sampleImageMsg with photoURL=media_id
+            #   - files  -> sampleFile     with mediaId + fileName + fileType
             for media_id, media_type, file_ext, file_name in media_items:
                 self._send_media(chat_id, is_group, media_id, media_type, file_ext, file_name, headers, url, payload_base)
 
@@ -372,19 +376,17 @@ class DingTalkProxyChannel(BaseProxyChannel):
     def _send_media(self, chat_id: str, is_group: bool, media_id: str, media_type: str, file_ext: str, file_name: str, headers: dict, url: str, payload_base: dict) -> None:
         """Send a media item via DingTalk Robot API.
 
-        For images (``media_type="image"``) tries ``sampleImage`` first, falls
-        back to ``sampleFile`` when that fails (the Robot API does not support
-        ``sampleImage`` in many environments).  For files uses ``sampleFile``
+        For images (``media_type="image"``) tries ``sampleImageMsg`` first, falls
+        back to ``sampleFile`` when that fails.  For files uses ``sampleFile``
         with the original ``fileName``.
         """
         import httpx
 
         try:
             if media_type == "image":
-                # Try sampleImage first (photoURL accepts a media_id)
                 payload = {
                     **payload_base,
-                    "msgKey": "sampleImage",
+                    "msgKey": "sampleImageMsg",
                     "msgParam": json.dumps({
                         "photoURL": media_id,
                     }, ensure_ascii=False),
@@ -392,10 +394,14 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 with httpx.Client(timeout=30) as client:
                     resp = client.post(url, json=payload, headers=headers)
                     if resp.status_code < 400:
-                        logger.info(f"Sent image {media_id} to {chat_id}")
-                        return
-                    # Fallback: send image as sampleFile
-                    logger.info("sampleImage not supported, falling back to sampleFile for {}", file_name or media_id)
+                        result = resp.json()
+                        errcode = result.get("errcode")
+                        if errcode in (None, 0):
+                            logger.info(f"Sent image {media_id} to {chat_id}")
+                            return
+                        logger.info("sampleImageMsg API error (errcode={}), falling back to sampleFile for {}", errcode, file_name or media_id)
+                    else:
+                        logger.info("sampleImageMsg HTTP {}, falling back to sampleFile for {}", resp.status_code, file_name or media_id)
 
             # sampleFile for files (or image fallback)
             file_type = file_ext.lstrip(".") if file_ext else "file"
@@ -413,7 +419,12 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 if resp.status_code >= 400:
                     logger.warning("DingTalk media send failed ({}): {} - {}", media_type, resp.status_code, resp.text[:200])
                 else:
-                    logger.info(f"Sent {media_type} {media_id} to {chat_id} ({file_name})")
+                    result = resp.json()
+                    errcode = result.get("errcode")
+                    if errcode not in (None, 0):
+                        logger.warning("DingTalk media send API error ({}): errcode={} errmsg={}", media_type, errcode, result.get("errmsg", ""))
+                    else:
+                        logger.info(f"Sent {media_type} {media_id} to {chat_id} ({file_name})")
 
         except Exception as e:
             logger.error("DingTalk media send error ({}): {}", media_type, e)
@@ -466,7 +477,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     download_code = content_data.get("downloadCode")
                 if download_code:
                     content = "[用户发送了图片]"
-                    local_path = self._download_media(download_code, "image")
+                    local_path = await self._download_media(download_code, "image")
                     if local_path:
                         content = f"[用户发送了图片: {local_path}]"
                         media.append(local_path)
@@ -479,12 +490,36 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 file_name = content_data.get("fileName") or content_data.get("name", "")
                 if download_code:
                     content = "[用户发送了文件]"
-                    local_path = self._download_media(download_code, "file", file_name)
+                    local_path = await self._download_media(download_code, "file", file_name)
                     if local_path:
                         content = f"[用户发送了文件: {local_path}]"
                         media.append(local_path)
                 else:
                     content = "[收到文件消息]"
+
+            elif msg_type == "richText":
+                rich_text = chatbot_msg.rich_text_content
+                if rich_text:
+                    rich_list = rich_text.rich_text_list or []
+                    text_parts: list[str] = []
+                    for item in rich_list:
+                        if not isinstance(item, dict):
+                            continue
+                        if item.get("type") == "text":
+                            t = item.get("text", "").strip()
+                            if t:
+                                text_parts.append(t)
+                        dl_code = item.get("downloadCode") or item.get("download_code", "")
+                        if dl_code:
+                            item_type = item.get("type", "")
+                            mtype = "image" if item_type in ("picture", "image") else "file"
+                            fname = item.get("fileName") or item.get("name", "")
+                            local_path = await self._download_media(dl_code, mtype, fname)
+                            if local_path:
+                                media.append(local_path)
+                    content = " ".join(text_parts).strip() if text_parts else "[用户发送了富文本消息]"
+                else:
+                    content = "[收到富文本消息]"
 
             elif isinstance(chatbot_msg.extensions.get("content"), dict):
                 content = chatbot_msg.extensions["content"].get("recognition", "").strip()
@@ -511,6 +546,20 @@ class DingTalkProxyChannel(BaseProxyChannel):
             conversation_type = data.get("conversationType")
             conversation_id = data.get("conversationId") or data.get("openConversationId")
             is_group = conversation_type == "2" and conversation_id
+
+            # Group @mention gating: skip if groupPolicy=mention and bot not @mentioned
+            if is_group and self.config.get("groupPolicy", "mention") == "mention":
+                is_mentioned = getattr(chatbot_msg, "is_in_at_list", False)
+                if not is_mentioned:
+                    raw = data.get("isInAtList", False)
+                    if isinstance(raw, str):
+                        is_mentioned = raw.lower() in ("true", "1", "yes")
+                    else:
+                        is_mentioned = bool(raw)
+                if not is_mentioned:
+                    logger.info("DingTalk group message ignored: bot was not @mentioned")
+                    return
+
             chat_id = f"group:{conversation_id}" if is_group else sender_id
 
             # Build message with optional media
@@ -584,7 +633,9 @@ class DingTalkProxyChannel(BaseProxyChannel):
         self._enqueue_send(item)
 
     def _get_access_token(self) -> str | None:
-        """Get DingTalk access token."""
+        """Get DingTalk access token with per-process caching (tokens last 7200s)."""
+        if self._access_token and time.time() < self._token_expiry:
+            return self._access_token
         try:
             import httpx
             url = "https://api.dingtalk.com/v1.0/oauth2/accessToken"
@@ -595,7 +646,14 @@ class DingTalkProxyChannel(BaseProxyChannel):
             with httpx.Client(timeout=30) as client:
                 resp = client.post(url, json=data)
                 if resp.status_code == 200:
-                    return resp.json().get("accessToken")
+                    result = resp.json()
+                    errcode = result.get("errcode")
+                    if errcode not in (None, 0):
+                        logger.warning("Token API error: errcode={} errmsg={}", errcode, result.get("errmsg", ""))
+                        return None
+                    self._access_token = result.get("accessToken")
+                    self._token_expiry = time.time() + int(result.get("expireIn", 7200)) - 60
+                    return self._access_token
         except Exception:
             logger.exception("Failed to get DingTalk access token")
         return None
