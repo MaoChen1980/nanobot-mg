@@ -144,6 +144,9 @@ class FeishuProxyChannel(BaseProxyChannel):
                                 or content_obj.get("key") or content_obj.get("token"))
                 if msg_type == "text" and isinstance(content_obj, dict):
                     text = content_obj.get("text", "")
+                    mentions = getattr(message, "mentions", None)
+                    if mentions:
+                        text = self._strip_leading_bot_mention(text, mentions)
                 elif isinstance(content_obj, dict) and content:
                     label = _MSG_TYPE_LABELS.get(msg_type, msg_type)
                     text = f"[{label}]\n{content}"  # 非 text → 带类型标签的原始 JSON
@@ -250,6 +253,53 @@ class FeishuProxyChannel(BaseProxyChannel):
             self.send_to_hub(msg_data)
         except Exception as e:
             logger.error("Failed to process card action: {}", e)
+
+    # ------------------------------------------------------------------
+    # Bot mention handling
+    # ------------------------------------------------------------------
+
+    def _get_bot_open_id(self) -> str:
+        """Get bot's own open_id by calling bot info API (best-effort, cached)."""
+        cached = getattr(self, "_bot_open_id", None)
+        if cached:
+            return cached
+        try:
+            from lark_oapi.api.contact.v3 import GetUserRequest
+            request = GetUserRequest.builder().user_id_type("open_id").build()
+            with self._client_lock:
+                resp = self._client.contact.v3.user.get(request)
+            if resp.success() and resp.data:
+                self._bot_open_id = resp.data.open_id or ""
+                return self._bot_open_id
+        except Exception as e:
+            logger.debug("Failed to get bot open_id: {}", e)
+        return ""
+
+    def _is_bot_mention(self, mention: Any) -> bool:
+        """Check if a mention targets this bot by comparing open_id."""
+        if not hasattr(mention, "id") or not mention.id:
+            return False
+        mention_open_id = getattr(mention.id, "open_id", None) or ""
+        if not mention_open_id:
+            return False
+        bot_open_id = self._get_bot_open_id()
+        return mention_open_id == bot_open_id if bot_open_id else mention_open_id.startswith("ou_")
+
+    @staticmethod
+    def _strip_leading_bot_mention(text: str, mentions: list | None) -> str:
+        """Remove the leading bot @mention from group message text."""
+        if not mentions or not text:
+            return text
+        candidate = text.lstrip()
+        for mention in mentions:
+            key = getattr(mention, "key", None) or ""
+            if not key or not candidate.startswith(key):
+                continue
+            # Only strip if followed by a non-identifier char (end of placeholder)
+            rest = candidate[len(key):].lstrip()
+            if rest != candidate:
+                return rest or text
+        return text
 
     # ------------------------------------------------------------------
     # Fetch quoted message
@@ -723,6 +773,11 @@ class FeishuProxyChannel(BaseProxyChannel):
 
     # ── Send strategies ────────────────────────────────────────────────
 
+    @staticmethod
+    def _receive_id_type(chat_id: str) -> str:
+        """``oc_`` prefix → chat_id (group), anything else → open_id (single chat)."""
+        return "chat_id" if chat_id.startswith("oc_") else "open_id"
+
     def _send_card_reply(self, chat_id: str, content: str,
                           root_id: str | None = None,
                           quick_replies: list[dict[str, str]] | None = None) -> bool:
@@ -788,7 +843,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 body.root_id = root_id
             request = (
                 CreateMessageRequest.builder()
-                .receive_id_type("chat_id")
+                .receive_id_type(self._receive_id_type(chat_id))
                 .request_body(body)
                 .build()
             )
@@ -830,7 +885,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 body.root_id = root_id
             request = (
                 CreateMessageRequest.builder()
-                .receive_id_type("chat_id")
+                .receive_id_type(self._receive_id_type(chat_id))
                 .request_body(body)
                 .build()
             )
@@ -860,7 +915,7 @@ class FeishuProxyChannel(BaseProxyChannel):
                 body.root_id = root_id
             request = (
                 CreateMessageRequest.builder()
-                .receive_id_type("chat_id")
+                .receive_id_type(self._receive_id_type(chat_id))
                 .request_body(body)
                 .build()
             )

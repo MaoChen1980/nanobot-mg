@@ -248,7 +248,7 @@ class DingTalkProxyChannel(BaseProxyChannel):
             media_id = self._upload_media(path, "image")
             if media_id:
                 media_items.append((media_id, "image", "", os.path.basename(path)))
-                return f"![{alt_text}]({media_id})"
+                return f"[image: {alt_text}]"
             logger.warning(f"Failed to upload image: {path}")
             return match.group(0)
 
@@ -343,8 +343,9 @@ class DingTalkProxyChannel(BaseProxyChannel):
 
             headers = {"x-acs-dingtalk-access-token": token}
 
-            # Send as a single markdown message.  Images are embedded via
-            # ``![image](media_id)`` and files as ``[文件: name]`` text.
+            # Send as a single markdown message.  Images are added as text
+            # references ``[image: name]`` (sent natively via ``_send_media``
+            # below) and files as ``[文件: name]`` text.
             if content.strip():
                 payload = {
                     **payload_base,
