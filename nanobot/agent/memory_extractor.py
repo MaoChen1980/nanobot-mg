@@ -94,6 +94,7 @@ class MemoryExtractor:
         self.processed_dir = ensure_dir(self.prompts_dir / "processed")
         self._last_modified_files: list[str] = []
         self._pending_tool_scripts: list[dict[str, Any]] = []
+        self._pending_skill_entries: list[dict[str, Any]] = []
         # Persistent cache for recent_entries — preserves MEMORY.md Active/Recent
         # sections across extraction runs that have no new findings.
         self._recent_cache: list[dict[str, Any]] = []
@@ -375,6 +376,9 @@ class MemoryExtractor:
         Returns ``recent_entries`` (for MEMORY.md) if any writing was done,
         ``None`` if nothing changed.
         """
+        # Reset per-cycle pending collections — entries filled below as we iterate findings
+        self._pending_skill_entries = []
+        self._pending_tool_scripts = []
         # memory_state: {rel_path → [{content, ts, pinned}]}
         memory_state: dict[str, list[dict[str, Any]]] = {}
         # supersedes_plan: {rel_path → {(normalized_old_text): True}}
@@ -419,7 +423,7 @@ class MemoryExtractor:
                 name = (finding.get("name") or "").strip()
                 if name and content:
                     skill_line = f"- **{name}**: {content}\n<!--ts:{ts_num}-->"
-                    memory_state.setdefault("pending_skills.md", []).append({
+                    self._pending_skill_entries.append({
                         "content": skill_line, "ts": ts_num, "pinned": False,
                     })
 
@@ -468,9 +472,11 @@ class MemoryExtractor:
         for entries in memory_state.values():
             entries.sort(key=lambda e: e["ts"])
 
-        # ── Flush each topic: full file rewrite ──
+        # ── Flush each topic: full file rewrite (skip pending_skills.md — kept in memory) ──
         recent_entries: list[dict[str, Any]] = []
         for rel_path, entries in memory_state.items():
+            if rel_path == "pending_skills.md":
+                continue
             content_lines: list[str] = []
             existing_paragraphs: list[dict[str, Any]] = []
             full_path = self.store.rules_file if rel_path == "RULES.md" else self.store.user_file if rel_path == "user.md" else self.store.memory_dir / rel_path
@@ -744,9 +750,9 @@ class MemoryExtractor:
 
         For ``script`` type: copy file to ``workspace/tools/<name>/``.
         For ``system`` type: no script to copy.
-        Both types write a readme.md to ``workspace/tools/<name>/`` and append an
-        entry to ``pending_skills.md`` so downstream ``_materialize_skills()``
-        can create a full SKILL.md.
+        Both types write a readme.md to ``workspace/tools/<name>/`` and append a
+        skill entry to ``self._pending_skill_entries`` so downstream
+        ``_materialize_skills()`` can create a full SKILL.md.
 
         Returns True if any changes were made.
         """
@@ -754,7 +760,6 @@ class MemoryExtractor:
             return False
 
         tools_dir = ensure_dir(self.store.workspace / "tools")
-        pending_path = self.store.memory_dir / "pending_skills.md"
 
         # Build set of existing tool dirs for dedup
         existing_tools: set[str] = set()
@@ -831,7 +836,7 @@ class MemoryExtractor:
             )
             logger.info("MemoryExtractor: wrote workspace/tools/{}/readme.md", name)
 
-            # ── Append skill entry to pending_skills.md (single-line for clean removal) ──
+            # ── Append skill entry to _pending_skill_entries (no disk I/O) ──
             meta_parts = []
             if install_hint:
                 meta_parts.append(f"Install: {install_hint}")
@@ -842,18 +847,20 @@ class MemoryExtractor:
             meta_str = " | ".join(meta_parts)
             skill_line = f"- **{name}**: {description} — {meta_str}" if meta_str else f"- **{name}**: {description}"
 
-            existing = pending_path.read_text(encoding="utf-8") if pending_path.exists() else ""
-            new_entry = f"\n{skill_line}\n<!--ts:{time.time()}-->"
-            pending_path.write_text(existing.strip() + new_entry + "\n", encoding="utf-8")
+            self._pending_skill_entries.append({
+                "content": f"{skill_line}\n<!--ts:{time.time()}-->",
+                "ts": time.time(),
+                "pinned": False,
+            })
 
             changed = True
-            logger.info("MemoryExtractor: added tool {} to pending_skills.md", name)
+            logger.info("MemoryExtractor: added tool {} to pending skills", name)
 
         if changed:
             from nanobot.utils.gitstore import commit_workspace_changes
             commit_workspace_changes(
                 self.store.workspace,
-                rel_dirs=["tools", "memory/pending_skills.md"],
+                rel_dirs=["tools"],
                 message="tool: add scripts to workspace tools and enqueue skills",
             )
 
@@ -865,21 +872,42 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def _materialize_skills(self) -> bool:
-        """Convert pending_skills.md entries to real skills via sub-agent.
+        """Convert pending skill entries (in memory) to real skills via sub-agent.
+
+        Reads from ``self._pending_skill_entries`` — populated by both the LLM
+        analysis path (``_write_cleanup_and_rebuild``) and the tool/script path
+        (``_materialize_tool_scripts``). No disk file is involved.
 
         Spawns a sub-agent with file tools to read existing skills and decide
         create/update/merge/skip. Returns True if any changes were made.
         """
-        pending_path = self.store.memory_dir / "pending_skills.md"
-        if not pending_path.exists():
+        if not self._pending_skill_entries:
             return False
 
-        pending_text = pending_path.read_text(encoding="utf-8").strip()
-        if not pending_text:
+        pending_text = "\n".join(e["content"] for e in self._pending_skill_entries)
+
+        # Cheap gate: if all named skills already have a directory, skip the LLM call.
+        skills_dir = self.store.workspace / "skills"
+        existing_skill_dirs: set[str] = set()
+        if skills_dir.is_dir():
+            for child in skills_dir.iterdir():
+                if child.is_dir():
+                    existing_skill_dirs.add(child.name.lower())
+
+        pending_names = {
+            m.group(1).lower()
+            for entry in self._pending_skill_entries
+            if (m := re.search(r"^\*\*([^*]+)\*\*:", entry["content"]))
+        }
+        if pending_names and pending_names.issubset(existing_skill_dirs):
+            logger.info(
+                "MemoryExtractor: all {} pending skill(s) already exist, skipping sub-agent",
+                len(pending_names),
+            )
+            self._pending_skill_entries = []
             return False
 
         # Snapshot skills dir before, to detect changes after
-        skills_dir = self.store.workspace / "skills"
         dir_before: set[str] = set()
         if skills_dir.is_dir():
             for child in skills_dir.iterdir():
@@ -887,7 +915,7 @@ class MemoryExtractor:
                     dir_before.add(child.name)
 
         # Get provider from ContextVar (set by AgentLoop at startup)
-        from nanobot.agent.llm_context import _llm_provider, _llm_model
+        from nanobot.agent.llm_context import _llm_model, _llm_provider
         try:
             provider = _llm_provider.get()
             model = _llm_model.get()
@@ -896,6 +924,7 @@ class MemoryExtractor:
                 "MemoryExtractor: LLM provider not available, "
                 "skipping skill materialization"
             )
+            self._pending_skill_entries = []
             return False
 
         from nanobot.agent.runner import AgentRunner, AgentRunSpec
@@ -953,10 +982,8 @@ class MemoryExtractor:
                 result.final_content[:200],
             )
 
-        # ── Done: delete pending_skills.md so next cycle skips if nothing new ──
-        if pending_path.exists():
-            pending_path.unlink()
-            logger.info("MemoryExtractor: deleted pending_skills.md after processing")
+        # ── Done: reset for next cycle ──
+        self._pending_skill_entries = []
 
         # Detect changes: new skill dirs
         dir_after: set[str] = set()
@@ -1162,8 +1189,8 @@ class MemoryExtractor:
                         content = src_path.read_text(encoding="utf-8")
                         body_lines = content.split("\n")
                         body = "\n".join(
-                            l for l in body_lines
-                            if not l.startswith("# ") and not l.startswith("---")
+                            line for line in body_lines
+                            if not line.startswith("# ") and not line.startswith("---")
                         )
                         combined.append(body.strip())
                         combined.append("")

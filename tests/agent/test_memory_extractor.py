@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import time
@@ -18,7 +17,6 @@ from nanobot.agent.memory_extractor import (
     _parse_ts,
     _trim_sentence,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -757,16 +755,17 @@ class TestWriteCleanupAndRebuildByType:
         assert "no hardcoded secrets" in text
 
     @pytest.mark.asyncio
-    async def test_skill_written_to_pending_skills(self, extractor: MemoryExtractor) -> None:
+    async def test_skill_stored_in_memory_not_on_disk(self, extractor: MemoryExtractor) -> None:
         await extractor._write_cleanup_and_rebuild(
             [_make_finding(ftype="skill", content="useful skill", topic="", name="my-skill")]
         )
+        # Skill entries are kept in memory, NOT written to disk
         pending = extractor.store.memory_dir / "pending_skills.md"
-        assert pending.exists()
-        text = pending.read_text(encoding="utf-8")
-        assert "**my-skill**" in text
-        assert "useful skill" in text
-        assert "<!--ts:" in text
+        assert not pending.exists()
+        assert len(extractor._pending_skill_entries) == 1
+        assert "**my-skill**" in extractor._pending_skill_entries[0]["content"]
+        assert "useful skill" in extractor._pending_skill_entries[0]["content"]
+        assert "<!--ts:" in extractor._pending_skill_entries[0]["content"]
 
 
 # ---------------------------------------------------------------------------
@@ -1092,7 +1091,7 @@ class TestGenerateMemoryIndex:
             )
         extractor._generate_memory_index([])
         text = extractor.store.memory_file.read_text(encoding="utf-8")
-        pinned_lines = [l for l in text.split("\n") if l.startswith("- [")]
+        pinned_lines = [line for line in text.split("\n") if line.startswith("- [")]
         assert len(pinned_lines) <= 6
 
     def test_recent_changes_section(self, extractor: MemoryExtractor) -> None:
@@ -1133,7 +1132,7 @@ class TestGenerateMemoryIndex:
             (d / "file.md").write_text(f"# Cat {i}\ncontent\n", encoding="utf-8")
         extractor._generate_memory_index([])
         text = extractor.store.memory_file.read_text(encoding="utf-8")
-        cat_lines = [l for l in text.split("\n") if l.startswith("- **")]
+        cat_lines = [line for line in text.split("\n") if line.startswith("- **")]
         assert len(cat_lines) <= 20
 
     def test_file_without_heading_uses_stem(self, extractor: MemoryExtractor) -> None:
@@ -1153,31 +1152,23 @@ class TestMaterializeSkills:
     """Test _materialize_skills early-return paths (no sub-agent needed)."""
 
     @pytest.mark.asyncio
-    async def test_no_pending_file_returns_false(self, extractor: MemoryExtractor) -> None:
-        """No pending_skills.md → False."""
+    async def test_no_pending_entries_returns_false(self, extractor: MemoryExtractor) -> None:
+        """No _pending_skill_entries → False."""
         result = await extractor._materialize_skills()
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_empty_pending_returns_false(self, extractor: MemoryExtractor) -> None:
-        """pending_skills.md exists but is empty → False."""
-        pending = extractor.store.memory_dir / "pending_skills.md"
-        pending.write_text("   ", encoding="utf-8")
-        result = await extractor._materialize_skills()
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_empty_string_pending_returns_false(self, extractor: MemoryExtractor) -> None:
-        """pending_skills.md exists but is blank/whitespace → False."""
-        pending = extractor.store.memory_dir / "pending_skills.md"
-        pending.write_text("\n\n  \n", encoding="utf-8")
+    async def test_empty_pending_entries_returns_false(self, extractor: MemoryExtractor) -> None:
+        """Empty _pending_skill_entries → False."""
+        extractor._pending_skill_entries = []
         result = await extractor._materialize_skills()
         assert result is False
 
     @pytest.mark.asyncio
     async def test_provider_not_available_returns_false(self, extractor: MemoryExtractor) -> None:
         """_llm_provider ContextVar not set (LookupError) → False, no crash."""
-        pending = extractor.store.memory_dir / "pending_skills.md"
-        pending.write_text("- **test-skill**: a test skill\n", encoding="utf-8")
+        extractor._pending_skill_entries = [
+            {"content": "- **test-skill**: a test skill\n<!--ts:1000000-->", "ts": 1000000, "pinned": False},
+        ]
         result = await extractor._materialize_skills()
         assert result is False
