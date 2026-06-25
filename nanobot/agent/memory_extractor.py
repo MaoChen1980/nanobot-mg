@@ -474,6 +474,7 @@ class MemoryExtractor:
 
         # ── Flush each topic: full file rewrite (skip pending_skills.md — kept in memory) ──
         recent_entries: list[dict[str, Any]] = []
+        needs_content_consolidation: list[str] = []  # files with ≥3 new entries
         for rel_path, entries in memory_state.items():
             if rel_path == "pending_skills.md":
                 continue
@@ -582,6 +583,17 @@ class MemoryExtractor:
                     "content": clean[:200],
                     "ts": e["ts"],
                 })
+
+            # Mark for content consolidation if this batch added ≥3 new entries
+            if len(entries) >= 3 and rel_path not in ("RULES.md", "user.md", "pending_skills.md"):
+                needs_content_consolidation.append(rel_path)
+
+        # ── Content-level consolidation for fragmented files ──
+        for rel_path in needs_content_consolidation:
+            try:
+                await self._consolidate_topic_content(rel_path)
+            except Exception:
+                logger.exception("MemoryExtractor: content consolidation failed for {}", rel_path)
 
         # Sort recent by ts (newest first), take top 12
         recent_entries.sort(key=lambda x: -(x["ts"] or 0))
@@ -1033,6 +1045,75 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
     # Memory consolidation — merge narrow topic files
     # ------------------------------------------------------------------
+
+    async def _consolidate_topic_content(self, rel_path: str) -> None:
+        """Content-level consolidation for a single memory file.
+
+        Reads the full file, uses LLM to group related paragraphs, merge duplicates,
+        and organize into semantic sections. Preserves all ``<!--ts:-->`` metadata.
+        Called when a file gets ≥3 new entries in one extraction cycle.
+        """
+        full_path = self.store.memory_dir / rel_path
+        if not full_path.exists():
+            return
+        text = full_path.read_text(encoding="utf-8")
+        stripped = text.strip()
+        if not stripped:
+            return
+        lines = stripped.count("\n") + 1
+        if lines < 20:
+            return  # only consolidate files with enough content
+
+        system_msg = (
+            "你正在整理知识库文件。目标：让内容更有结构、更容易查找。\n\n"
+            "规则：\n"
+            "1. 把散落的子弹笔记按语义分组，用 ## 二级标题分区（如 ## Status、## Key Decisions、## Technical Details、## Open Issues）\n"
+            "2. 合并内容重复或高度重叠的条目，保留信息最完整的那条\n"
+            "3. 为文件顶部生成一条 > TL;DR 单行总结\n"
+            "4. 重要的 pinned 条目保留在文件开头附近\n"
+            "5. **必须保留所有 HTML 注释元数据** — 每个段落后的 <!--ts:timestamp--><!--pinned--><!--recent--> 不能丢失或改变\n"
+            "6. 不要删除任何只有信息，只合并重复和重组顺序\n"
+            "7. 保持原始措辞，不要润色或重写技术内容\n"
+            "8. 文件末尾保留原始 --- 分隔线和 *更新: 日期* 脚注\n\n"
+            "输出完整的文件内容，直接输出 markdown，不要用代码块包裹。"
+        )
+
+        response = await chat_stream_with_retry(
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": f"请重组这个记忆文件的内容：\n\n{text}"},
+            ],
+        )
+        if response.finish_reason == "error":
+            logger.warning("MemoryExtractor: content consolidation LLM error for {}", rel_path)
+            return
+
+        new_text = (response.content or "").strip()
+        if not new_text:
+            return
+
+        # Extract content inside markdown code block if LLM wrapped it
+        if new_text.startswith("```"):
+            lines_in = new_text.split("\n")
+            fence_chars = lines_in[0]
+            if len(lines_in) > 2 and lines_in[-1].strip() == fence_chars:
+                new_text = "\n".join(lines_in[1:-1]).strip()
+
+        # Verify: must still have <!--ts: --> markers (LLM shouldn't drop them)
+        old_ts_count = stripped.count("<!--ts:")
+        new_ts_count = new_text.count("<!--ts:")
+        if new_ts_count < old_ts_count * 0.5:
+            logger.warning(
+                "MemoryExtractor: content consolidation dropped too many ts markers "
+                "({} → {}), skipping write for {}", old_ts_count, new_ts_count, rel_path
+            )
+            return
+
+        # Atomic write
+        tmp_path = full_path.with_suffix(".md.tmp")
+        tmp_path.write_text(new_text + "\n", encoding="utf-8")
+        tmp_path.replace(full_path)
+        logger.info("MemoryExtractor: content consolidated {} ({} lines → {})", rel_path, lines, new_text.count("\n") + 1)
 
     async def _rebuild_indexes(self) -> None:
         """Regenerate index.md, tree.json, and rebuild FAISS indexes.
