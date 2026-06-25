@@ -953,20 +953,19 @@ class MemoryExtractor:
                 result.final_content[:200],
             )
 
-        # Detect changes: new skill dirs or modified pending_skills.md
+        # ── Done: delete pending_skills.md so next cycle skips if nothing new ──
+        if pending_path.exists():
+            pending_path.unlink()
+            logger.info("MemoryExtractor: deleted pending_skills.md after processing")
+
+        # Detect changes: new skill dirs
         dir_after: set[str] = set()
         if skills_dir.is_dir():
             for child in skills_dir.iterdir():
                 if child.is_dir():
                     dir_after.add(child.name)
 
-        current_pending = (
-            pending_path.read_text(encoding="utf-8").strip()
-            if pending_path.exists()
-            else ""
-        )
-
-        return bool(dir_before ^ dir_after) or current_pending != pending_text
+        return bool(dir_before ^ dir_after)
 
     @staticmethod
     def _extract_json_from_llm_output(text: str) -> str:
