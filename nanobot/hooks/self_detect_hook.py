@@ -552,7 +552,7 @@ class SelfDetectHook(AgentHook):
         # failure and return llm_empty so the session continues without crashing.
         for attempt in range(2):
             try:
-                response = await self._call_llm(metrics_text, hook_code)
+                response = await self._raw_llm_call(metrics_text, hook_code)
                 findings, diagnostic = self._parse_findings(response)
                 if diagnostic != "json_decode_error":
                     return findings, diagnostic
@@ -563,8 +563,12 @@ class SelfDetectHook(AgentHook):
         # Second attempt also produced json_decode_error — treat as empty
         return [], "llm_empty"
 
-    async def _call_llm(self, metrics_text: str, hook_code: str) -> str:
-        """Make a minimal LLM call for structured findings extraction."""
+    async def _raw_llm_call(self, metrics_text: str, hook_code: str) -> str:
+        """Make a minimal LLM call and return the raw response string.
+
+        Named `_raw_llm_call` (not `_call_llm`) to distinguish from `_call_for_findings`
+        which is the actual interface used by the detection flow.
+        """
         response = await chat_stream_with_retry(
             messages=[
                 {"role": "system", "content": REFLECTION_SYSTEM_PROMPT},
@@ -582,12 +586,10 @@ class SelfDetectHook(AgentHook):
     def _parse_findings(raw: str) -> tuple[list[dict[str, Any]], str]:
         """Parse JSON findings from LLM response.
 
-        Returns (findings, diagnostic) where diagnostic is one of:
-        - ``"ok"`` — found valid findings
-        - ``"json_decode_error"`` — couldn't parse response as JSON
-        - ``"empty_findings"`` — JSON parsed but findings array was empty
-        - ``"all_filtered"`` — entries found but none passed type/content validation
-        - ``"llm_empty"`` — LLM returned empty content
+        Returns (findings, diagnostic_str) where:
+          - findings: list of validated finding dicts, or [] on any failure
+          - diagnostic_str: one of "ok" | "json_decode_error" | "empty_findings" |
+                            "all_filtered" | "llm_empty", describing why parsing failed
         """
         if not raw or not raw.strip():
             return [], "llm_empty"

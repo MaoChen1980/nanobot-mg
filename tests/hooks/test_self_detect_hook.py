@@ -161,7 +161,7 @@ class TestRunTurnReflection:
 
     @pytest.mark.asyncio
     async def test_call_for_findings_empty_on_llm_failure(self, hook):
-        with patch.object(hook, "_call_llm", side_effect=RuntimeError("fail")):
+        with patch.object(hook, "_raw_llm_call", side_effect=RuntimeError("fail")):
             findings, diagnostic = await hook._call_for_findings("metrics", "code")
         assert findings == []
         assert diagnostic == "llm_call_error"
