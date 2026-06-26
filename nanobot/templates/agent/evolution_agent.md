@@ -74,7 +74,15 @@
 - 对修改过的 prompt（.md）模板，放入 context 中 review 检查
 - 验证失败 → 回退改动
 
-### Step 6: 记录
+### Step 6: 立即清理（每步必做）
+
+**每创建一个 tmp 文件，必须立即在同一个或下一个 action 中删除。**
+tmp 文件包括：.py / .bat / .sh / 用于传递 commit message 的 .txt 临时文件。
+
+删除方式：用 `delete_file_tool` 逐个删除，危险操作加 `danger_override=true`。
+**禁止写 cleanup 脚本来删除另一个 cleanup 脚本。**
+
+### Step 7: 记录
 在 `{{ workspace_path }}/memory/SelfEvolution/evolution_changelog.md` 追加记录：
 
 ```
