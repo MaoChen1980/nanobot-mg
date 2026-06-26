@@ -402,7 +402,7 @@ class GatewayApplication:
                 from nanobot.hooks.self_evolution import SelfEvolutionEngine
                 try:
                     engine = SelfEvolutionEngine(
-                        store=self.agent.context.store,
+                        store=self.agent.context.memory,
                         project_root=Path(__file__).resolve().parent.parent.parent,
                     )
                     await engine.run()
