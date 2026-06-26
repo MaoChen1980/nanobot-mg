@@ -16,14 +16,10 @@ if typing.TYPE_CHECKING:
     from nanobot.proxy.channels.discord import DiscordProxyChannel
     from nanobot.proxy.channels.email import EmailProxyChannel
     from nanobot.proxy.channels.feishu import FeishuProxyChannel
-    from nanobot.proxy.channels.matrix import MatrixProxyChannel
-    from nanobot.proxy.channels.mochat import MochatProxyChannel
-    from nanobot.proxy.channels.msteams import MSTeamsProxyChannel
     from nanobot.proxy.channels.qq import QQProxyChannel
     from nanobot.proxy.channels.slack import SlackProxyChannel
     from nanobot.proxy.channels.telegram import TelegramProxyChannel
     from nanobot.proxy.channels.weixin import WeixinProxyChannel
-    from nanobot.proxy.channels.wecom import WecomProxyChannel
     from nanobot.proxy.channels.whatsapp import WhatsAppProxyChannel
 
 _CHANNEL_MODULES: dict[str, str] = {
@@ -31,14 +27,10 @@ _CHANNEL_MODULES: dict[str, str] = {
     "DiscordProxyChannel": "nanobot.proxy.channels.discord",
     "EmailProxyChannel": "nanobot.proxy.channels.email",
     "FeishuProxyChannel": "nanobot.proxy.channels.feishu",
-    "MatrixProxyChannel": "nanobot.proxy.channels.matrix",
-    "MochatProxyChannel": "nanobot.proxy.channels.mochat",
-    "MSTeamsProxyChannel": "nanobot.proxy.channels.msteams",
     "QQProxyChannel": "nanobot.proxy.channels.qq",
     "SlackProxyChannel": "nanobot.proxy.channels.slack",
     "TelegramProxyChannel": "nanobot.proxy.channels.telegram",
     "WeixinProxyChannel": "nanobot.proxy.channels.weixin",
-    "WecomProxyChannel": "nanobot.proxy.channels.wecom",
     "WhatsAppProxyChannel": "nanobot.proxy.channels.whatsapp",
 }
 

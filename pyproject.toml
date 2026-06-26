@@ -75,22 +75,9 @@ dependencies = [
 [project.optional-dependencies]
 api = [
 ]
-wecom = [
-    "wecom-aibot-sdk-python>=0.1.5",
-]
 weixin = [
     "qrcode[pil]>=8.0",
     "pycryptodome>=3.20.0",
-]
-msteams = [
-    "PyJWT>=2.0,<3.0",
-    "cryptography>=41.0",
-]
-
-matrix = [
-    "matrix-nio[e2e]>=0.25.2; sys_platform != 'win32'",
-    "mistune>=3.0.0,<4.0.0",
-    "nh3>=0.2.17,<1.0.0",
 ]
 discord = [
     "discord.py>=2.5.2,<3.0.0",

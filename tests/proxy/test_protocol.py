@@ -75,8 +75,8 @@ class TestProxyMessage:
 
     def test_to_inbound_message_with_timestamp(self):
         msg = ProxyMessage(
-            channel="wecom",
-            bot="wbot",
+            channel="discord",
+            bot="dbot",
             sender_id="uid",
             chat_id="cid",
             content="hello",
@@ -84,7 +84,7 @@ class TestProxyMessage:
             timestamp="2025-03-15T10:30:00",
         )
         ib = msg.to_inbound_message()
-        assert ib.channel == "proxy:wecom:wbot"
+        assert ib.channel == "proxy:discord:dbot"
         assert ib.content == "hello"
         assert isinstance(ib.timestamp, datetime)
         assert ib.timestamp.year == 2025

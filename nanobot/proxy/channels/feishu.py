@@ -984,12 +984,32 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .request_body(body)
                 .build()
             )
-            with self._client_lock:
-                resp = self._client.im.v1.message.create(request)
-            if resp.success():
-                logger.info("Feishu card sent OK to chat={} content_len={}", chat_id, len(content))
-                return True
-            logger.warning("Feishu card send failed ({}): {} - will fall back", resp.code, resp.msg)
+            for attempt in range(3):
+                try:
+                    with self._client_lock:
+                        resp = self._client.im.v1.message.create(request)
+                    if resp.success():
+                        logger.info(
+                            "Feishu card sent OK to chat={} content_len={}",
+                            chat_id, len(content),
+                        )
+                        return True
+                    # API-level error — no point retrying
+                    logger.warning(
+                        "Feishu card send failed ({}): {} - will fall back",
+                        resp.code, resp.msg,
+                    )
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        wait = 1 << attempt  # 1, 2, 4 sec
+                        logger.warning(
+                            "Feishu card send attempt {} failed, retrying in {}s: {}",
+                            attempt + 1, wait, e,
+                        )
+                        time.sleep(wait)
+                    else:
+                        logger.exception("Feishu card send exception: {}", e)
         except Exception as e:
             logger.exception("Feishu card send exception: {}", e)
         return False
@@ -1026,12 +1046,31 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .request_body(body)
                 .build()
             )
-            with self._client_lock:
-                resp = self._client.im.v1.message.create(request)
-            if resp.success():
-                logger.info("Feishu post sent OK to chat={} content_len={}", chat_id, len(content))
-                return True
-            logger.warning("Feishu post send failed ({}): {} - will fall back", resp.code, resp.msg)
+            for attempt in range(3):
+                try:
+                    with self._client_lock:
+                        resp = self._client.im.v1.message.create(request)
+                    if resp.success():
+                        logger.info(
+                            "Feishu post sent OK to chat={} content_len={}",
+                            chat_id, len(content),
+                        )
+                        return True
+                    logger.warning(
+                        "Feishu post send failed ({}): {} - will fall back",
+                        resp.code, resp.msg,
+                    )
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        wait = 1 << attempt
+                        logger.warning(
+                            "Feishu post send attempt {} failed, retrying in {}s: {}",
+                            attempt + 1, wait, e,
+                        )
+                        time.sleep(wait)
+                    else:
+                        logger.exception("Post send exception: {}", e)
         except Exception as e:
             logger.exception("Post send exception: {}", e)
         return False
@@ -1056,12 +1095,31 @@ class FeishuProxyChannel(BaseProxyChannel):
                 .request_body(body)
                 .build()
             )
-            with self._client_lock:
-                resp = self._client.im.v1.message.create(request)
-            if resp.success():
-                logger.info("Feishu plain text sent OK to chat={} content_len={}", chat_id, len(content))
-            else:
-                logger.error("Feishu plain text send failed ({}): {}", resp.code, resp.msg)
+            for attempt in range(3):
+                try:
+                    with self._client_lock:
+                        resp = self._client.im.v1.message.create(request)
+                    if resp.success():
+                        logger.info(
+                            "Feishu plain text sent OK to chat={} content_len={}",
+                            chat_id, len(content),
+                        )
+                        return
+                    logger.error(
+                        "Feishu plain text send failed ({}): {}",
+                        resp.code, resp.msg,
+                    )
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        wait = 1 << attempt
+                        logger.warning(
+                            "Feishu plain text attempt {} failed, retrying in {}s: {}",
+                            attempt + 1, wait, e,
+                        )
+                        time.sleep(wait)
+                    else:
+                        logger.exception("Feishu plain-text fallback exception: {}", e)
         except Exception as e:
             logger.exception("Feishu plain-text fallback exception: {}", e)
 
@@ -1180,6 +1238,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             .app_secret(self.config["appSecret"])
             .domain(self._domain)
             .log_level(lark.LogLevel.INFO)
+            .timeout(30)
             .build()
         )
 

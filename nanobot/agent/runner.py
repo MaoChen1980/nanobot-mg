@@ -998,7 +998,7 @@ class AgentRunner:
                 await hook.after_iteration(context)
                 continue
 
-            if response.finish_reason == "error":
+            if response.finish_reason == "error" and (is_blank_text(clean) or clean.startswith("Error")):
                 if response.error_kind == "timeout":
                     consecutive_timeout_count += 1
                 else:

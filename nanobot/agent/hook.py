@@ -25,6 +25,7 @@ class AgentRunHookContext:
     tool_events: list[dict[str, str]] = field(default_factory=list)
     had_injections: bool = False
     exception: BaseException | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
