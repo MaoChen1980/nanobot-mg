@@ -150,12 +150,17 @@ class SelfLogHook(AgentHook):
         if result is None:
             return True
         if isinstance(result, dict):
-            return not any(v for v in result.values() if v is not None and v != "")
+            return not any(v is not None for v in result.values())
         s = str(result).strip()
         return s in ("", "None", "[]", "{}", "null")
 
     def _detect_discomfort(self, result: object) -> str | None:
-        """Detect discomfort signals in tool results (word-bounded regex)."""
+        """Detect discomfort patterns in tool results.
+
+        Returns the pattern name (str) if found, or None if no discomfort signal.
+        The return type is deliberately str | None (not bool) so callers can
+        distinguish "matched pattern X" from "no match" for debugging.
+        """
         if result is None:
             return None
         s = str(result) if isinstance(result, str) else str(result)

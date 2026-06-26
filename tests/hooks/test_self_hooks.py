@@ -112,9 +112,12 @@ class TestSelfLogHookCapture:
     def test_captures_discomfort_signals(self):
         # "error" matches first for both entries (DISCOMFORT_PATTERNS order)
         entry = self._capture([{"error": "failed"}, {"error": "timeout"}])
-        assert "error" in entry["discomfort_signals"]
-        # Only one unique "error" signal (first pattern match per result)
-        assert entry["discomfort_signals"] == ["error", "error"]
+        assert any(d["pattern"] == "error" for d in entry["discomfort_signals"])
+        # Both results match "error" pattern (DISCOMFORT_PATTERNS order)
+        assert entry["discomfort_signals"] == [
+            {"pattern": "error", "tool": ""},
+            {"pattern": "error", "tool": ""},
+        ]
 
     def test_captures_empty_result_count(self):
         # Pass raw empty string/None (how the hook receives tool results from context)
