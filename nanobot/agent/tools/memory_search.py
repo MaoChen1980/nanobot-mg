@@ -75,7 +75,13 @@ class MemorySearchTool(Tool):
         if tasks_index is not None:
             tasks_results = tasks_index.search(query, k=min(k, 3))
 
-        if not results and not tasks_results:
+        # Also search skills index if available
+        skills_results: list[dict[str, Any]] = []
+        skills_index = getattr(self._store, "skills_index", None)
+        if skills_index is not None:
+            skills_results = skills_index.search(query, k=min(k, 3))
+
+        if not results and not tasks_results and not skills_results:
             return "No relevant knowledge found."
 
         for r in results:
@@ -136,6 +142,19 @@ class MemorySearchTool(Tool):
                 heading = r.get("heading", "")
                 score = r.get("score", 0)
                 label = f"tasks/{source} — {heading}" if heading else f"tasks/{source}"
+                parts.append(f"**{label}** [score={score:.2f}]")
+                text = r.get("text", "")
+                if len(text) > 400:
+                    text = text[:397] + "..."
+                parts.append(f"> {text}\n")
+
+        if skills_results:
+            if parts:
+                parts.append("---")
+            for r in skills_results:
+                source = r.get("source", "")
+                score = r.get("score", 0)
+                label = f"skills/{source}"
                 parts.append(f"**{label}** [score={score:.2f}]")
                 text = r.get("text", "")
                 if len(text) > 400:

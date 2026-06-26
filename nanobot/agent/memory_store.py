@@ -12,6 +12,7 @@ from loguru import logger
 from nanobot.utils.helpers import ensure_dir, truncate_text
 from nanobot.agent.loop_utils import strip_think
 from nanobot.agent.memory_vector import MemoryVectorIndex
+from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.gitstore import GitStore
 
 if TYPE_CHECKING:
@@ -62,6 +63,11 @@ class MemoryStore:
                 self.build_tasks_index()
         else:
             self.tasks_index = None
+        self.skills_loader = SkillsLoader(workspace)
+        self.skills_index = MemoryVectorIndex(self.memory_dir, index_dir=".skills_index")
+        if not self.skills_index.load() and self.skills_loader.list_skills(filter_unavailable=False):
+            logger.info("No skills FAISS index found — building from skills list")
+            self.build_skills_index()
 
     @property
     def git(self) -> GitStore:
@@ -126,19 +132,15 @@ class MemoryStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
 
-    def get_all_memory_text(self) -> str:
-        """Concatenate all categorized memory files for full index rebuild."""
-        parts: list[str] = []
+    def build_vector_index(self) -> None:
+        """Full rebuild of the FAISS vector index from all memory files."""
+        file_texts: dict[str, str] = {}
         for f in self.list_memory_files():
             content = self.read_file(f)
             if content.strip():
-                rel = f.relative_to(self.memory_dir)
-                parts.append(f"--- {rel} ---\n{content}")
-        return "\n\n".join(parts)
-
-    def build_vector_index(self) -> None:
-        """Rebuild the FAISS vector index (incremental if index exists)."""
-        self.vector_index.build_incremental()
+                rel = f.relative_to(self.memory_dir).as_posix()
+                file_texts[rel] = content
+        self.vector_index.build_from_files(file_texts)
 
     def _list_tasks_files(self) -> list[Path]:
         """Return all .md files under tasks/ (excluding .tasks_index/)."""
@@ -150,9 +152,27 @@ class MemoryStore:
         )
 
     def build_tasks_index(self) -> None:
-        """Rebuild the FAISS index from all tasks/ files (incremental if exists)."""
-        if self.tasks_index is not None:
-            self.tasks_index.build_incremental()
+        """Full rebuild of the tasks FAISS index from all tasks files."""
+        if self.tasks_index is None:
+            return
+        file_texts: dict[str, str] = {}
+        for f in self._list_tasks_files():
+            content = self.read_file(f)
+            if content.strip():
+                rel = f.relative_to(self.tasks_dir).as_posix()
+                file_texts[rel] = content
+        self.tasks_index.build_from_files(file_texts)
+
+    def build_skills_index(self) -> None:
+        """Full rebuild of the skills FAISS index from SkillsLoader."""
+        skills = self.skills_loader.list_skills(filter_unavailable=False)
+        file_texts: dict[str, str] = {}
+        for s in skills:
+            meta = self.skills_loader.get_skill_metadata(s["name"]) or {}
+            desc = (meta.get("description") or "").strip()
+            content = f"# {s['name']}\n\n{desc}\n\nPath: {s['path']}"
+            file_texts[f"skills/{s['name']}.md"] = content
+        self.skills_index.build_from_files(file_texts)
 
     def condense_session_to_history(self, messages: list[dict]) -> int:
         """Archive session messages into history, grouped by turns.

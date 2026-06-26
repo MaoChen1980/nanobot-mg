@@ -223,10 +223,12 @@ async def handle_memory_rebuild_index(request: Request) -> Response:
         store = MemoryStore(workspace)
         store.build_vector_index()
         store.build_tasks_index()
+        store.build_skills_index()
         return {
             "faiss_available": store.vector_index._index is not None,
             "chunks": len(store.vector_index._chunks),
             "tasks_chunks": len(store.tasks_index._chunks) if store.tasks_index else 0,
+            "skills_chunks": len(store.skills_index._chunks) if store.skills_index else 0,
         }
 
     try:

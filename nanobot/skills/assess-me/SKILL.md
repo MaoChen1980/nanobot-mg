@@ -42,6 +42,17 @@ Write your current thinking state to a temp file, then read it back.
 5. **Blocker** — What specifically is blocking you? (exact obstacle, not symptom)
 6. **Recovery** — If stuck, what should you do differently?
 
+## Information Retrieval Priority
+
+When Gaps > 0 and supplementary information exists, retrieve in this order:
+
+1. `memory_search_tool` — search internal knowledge base (past decisions, notes, accumulated knowledge)
+2. `conversation_search_tool` — search past conversation history (similar tasks, previous attempts)
+3. `read_file_tool` / `grep_tool` — read or search work-related files directly (code, config, docs)
+4. `web_search_tool` / `web_fetch_tool` — external web information (last resort only)
+
+Do not skip tiers. Do not jump to web search before exhausting internal sources.
+
 ## Instructions
 
 ```

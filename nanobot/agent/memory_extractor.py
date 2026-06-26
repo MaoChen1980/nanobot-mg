@@ -1347,6 +1347,7 @@ class MemoryExtractor:
         self._generate_tree_json()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self.store.build_vector_index)
+        await loop.run_in_executor(None, self.store.build_skills_index)
 
     async def _consolidate_memory(self) -> bool:
         """Consolidate memory files: merge small files, reorganize dirs under 20 limit.
