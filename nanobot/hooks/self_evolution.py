@@ -236,6 +236,9 @@ class SelfEvolutionEngine:
         from nanobot.agent.tools.registry import ToolRegistry
         from nanobot.agent.tools.search import GlobTool, GrepTool
         from nanobot.agent.tools.shell.shell import ExecTool
+        from nanobot.agent.tools.memory_search import MemorySearchTool
+        from nanobot.agent.tools.conversation_search import ConversationSearchTool
+        from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
 
         try:
             provider = _llm_provider.get()
@@ -256,8 +259,23 @@ class SelfEvolutionEngine:
         tools.register(GrepTool(workspace=self.project_root))
         tools.register(ExecTool(
             working_dir=project_root_str,
-            timeout=120,
+            timeout=600,
         ))
+        # Memory tools scoped to workspace (for reading/writing memory/ and searching)
+        class _WriteMemoryTool(WriteFileTool):
+            name = "write_memory_tool"
+        class _GlobMemoryTool(GlobTool):
+            @property
+            def name(self):
+                return "glob_memory_tool"
+        tools.register(_WriteMemoryTool(workspace=self.store.workspace))
+        tools.register(_GlobMemoryTool(workspace=self.store.workspace))
+        tools.register(MemorySearchTool(store=self.store))
+        # Web tools for looking up documentation
+        tools.register(WebSearchTool())
+        tools.register(WebFetchTool())
+        # Conversation search for past context
+        tools.register(ConversationSearchTool(store=self.store))
 
         system_prompt = render_template(
             "agent/evolution_agent.md",
@@ -272,8 +290,10 @@ class SelfEvolutionEngine:
             ],
             tools=tools,
             model=model,
-            max_iterations=40,
-            max_tool_result_chars=10000,
+            max_iterations=100,
+            max_tool_result_chars=50000,
+            max_tokens=64000,
+            concurrent_tools=True,
         )
 
         runner = AgentRunner(provider)
