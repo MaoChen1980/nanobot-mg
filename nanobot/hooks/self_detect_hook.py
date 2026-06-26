@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from nanobot.agent.hook import AgentHook, AgentHookContext
+from nanobot.agent.hook import AgentHook, AgentHookContext, AgentRunHookContext
 from nanobot.agent.llm_context import chat_stream_with_retry
 
 
@@ -317,6 +317,100 @@ class SelfDetectHook(AgentHook):
             self._total_iterations += 1
         except Exception:
             logger.debug("SelfDetectHook.after_iteration failed silently")
+
+    async def after_run(self, context: AgentRunHookContext) -> None:
+        """Write session summary to shared session context dir.
+
+        Writes findings and metrics to workspace/.self_improve/session_context/{project}/last_session.md.
+        ContextInjectHook sets the module-level _session_context_dir in set_workspace
+        before this runs, so we use that path directly.
+        """
+        try:
+            # Use shared session context dir from ContextInjectHook
+            # If not set, derive from self._workspace
+            from nanobot.hooks.context_inject_hook import get_session_context_dir
+
+            scd = get_session_context_dir()
+            # Derive project_type from workspace if ContextInjectHook didn't set scd
+            project_type = self._detect_project_type()
+            if scd is None and self._workspace is not None:
+                # Fallback: build session context dir ourselves
+                scd = (
+                    self._workspace
+                    / ".self_improve"
+                    / "session_context"
+                    / project_type
+                )
+            elif scd is None:
+                return
+
+            project_name_map = {
+                "android": "mobile-ai-agent",
+                "python": "nanobot-mg",
+                "trading": "trading",
+            }.get(project_type, "unknown")
+
+            scd.mkdir(parents=True, exist_ok=True)
+            last_path = scd / "last_session.md"
+
+            # Count rejection/correction signals from accumulated entries
+            rejection_count = 0
+            correction_count = 0
+            tool_counts: dict[str, int] = {}
+            for entry in self._entries_accumulated:
+                for msg in entry.get("messages", []):
+                    role = msg.get("role", "")
+                    # Rough proxy: user msgs after tool results often = rejection signals
+                    if role == "user" and msg.get("tool_result"):
+                        rejection_count += 1
+                    if role == "user" and msg.get("content") and any(
+                       kw in str(msg.get("content", "")) for kw in ["correction", "actually", "别", "不对"]
+                    ):
+                        correction_count += 1
+                # Count tool calls per name
+                for tc in entry.get("tool_calls", []):
+                    name = tc.get("name", "unknown")
+                    tool_counts[name] = tool_counts.get(name, 0) + 1
+
+            # Build summary
+            lines = [
+                f"# Session Summary — {project_name_map}",
+                "",
+                f"**Project type**: {project_type}",
+                f"**Total iterations**: {self._total_iterations}",
+                f"**Total turns**: {self._turn_count}",
+                f"**Rejection signals**: {rejection_count}",
+                f"**Correction signals**: {correction_count}",
+                "",
+                "## Tool usage counts",
+                "",
+            ]
+            for name, count in sorted(tool_counts.items(), key=lambda x: -x[1])[:10]:
+                lines.append(f"- {name}: {count}")
+
+            if self._entries_accumulated:
+                lines.append("")
+                lines.append("## Last few tool calls")
+                last_entries = self._entries_accumulated[-3:]
+                for entry in last_entries:
+                    for tc in entry.get("tool_calls", []):
+                        lines.append(f"- {tc.get('name', '?')}: {str(tc.get('arguments', ''))[:80]}")
+
+            last_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except Exception:
+            logger.debug("SelfDetectHook.after_run failed silently")
+
+    def _detect_project_type(self) -> str:
+        """Detect project type from self._workspace (mirrors ContextInjectHook logic)."""
+        if self._workspace is None:
+            return "unknown"
+        if (self._workspace / "app" / "build.gradle.kts").exists():
+            return "android"
+        if (self._workspace / "nanobot" / "hooks").exists():
+            return "python"
+        if (self._workspace / "workspace").exists() or (self._workspace.parent / "workspace").exists():
+            return "trading"
+        return "unknown"
 
     def _build_entry(self, context: AgentHookContext) -> dict:
         tool_calls_data = [

@@ -11,9 +11,19 @@ Android porting).
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
+
+# Shared across all hook instances — written by ContextInjectHook.set_workspace,
+# read by SelfDetectHook.after_run. This ensures both hooks agree on the same
+# session context file path without needing to coordinate through AgentLoop.
+_session_context_dir: Path | None = None
+
+
+def get_session_context_dir() -> Path | None:
+    return _session_context_dir
 
 
 class ContextInjectHook(AgentHook):
@@ -29,8 +39,16 @@ class ContextInjectHook(AgentHook):
 
     def set_workspace(self, workspace: Path) -> None:
         """Called by AgentLoop to provide the workspace path."""
+        global _session_context_dir
         self._workspace = workspace
         self._detect_project()
+        # Share session context dir with other hooks (e.g. SelfDetectHook.after_run)
+        _session_context_dir = (
+            workspace
+            / ".self_improve"
+            / "session_context"
+            / (self._project_type or "unknown")
+        )
 
     def _detect_project(self) -> None:
         """Detect project type from workspace structure."""
@@ -78,16 +96,27 @@ class ContextInjectHook(AgentHook):
         if self._workspace is None:
             return
 
-        # Build project context block
         project_info = {
             "project_type": self._project_type or "unknown",
             "project_name": self._project_name or self._workspace.name,
             "workspace": str(self._workspace.resolve()),
         }
 
-        # Inject into agent's instruction context
-        # This will be picked up by the prompt template
+        # Inject previous session summary if it exists
+        prev_session = None
+        scd = _session_context_dir
+        if scd is not None:
+            last_path = scd / "last_session.md"
+            if last_path.exists():
+                try:
+                    content = last_path.read_text(encoding="utf-8")
+                    # Extract key lines (first 30 lines = session summary)
+                    prev_session = "\n".join(content.splitlines()[:30])
+                except OSError:
+                    pass
+
         context.metadata["project_context"] = project_info
+        context.metadata["prev_session_summary"] = prev_session
         context.metadata["project_context_injected"] = True
 
     @property
