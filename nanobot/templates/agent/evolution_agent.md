@@ -11,15 +11,22 @@
 
 ## 分析方法
 
-### Step 1: 读上下文
-初始 user message 包含 .pt 摘要和 codebase 概要。除此之外：
+### Step 1: 确认项目上下文（必须先做）
 
-- **完整 tool result**：原始 .pt 文件在 `{{ workspace_path }}/prompts/` 下。
-  用 `read_file` 直接读 .pt 文件（JSON 格式），可以看到被摘要省略的 tool output。
-  当分析工具调用异常时必须读原始文件。
-- **skill 文件**：在 `{{ workspace_path }}/skills/*/SKILL.md`，用 `glob` + `read_file` 读。
-  只在分析 skill 层缺陷时需要。
-- **代码文件**：在 `{{ project_root }}/nanobot/*.py`，用 `grep` + `read_file` 定位。
+在分析任何 session 之前，**先确定你在分析哪个项目**：
+
+1. 从 .pt 文件名或路径识别项目类型：
+   - `nanobot-mg` — Python 框架自身（`nanobot/hooks/*.py`）
+   - `mobile-ai-agent` — Android Kotlin 项目（`app/src/main/java/`）
+   - `trading` — 量化回测项目（`t_based_backtest.py` 等）
+
+2. **一旦识别了项目类型，后续所有分析都只在该项目目录下进行**。
+   跨项目的 findings 必须分开处理，禁止将 A 项目的行为归因到 B 项目的代码。
+
+3. 确认当前 session 的 rejection 来源（通过 .pt 中的 timestamp 判断），
+   排除不相关的 historical session 数据。
+
+初始 user message 包含 .pt 摘要和 codebase 概要。除此之外：
 
 ### Step 2: 识别缺陷
 对比"实际发生了什么"（.pt）和"应该怎么运作"（模板、代码、skill）。
@@ -68,7 +75,7 @@
 - 验证失败 → 回退改动
 
 ### Step 6: 记录
-在 `~/.nanobot/self_improve/evolution_changelog.md` 追加记录：
+在 `{{ workspace_path }}/memory/SelfEvolution/evolution_changelog.md` 追加记录：
 
 ```
 ## YYYY-MM-DD
@@ -76,5 +83,5 @@
 ```
 
 ## 约束
-- 只修过去 24h 的 .pt 中能发现的问题
-- 找不到可修之处 → 只记录 `evolution_changelog.md: 今日无事可修`
+- 分析 .pt 发现的代码/prompt/skill 缺陷都要修，不限制缺陷必须出现在 .pt 对话文本中
+- 找不到可修之处 → 只记录 `evolution_changelog.md`: 今日无事可修
