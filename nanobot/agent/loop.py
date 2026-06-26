@@ -411,6 +411,7 @@ class AgentLoop:
             DeleteFileTool, EditFileTool, MoveFileTool, ReadFileTool, WriteFileTool,
         )
         from nanobot.agent.tools.list_subagents import ListSubagentsTool
+        from nanobot.agent.tools.log_event import LogEventTool
         from nanobot.agent.tools.memory_search import MemorySearchTool
         from nanobot.agent.tools.message import MessageTool
         from nanobot.agent.tools.reframe import ReframeTool
@@ -443,6 +444,7 @@ class AgentLoop:
             self.tools.register(WebFetchTool(config=self.web_config.fetch, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound, workspace=self.workspace))
         self.tools.register(MemorySearchTool(store=self.context.memory))
+        self.tools.register(LogEventTool(store=self.context.memory))
         self.tools.register(ConversationSearchTool(store=self.context.memory))
         self.tools.register(SearchTextTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ExploreModuleTool(workspace=self.workspace, allowed_dir=allowed_dir))
@@ -820,7 +822,7 @@ class AgentLoop:
                 await on_stream(fc or "")
                 await on_stream_end(resuming=False)
         elif result.stop_reason == "error":
-            logger.error("LLM returned error: {}", (result.final_content or "")[:200])
+            logger.warning("LLM returned error: {}", (result.final_content or "")[:200])
 
         await hook.after_turn()
         return (fc, result.tools_used, result.messages,

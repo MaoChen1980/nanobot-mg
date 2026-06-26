@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -43,6 +44,7 @@ class MemoryStore:
         self.soul_file = workspace / "SOUL.md"
         self.user_file = workspace / "USER.md"
         self.rules_file = workspace / "RULES.md"
+        self.events_lock = asyncio.Lock()
         self._git = GitStore(workspace, tracked_files=[
             "SOUL.md", "USER.md", "RULES.md",
         ])

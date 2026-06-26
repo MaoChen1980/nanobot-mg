@@ -12,6 +12,7 @@ import threading
 import time
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from importlib.resources import files as pkg_files
 from pathlib import Path
 from typing import Any
@@ -274,6 +275,7 @@ class ContextBuilder:
                 "meta_learning",
                 "skill_refinement",
                 "tool_result_summary",
+                "memory_usage",
             ]
         else:
             snippet_names = [
@@ -287,6 +289,7 @@ class ContextBuilder:
                 "meta_learning",
                 "skill_refinement",
                 "tool_result_summary",
+                "memory_usage",
             ]
         template_kwargs = dict(
             workspace_path=self._workspace_path_str,
@@ -648,21 +651,26 @@ class ContextBuilder:
     # -- vector-indexed memory -------------------------------------------------
 
     def _build_memory_section(self) -> str:
-        """Build memory section: MEMORY.md + key content files (no vector search)."""
+        """Build memory section: working.md + key preference files + recent events.
+
+        Tier 2 injection — appended to system prompt as dynamic session state.
+        working.md replaces the old MEMORY.md (which is now human-only).
+        Recent events (last 7d) are scanned from events/ for proactive awareness.
+        """
         memory_dir = self.memory.memory_dir
         parts = []
 
-        # Load MEMORY.md index (cached by mtime)
-        index_content = self._cached_read_text(self.memory.memory_file) or ""
-        if index_content and not self._is_default_template_content(index_content, "memory/MEMORY.md"):
-            lines = index_content.split("\n")
-            if lines and lines[0].startswith("# "):
-                lines = lines[1:]
-            index_text = "\n".join(lines).strip()
-            if index_text:
-                parts.append(f"# Memory - {self._workspace_path_str}/memory/MEMORY.md\n\n{index_text}")
+        # Load working.md (short-term working memory, written by agent inline)
+        working_path = memory_dir / "working.md"
+        working_content = self._cached_read_text(working_path) or ""
+        working_text = working_content.strip()
+        if working_text:
+            parts.append(
+                f"### Working Memory — {self._workspace_path_str}/memory/working.md\n\n"
+                f"{working_text}"
+            )
 
-        # Also inline key memory files so rules/preferences are visible without recall (cached by mtime)
+        # Inline key preference files for immediate visibility (cached by mtime)
         MAX_MEMORY_CHARS = 2000
         for name in ("system.md", "user.md"):
             fpath = memory_dir / name
@@ -673,6 +681,41 @@ class ContextBuilder:
                     text = text[:MAX_MEMORY_CHARS] + "\n\n... (truncated, see file in memory/)"
                 heading = name.replace(".md", "").title()
                 parts.append(f"### {heading}\n\n{text}")
+
+        # Scan recent events (last 7d) for proactive awareness — lightweight, cached by mtime
+        events_dir = memory_dir / "events"
+        if events_dir.is_dir():
+            cutoff = time.time() - 7 * 86400
+            recent_groups: dict[str, list[str]] = {}
+            for p in sorted(events_dir.rglob("*.md")):
+                text = self._cached_read_text(p)
+                if not text:
+                    continue
+                topic = p.stem.replace("-", " ").title()
+                in_timeline = False
+                for line in text.split("\n"):
+                    s = line.strip()
+                    if s == "## Timeline":
+                        in_timeline = True
+                        continue
+                    if in_timeline:
+                        if s.startswith("## ") or s.startswith("---"):
+                            break
+                        if s.startswith("- ") and len(s) > 14:
+                            date_str = s[2:12].strip()
+                            try:
+                                dt = datetime.strptime(date_str, "%Y-%m-%d").timestamp()
+                                if dt > cutoff:
+                                    recent_groups.setdefault(topic, []).append(s)
+                            except ValueError:
+                                continue
+            if recent_groups:
+                ev_lines = ["### Recent Events\n"]
+                for topic, entries in sorted(recent_groups.items()):
+                    ev_lines.append(f"**{topic}**:")
+                    for entry in entries[:5]:  # max 5 per topic
+                        ev_lines.append(f"  {entry}")
+                parts.append("\n".join(ev_lines))
 
         # Track injection for quality stats
         self._track_memory_injection(parts)
@@ -685,9 +728,10 @@ class ContextBuilder:
             return ""
         return (
             "# Memory\n\n"
-            "## Long-term Memory\n\n"
-            "This is your persistent memory — facts, conventions, and patterns "
-            "learned from past work. Follow these guidelines in your responses.\n\n"
+            "## Memory Workspace\n\n"
+            "Current working memory and persistent user/system preferences. "
+            "working.md is your short-term scratchpad — update it inline as you work. "
+            "For knowledge base lookups, use the memory_search tool.\n\n"
             + "\n\n".join(parts)
         )
 

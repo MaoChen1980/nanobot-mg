@@ -92,12 +92,10 @@ class MemoryExtractor:
         self.prompts_dir = ensure_dir(store.workspace / "prompts")
         self.failed_dir = ensure_dir(self.prompts_dir / "failed")
         self.processed_dir = ensure_dir(self.prompts_dir / "processed")
+        self.events_dir = ensure_dir(store.workspace / "memory" / "events")
         self._last_modified_files: list[str] = []
         self._pending_tool_scripts: list[dict[str, Any]] = []
         self._pending_skill_entries: list[dict[str, Any]] = []
-        # Persistent cache for recent_entries — preserves MEMORY.md Active/Recent
-        # sections across extraction runs that have no new findings.
-        self._recent_cache: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -106,6 +104,7 @@ class MemoryExtractor:
     async def run(self) -> bool:
         """Step 1 (extract) → Step 2 (write + cleanup) → Step 3 (post-process)."""
         all_findings: list[dict[str, Any]] = []
+        all_events: list[dict[str, Any]] = []
 
         # ── Step 1: collect .pt + .pt.processing (crash survivors) ──
         pt_files = sorted(
@@ -135,7 +134,6 @@ class MemoryExtractor:
                     findings = analysis.get("findings", [])
                     code_ts = _parse_ts(saved_at) or time.time()
                     for f in findings:
-                        # Inject ts if LLM didn't provide one
                         if not f.get("ts"):
                             f["ts"] = _format_ts(code_ts)
                     if findings:
@@ -143,6 +141,17 @@ class MemoryExtractor:
                         logger.info(
                             "MemoryExtractor: {} findings from {}",
                             len(findings),
+                            processing_path.name,
+                        )
+                    events = analysis.get("events", [])
+                    if events:
+                        for e in events:
+                            if not e.get("date"):
+                                e["date"] = saved_at[:10] if saved_at else _format_ts(code_ts)[:10]
+                        all_events.extend(events)
+                        logger.info(
+                            "MemoryExtractor: {} events from {}",
+                            len(events),
                             processing_path.name,
                         )
                 processed.append(processing_path)
@@ -156,16 +165,17 @@ class MemoryExtractor:
         # ── User feedback processing: aggregate corrections from SelfDetectHook ──
         feedback_written = await self._process_user_feedback()
 
-        if not all_findings and not feedback_written:
+        if not all_findings and not all_events and not feedback_written:
             logger.info("MemoryExtractor: nothing to process")
             self._move_processed(processed)
             return False
 
-        # ── Step 2: write findings + cleanup in memory, then flush ──
-        recent_entries = await self._write_cleanup_and_rebuild(all_findings)
+        # ── Step 2: write findings + events + cleanup, then flush ──
+        wrote_findings = await self._write_cleanup_and_rebuild(all_findings)
+        wrote_events = await self._write_events(all_events)
 
         # ── Step 3: post-process ──
-        changed = recent_entries is not None or self._memory_dir_changed() or feedback_written
+        changed = wrote_findings or wrote_events or self._memory_dir_changed() or feedback_written
 
         if await self._materialize_tool_scripts():
             changed = True
@@ -173,7 +183,6 @@ class MemoryExtractor:
             changed = True
         if await self._consolidate_memory():
             changed = True
-            # Ensure consolidation-created files are included in cleanup scope
             current_state = self._snapshot_memory_dir(self.store.memory_dir)
             for rel_path in current_state:
                 if rel_path not in self._last_modified_files:
@@ -182,12 +191,7 @@ class MemoryExtractor:
             await self._cleanup_check(modified_files=self._last_modified_files)
 
         if changed:
-            # Merge new recent entries into cache, keep newest 12
-            if recent_entries:
-                merged = {r.get("content", ""): r for r in self._recent_cache + recent_entries}
-                self._recent_cache = sorted(merged.values(), key=lambda x: -(x.get("ts") or 0))[:12]
-            self._generate_memory_index(self._recent_cache)
-            self._add_backlinks()
+            self._generate_memory_index()
             await self._rebuild_indexes()
             if self.store.git.is_initialized():
                 self.store.git.auto_commit("memory: extract and cleanup")
@@ -370,11 +374,10 @@ class MemoryExtractor:
     # Step 2 — Write findings + cleanup
     # ------------------------------------------------------------------
 
-    async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    async def _write_cleanup_and_rebuild(self, findings: list[dict[str, Any]]) -> bool:
         """Build in-memory state, chain supersede, then full-file atomic rewrite.
 
-        Returns ``recent_entries`` (for MEMORY.md) if any writing was done,
-        ``None`` if nothing changed.
+        Returns True if any findings were written, False otherwise.
         """
         # Reset per-cycle pending collections — entries filled below as we iterate findings
         self._pending_skill_entries = []
@@ -466,14 +469,13 @@ class MemoryExtractor:
 
         if not memory_state:
             logger.info("MemoryExtractor: no actionable findings to write")
-            return None
+            return False
 
         # ── Sort each topic by ts ──
         for entries in memory_state.values():
             entries.sort(key=lambda e: e["ts"])
 
         # ── Flush each topic: full file rewrite (skip pending_skills.md — kept in memory) ──
-        recent_entries: list[dict[str, Any]] = []
         needs_content_consolidation: list[str] = []  # files with ≥3 new entries
         for rel_path, entries in memory_state.items():
             if rel_path == "pending_skills.md":
@@ -573,17 +575,6 @@ class MemoryExtractor:
 
             logger.info("MemoryExtractor: wrote {} paragraph(s) to {}", len(unique), rel_path)
 
-            # Collect recent entries from this topic — only entries with <!--recent--> marker
-            for e in unique:
-                if "<!--recent-->" not in e["content"]:
-                    continue
-                clean = _TS_RE.sub("", e["content"]).replace("<!--pinned-->", "").replace("<!--recent-->", "").strip()
-                recent_entries.append({
-                    "topic": rel_path,
-                    "content": clean[:200],
-                    "ts": e["ts"],
-                })
-
             # Mark for content consolidation if this batch added ≥3 new entries
             if len(entries) >= 3 and rel_path not in ("RULES.md", "user.md", "pending_skills.md"):
                 needs_content_consolidation.append(rel_path)
@@ -595,10 +586,8 @@ class MemoryExtractor:
             except Exception:
                 logger.exception("MemoryExtractor: content consolidation failed for {}", rel_path)
 
-        # Sort recent by ts (newest first), take top 12
-        recent_entries.sort(key=lambda x: -(x["ts"] or 0))
         self._last_modified_files = list(memory_state.keys())
-        return recent_entries[:12]
+        return True
 
     @staticmethod
     def _parse_file_paragraphs(text: str) -> list[dict[str, Any]]:
@@ -752,6 +741,177 @@ class MemoryExtractor:
         return prefix + content
 
     # (supersedes is now handled by _supersedes_in_memory + flush-time plan)
+
+    # ------------------------------------------------------------------
+    # Events — write events to events/{topic}.md
+    # ------------------------------------------------------------------
+
+    async def _write_events(self, events: list[dict[str, Any]]) -> bool:
+        """Write extracted events to ``events/{topic}.md`` Timeline section.
+
+        Groups events by topic, appends to existing Timeline, dedup by summary.
+        Returns True if any events were written.
+        """
+        if not events:
+            return False
+
+        # Group by topic
+        by_topic: dict[str, list[dict[str, Any]]] = {}
+        for e in events:
+            topic = (e.get("topic") or "").strip()
+            if not topic:
+                continue
+            by_topic.setdefault(topic, []).append(e)
+
+        for topic, topic_events in by_topic.items():
+            safe_name = MemoryExtractor._sanitize_filename(topic.replace("/", "_"))
+            path = self.events_dir / f"{safe_name}.md"
+
+            async with self.store.events_lock:
+                # Read existing content
+                existing_timeline: list[str] = []
+                if path.exists():
+                    text = path.read_text(encoding="utf-8")
+                    in_timeline = False
+                    for line in text.split("\n"):
+                        if line.strip() == "## Timeline":
+                            in_timeline = True
+                            continue
+                        if in_timeline:
+                            if line.startswith("## ") or line.startswith("---"):
+                                in_timeline = False
+                            elif line.strip().startswith("- "):
+                                existing_timeline.append(line.strip())
+
+                # Build existing dedup set — keyed by (summary + detail)
+                existing_dedup_keys: set[str] = set()
+                for line in existing_timeline:
+                    colon_idx = line.find(": ")
+                    if colon_idx > 0:
+                        existing_dedup_keys.add(line[colon_idx + 2:].strip())
+
+                # Append new events
+                new_lines: list[str] = []
+                for e in topic_events:
+                    date = (e.get("date") or "").strip()[:10]
+                    summary = (e.get("summary") or "").strip()
+                    if not date or not summary:
+                        continue
+                    detail = (e.get("detail") or "").strip()
+                    dedup_key = summary
+                    if detail:
+                        dedup_key += f" — {detail}"
+                    if dedup_key in existing_dedup_keys:
+                        continue
+                    line = f"- {date}: {summary}"
+                    if detail:
+                        line += f" — {detail}"
+                    new_lines.append(line)
+                    existing_dedup_keys.add(dedup_key)
+
+                if not new_lines:
+                    continue
+
+                # Find heading from topic or use topic name
+                heading = topic.replace("/", " / ").replace("-", " ").title()
+
+                # Build file content
+                content_parts: list[str] = [
+                    f"# {heading}",
+                    "",
+                    "## Timeline",
+                    "",
+                ]
+                # Merge existing + new, sort by date
+                all_entries = existing_timeline + new_lines
+                all_entries.sort(key=lambda x: x[2:12] if x.startswith("- ") else "")  # sort by YYYY-MM-DD
+
+                content_parts.extend(all_entries)
+                content_parts.append("")
+                content_parts.append("---")
+
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("\n".join(content_parts).strip() + "\n", encoding="utf-8")
+                logger.info("MemoryExtractor: wrote {} event(s) to events/{}.md", len(new_lines), safe_name)
+
+                # Compress if too many events (only if not already compressed)
+                if len(all_entries) > 30:
+                    current_text = path.read_text(encoding="utf-8")
+                    if "<!--compressed-->" not in current_text:
+                        await self._compress_events(topic, path)
+
+        return True
+
+    async def _compress_events(self, topic: str, path: Path) -> None:
+        """Compress old events when a timeline exceeds 30 entries.
+
+        Events older than 60 days are compressed into a quarterly summary.
+        """
+        content = path.read_text(encoding="utf-8")
+        lines = content.split("\n")
+
+        # Separate recent (≤60d) and old (>60d)
+        import calendar
+        now = time.time()
+        cutoff = now - 60 * 86400
+
+        recent_lines: list[str] = []
+        old_lines: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped.startswith("- "):
+                continue
+            # Extract date: "- YYYY-MM-DD: ..."
+            date_str = stripped[2:12].strip()
+            try:
+                dt = datetime.strptime(date_str, "%Y-%m-%d").timestamp()
+                if dt > cutoff:
+                    recent_lines.append(stripped)
+                else:
+                    old_lines.append(stripped)
+            except (ValueError, IndexError):
+                recent_lines.append(stripped)
+
+        if len(old_lines) < 10:
+            return  # not enough old events to justify compression
+
+        # Group old events by quarter
+        quarter_groups: dict[str, list[str]] = {}
+        for line in old_lines:
+            date_str = line[2:12].strip()
+            try:
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                quarter = f"{dt.year}-Q{(dt.month - 1) // 3 + 1}"
+                quarter_groups.setdefault(quarter, []).append(line)
+            except (ValueError, IndexError):
+                pass
+
+        # Build compressed timeline
+        compressed: list[str] = []
+        for quarter in sorted(quarter_groups.keys()):
+            entries = quarter_groups[quarter]
+            count = len(entries)
+            compressed.append(f"- {quarter}: {count} 个事件")
+
+        # Rebuild file: heading + timeline + compressed old + recent
+        heading = content.split("\n")[0] if content.startswith("#") else f"# {topic}"
+        new_content = [
+            heading,
+            "",
+            "<!--compressed-->",
+            "",
+            "## Timeline",
+            "",
+            *compressed,
+            "",
+            "### Recent",
+            "",
+            *recent_lines,
+            "",
+            "---",
+        ]
+        path.write_text("\n".join(new_content).strip() + "\n", encoding="utf-8")
+        logger.info("MemoryExtractor: compressed events/{} ({} old → {} quarterly)", path.name, len(old_lines), len(compressed))
 
     # ------------------------------------------------------------------
     # Tool/script materialization — tool_script findings → tools/ + pending_skills.md
@@ -1561,169 +1721,107 @@ class MemoryExtractor:
     # MEMORY.md + tree.json generation
     # ------------------------------------------------------------------
 
-    def _generate_memory_index(self, recent_entries: list[dict[str, Any]]) -> None:
-        """Scan memory/ and generate compact MEMORY.md for agent system prompt.
+    def _generate_memory_index(self) -> None:
+        """Generate MEMORY.md for human browsing — knowledge map + event timeline + health stats.
 
-        Format: Active (current progress) + Pinned + Index (keyword links) + Recent (dated).
-        All four sections are always emitted for structural stability.
+        Not injected into agent context. Serves as a human-friendly table of contents.
         """
-        # Filter out stale entries older than 14 days
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "tree.json"}
         now = time.time()
-        recent_entries = [
-            r for r in recent_entries
-            if r.get("ts") and now - r["ts"] < 14 * 86400
-        ]
-        exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
+        stale_cutoff = now - 90 * 86400
 
-        # Helpers
-        def _extract_emoji(line: str) -> tuple[str, str]:
-            """Return (emoji, rest_of_line) or ('', line)."""
-            for e in sorted(_EMOJI_SET, key=len, reverse=True):  # longer first to avoid partial match
-                if e in line:
-                    return e, line.replace(e, "", 1).strip()
-            return "", line
-
-        def _first_finding_text(text: str) -> str:
-            """Get first non-heading, non-TLDR content line from a file."""
-            for line in text.split("\n"):
-                s = line.strip()
-                if not s or s.startswith("# ") or s.startswith("> ") or s.startswith("---"):
-                    continue
-                return s.lstrip("- ").strip()
-            return ""
-
-        # Collect file metadata + pinned items
-        file_meta: list[tuple[str, int, str, str, str]] = []  # (rel, mtime_ns, category, stem, heading)
-        pinned_candidates: list[tuple[str, int, str, str]] = []  # (rel, mtime_ns, summary, emoji)
+        # ── Scan memory/ files ──
+        topic_groups: dict[str, list[tuple[str, str, float]]] = {}  # topic → [(rel, h1, mtime)]
+        total_files = 0
+        stale_files = 0
         for p in self.store.memory_dir.rglob("*.md"):
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
             rel = p.relative_to(self.store.memory_dir).as_posix()
             try:
                 text = p.read_text(encoding="utf-8")
-                mtime = p.stat().st_mtime_ns
+                mtime = p.stat().st_mtime
             except OSError:
                 continue
             if not text.strip():
                 continue
+            total_files += 1
+            if mtime < stale_cutoff:
+                stale_files += 1
 
-            heading = ""
+            h1 = ""
             for line in text.split("\n"):
                 s = line.strip()
                 if s.startswith("# "):
-                    heading = s.lstrip("# ").strip()
+                    h1 = s.lstrip("# ").strip()[:80]
                     break
-            if not heading:
-                heading = text.strip().split("\n")[0].strip()[:60]
 
-            parent = rel.rsplit("/", 1)[0] if "/" in rel else "."
-            stem = Path(rel).stem
-            file_meta.append((rel, mtime, parent, stem, heading))
+            parent = rel.rsplit("/", 1)[0] if "/" in rel else "root"
+            topic_groups.setdefault(parent, []).append((rel, h1, mtime))
 
-            # Detect pinned — prefer TL;DR, then first finding text
-            if "<!--pinned-->" in text:
-                tldr = ""
+        # ── Scan events/ for timeline ──
+        event_entries: list[str] = []
+        if self.events_dir and self.events_dir.is_dir():
+            for p in sorted(self.events_dir.rglob("*.md")):
+                try:
+                    text = p.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+                in_timeline = False
                 for line in text.split("\n"):
                     s = line.strip()
-                    if s.startswith("> **TL;DR**:"):
-                        tldr = s[len("> **TL;DR**:"):].strip()
-                        break
-                if tldr:
-                    emoji, summary = _extract_emoji(tldr)
-                    summary = _trim_sentence(summary, 120)
-                else:
-                    raw = _first_finding_text(text)
-                    emoji, summary = _extract_emoji(raw)
-                    summary = _trim_sentence(summary, 120)
-                if summary:
-                    pinned_candidates.append((rel, mtime, summary, emoji))
+                    if s == "## Timeline":
+                        in_timeline = True
+                        continue
+                    if in_timeline:
+                        if s.startswith("## ") or s.startswith("---"):
+                            break
+                        if s.startswith("- ") and len(s) > 14:
+                            event_entries.append(s)
+                if len(event_entries) >= 20:
+                    break
+        event_entries.sort(reverse=True)
+        event_entries = event_entries[:20]
 
-        # Sort pinned by recency (newest first), take top 5
-        pinned_candidates.sort(key=lambda x: -x[1])
-        pinned: list[str] = []
-        for rel, _mtime, summary, emoji in pinned_candidates[:5]:
-            emoji_prefix = f"{emoji} " if emoji else ""
-            pinned.append(f"- {emoji_prefix}[{summary}]({rel})")
+        # ── Build MEMORY.md ──
+        lines = ["# Memory", "", "> Human-readable index of the knowledge base. See also `events/` for timeline records.", ""]
 
-        if not file_meta:
-            return
-
-        lines = ["# Memory\n", ""]
-
-        # ── Active — top 3 recent entries (current progress) ──
-        lines.append("## Active\n")
-        if recent_entries:
-            for r in recent_entries[:3]:
-                text = r.get("content", "")
-                if not text:
-                    continue
-                emoji, rest = _extract_emoji(text)
-                rest = rest.lstrip("- ").strip()
-                trimmed = _trim_sentence(rest, 180)
-                display = f"{emoji} {trimmed}" if emoji else trimmed
-                lines.append(f"- {display}")
+        # Knowledge Map
+        lines.append("## Knowledge Map\n")
+        for topic in sorted(topic_groups, key=lambda t: (t != "root", t)):
+            files = topic_groups[topic]
+            files.sort(key=lambda x: -x[2])  # newest first
+            label = topic.replace("_", " ").replace("/", " / ").title()
+            count = len(files)
+            descs = []
+            for rel, h1, _ in files[:5]:
+                display = h1 or Path(rel).stem
+                descs.append(f"[{display}]({rel})")
+            topic_str = "; ".join(descs)
+            if count > 5:
+                topic_str += f" (+{count - 5} more)"
+            lines.append(f"- **{label}** ({count} files) — {topic_str}")
         lines.append("")
 
-        # ── Pinned — important findings (renamed from "Rules": contains all pinned types, not just instructions) ──
-        lines.append("## Pinned\n")
-        if pinned:
-            lines.extend(pinned)
-        lines.append("")
+        # Recent Events
+        if event_entries:
+            lines.append("## Recent Events\n")
+            lines.extend(event_entries)
+            lines.append("")
 
-        # Build category index
-        category_index: dict[str, list[tuple[str, str, str]]] = {}
-        for rel, _mtime, parent, stem, heading in file_meta:
-            category_index.setdefault(parent, []).append((rel, stem, heading))
-
-        # ── Index — per-category keyword links (clickable, human+LLM dual-purpose) ──
-        lines.append("## Index\n")
-        cat_order = sorted(category_index, key=lambda c: (c == ".", c))[:20]
-        for cat in cat_order:
-            files = category_index[cat]
-            label = cat if cat != "." else "misc"
-            links: list[str] = []
-            cat_path = self.store.memory_dir / cat if cat != "." else self.store.memory_dir
-            if cat_path.is_dir():
-                for child in sorted(cat_path.iterdir()):
-                    if child.is_dir() and child.name != ".vector_index":
-                        if any(f.is_file() and f.suffix == ".md" for f in child.rglob("*.md")):
-                            sub_rel = f"{cat}/{child.name}/index.md" if cat != "." else f"{child.name}/index.md"
-                            links.append(f"[{child.name}/]({sub_rel})")
-            # Keyword-style file links: [heading](rel)
-            for rel, _stem, heading in sorted(files, key=lambda x: x[2]):
-                display = heading if heading else Path(rel).stem
-                display = _trim_sentence(display, 100)
-                links.append(f"[{display}]({rel})")
-            topic_str = ", ".join(links[:20])
-            if len(links) > 20:
-                topic_str += ", …"
-            if cat != ".":
-                lines.append(f"- [**{label}**]({cat}/index.md) — {topic_str}")
-            else:
-                lines.append(f"- **{label}** — {topic_str}")
-        lines.append("")
-
-        # ── Recent — dated milestone entries ──
-        lines.append("## Recent\n")
-        if recent_entries:
-            for r in recent_entries:
-                text = r.get("content", "")
-                ts_v = r.get("ts", 0)
-                if not text:
-                    continue
-                date_str = datetime.fromtimestamp(ts_v).strftime("%Y-%m-%d") if ts_v else ""
-                emoji, rest = _extract_emoji(text)
-                rest = rest.lstrip("- ").strip()
-                trimmed = _trim_sentence(rest, 145)
-                display = f"{emoji} {trimmed}" if emoji else trimmed
-                prefix = f"{date_str}: " if date_str else ""
-                lines.append(f"- {prefix}{display}")
+        # Health Stats
+        lines.append("## Health\n")
+        lines.append(f"- Total knowledge files: {total_files}")
+        lines.append(f"- Topic areas: {len(topic_groups)}")
+        if stale_files:
+            lines.append(f"- Stale files (no update in 90d): {stale_files}")
+        lines.append(f"- Event entries tracked: {len(event_entries):}+")
         lines.append("")
 
         self.store.memory_file.write_text("\n".join(lines), encoding="utf-8")
         logger.info(
-            "MemoryExtractor: re-generated MEMORY.md with {} files in {} categories",
-            len(file_meta), len(category_index),
+            "MemoryExtractor: re-generated MEMORY.md — {} files in {} topics, {} events",
+            total_files, len(topic_groups), len(event_entries),
         )
 
     def _generate_tree_json(self) -> None:

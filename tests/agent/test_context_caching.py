@@ -149,12 +149,11 @@ def test_gpu_info_global_cache(tmp_path):
 def test_memory_section_cached(tmp_path):
     """Repeated call returns cached result."""
     builder = _make_builder(tmp_path)
-    memory_file = builder.memory.memory_file
-    memory_file.parent.mkdir(parents=True, exist_ok=True)
-    memory_file.write_text("# Memory Index\n\nSome memories.", encoding="utf-8")
+    working_file = builder.memory.memory_dir / "working.md"
+    working_file.parent.mkdir(parents=True, exist_ok=True)
+    working_file.write_text("## Current Task\n\nSome memories.", encoding="utf-8")
 
     section1 = builder._build_memory_section()
-    # First `# ` heading is stripped by _build_memory_section
     assert "Some memories" in section1
 
     section2 = builder._build_memory_section()
@@ -162,17 +161,16 @@ def test_memory_section_cached(tmp_path):
 
 
 def test_memory_section_invalidated_by_change(tmp_path):
-    """Changing MEMORY.md invalidates cache."""
+    """Changing working.md invalidates cache."""
     builder = _make_builder(tmp_path)
-    memory_file = builder.memory.memory_file
-    memory_file.parent.mkdir(parents=True, exist_ok=True)
-    memory_file.write_text("# Old Memory\n\nOld.", encoding="utf-8")
+    working_file = builder.memory.memory_dir / "working.md"
+    working_file.parent.mkdir(parents=True, exist_ok=True)
+    working_file.write_text("## Current Task\n\nOld.", encoding="utf-8")
 
     section1 = builder._build_memory_section()
-    # First `# ` heading is stripped
     assert "Old." in section1
 
-    _write_file(memory_file, "# New Memory\n\nNew.")
+    _write_file(working_file, "## Current Task\n\nNew.")
 
     section2 = builder._build_memory_section()
     assert "New." in section2
@@ -186,9 +184,12 @@ def test_memory_section_invalidated_by_change(tmp_path):
 def test_task_tree_cached(tmp_path):
     """Repeated call returns cached result."""
     builder = _make_builder(tmp_path)
-    tree = tmp_path / "workspace" / "tasks" / "TREE.md"
+    tree = tmp_path / "workspace" / "tasks" / "tree.json"
     tree.parent.mkdir(parents=True, exist_ok=True)
-    tree.write_text("## Feature X\n\nIn progress.", encoding="utf-8")
+    tree.write_text(
+        '{"items": [{"id": "1", "name": "Feature X", "status": "active", "doc": "In progress."}]}',
+        encoding="utf-8",
+    )
 
     t1 = builder._build_task_tree_section()
     assert "Feature X" in t1
@@ -198,16 +199,19 @@ def test_task_tree_cached(tmp_path):
 
 
 def test_task_tree_invalidated_by_change(tmp_path):
-    """Changing TREE.md invalidates cache."""
+    """Changing tree.json invalidates cache."""
     builder = _make_builder(tmp_path)
-    tree = tmp_path / "workspace" / "tasks" / "TREE.md"
+    tree = tmp_path / "workspace" / "tasks" / "tree.json"
     tree.parent.mkdir(parents=True, exist_ok=True)
-    tree.write_text("## Old\n\nOld description.", encoding="utf-8")
+    tree.write_text(
+        '{"items": [{"id": "1", "name": "Old", "status": "active", "doc": "Old description."}]}',
+        encoding="utf-8",
+    )
 
     t1 = builder._build_task_tree_section()
     assert "Old" in t1
 
-    _write_file(tree, "## New\n\nNew description.")
+    _write_file(tree, '{"items": [{"id": "1", "name": "New", "status": "active", "doc": "New description."}]}')
 
     t2 = builder._build_task_tree_section()
     assert "New" in t2
@@ -269,7 +273,10 @@ def test_build_system_prompt_stable_across_calls(tmp_path):
     builder = _make_builder(tmp_path)
     ws = tmp_path / "workspace"
     (ws / "tasks").mkdir(parents=True, exist_ok=True)
-    (ws / "tasks" / "TREE.md").write_text("## Task One\n\nDo it.", encoding="utf-8")
+    (ws / "tasks" / "tree.json").write_text(
+        '{"items": [{"id": "1", "name": "Task One", "status": "active", "doc": "Do it."}]}',
+        encoding="utf-8",
+    )
     builder._framework_config = {"model": "claude-sonnet-4", "provider": "anthropic"}
 
     p1 = builder.build_system_prompt(channel="cli")
@@ -294,17 +301,20 @@ def test_build_system_prompt_caches_identity_per_channel(tmp_path):
 
 
 def test_scenario_tree_md_changes_mid_session(tmp_path):
-    """TREE.md changes mid-session, next call to _build_task_tree_section picks it up."""
+    """tree.json changes mid-session, next call to _build_task_tree_section picks it up."""
     builder = _make_builder(tmp_path)
     ws = tmp_path / "workspace"
-    tree = ws / "tasks" / "TREE.md"
+    tree = ws / "tasks" / "tree.json"
     tree.parent.mkdir(parents=True, exist_ok=True)
-    tree.write_text("## Original\n\nOriginal plan.", encoding="utf-8")
+    tree.write_text(
+        '{"items": [{"id": "1", "name": "Original", "status": "active", "doc": "Original plan."}]}',
+        encoding="utf-8",
+    )
 
     t1 = builder._build_task_tree_section()
     assert "Original" in t1
 
-    _write_file(tree, "## Updated\n\nUpdated plan.")
+    _write_file(tree, '{"items": [{"id": "1", "name": "Updated", "status": "active", "doc": "Updated plan."}]}')
 
     t2 = builder._build_task_tree_section()
     assert "Updated" in t2
