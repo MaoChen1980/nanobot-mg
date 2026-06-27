@@ -913,7 +913,14 @@ class AgentLoop:
 
             try:
                 logger.info("assess_me call start")
-                result = await assess_me(messages, has_active_task=_has_active)
+                always_set: set[str] = set()
+                skills_summary = ""
+                ctx_builder = getattr(loop, "context", None)
+                if ctx_builder and hasattr(ctx_builder, "skills"):
+                    always_set = set(ctx_builder.skills.get_always_skills())
+                    skills_summary = ctx_builder.skills.build_skills_summary(exclude=always_set)
+                result = await assess_me(messages, has_active_task=_has_active,
+                                          skills_summary=skills_summary)
                 logger.info("assess_me call done (result_len={})", len(result) if result else 0)
             except Exception:
                 logger.exception("assess_me failed")

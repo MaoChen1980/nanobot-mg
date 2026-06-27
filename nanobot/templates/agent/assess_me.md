@@ -89,6 +89,20 @@ agent 陈述是否符合用户需求？
 **噪音的特征：** 读完后觉得「本来就该这么干」→ 不写。
 **进化的特征：** 读完后觉得「原来有个坑 / 原来可以这样」→ 写。
 
+### Skills 匹配
+
+{% if skills_summary %}
+可用扩展技能（非 always 注入）：
+{{ skills_summary }}
+
+检查：
+- 是否有技能描述与当前任务或问题高度相关？
+- 如果相关，agent 是否通过 read_file 加载并按步骤执行？
+- 存在相关技能但未使用 → 在 content 中标记"存在相关 skill: XXX 未使用"，status 设为 "findings"
+{% else %}
+无可用的扩展技能列表。
+{% endif %}
+
 {% if verify %}
 ## Items to Verify
 

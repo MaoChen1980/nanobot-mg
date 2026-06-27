@@ -69,6 +69,7 @@ async def assess_me(
     messages: list[dict[str, Any]],
     verify: str = "",
     has_active_task: bool = True,
+    skills_summary: str = "",
 ) -> str:
     """Assess current cognition state from conversation history.
 
@@ -85,6 +86,7 @@ async def assess_me(
         conversation=conversation,
         verify=verify,
         has_active_task=has_active_task,
+        skills_summary=skills_summary,
     )
 
     resp = await chat_stream_with_retry(
