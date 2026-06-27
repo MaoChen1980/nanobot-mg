@@ -3,6 +3,7 @@ name: github-issues
 description: "Create, triage, label, assign GitHub issues via gh or REST."
 version: 1.1.0
 platforms: [linux, macos, windows]
+category: project-management
 ---
 
 # GitHub Issues Management

@@ -6,6 +6,7 @@ description: Hypothesis-driven debugging methodology for hard bugs. Use this
   when debugging requires more than a quick glance — especially when the first
   attempt at a fix didn't work, when behavior seems "impossible", or when you're
   tempted to blame an external system (model, API, library) without evidence.
+category: code-analysis
 ---
 
 # Structured Debugging

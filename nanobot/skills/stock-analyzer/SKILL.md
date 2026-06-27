@@ -6,6 +6,7 @@ description: >-
   Supports A-share, US stocks, HK stocks. Generates detailed investment recommendations
   with risk assessment and actionable trading strategies.
 official: true
+category: domain-specific
 ---
 
 # Stock Deep Analyzer

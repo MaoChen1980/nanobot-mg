@@ -16,6 +16,7 @@ except ModuleNotFoundError:
 MAX_SKILL_NAME_LENGTH = 64
 ALLOWED_FRONTMATTER_KEYS = {
     "name",
+    "category",
     "description",
     "metadata",
     "always",
@@ -183,6 +184,14 @@ def validate_skill(skill_path):
     description_error = _validate_description(description)
     if description_error:
         return False, description_error
+
+    category = frontmatter.get("category")
+    if not category:
+        return False, "Missing 'category' in frontmatter"
+    if not isinstance(category, str) or not category.strip():
+        return False, "'category' must be a non-empty string"
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", category.strip()):
+        return False, f"Invalid category '{category}': must be hyphen-case (lowercase, hyphens only)"
 
     always = frontmatter.get("always")
     if always is not None and not isinstance(always, bool):

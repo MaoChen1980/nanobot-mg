@@ -3,6 +3,7 @@ name: bugfix
 description: Fix a bug from a GitHub issue, following the reproduce-first
   workflow. Use when the user asks to fix a bug, investigate a GitHub issue, or
   debug a user-reported problem. Takes a GitHub issue URL or number as input.
+category: coding
 ---
 
 # Bugfix Workflow

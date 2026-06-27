@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-06-25T04:10:27+0800
+Last scanned: 2026-06-28T00:22:42+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,36 +11,28 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~103,391
+- **Approx LOC**: ~110,212
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 402 | ~102,784 |
+| Python | 417 | ~109,605 |
 | Shell | 8 | ~607 |
 
 ## Directory Structure
 
 E:\claude\nanobot-mg/
-  bridge/
-    src/
-      index.ts (1KB)
-      server.ts (4KB)
-      types.d.ts (116B)
-      whatsapp.ts (9KB)
-    package.json (588B)
-    tsconfig.json (355B)
   docs/
     ideas/
       session-reset-after-task.md (1KB)
     agent-social-network.md (622B)
     AGENTS.md (16KB)
     channel-plugin-guide.md (14KB)
-    chat-apps.md (20KB)
+    chat-apps.md (14KB)
     chat-commands.md (1KB)
     cli-reference.md (1KB)
-    configuration.md (30KB)
+    configuration.md (29KB)
     deployment.md (5KB)
     memory.md (6KB)
     multiple-instances.md (4KB)
@@ -61,7 +53,7 @@ E:\claude\nanobot-mg/
   nanobot/
     agent/
       commands/
-        observe.py (2KB)
+        observe.py (3KB)
       tools/
         filesystem/
         mcp/
@@ -69,42 +61,43 @@ E:\claude\nanobot-mg/
         __init__.py (352B)
         _section_utils.py (9KB)
         _semantic_base.py (16KB)
-        analyze_tool.py (8KB)
-        assess_me_tool.py (4KB)
+        analyze.py (7KB)
+        assess_me.py (3KB)
         base.py (16KB)
         cancel_subagent.py (1KB)
         check_subagent.py (2KB)
-        checkpoint.py (14KB)
-        conversation_search.py (6KB)
+        checkpoint.py (15KB)
+        conversation_search.py (5KB)
         cron.py (20KB)
         danger.py (2KB)
-        debug_root_cause.py (12KB)
-        explore_module.py (18KB)
+        debug_root_cause.py (11KB)
+        explore_module.py (21KB)
         file_state.py (8KB)
         list_subagents.py (1KB)
-        memory_search.py (5KB)
+        log_event.py (5KB)
+        memory_search.py (6KB)
         message.py (8KB)
         notify_orchestrator.py (2KB)
         output_cache.py (3KB)
-        reframe.py (6KB)
+        reframe.py (5KB)
         registry.py (8KB)
+        restart_agent.py (3KB)
         sandbox.py (2KB)
         scan_project.py (2KB)
         schema.py (2KB)
         search.py (28KB)
         self.py (21KB)
-        self_restart_tool.py (2KB)
-        semantic_search.py (5KB)
-        send_message.py (4KB)
+        semantic_search.py (4KB)
+        send_message.py (3KB)
         shell_validators.py (7KB)
-        spawn.py (10KB)
+        spawn.py (7KB)
         tool_call_log.py (3KB)
-        web.py (23KB)
+        web.py (22KB)
       __init__.py (584B)
       assess_me.py (6KB)
       compress.py (19KB)
       compressor.py (7KB)
-      context.py (52KB)
+      context.py (55KB)
       context_vars.py (985B)
       db.py (23KB)
       hook.py (9KB)
@@ -113,15 +106,15 @@ E:\claude\nanobot-mg/
       loop_checkpoint.py (6KB)
       loop_constants.py (749B)
       loop_dispatch.py (7KB)
-      loop_hook.py (10KB)
+      loop_hook.py (11KB)
       loop_mcp.py (2KB)
       loop_message_handlers.py (27KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (78KB)
-      memory_store.py (10KB)
+      memory_extractor.py (89KB)
+      memory_store.py (11KB)
       memory_vector.py (26KB)
-      message_pipe.py (7KB)
+      message_pipe.py (8KB)
       project_scanner.py (21KB)
       runner.py (66KB)
       runner_constants.py (566B)
@@ -144,7 +137,13 @@ E:\claude\nanobot-mg/
       manager.py (4KB)
       queue.py (1KB)
     cli/
+      __init__.py (30B)
+      commands.py (43KB)
+      stream.py (4KB)
     command/
+      __init__.py (255B)
+      builtin.py (9KB)
+      router.py (3KB)
     config/
     cron/
     docs/
@@ -169,11 +168,13 @@ E:\claude\nanobot-mg/
     project_card.md (4KB)
   tasks/
   tests/
+  tmp/
   CONTRIBUTING.md (4KB)
   docker-compose.yml (1KB)
-  Dockerfile (2KB)
+  Dockerfile (995B)
   entrypoint.sh (443B)
   LICENSE (1KB)
+  project_card.md (11KB)
   pyproject.toml (4KB)
   README.md (8KB)
   README_en.md (5KB)
@@ -228,7 +229,7 @@ dependencies = [
     "rich>=14.0.0,<15.0.0",
     "croniter>=6.0.0,<7.0.0",
     "dingtalk-stream>=0.24.0,<1.0.0",
-... (140 more lines)
+... (125 more lines)
 ```
 
 ### .editorconfig
@@ -303,37 +304,22 @@ trim_trailing_whitespace = false
 ```text
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-# Install Node.js 20 for the WhatsApp bridge
+# Install runtime dependencies only
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates gnupg git bubblewrap openssh-client && \
-    mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends nodejs && \
-    apt-get purge -y gnupg && \
-    apt-get autoremove -y && \
+    apt-get install -y --no-install-recommends git bubblewrap openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install Python dependencies first (cached layer)
 COPY pyproject.toml README.md LICENSE ./
-RUN mkdir -p nanobot bridge && touch nanobot/__init__.py && \
+RUN mkdir -p nanobot && touch nanobot/__init__.py && \
     uv pip install --system --no-cache . && \
-    rm -rf nanobot bridge
+    rm -rf nanobot
 
 # Copy the full source and install
 COPY nanobot/ nanobot/
-COPY bridge/ bridge/
 RUN uv pip install --system --no-cache .
-
-# Build the WhatsApp bridge
-WORKDIR /app/bridge
-RUN git config --global --add url."https://github.com/".insteadOf ssh://git@github.com/ && \
-    git config --global --add url."https://github.com/".insteadOf git@github.com: && \
-    npm install && npm run build
-WORKDIR /app
 
 # Create non-root user and config directory
 RUN useradd -m -u 1000 -s /bin/bash nanobot && \
@@ -341,7 +327,17 @@ RUN useradd -m -u 1000 -s /bin/bash nanobot && \
     chown -R nanobot:nanobot /home/nanobot /app
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-... (10 more lines)
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+USER nanobot
+ENV HOME=/home/nanobot
+
+# Gateway default port
+EXPOSE 18790
+
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["status"]
+
 ```
 
 ### docker-compose.yml

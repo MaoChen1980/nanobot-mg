@@ -11,6 +11,7 @@ metadata:
     related_skills: [github-repo-management]
 prerequisites:
   commands: [pygount]
+category: code-analysis
 ---
 
 # Codebase Inspection with pygount

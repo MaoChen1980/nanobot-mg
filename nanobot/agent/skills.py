@@ -206,35 +206,54 @@ class SkillsLoader:
 
     def build_skills_summary(self, exclude: set[str] | None = None) -> str:
         """
-        Build a summary of all skills (name, description, path, availability).
+        Build a summary of all skills grouped by category, with folding.
 
-        This is used for progressive loading - the agent can read the full
-        skill content using read_file when needed.
+        Categories are extracted dynamically from each skill's frontmatter
+        ``category`` field — no hardcoded list. Skills without a category
+        are grouped under "Other". Categories are sorted alphabetically.
+        Each category section is folded by default so the LLM expands only
+        the relevant section.
 
         Args:
             exclude: Set of skill names to omit from the summary.
 
         Returns:
-            Markdown-formatted skills summary.
+            Markdown-formatted skills summary with category grouping.
         """
         all_skills = self.list_skills(filter_unavailable=False)
         if not all_skills:
             return ""
 
-        lines: list[str] = []
+        grouped: dict[str, list[dict[str, str]]] = {}
         for entry in all_skills:
             skill_name = entry["name"]
             if exclude and skill_name in exclude:
                 continue
-            meta = self._get_skill_meta(skill_name)
-            available = self._check_requirements(meta)
-            desc = self._get_skill_description(skill_name)
-            if available:
-                lines.append(f"- **{skill_name}** — {desc}  `{entry['path']}`")
-            else:
-                missing = self._get_missing_requirements(meta)
-                suffix = f" (unavailable: {missing})" if missing else " (unavailable)"
-                lines.append(f"- **{skill_name}** — {desc}{suffix}  `{entry['path']}`")
+            meta = self.get_skill_metadata(skill_name)
+            category = (meta or {}).get("category") or "other"
+            grouped.setdefault(category, []).append(entry)
+
+        lines: list[str] = []
+        for cat in sorted(grouped):
+            entries = grouped[cat]
+            label = cat.replace("-", " ").title()
+            lines.append(f"### {label} ({len(entries)} skill{'s' if len(entries) != 1 else ''})")
+            lines.append("<details><summary>Expand</summary>")
+            lines.append("")
+            for entry in entries:
+                skill_name = entry["name"]
+                meta = self._get_skill_meta(skill_name)
+                available = self._check_requirements(meta)
+                desc = self._get_skill_description(skill_name)
+                if available:
+                    lines.append(f"- **{skill_name}** — {desc}  `{entry['path']}`")
+                else:
+                    missing = self._get_missing_requirements(meta)
+                    suffix = f" (unavailable: {missing})" if missing else " (unavailable)"
+                    lines.append(f"- **{skill_name}** — {desc}{suffix}  `{entry['path']}`")
+            lines.append("</details>")
+            lines.append("")
+
         return "\n".join(lines)
 
     def _get_missing_requirements(self, skill_meta: dict) -> str:

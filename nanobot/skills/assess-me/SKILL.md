@@ -6,6 +6,7 @@ description: >
   或修复后需验证完整性时，必须使用此 Skill。
   关键词：你确定吗、再检查、review、verify、审计、double check、检查完整性。
   即使用户没有明确说"审计"，只要用户质疑你的判断或工具返回意外结果，都应触发。
+category: agent
 ---
 
 # Assess Me — Self-Cognition Audit

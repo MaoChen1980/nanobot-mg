@@ -6,6 +6,7 @@ description: >
   关键词：SSH、终端、交互、密码、REPL、tmux、session、持久运行、后台。
   即使用户没有明确说"开一个 tmux"，只要涉及需要持续运行的命令行操作，都应触发。
 version: 0.1.0
+category: domain-specific
 ---
 
 # tmux Skill

@@ -6,6 +6,7 @@ description: >
   或方案越写越复杂、同一问题连续 3 次无进展时，必须使用此 Skill。
   关键词：换个角度、简化、太复杂、different approach、重新想、跳出循环、方案膨胀。
   即使用户没有明确说"重构问题"，只要方案明显膨胀或用户要求换方向，都应触发。
+category: domain-specific
 ---
 
 # Reframe — Strip Noise, Get Fresh Perspective

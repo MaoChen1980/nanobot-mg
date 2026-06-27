@@ -6,6 +6,7 @@ description: >
   关键词：PR、pull request、CI、GitHub、issue、workflow、代码搜索、gh。
   即使用户没有明确说"用 gh 命令"，只要涉及 GitHub 上的任何操作，都应触发。
 version: 0.1.0
+category: domain-specific
 ---
 
 # GitHub Skill

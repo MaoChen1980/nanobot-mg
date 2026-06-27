@@ -6,6 +6,7 @@ description: >
   或用户说"排查"、"为什么"、"还是不对"时，必须使用此 Skill。
   关键词：报错、对不上、排查、根因、still broken、why、重复失败、不符合预期。
   即使用户没有明确说"根因分析"，只要工具返回了非预期结果或用户要求排查，都应触发。
+category: debugging
 ---
 
 # Debug Root Cause — Systematic Investigation Methodology

@@ -6,6 +6,7 @@ description: >
   关键词：总结、摘要、概括、TLDR、summarize、extract key points。
   即使用户没有明确说"给我总结"，只要提供了外部内容源并要求提取信息，都应触发。
 version: 0.1.0
+category: domain-specific
 ---
 
 # Summarize Skill

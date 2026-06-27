@@ -1,6 +1,7 @@
 ---
 name: code-review
 description: "Review code for bugs, security issues, code smells, and maintainability. Use for PR review, pre-commit diff review, or when user asks 'review this code' / 'code review'."
+category: code-review
 ---
 
 # Code Review Skill

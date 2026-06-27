@@ -9,6 +9,7 @@ metadata:
   hermes:
     tags: [debugging, troubleshooting, problem-solving, root-cause, investigation]
     related_skills: [test-driven-development, plan, subagent-driven-development]
+category: code-analysis
 ---
 
 # Systematic Debugging

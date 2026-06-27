@@ -2,6 +2,7 @@
 name: "playwright"
 description: "Use when the task requires automating a real browser from the terminal (navigation, form filling, snapshots, screenshots, data extraction, UI-flow debugging) via `npx @playwright/mcp playwright-cli`."
 official: true
+category: domain-specific
 ---
 
 # Playwright CLI Skill

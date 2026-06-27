@@ -6,6 +6,7 @@ description: >
   关键词：安装 skill、搜索 skill、skill 市场、clawhub、社区 skill、技能仓库、可用 skill。
   即使用户没有明确说"clawhub"，只要涉及从外部获取或管理技能，都应触发。
 version: 0.1.0
+category: project-management
 ---
 
 # ClawHub — community skill registry

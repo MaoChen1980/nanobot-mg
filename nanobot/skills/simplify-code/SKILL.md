@@ -3,6 +3,7 @@ name: simplify-code
 description: "Parallel 3-agent cleanup of recent code changes via spawn."
 version: 1.0.0
 platforms: [linux, macos, windows]
+category: code-analysis
 ---
 
 # Simplify Code — Parallel Review & Cleanup

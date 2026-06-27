@@ -12,6 +12,7 @@ metadata:
     tags: [twitter, x, social-media, xurl, official-api]
     homepage: https://github.com/xdevplatform/xurl
     upstream_skill: https://github.com/openclaw/openclaw/blob/main/skills/xurl/SKILL.md
+category: domain-specific
 ---
 
 # xurl — X (Twitter) API via the Official CLI

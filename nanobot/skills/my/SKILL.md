@@ -6,6 +6,7 @@ description: >
   关键词：你是谁、能力、配置、自检、状态检查、model、context window、iteration limit、运行时。
   即使用户没有明确说"自检"，只要涉及 agent 自身状态和能力的问题，都应触发。
 version: 0.1.0
+category: domain-specific
 ---
 
 # Self-Awareness Skill

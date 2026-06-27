@@ -6,6 +6,7 @@ description: >
   关键词：提醒、定时、每天、每隔、cron、schedule、remind、通知、延期。
   即使用户没有明确说"设置 cron"，只要涉及未来某个时间执行操作，都应触发。
 version: 0.1.0
+category: project-management
 ---
 
 # Cron — scheduled reminders and tasks

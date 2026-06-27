@@ -6,6 +6,7 @@ description: >
   关键词：天气、温度、下雨、下雪、刮风、湿度、预报、℃、rain、temperature、forecast。
   即使用户没有明确说"查天气"，只要涉及某个城市或地区的自然条件，都应触发。
 version: 0.1.0
+category: domain-specific
 ---
 
 # Weather — current conditions and forecasts

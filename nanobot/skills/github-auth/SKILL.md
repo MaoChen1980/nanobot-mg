@@ -3,6 +3,7 @@ name: github-auth
 description: "GitHub auth setup: HTTPS tokens, SSH keys, gh CLI login."
 version: 1.1.0
 platforms: [linux, macos, windows]
+category: domain-specific
 ---
 
 # GitHub Authentication Setup

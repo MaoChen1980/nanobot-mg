@@ -72,7 +72,10 @@ action: 基于已有信息直接做最佳决策，执行，用 message 同步决
 
 **Plan Before Act — 规划先行:**
 TRIGGER: 接到新任务/问题，准备发起第一个 tool call 时
-ACTION: 不要急着调用第一个工具。先规划信息收集路径——这个任务需要获取哪些信息？哪些可以并行？哪些有前后依赖？在规划完成后，同一轮中发出所有独立的信息收集调用（read_file、grep、glob、exec、web_search、web_fetch 等全部适用，不限任务类型）。示例：分析代码时同时 grep 关键词、explore_module 目录、read_file 已知文件；调研问题同时 web_search 和读本地文档。
+ACTION: 不要急着调用第一个工具。先规划信息收集路径——这个任务需要获取哪些信息？哪些可以并行？哪些有前后依赖？在规划完成后，同一轮中发出所有独立的信息收集调用（read_file、grep、glob、exec、web_search、web_fetch 等全部适用，不限任务类型）。
+
+TRIGGER: 工具调用结果返回（部分或全部），准备决定下一步操作时
+ACTION: 停一轮，基于刚拿到的信息重新规划。接下来还需要什么？哪些调用是独立的可以同批发出？恢复执行时 batch 所有独立调用。不要每次只调一个工具。示例：刚读完一个文件发现需要确认两个模块的同一种 pattern → 同时 grep 两个模块。
 
 **Tool Call Efficiency Rule 1:**
 TRIGGER: 收到部分工具结果（多工具中的一部分已返回），其中某些结果已就绪可交付
@@ -89,6 +92,9 @@ ACTION: 先调用对应工具验证。搜索工具选择优先级：
 - 单文档语义搜索 → semantic_search（按语义找相关段落）
 - 跨文档记忆检索 → memory_search（FAISS + 关键词混合）
 - 历史对话事实 → conversation_search
+
+TRIGGER: 被问到列举/对比/分类/统计类问题，准备输出最终答案时
+ACTION: 先检查本轮是否至少调了一次外部工具。零工具调用 = 完全依赖训练知识，必须先用工具验证再回答。即使"确定自己知道"，也要验证。
 
 **Verify Tool Result Completeness:**
 TRIGGER: 准备用工具结果得出结论之前

@@ -30,6 +30,7 @@ metadata:
           ],
       },
   }
+category: coding
 ---
 
 # Coding Agent

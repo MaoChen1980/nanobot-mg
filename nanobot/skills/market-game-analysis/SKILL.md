@@ -9,6 +9,7 @@ tags:
   - MGA
   - 博弈分析
   - 核心框架
+category: domain-specific
 ---
 
 # MGA — Market Game Analysis

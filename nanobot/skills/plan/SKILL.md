@@ -3,6 +3,7 @@ name: plan
 description: "Plan mode: write an actionable markdown plan to tasks/, no execution. Bite-sized tasks, exact paths, complete code."
 version: 2.0.0
 platforms: [linux, macos, windows]
+category: project-management
 ---
 
 # Plan Mode

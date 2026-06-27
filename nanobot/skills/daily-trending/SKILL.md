@@ -4,6 +4,7 @@ description: >-
   Fetch today's trending topics from tophub.today across multiple platforms.
   Triggered when users ask "what's trending today", "hot topics", "今日热搜", or "微博热搜".
 official: true
+category: project-management
 ---
 
 # Daily Trending

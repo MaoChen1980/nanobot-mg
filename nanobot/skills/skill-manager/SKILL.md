@@ -11,6 +11,7 @@ description: >
   关键词：创建 skill、更新 skill、修复 skill、删除 skill、skill 不对、skill 过时、模式复用、提炼 skill、pending_skills、自我进化。
   即使用户没有明确要求"管理 skill"，在执行完任何 skill 后发现可改进之处时，都应主动触发。
 version: 0.1.0
+category: agent
 ---
 
 # Skill Manager
@@ -143,6 +144,7 @@ $WORKSPACE/skills/<name>/
 ```yaml
 ---
 name: skill-name           # 连字符命名法，小写
+category: code-analysis     # 必填。创建前运行 list_categories.py 查看现有 category，选择合适的；如有需要可创建新值
 description: >
   [功能概述]。
   当用户[场景1]、[场景2]、[场景3]时，必须使用此 Skill。
@@ -241,6 +243,7 @@ python {baseDir}/scripts/quick_validate.py $WORKSPACE/skills/<name>
 
 - `scripts/init_skill.py` — 脚手架工具
 - `scripts/quick_validate.py` — 结构验证器
+- `scripts/list_categories.py` — 列出所有已有的 category（创建 skill 前运行，选择合适的 category）
 - `scripts/package_skill.py` — 分发打包工具
 - `scripts/ab_test_template.py` — A/B 测试模板
 - `references/hermes_triggers.md` — 完整的 Hermes 触发条件参考
