@@ -69,14 +69,22 @@ _LANG_PATTERNS: dict[str, list[tuple[str, str]]] = {
 )
 class ExploreModuleTool(_FsTool):
     """Get a bird's-eye view of a code module — classes, functions, their signatures and line numbers."""
-    instruction = "Understand code module/file structure (classes, functions, line numbers). For file searches use glob."
+    instruction = (
+        "Explore code files or directories. "
+        "For a file: shows classes, functions, signatures, line numbers, and cross-references. "
+        "For a directory: shows subdirectory tree, files grouped by extension with sizes, "
+        "and inline symbol summaries per file (no need to explore each file individually). "
+        "For file searches use glob. For reading file contents use read_file."
+    )
 
     name = "explore_module"
     read_only = True
 
     description = (
         "Get a structured overview of a code file or directory: classes, functions, "
-        "signatures, and 1-indexed line numbers. "
+        "signatures, docstrings, 1-indexed line numbers, and cross-references between symbols. "
+        "Directory listings show files grouped by extension, sizes, subdirectory tree, "
+        "and inline summaries of top-level symbols per file. "
         "Python uses AST parsing (precise), other languages use regex (may be incomplete). "
         "Supported: .py, .js, .ts, .go, .rs, .java, .kt."
     )
@@ -398,7 +406,9 @@ class ExploreModuleTool(_FsTool):
                 file_count += len(files)
             parts.append(f"[{ext or '(no ext)'}]{size_info}")
             for rel, sz in files[:20]:
-                parts.append(f"  {rel}  ({self._format_size(sz)})")
+                summary = self._get_file_summary(Path(rel))
+                summary_suffix = f"  — {summary}" if summary else ""
+                parts.append(f"  {rel}  ({self._format_size(sz)}){summary_suffix}")
             if len(files) > 20:
                 parts.append(f"  ... and {len(files) - 20} more")
 
@@ -440,6 +450,71 @@ class ExploreModuleTool(_FsTool):
                 except OSError:
                     sz = 0
                 by_type.setdefault(ext, []).append((rel, sz))
+
+    # ------------------------------------------------------------------
+    # File summarization — inline symbols for directory listings
+    # ------------------------------------------------------------------
+
+    def _get_file_summary(self, fp: Path) -> str | None:
+        """Quick top-level symbol names for directory listing (fast, no cross-refs)."""
+        suffix = fp.suffix.lower()
+        if suffix not in _LANG_PATTERNS and suffix != ".py":
+            return None
+        try:
+            raw = fp.read_bytes()
+        except OSError:
+            return None
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+        if suffix == ".py":
+            return self._summarize_python(text)
+        else:
+            lines = text.replace("\r\n", "\n").split("\n")
+            return self._summarize_generic(lines, suffix)
+
+    @staticmethod
+    def _summarize_python(text: str) -> str | None:
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            return "(parse error)"
+        names: list[str] = []
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, ast.ClassDef):
+                names.append(node.name)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                names.append(node.name)
+        if not names:
+            return None
+        s = ", ".join(names[:10])
+        if len(names) > 10:
+            s += f", ... (+{len(names) - 10} more)"
+        return s
+
+    @staticmethod
+    def _summarize_generic(lines: list[str], suffix: str) -> str | None:
+        patterns = _LANG_PATTERNS[suffix]
+        names: list[str] = []
+        seen: set[str] = set()
+        for pattern, kind in patterns:
+            for line in lines:
+                m = re.search(pattern, line)
+                if m:
+                    name = m.group(1)
+                    if name and name not in seen:
+                        seen.add(name)
+                        names.append(name)
+                        if len(names) >= 15:
+                            break
+        if not names:
+            return None
+        s = ", ".join(names[:10])
+        if len(names) > 10:
+            s += f", ... (+{len(names) - 10} more)"
+        return s
 
     @staticmethod
     def _format_size(size: int) -> str:
