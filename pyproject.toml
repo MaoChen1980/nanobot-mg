@@ -70,6 +70,7 @@ dependencies = [
     "Pillow>=10.0.0",
     "fabric>=3.0.0",
     "markitdown>=0.1.5,<1.0.0",
+    "neonize>=0.3.18",
 ]
 
 [project.optional-dependencies]
@@ -128,13 +129,10 @@ packages = ["nanobot"]
 [tool.hatch.build.targets.wheel.sources]
 "nanobot" = "nanobot"
 
-[tool.hatch.build.targets.wheel.force-include]
-"bridge" = "nanobot/bridge"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "nanobot/",
-    "bridge/",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",

@@ -571,7 +571,7 @@ const SELECT_FIELDS = {
 // Password fields (should not reveal actual value)
 const SECRET_FIELDS = new Set([
   'token','app_secret','client_secret','api_key','password','proxy_password',
-  'bot_token','app_token','smtp_password','imap_password','bridge_token',
+  'bot_token','app_token','smtp_password','imap_password',
   'claw_token',
 ]);
 
@@ -588,7 +588,7 @@ const BOT_TEMPLATES = {
   slack: {name:'', bot_token:'', app_token:'', mode:'socket', group_policy:'mention'},
   telegram: {name:'', token:'', group_policy:'mention'},
   weixin: {name:'', api_url:'https://ilinkai.weixin.qq.com', token:''},
-  whatsapp: {name:'', bridge_url:'ws://localhost:3001', bridge_token:''},
+  whatsapp: {name:'', enabled: false},
 };
 
 function renderChannels() {
