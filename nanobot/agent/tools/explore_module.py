@@ -64,7 +64,6 @@ _LANG_PATTERNS: dict[str, list[tuple[str, str]]] = {
     build_parameters_schema(
         path=p("string", "Absolute path to a file or directory to explore."),
         max_level=p("integer", "Maximum depth for directory listing (default 3, max 5). Depth=1 lists top-level; depth=3 shows subdirectories 3 levels deep.", minimum=1, maximum=5, default=3),
-        show_refs=p("boolean", "Show a sample of internal references for each symbol (default true)", default=True),
         required=["path"],
     ),
 )
@@ -86,7 +85,6 @@ class ExploreModuleTool(_FsTool):
         self,
         path: str = "",
         max_level: int = 3,
-        show_refs: bool = True,
         **kwargs: Any,
     ) -> str:
         try:
@@ -94,9 +92,9 @@ class ExploreModuleTool(_FsTool):
             if not fp.exists():
                 return f"Error: Path not found: {path}"
             if fp.is_file():
-                return self._explore_file(fp, show_refs=show_refs)
+                return self._explore_file(fp)
             if fp.is_dir():
-                return self._explore_directory(fp, max_level, show_refs=show_refs)
+                return self._explore_directory(fp, max_level)
             return f"Error: Not a file or directory: {path}"
         except PermissionError as e:
             return f"Error: {e}"

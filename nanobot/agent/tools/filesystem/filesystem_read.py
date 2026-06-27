@@ -62,7 +62,7 @@ class ReadFileTool(_FsTool):
 
     read_only = True
 
-    async def execute(self, path: str = "", mode: str = "full", extract: str | None = None, offset: int = 1, limit: int | None = None, pages: str | None = None, **kwargs: Any) -> Any:
+    async def execute(self, path: str = "", mode: str = "full", extract: str | None = None, offset: int = 1, limit: int = 2000, pages: str | None = None, **kwargs: Any) -> Any:
         try:
             # Device path blacklist
             if _is_blocked_device(path):

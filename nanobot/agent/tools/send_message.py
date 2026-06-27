@@ -38,9 +38,11 @@ class SendMessageTool(Tool):
         self._subagent_id = subagent_id
         self._subagent_label = subagent_label
     instruction = (
-        "Send a message to a running subagent. Use list_subagents first to get the recipient name. "
-        "Fire-and-forget — execution continues immediately on both sides. "
-        "The recipient will see your message in their next iteration."
+        "Send a message between Orchestrator and Subagents (bidirectional, non-blocking). "
+        "Subagent→Orchestrator: recipient='main'. "
+        "Orchestrator→Subagent: recipient='subagent:<label>'. "
+        "Use list_subagents to get recipient names. "
+        "Fire-and-forget — execution continues immediately on both sides."
     )
 
     name = "send_message"

@@ -137,7 +137,7 @@ class SpawnTool(Tool):
             label = t.get("label")
             role = t.get("role")
             output_schema = t.get("output_schema")
-            max_iterations = t.get("max_iterations")
+            max_iterations = t.get("max_iterations", 100)
             result = await self._manager.spawn(
                 task=task,
                 label=label,

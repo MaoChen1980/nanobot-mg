@@ -30,7 +30,7 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
             "string",
             "End date (YYYY-MM-DD or YYYY-MM-DD HH:MM), inclusive",
         ),
-        required=["keyword"],
+        required=[],
     ),
 )
 class ConversationSearchTool(Tool):

@@ -124,7 +124,7 @@ def _extract_powershell_inner(command: str) -> str | None:
             "Default: false. Detection re-enables automatically for the next call.",
             default=False,
         ),
-        required=["working_dir"],
+        required=[],
     )
 )
 class ExecTool(Tool):

@@ -148,7 +148,6 @@ class SelfTool(Tool):
                     "Examples: 'max_iterations', 'model', 'workspace', 'subagents', 'exec_config.sandbox_enabled'.",
                 },
                 "value": {
-                    "type": "string",
                     "description": "New value for 'set'/'modify'. Pass as JSON-encoded value "
                     "(int for max_iterations, string for model, object for scratchpad notes).",
                 },

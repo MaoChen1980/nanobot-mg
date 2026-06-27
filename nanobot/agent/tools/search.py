@@ -212,7 +212,7 @@ class GlobTool(_SearchTool):
         pattern: str,
         path: str = "",
         max_results: int | None = None,
-        head_limit: int | None = None,
+        head_limit: int = 250,
         offset: int = 0,
         entry_type: str = "files",
         **kwargs: Any,
@@ -517,7 +517,7 @@ class GrepTool(_SearchTool):
         context_after: int = 0,
         max_matches: int | None = None,
         max_results: int | None = None,
-        head_limit: int | None = None,
+        head_limit: int = 250,
         offset: int = 0,
         **kwargs: Any,
     ) -> str:
