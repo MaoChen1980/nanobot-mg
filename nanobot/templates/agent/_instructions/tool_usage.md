@@ -53,6 +53,6 @@
 - 不要用 `glob` 或 `grep` 做定时
 
 ### 系统
-- 查看/修改配置 → `config(action='check'|'set')`
+- 查看/修改配置 → `check_config(action='check'|'set')`
 - 卡住/重置 → `restart_agent`（不要用 `exec` 或 `list_subagents`）
 - 记录事件 → `log_event(topic, summary, [detail])`

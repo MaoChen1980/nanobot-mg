@@ -108,13 +108,13 @@ class SelfTool(Tool):
 
     @property
     def name(self) -> str:
-        return "config"
+        return "check_config"
 
     @property
     def instruction(self) -> str:
         return (
             "View or modify framework configuration. "
-            "Use config(action='check') to inspect, config(action='set') to change. "
+            "Use check_config(action='check') to inspect, check_config(action='set') to change. "
             "Before setting state, predict the potential impact — "
             "warn the user if the change could cause crashes or instability."
         )
@@ -122,10 +122,11 @@ class SelfTool(Tool):
     @property
     def description(self) -> str:
         base = (
-            "View and modify the agent loop's runtime state. "
-            "check (no key) → shows full configuration overview. "
-            "check (with key) → view a specific value (supports dot-path). "
-            "set (with key, value) → modify configuration or store scratchpad notes."
+            "View the agent loop's runtime state or modify its settings. "
+            "check (no key) → full status overview: model, iterations, subagents, hooks, skills, token usage, scratchpad. "
+            "check <dot-path> → inspect a specific attribute (e.g. 'max_iterations', 'subagents', 'exec_config.sandbox_enabled'). "
+            "set <key, value> → modify a runtime setting or store scratchpad notes. "
+            "Aliases: 'inspect' for check, 'modify' for set."
         )
         if not self._modify_allowed:
             base += "\nREAD-ONLY MODE: set is disabled."
@@ -138,15 +139,19 @@ class SelfTool(Tool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["check", "set"],
-                    "description": "Action: 'check' (view config; alias 'inspect'), 'set' (modify config or store scratchpad notes; alias 'modify')",
+                    "enum": ["check", "inspect", "set", "modify"],
+                    "description": "'check' or 'inspect': view runtime state. 'set' or 'modify': change a setting or store scratchpad notes.",
                 },
                 "key": {
                     "type": "string",
-                    "description": "Dot-path for check/set. Examples: 'max_iterations', 'workspace', 'provider_retry_mode'. "
-                    "For check without key, shows all config values.",
+                    "description": "Dot-path to inspect or set. Without key, 'check' shows the full runtime overview. "
+                    "Examples: 'max_iterations', 'model', 'workspace', 'subagents', 'exec_config.sandbox_enabled'.",
                 },
-                "value": {"type": "string", "description": "New value (for set). Pass JSON-encoded value. The framework decodes JSON types on the receiving end (int for max_iterations, string for model, array/object for scratchpad)."},
+                "value": {
+                    "type": "string",
+                    "description": "New value for 'set'/'modify'. Pass as JSON-encoded value "
+                    "(int for max_iterations, string for model, object for scratchpad notes).",
+                },
             },
             "required": ["action"],
         }

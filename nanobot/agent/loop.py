@@ -511,7 +511,7 @@ class AgentLoop:
             include_timestamps=True, timezone=self.context.timezone
         )
 
-        for name in ("message", "spawn", "cron", "config", "assess_me", "debug_root_cause"):
+        for name in ("message", "spawn", "cron", "check_config", "assess_me", "debug_root_cause"):
             tool = self.tools.get(name)
             if tool is None:
                 continue

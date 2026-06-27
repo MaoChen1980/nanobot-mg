@@ -608,7 +608,7 @@ def _tool_call(call_id: str) -> dict:
     return {
         "id": call_id,
         "type": "function",
-        "function": {"name": "config", "arguments": "{}"},
+        "function": {"name": "check_config", "arguments": "{}"},
     }
 
 
@@ -617,7 +617,7 @@ def test_deepseek_thinking_preserves_tool_history_backfills_reasoning_content() 
         {"role": "system", "content": "system"},
         {"role": "user", "content": "can we use wechat?"},
         {"role": "assistant", "content": "", "tool_calls": [_tool_call("call_bad")]},
-        {"role": "tool", "tool_call_id": "call_bad", "name": "config", "content": "channels"},
+        {"role": "tool", "tool_call_id": "call_bad", "name": "check_config", "content": "channels"},
         {"role": "user", "content": "continue"},
     ])
 
@@ -629,7 +629,7 @@ def test_deepseek_thinking_preserves_tool_history_backfills_reasoning_content() 
     assert msgs[2]["role"] == "assistant"
     assert msgs[2]["content"] is None
     assert msgs[2]["reasoning_content"] == " "
-    assert msgs[2]["tool_calls"][0]["function"]["name"] == "config"
+    assert msgs[2]["tool_calls"][0]["function"]["name"] == "check_config"
     # Tool message preserved
     assert msgs[3]["role"] == "tool"
     assert msgs[3]["content"] == "channels"
@@ -646,7 +646,7 @@ def test_deepseek_thinking_keeps_tool_history_with_reasoning_content() -> None:
             "reasoning_content": "I should inspect supported channels.",
             "tool_calls": [_tool_call("call_good")],
         },
-        {"role": "tool", "tool_call_id": "call_good", "name": "config", "content": "channels"},
+        {"role": "tool", "tool_call_id": "call_good", "name": "check_config", "content": "channels"},
         {"role": "user", "content": "continue"},
     ])
 
@@ -661,7 +661,7 @@ def test_deepseek_thinking_preserves_orphan_tool_turn() -> None:
         {"role": "system", "content": "system"},
         {"role": "user", "content": "can we use wechat?"},
         {"role": "assistant", "content": "", "tool_calls": [_tool_call("call_bad")]},
-        {"role": "tool", "tool_call_id": "call_bad", "name": "config", "content": "channels"},
+        {"role": "tool", "tool_call_id": "call_bad", "name": "check_config", "content": "channels"},
     ])
 
     msgs = kwargs["messages"]
@@ -672,7 +672,7 @@ def test_deepseek_thinking_preserves_orphan_tool_turn() -> None:
     assert msgs[2]["role"] == "assistant"
     assert msgs[2]["content"] is None
     assert msgs[2]["reasoning_content"] == " "
-    assert msgs[2]["tool_calls"][0]["function"]["name"] == "config"
+    assert msgs[2]["tool_calls"][0]["function"]["name"] == "check_config"
     # Tool message preserved
     assert msgs[3]["role"] == "tool"
     assert msgs[3]["content"] == "channels"

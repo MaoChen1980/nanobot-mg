@@ -43,7 +43,7 @@ def _make_mock_loop(**overrides):
 
     # Tools registry mock
     loop.tools = MagicMock()
-    loop.tools.tool_names = ["read_file", "write_file", "exec", "web_search", "config"]
+    loop.tools.tool_names = ["read_file", "write_file", "exec", "web_search", "check_config"]
     loop.tools.has.side_effect = lambda n: n in loop.tools.tool_names
     loop.tools.get.return_value = None
 
