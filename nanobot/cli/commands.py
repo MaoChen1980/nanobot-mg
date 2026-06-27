@@ -610,6 +610,9 @@ def agent(
     project_root_path = Path(project_root).expanduser().resolve() if project_root else None
     sync_workspace_templates(config.workspace_path)
 
+    # CLI mode: show tool call hints (like Feishu channel does)
+    config.channels.send_tool_hints = True
+
     bus = MessageBus()
     provider = _make_provider(config)
     from nanobot.agent.llm_context import set_llm

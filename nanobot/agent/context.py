@@ -263,6 +263,13 @@ class ContextBuilder:
         """
         sections: list[str] = []
 
+        # Core golden rule — most prominent position, before everything else
+        sections.append(
+            "## Core Rule\n\n"
+            "开始调用工具时：先写一句话说明当前步骤，然后**在同一轮回复中发出 tool_call**。"
+            "纯文本不带 tool_call 会结束当前任务循环。\n"
+        )
+
         # Rules from RULES.md — extracted instruction-type findings
         rules_text = self.memory.read_rules().strip()
         if rules_text:

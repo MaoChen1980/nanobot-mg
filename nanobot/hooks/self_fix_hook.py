@@ -52,12 +52,15 @@ class SelfFixHook(AgentHook):
     Resolution: LLM writes finding ID to resolved_findings.jsonl to suppress future injections.
     """
 
-    def __init__(self, reraise: bool = False) -> None:
+    def __init__(self, reraise: bool = False, disabled: bool = True) -> None:
         super().__init__(reraise)
+        self._disabled = disabled
         self._reported_ids: set[str] = set()  # finding IDs already injected this session
         self._last_injected = ""  # dedup: skip if insight string unchanged
 
     async def before_iteration(self, context: AgentHookContext) -> None:
+        if self._disabled:
+            return
         try:
             finding_insight = self._build_finding_insight()
             if not finding_insight:

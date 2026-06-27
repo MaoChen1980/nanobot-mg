@@ -17,6 +17,12 @@ from loguru import logger
 from nanobot.agent.compressor import CompressEvent, Compressor
 from nanobot.agent.llm_context import chat_stream_with_retry, chat_with_retry
 
+try:
+    from tmp.llm_dump_util import dump_llm_call
+except ImportError:
+    def dump_llm_call(*args: object, **kwargs: object) -> None:  # type: ignore
+        pass
+
 
 _HAS_CONTEXT_WINDOW_MARKERS = (
     "context window",
@@ -64,6 +70,7 @@ class MessagePipe:
         for attempt in range(self.MAX_RETRIES + 1):
             response = await chat_with_retry(messages=messages, **kwargs)
             if not _is_overflow(response):
+                dump_llm_call(messages, response, label="complete")
                 return response, compress_event
             logger.warning(
                 "Overflow detected (attempt {}/{}), compressing...",
@@ -74,6 +81,7 @@ class MessagePipe:
 
         # Last attempt: send as-is (can't compress further)
         response = await chat_with_retry(messages=messages, **kwargs)
+        dump_llm_call(messages, response, label="complete_fallback")
         return response, compress_event
 
     async def complete_stream(
@@ -101,6 +109,7 @@ class MessagePipe:
                 **kwargs,
             )
             if not _is_overflow(response):
+                dump_llm_call(messages, response, label="stream")
                 return response, compress_event
             logger.warning(
                 "Overflow detected (attempt {}/{}), compressing...",
@@ -115,6 +124,7 @@ class MessagePipe:
             on_reasoning_delta=on_reasoning_delta,
             **kwargs,
         )
+        dump_llm_call(messages, response, label="stream_fallback")
         return response, compress_event
 
     async def _compress(
