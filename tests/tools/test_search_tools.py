@@ -286,11 +286,11 @@ async def test_search_tools_reject_paths_outside_workspace(tmp_path: Path) -> No
     outside = tmp_path.parent / "outside-search.txt"
     outside.write_text("secret\n", encoding="utf-8")
 
-    grep_tool = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
-    glob_tool = GlobTool(workspace=tmp_path, allowed_dir=tmp_path)
+    grep = GrepTool(workspace=tmp_path, allowed_dir=tmp_path)
+    glob = GlobTool(workspace=tmp_path, allowed_dir=tmp_path)
 
-    grep_result = await grep_tool.execute(pattern="secret", path=str(outside))
-    glob_result = await glob_tool.execute(pattern="*.txt", path=str(outside.parent))
+    grep_result = await grep.execute(pattern="secret", path=str(outside))
+    glob_result = await glob.execute(pattern="*.txt", path=str(outside.parent))
 
     assert grep_result.startswith("Error:")
     assert glob_result.startswith("Error:")
@@ -303,11 +303,11 @@ def test_agent_loop_registers_grep_and_glob(tmp_path: Path) -> None:
 
     loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
 
-    assert "grep_tool" in loop.tools.tool_names
-    assert "glob_tool" in loop.tools.tool_names
-    assert "reframe_tool" in loop.tools.tool_names
-    assert "debug_root_cause_tool" in loop.tools.tool_names
-    assert "assess_me_tool" in loop.tools.tool_names
+    assert "grep" in loop.tools.tool_names
+    assert "glob" in loop.tools.tool_names
+    assert "reframe" in loop.tools.tool_names
+    assert "debug_root_cause" in loop.tools.tool_names
+    assert "assess_me" in loop.tools.tool_names
 
 
 @pytest.mark.asyncio
@@ -338,11 +338,11 @@ async def test_subagent_registers_grep_and_glob(tmp_path: Path) -> None:
     status = SubagentStatus(task_id="sub-1", label="label", task_description="search task", started_at=time.monotonic())
     await mgr._run_subagent("sub-1", "search task", "label", {"channel": "cli", "chat_id": "direct", "session_key": None}, status)
 
-    assert "grep_tool" in captured["tool_names"]
-    assert "glob_tool" in captured["tool_names"]
-    assert "reframe_tool" in captured["tool_names"]
-    assert "debug_root_cause_tool" in captured["tool_names"]
-    assert "assess_me_tool" in captured["tool_names"]
+    assert "grep" in captured["tool_names"]
+    assert "glob" in captured["tool_names"]
+    assert "reframe" in captured["tool_names"]
+    assert "debug_root_cause" in captured["tool_names"]
+    assert "assess_me" in captured["tool_names"]
 
 
 def test_subagent_prompt_respects_disabled_skills(tmp_path: Path) -> None:

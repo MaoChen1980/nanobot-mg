@@ -26,7 +26,7 @@ Generate `.excalidraw` files for architecture diagrams, flowcharts, sequence dia
 1. **Load this skill** (you already did)
 2. **Write the elements JSON** -- an array of Excalidraw element objects
 3. **Save the file** using `write_file` to create a `.excalidraw` file
-4. **Optionally upload** for a shareable link using `scripts/upload.py` via `exec_tool`
+4. **Optionally upload** for a shareable link using `scripts/upload.py` via `exec`
 
 ### Saving a Diagram
 

@@ -108,7 +108,7 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
     assert "Principal engineer" in prompt
     assert "取舍、约束和失效模式" in prompt  # translated from "tradeoffs, constraints, and failure modes"
     # Tool reference from identity.md
-    assert "read_file_tool" in prompt
+    assert "read_file" in prompt
 
 
 def test_identity_has_no_behavioral_instructions(tmp_path) -> None:
@@ -251,7 +251,7 @@ def test_instructions_contains_output_rules_subagent(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     instructions = builder.build_instructions_section(for_subagent=True)
     assert "### Output Rules" in instructions
-    assert "send_message_tool" in instructions  # subagent-specific
+    assert "send_message" in instructions  # subagent-specific
     assert "写代码先计划" not in instructions  # orchestrator-only
 
 

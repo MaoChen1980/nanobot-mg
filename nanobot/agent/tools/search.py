@@ -1,4 +1,4 @@
-"""Search tools: grep_tool and glob_tool."""
+"""Search tools: grep and glob."""
 
 from __future__ import annotations
 
@@ -141,16 +141,21 @@ class GlobTool(_SearchTool):
 
     @property
     def name(self) -> str:
-        return "glob_tool"
+        return "glob"
+
+    @property
+    def instruction(self) -> str:
+        return (
+            "Find files by name/glob pattern. "
+            "For content search use grep."
+        )
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Search for files matching a glob pattern by filename.\n\n"
-            "**When to use**:\n"
-            "- When you need to find files by glob pattern matching their filenames\n"
-            "- To list directory contents: `pattern=\"*\"` for top-level, `pattern=\"**/*\"` for recursive, `entry_type=\"both\"` for files+dirs\n"
-            "- Default max 250 results (up to 1000)\n\n"
+            "Search for files matching a glob pattern by filename. "
+            "Default max 250 results (up to 1000). "
+            "Supports pagination via head_limit and offset, and entry_type filter (files/dirs/both)."
         )
 
     @property
@@ -217,7 +222,7 @@ class GlobTool(_SearchTool):
                 return "Error: `path` is required — provide an absolute path."
             root = self._resolve(path)
             if not root.exists():
-                return f"Error: Path not found: {path} — use glob_tool to locate it first"
+                return f"Error: Path not found: {path} — use glob to locate it first"
             if not root.is_dir():
                 return f"Error: Not a directory: {path}"
 
@@ -271,20 +276,21 @@ class GrepTool(_SearchTool):
 
     @property
     def name(self) -> str:
-        return "grep_tool"
+        return "grep"
+
+    @property
+    def instruction(self) -> str:
+        return (
+            "Exact keyword/regex search in file contents. "
+            "For semantic/concept matching use semantic_search."
+        )
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Search file contents using a regex pattern.\n\n"
-            "**Output format (output_mode)**:\n"
-            "- `content`:  PATH:LINENO header + \"> LINENO| matched line\" + \"  LINENO| context line\"\n"
-            "  The matched line's path and lineno are directly usable as read_file path and offset params\n"
-            "- `files_with_matches` (default): one absolute path per line\n"
-            "- `count`:  path:match count\n\n"
-            "**When to use**:\n"
-            "- When you need to search file contents for lines matching a pattern\n"
-            "- Supports regular expressions\n\n"
+            "Search file contents using a regex pattern. "
+            "Output modes: content (with optional context), files_with_matches (default), count. "
+            "Uses ripgrep when available for fast directory searches."
         )
 
     @property
@@ -523,7 +529,7 @@ class GrepTool(_SearchTool):
         try:
             target = self._resolve(path)
             if not target.exists():
-                return f"Error: Path not found: {path} — use glob_tool to locate it first"
+                return f"Error: Path not found: {path} — use glob to locate it first"
             if not (target.is_dir() or target.is_file()):
                 return f"Error: Unsupported path: {path}"
 

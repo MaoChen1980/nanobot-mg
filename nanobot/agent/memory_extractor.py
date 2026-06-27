@@ -1126,7 +1126,7 @@ class MemoryExtractor:
             f"## Pending skill entries\n\n{pending_text}\n\n"
             "以上是 MemoryExtractor 从对话快照中提取的待处理 skill 需求。"
             "请按以下步骤处理每个 candidate：\n\n"
-            "1. 用 glob_tool 检查 workspace/skills/ 下已有 skill\n"
+            "1. 用 glob 检查 workspace/skills/ 下已有 skill\n"
             "2. 对每个 candidate，如果有同名或功能相似的已有 skill，"
             "用 read_file 读完整内容对比\n"
             "3. 参考 skill-manager 流程决策：新建 / 更新 / 合并 / 跳过\n"

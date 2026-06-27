@@ -486,14 +486,14 @@ class TestAssessMe:
 
 
 # =========================================================================
-# assess_me_tool
+# assess_me
 # =========================================================================
 
 
 class TestAssessMeTool:
     @pytest.mark.asyncio
     async def test_no_messages_returns_error(self) -> None:
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.assess_me import AssessMeTool
 
         tool = AssessMeTool()
         result = await tool.execute()
@@ -501,7 +501,7 @@ class TestAssessMeTool:
 
     @pytest.mark.asyncio
     async def test_assess_me_called_with_messages(self) -> None:
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.assess_me import AssessMeTool
 
         tool = AssessMeTool()
         tool.set_context(messages=[
@@ -521,7 +521,7 @@ class TestAssessMeTool:
 
     @pytest.mark.asyncio
     async def test_verify_passed_through(self) -> None:
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.assess_me import AssessMeTool
 
         tool = AssessMeTool()
         tool.set_context(messages=[
@@ -540,7 +540,7 @@ class TestAssessMeTool:
 
     @pytest.mark.asyncio
     async def test_focus_prepended_when_provided(self) -> None:
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.assess_me import AssessMeTool
 
         tool = AssessMeTool()
         tool.set_context(messages=[{"role": "user", "content": "hi"}])
@@ -553,7 +553,7 @@ class TestAssessMeTool:
 
     @pytest.mark.asyncio
     async def test_assess_me_failure_returns_error(self) -> None:
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.assess_me import AssessMeTool
 
         tool = AssessMeTool()
         tool.set_context(messages=[{"role": "user", "content": "hi"}])
@@ -566,7 +566,7 @@ class TestAssessMeTool:
 
     @pytest.mark.asyncio
     async def test_assess_me_exception_returns_error(self) -> None:
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.assess_me import AssessMeTool
 
         tool = AssessMeTool()
         tool.set_context(messages=[{"role": "user", "content": "hi"}])
@@ -634,7 +634,7 @@ class TestAppendTurnToSessionAssessmentFilter:
         tool_result = {
             "role": "tool",
             "tool_call_id": "call_1",
-            "name": "assess_me_tool",
+            "name": "assess_me",
             "content": "some analysis",
             "timestamp": "2025-01-01T00:00:00",
         }
@@ -1013,9 +1013,9 @@ class TestExtractorSkillCreatorTemplate:
             workspace_path="/tmp/workspace",
         )
         assert "## 流程" in content
-        assert "glob_tool" in content
-        assert "exec_tool" in content
-        assert "grep_tool" in content
+        assert "glob" in content
+        assert "exec" in content
+        assert "grep" in content
         assert "read_file" in content
         assert "write_file" in content
         assert "edit_file" in content

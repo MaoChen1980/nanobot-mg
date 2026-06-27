@@ -657,7 +657,7 @@ class AgentRunner:
                     _overflow_summary = compress_event.summary
             # Images are only useful once — strip base64 payloads so
             # subsequent turns don't re-send megabytes of image data.
-            # The model can re-read with read_file_tool if needed.
+            # The model can re-read with read_file if needed.
             if response.finish_reason != "error":
                 strip_image_blocks(messages)
                 # Periodic self-assessment — fire at milestones (every assess_interval responses)

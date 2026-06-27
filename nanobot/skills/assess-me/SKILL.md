@@ -46,10 +46,10 @@ Write your current thinking state to a temp file, then read it back.
 
 When Gaps > 0 and supplementary information exists, retrieve in this order:
 
-1. `memory_search_tool` — search internal knowledge base (past decisions, notes, accumulated knowledge)
-2. `conversation_search_tool` — search past conversation history (similar tasks, previous attempts)
-3. `read_file_tool` / `grep_tool` — read or search work-related files directly (code, config, docs)
-4. `web_search_tool` / `web_fetch_tool` — external web information (last resort only)
+1. `memory_search` — search internal knowledge base (past decisions, notes, accumulated knowledge)
+2. `conversation_search` — search past conversation history (similar tasks, previous attempts)
+3. `read_file` / `grep` — read or search work-related files directly (code, config, docs)
+4. `web_search` / `web_fetch` — external web information (last resort only)
 
 Do not skip tiers. Do not jump to web search before exhausting internal sources.
 

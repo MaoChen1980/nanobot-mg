@@ -226,7 +226,7 @@ def strip_image_blocks(messages: list[dict]) -> None:
     Images should only be sent to the LLM once — after the model has seen
     them, replace the heavy base64 payload with a lightweight ``[image: path]``
     reference so subsequent turns don't re-send multiple megabytes of data.
-    The model can always call ``read_file_tool`` again if it needs to re-examine
+    The model can always call ``read_file`` again if it needs to re-examine
     the image.
     """
     for msg in messages:

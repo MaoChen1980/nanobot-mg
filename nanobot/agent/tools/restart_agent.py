@@ -1,4 +1,4 @@
-"""self_restart_tool.py — Agent can call this to restart nanobot."""
+"""restart_agent.py — Agent can call this to restart nanobot."""
 
 from __future__ import annotations
 
@@ -19,9 +19,13 @@ if TYPE_CHECKING:
 @tool_parameters(build_parameters_schema())
 class SelfRestartTool(Tool):
     """Restart nanobot framework."""
+    instruction = "Restart nanobot when stuck in a loop, state corrupted, or you want to reset. Do NOT use exec or list_subagents or search tools for restart."
 
-    name = "self_restart_tool"
-    description = "Request a framework restart (gateway performs the actual restart on next iteration). No parameters."
+    name = "restart_agent"
+    description = (
+        "Restart the agent cleanly when stuck in a loop, state corrupted, "
+        "or you want to reset the task. No parameters."
+    )
 
     async def execute(self, **kwargs: Any) -> str:
         try:

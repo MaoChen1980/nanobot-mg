@@ -22,16 +22,15 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 )
 class AnalyzeTool(_FsTool):
     """Read data (from text or file) and return structured analysis."""
+    instruction = "Analyze text content (keywords, statistics). For project structure use scan_project."
 
-    name = "analyze_tool"
+    name = "analyze"
     read_only = True
 
     description = (
-        "**Purpose**: Analyze text and return a structured summary (line stats, keywords, keyword-filtered), without reading the full text into context.\n\n"
-        "**When to use**:\n"
-        "- File is too large (e.g. logs) — analyze it first to get an overview, then decide which section to read\n"
-        "- You want to know the topic of a file without reading the full content — analyze extracts keywords\n"
-        "- You want to find specific types of content (errors, warnings) — pass a keyword\n\n"
+        "Analyze text content and return structured summary: line count, word count, "
+        "section headings, keywords ranked by frequency, and keyword-filtered lines. "
+        "Alternative to reading the full text into context."
     )
 
     MAX_TEXT_SIZE = 10_000_000

@@ -126,6 +126,7 @@ class SaveCheckpointTool(Tool):
     """
 
     name = "save_checkpoint"
+    instruction = "Save a checkpoint before risky changes or after completing a milestone. Use restore_checkpoint to roll back."
     read_only = False
 
     async def execute(self, path: str, message: str = "", **kwargs: Any) -> str:
@@ -213,6 +214,7 @@ class ListCheckpointsTool(Tool):
     Works with any directory previously saved via ``save_checkpoint``.
     Pure Python, no system git required.
     """
+    instruction = "List all available checkpoints with their SHA hashes. Use before restore_checkpoint to get the SHA."
 
     name = "list_checkpoints"
     read_only = True
@@ -392,6 +394,7 @@ class RestoreCheckpointTool(Tool):
     """
 
     name = "restore_checkpoint"
+    instruction = "Restore progress from a checkpoint. Use list_checkpoints first to get the SHA."
     read_only = False
 
     async def execute(self, path: str, sha: str, **kwargs: Any) -> str:

@@ -43,7 +43,7 @@ def _make_mock_loop(**overrides):
 
     # Tools registry mock
     loop.tools = MagicMock()
-    loop.tools.tool_names = ["read_file_tool", "write_file_tool", "exec_tool", "web_search_tool", "self_tool"]
+    loop.tools.tool_names = ["read_file", "write_file", "exec", "web_search", "config"]
     loop.tools.has.side_effect = lambda n: n in loop.tools.tool_names
     loop.tools.get.return_value = None
 
@@ -628,9 +628,9 @@ class TestSubagentStatusFormatting:
             phase="awaiting_tools",
             iteration=3,
             tool_events=[
-                {"name": "read_file_tool", "status": "ok", "detail": "read app.log"},
-                {"name": "grep_tool", "status": "ok", "detail": "searched ERROR"},
-                {"name": "exec_tool", "status": "error", "detail": "timeout"},
+                {"name": "read_file", "status": "ok", "detail": "read app.log"},
+                {"name": "grep", "status": "ok", "detail": "searched ERROR"},
+                {"name": "exec", "status": "error", "detail": "timeout"},
             ],
             usage={"prompt_tokens": 4500, "completion_tokens": 1200},
         )
@@ -639,8 +639,8 @@ class TestSubagentStatusFormatting:
         assert "read logs and summarize" in result
         assert "awaiting_tools" in result
         assert "iteration: 3" in result
-        assert "read_file_tool(ok)" in result
-        assert "exec_tool(error)" in result
+        assert "read_file(ok)" in result
+        assert "exec(error)" in result
         assert "4500" in result
 
     def test_format_status_dict(self):
@@ -705,14 +705,14 @@ class TestSubagentHookStatus:
         context = AgentHookContext(
             iteration=5,
             messages=[],
-            tool_events=[{"name": "read_file_tool", "status": "ok", "detail": "ok"}],
+            tool_events=[{"name": "read_file", "status": "ok", "detail": "ok"}],
             usage={"prompt_tokens": 100, "completion_tokens": 50},
         )
         await hook.after_iteration(context)
 
         assert status.iteration == 5
         assert len(status.tool_events) == 1
-        assert status.tool_events[0]["name"] == "read_file_tool"
+        assert status.tool_events[0]["name"] == "read_file"
         assert status.usage == {"prompt_tokens": 100, "completion_tokens": 50}
 
     @pytest.mark.asyncio
@@ -825,7 +825,7 @@ class TestInspectTaskStatuses:
                 started_at=time.monotonic() - 8.0,
                 phase="awaiting_tools",
                 iteration=2,
-                tool_events=[{"name": "read_file_tool", "status": "ok", "detail": "ok"}],
+                tool_events=[{"name": "read_file", "status": "ok", "detail": "ok"}],
                 usage={"prompt_tokens": 500, "completion_tokens": 100},
             ),
         }

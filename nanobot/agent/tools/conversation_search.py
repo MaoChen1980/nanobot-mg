@@ -38,21 +38,18 @@ class ConversationSearchTool(Tool):
 
     def __init__(self, store: MemoryStore):
         self._store = store
+    instruction = (
+        "Search past conversation history for context from earlier sessions. "
+        "Use when user references past discussions."
+    )
 
-    name = "conversation_search_tool"
+    name = "conversation_search"
     read_only = True
 
     description = (
-        "**Purpose**: Search past conversation history by character substring (SQL LIKE). "
-        "Matches exact characters — `keyword='deploy'` finds 'deployment', 'redeploy', 'deploying'.\n\n"
-        "**When to use**: User says \"we discussed this\", \"I mentioned it last time\", "
-        "\"we did this earlier\". Use for finding specific facts, error messages, or topics from past sessions.\n\n"
-        "**Multiple keywords**: Separate with `|` for OR — `keyword='deploy|rollback'`.\n\n"
-        "**Optional filters**: `start` and `end` (YYYY-MM-DD) to narrow date range.\n\n"
-        "**Examples**:\n"
-        "  conversation_search_tool(keyword='docker')\n"
-        "  conversation_search_tool(keyword='deploy|rollback', start='2026-01-01')\n"
-        "  conversation_search_tool(query='error', start='2026-03-01', end='2026-03-15')"
+        "Search past conversation history by character substring (SQL LIKE). "
+        "Use | to OR multiple keywords (e.g. 'deploy|rollback'). "
+        "Supports optional start/end date filters. Also searches MEMORY.md."
     )
 
     async def execute(

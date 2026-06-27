@@ -70,7 +70,7 @@ class TestBuildToolEventStartPayload:
     def test_uses_tool_call_attributes(self):
         tc = MagicMock()
         tc.id = "call_123"
-        tc.name = "read_file_tool"
+        tc.name = "read_file"
         tc.arguments = {"path": "/tmp/test.txt"}
 
         payload = build_tool_event_start_payload(tc)
@@ -78,7 +78,7 @@ class TestBuildToolEventStartPayload:
         assert payload["version"] == 1
         assert payload["phase"] == "start"
         assert payload["call_id"] == "call_123"
-        assert payload["name"] == "read_file_tool"
+        assert payload["name"] == "read_file"
         assert payload["arguments"] == {"path": "/tmp/test.txt"}
         assert payload["result"] is None
         assert payload["error"] is None
@@ -103,7 +103,7 @@ class MockToolCall:
 class TestBuildToolEventFinishPayloads:
     def test_ok_phase(self):
         context = MagicMock()
-        context.tool_calls = [MockToolCall(id="c1", name="read_file_tool")]
+        context.tool_calls = [MockToolCall(id="c1", name="read_file")]
         context.tool_results = [{"files": ["out.txt"], "embeds": []}]
         context.tool_events = [{"status": "ok"}]
 
@@ -113,14 +113,14 @@ class TestBuildToolEventFinishPayloads:
         p = payloads[0]
         assert p["phase"] == "end"
         assert p["call_id"] == "c1"
-        assert p["name"] == "read_file_tool"
+        assert p["name"] == "read_file"
         assert p["result"] == {"files": ["out.txt"], "embeds": []}
         assert p["error"] is None
         assert p["files"] == ["out.txt"]
 
     def test_error_phase_with_string_result(self):
         context = MagicMock()
-        context.tool_calls = [MockToolCall(id="c2", name="exec_tool")]
+        context.tool_calls = [MockToolCall(id="c2", name="exec")]
         context.tool_results = ["Command failed with exit code 1"]
         context.tool_events = [{"status": "error", "detail": "timeout"}]
 
@@ -135,7 +135,7 @@ class TestBuildToolEventFinishPayloads:
 
     def test_error_phase_with_empty_result(self):
         context = MagicMock()
-        context.tool_calls = [MockToolCall(id="c3", name="exec_tool")]
+        context.tool_calls = [MockToolCall(id="c3", name="exec")]
         context.tool_results = [""]
         context.tool_events = [{"status": "error", "detail": "timeout"}]
 
@@ -147,7 +147,7 @@ class TestBuildToolEventFinishPayloads:
 
     def test_error_phase_without_detail(self):
         context = MagicMock()
-        context.tool_calls = [MockToolCall(id="c4", name="exec_tool")]
+        context.tool_calls = [MockToolCall(id="c4", name="exec")]
         context.tool_results = [""]
         context.tool_events = [{"status": "error"}]
 

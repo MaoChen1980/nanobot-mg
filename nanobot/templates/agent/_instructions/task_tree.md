@@ -11,9 +11,9 @@
 - `tasks/<project-id>/index.md` — 归档后的完整子树（根完成后由你折叠）
 
 **创建根节点：**
-新任务 → read_file_tool 读 `{{ tree_path }}`：
-- 文件不存在 → 用 write_file_tool(`"{{ tree_path }}"`, `{"items": []}`) 创建空树，再添加根节点
-- 存在但任务不在其中 → edit_file_tool/write_file_tool 添加根节点
+新任务 → read_file 读 `{{ tree_path }}`：
+- 文件不存在 → 用 write_file(`"{{ tree_path }}"`, `{"items": []}`) 创建空树，再添加根节点
+- 存在但任务不在其中 → edit_file/write_file 添加根节点
 根节点必须有 id、name、criteria（成功标准）、status: active。
 
 **生长规则：**
@@ -23,7 +23,7 @@
 **验证规则（重要）：**
 Trigger：你把一个节点的 status 改为 `completed`
 Action 1：立即写该节点的报告到 `tasks/<project-id>/<node-id>.md`（记录做了什么、结果、关键数据），并更新该节点的 `doc` 字段
-Action 2：用 read_file_tool 读 {{ tree_path }}，找到父节点，逐条检查其 criteria 字段：
+Action 2：用 read_file 读 {{ tree_path }}，找到父节点，逐条检查其 criteria 字段：
 - 每条 criteria 必须在对话历史中有对应的完成证据
 - 全部满足 → 父节点 status 改为 completed，递归向上验证
 - 有不满足 → 新增子节点覆盖未完成的部分

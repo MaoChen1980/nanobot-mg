@@ -27,21 +27,17 @@ class NotifyOrchestratorTool(Tool):
         self._manager = manager
         self._subagent_id = subagent_id
         self._subagent_label = subagent_label
+    instruction = "Notify the orchestrator about progress, completion, or escalation. Subagent-only tool. Use when you discover a better approach, hit a snag, or need to report progress."
 
-    name = "notify_orchestrator_tool"
+    name = "notify_orchestrator"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Send a notification to the Orchestrator (non-blocking).\n\n"
-            "Use when you discover a better approach, hit a snag, or need to report progress.\n"
-            "The Orchestrator will see your message in the next iteration.\n\n"
-            "**Priority**:\n"
-            "- info: General information, progress reports\n"
-            "- suggestion: Improvement suggestions (found a better approach)\n"
-            "- blocker: Blocking issue requiring Orchestrator decision\n\n"
-            "**Note**: This is fire-and-forget; execution continues after calling.\n"
-            "If you need a reply from the Orchestrator, the Orchestrator will re-spawn you."
+            "Send a notification to the Orchestrator (non-blocking, fire-and-forget). "
+            "The Orchestrator will see the message in the next iteration. "
+            "Priority: info, suggestion, or blocker. "
+            "Execution continues after calling — no reply expected."
         )
 
     async def execute(self, message: str, priority: str = "info", **kwargs: Any) -> str:

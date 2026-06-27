@@ -51,6 +51,14 @@ class ToolRegistry:
         name = schema.get("name")
         return name if isinstance(name, str) else ""
 
+    def get_instruction_map(self) -> dict[str, str]:
+        """Get tool name -> instruction for all tools with non-empty instructions."""
+        return {
+            name: tool.instruction
+            for name, tool in sorted(self._tools.items())
+            if tool.instruction
+        }
+
     def get_definitions(self) -> list[dict[str, Any]]:
         """Get tool definitions with stable ordering for cache-friendly prompts.
 
@@ -83,7 +91,7 @@ class ToolRegistry:
     ) -> tuple[Tool | None, dict[str, Any], str | None]:
         """Resolve, cast, and validate one tool call."""
         # Guard against invalid parameter types (e.g., list instead of dict)
-        if not isinstance(params, dict) and name in ('write_file_tool', 'read_file_tool'):
+        if not isinstance(params, dict) and name in ('write_file', 'read_file'):
             return None, params, (
                 f"Error: Tool '{name}' parameters must be a JSON object, got {type(params).__name__}. "
                 "Use named parameters: tool_name(param1=\"value1\", param2=\"value2\")"

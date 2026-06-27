@@ -268,6 +268,12 @@ class Tool(ABC):
 
     name: str = ""
     description: str = ""
+    instruction: str = ""
+    """Behavioral rule: when to use/not use this tool.
+    Auto-generates tool_usage.md in the instructions section.
+    Set only when the tool has non-obvious usage rules.
+    """
+
     read_only: bool = False
     exclusive: bool = False
 

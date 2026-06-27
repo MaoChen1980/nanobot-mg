@@ -198,4 +198,4 @@ your conversation context.
   games, anything non-web).
 - File edits — use `read_file` / `write_file` / `patch`, not `type` into
   an editor window.
-- Shell commands — use `exec_tool`, not `type` into Terminal.app.
+- Shell commands — use `exec`, not `type` into Terminal.app.

@@ -378,9 +378,9 @@ class UserMessageHandler:
 
     def _maybe_start_message_tool(self):
         """Notify message tool that a turn has started."""
-        if message_tool := self._loop.tools.get("message_tool"):
-            if isinstance(message_tool, MessageTool):
-                message_tool.start_turn()
+        if message := self._loop.tools.get("message"):
+            if isinstance(message, MessageTool):
+                message.start_turn()
 
     def _build_initial_messages(self, msg, history, pending, session, key=None):
         """Build the initial message list for the agent loop."""
@@ -511,7 +511,7 @@ class UserMessageHandler:
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
         """Format the final OutboundMessage for the user."""
-        if not msg.ephemeral and (mt := self._loop.tools.get("message_tool")) and isinstance(mt, MessageTool) and mt._sent_in_turn:
+        if not msg.ephemeral and (mt := self._loop.tools.get("message")) and isinstance(mt, MessageTool) and mt._sent_in_turn:
             if not had_injections or stop_reason == "empty_final_response":
                 return None
         if final_content is None:

@@ -98,57 +98,24 @@ class SpawnTool(Tool):
         self._origin_channel.set(channel)
         self._origin_chat_id.set(chat_id)
         self._session_key.set(effective_key or f"{channel}:{chat_id}")
+    instruction = (
+        "Dispatch parallel independent tasks via fire-and-forget subagents. "
+        "Use for: independent parallel subtasks, time-consuming work that benefits from its own context. "
+        "Do NOT use when you need synchronous results, sequential execution, or zero interruption risk. "
+        "After spawning: update the task tree, notify the user, continue working."
+    )
 
-    name = "spawn_tool"
+    name = "spawn"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Delegate one or more subtasks to Subagents to run independently in the background without blocking the current conversation.\n\n"
-            "You are the Orchestrator; the sub-agent is the Subagent. You are responsible for decomposition, delegation, and composition.\n\n"
-            "## ⚠️ Important: Embrace Uncertainty\n\n"
-            "spawn is fire-and-forget. You must accept when using it:\n"
-            "- **Results arrive asynchronously** — they are not guaranteed to return in the current turn; they may be injected into any subsequent turn\n"
-            "- **No ordering guarantee** — multiple tasks may complete in any order\n"
-            "- **May interrupt the current topic** — the user may have moved on, and results may suddenly appear\n"
-            "- **Tasks may fail** — failed tasks also send a notification; accepting failure is part of spawn's semantics\n\n"
-            "If you need **synchronous results**, **sequential execution**, or **zero interruption risk** → **do not use spawn, do it yourself**\n\n"
-            "## How It Works\n\n"
-            "- spawn returns immediately without blocking the current task\n"
-            "- Each subtask runs independently in the background with its own session and context\n"
-            "- When a subtask completes, the result is injected into a future conversation turn as a system message\n"
-            "- Pass a single-item `tasks` array for one subtask, or multiple items for parallel execution\n"
-            "- You can use `check_subagent_tool` to proactively query progress\n"
-            "- Use `send_message_tool(recipient='subagent:<label>', ...)` to communicate with running subagents\n\n"
-            "## When to Use\n\n"
-            "- You have independent, parallel subtasks that do not depend on your intermediate decisions\n"
-            "- The subtask involves separate file/search/execution work that benefits from its own context\n"
-            "- The subtask may be time-consuming and you don't want the user to wait\n"
-            "- **You are willing to embrace uncertainty**\n\n"
-            "## Limitations\n\n"
-            "- Maximum 200 tool-call iterations per subtask (adjustable via `max_iterations` parameter, default 100)\n"
-            "- Can read and execute skills\n"
-            "- Cannot nest spawn calls\n"
-            "- Cannot use the spawn tool itself\n"
-            "- The subtask only has a snapshot of the context at spawn time; it cannot see subsequent conversation turns\n\n"
-            "## Result Handling\n\n"
-            "- Success → system message notifies you of the result content\n"
-            "- Failure → system message notifies you of the error\n"
-            "- You can proactively query with `check_subagent_tool(task_id=...)`\n\n"
-            "## After Spawning — 你的职责\n\n"
-            "spawn 返回后不要等，立即做以下事：\n"
-            "- 更新 {{ tree_path }}，将子任务标记为 active\n"
-            "- 用 message_tool 告知用户你分配了什么、预计结果异步到达\n"
-            "- 继续处理你自己的其他工作（或等待结果）\n\n"
-            "Subagent 结果到达时 → 执行 orchestration guide 的 Trigger-Action Rules。\n\n"
-            "## Examples\n\n"
-            'spawn(tasks=[{"task": "Search all files containing TODO", "label": "find-todos"}])\n'
-            "→ Searches for TODO in the background; system message notifies you of result\n\n"
-            "spawn(tasks=[\n"
-            '    {"task": "Analyze module A", "label": "mod-a"},\n'
-            '    {"task": "Analyze module B", "label": "mod-b"},\n'
-            "    ])\n"
-            "→ Multiple tasks start simultaneously; each notifies its result upon completion"
+            "Delegate one or more subtasks to Subagents to run independently in the background "
+            "without blocking the current conversation. "
+            "Fire-and-forget — results arrive asynchronously, no ordering guarantee. "
+            "Max 200 tool-call iterations per subtask (adjustable via max_iterations). "
+            "Cannot nest spawn calls. Each subtask gets a snapshot of context at spawn time. "
+            "Use check_subagent to query progress, send_message to communicate with running subagents."
         )
 
     async def execute(self, tasks: list[dict], team_context: str | None = None, **kwargs: Any) -> str:

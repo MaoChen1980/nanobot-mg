@@ -17,7 +17,7 @@ version: 0.1.0
 
 > **路径约定**：
 > - `$WORKSPACE` = workspace 根目录（系统提示中可见），所有内部路径以此锚定
-> - `$PROJECT` = 外部项目根目录，由 `glob_tool` 确认后使用
+> - `$PROJECT` = 外部项目根目录，由 `glob` 确认后使用
 > - Skill 中引用路径时一律用此约定，不硬编码绝对路径
 
 ## Quick Start

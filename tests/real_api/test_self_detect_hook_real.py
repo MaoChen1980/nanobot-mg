@@ -38,7 +38,7 @@ def provider_info(llm_ctx):
 
 _MINIMAL_METRICS = """\
 ## Turn 1
-- tool_calls: web_search_tool (q="test query")
+- tool_calls: web_search (q="test query")
 - tool_count: 1
 - error: null
 - final_content: "Search results: ..."

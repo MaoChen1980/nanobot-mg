@@ -190,7 +190,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
         if call_count == 1:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id="tc1", name="read_file_tool", arguments={"path": "a.txt"})],
+                tool_calls=[ToolCallRequest(id="tc1", name="read_file", arguments={"path": "a.txt"})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         if call_count == 2:
@@ -198,7 +198,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
         if call_count == 3:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id="tc2", name="read_file_tool", arguments={"path": "b.txt"})],
+                tool_calls=[ToolCallRequest(id="tc2", name="read_file", arguments={"path": "b.txt"})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         return LLMResponse(
@@ -215,7 +215,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
         return "file content"
 
     tool_registry = MagicMock()
-    tool_registry.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file_tool"}}]
+    tool_registry.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file"}}]
     tool_registry.execute = AsyncMock(side_effect=fake_tool)
 
     runner = AgentRunner(provider)
@@ -233,7 +233,7 @@ async def test_runner_empty_response_does_not_break_tool_chain():
     # end-of-loop assess continue (fire-and-forget only).
     assert call_count == 4
     assert result.total_llm_requests == 4
-    assert "read_file_tool" in result.tools_used
+    assert "read_file" in result.tools_used
 
 
 
@@ -482,11 +482,11 @@ async def test_backfill_missing_tool_results_inserts_error():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_a", "type": "function", "function": {"name": "exec_tool", "arguments": "{}"}},
-                {"id": "call_b", "type": "function", "function": {"name": "read_file_tool", "arguments": "{}"}},
+                {"id": "call_a", "type": "function", "function": {"name": "exec", "arguments": "{}"}},
+                {"id": "call_b", "type": "function", "function": {"name": "read_file", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_a", "name": "exec_tool", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_a", "name": "exec", "content": "ok"},
     ]
     result = AgentRunner._backfill_missing_tool_results(messages)
     tool_msgs = [m for m in result if m.get("role") == "tool"]
@@ -494,7 +494,7 @@ async def test_backfill_missing_tool_results_inserts_error():
     backfilled = [m for m in tool_msgs if m.get("tool_call_id") == "call_b"]
     assert len(backfilled) == 1
     assert backfilled[0]["content"] == _BACKFILL_CONTENT
-    assert backfilled[0]["name"] == "read_file_tool"
+    assert backfilled[0]["name"] == "read_file"
 
 
 def test_drop_orphan_tool_results_removes_unmatched_tool_messages():
@@ -507,11 +507,11 @@ def test_drop_orphan_tool_results_removes_unmatched_tool_messages():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_ok", "type": "function", "function": {"name": "read_file_tool", "arguments": "{}"}},
+                {"id": "call_ok", "type": "function", "function": {"name": "read_file", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file_tool", "content": "ok"},
-        {"role": "tool", "tool_call_id": "call_orphan", "name": "exec_tool", "content": "stale"},
+        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_orphan", "name": "exec", "content": "stale"},
         {"role": "assistant", "content": "after tool"},
     ]
 
@@ -524,10 +524,10 @@ def test_drop_orphan_tool_results_removes_unmatched_tool_messages():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_ok", "type": "function", "function": {"name": "read_file_tool", "arguments": "{}"}},
+                {"id": "call_ok", "type": "function", "function": {"name": "read_file", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file_tool", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_ok", "name": "read_file", "content": "ok"},
         {"role": "assistant", "content": "after tool"},
     ]
 
@@ -543,10 +543,10 @@ async def test_backfill_noop_when_complete():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_x", "type": "function", "function": {"name": "exec_tool", "arguments": "{}"}},
+                {"id": "call_x", "type": "function", "function": {"name": "exec", "arguments": "{}"}},
             ],
         },
-        {"role": "tool", "tool_call_id": "call_x", "name": "exec_tool", "content": "done"},
+        {"role": "tool", "tool_call_id": "call_x", "name": "exec", "content": "done"},
         {"role": "assistant", "content": "all good"},
     ]
     result = AgentRunner._backfill_missing_tool_results(messages)
@@ -578,8 +578,8 @@ async def test_runner_tool_error_preserves_tool_results_in_messages():
         return LLMResponse(
             content=None,
             tool_calls=[
-                ToolCallRequest(id="tc1", name="read_file_tool", arguments={"path": "a"}),
-                ToolCallRequest(id="tc2", name="exec_tool", arguments={"cmd": "bad"}),
+                ToolCallRequest(id="tc1", name="read_file", arguments={"path": "a"}),
+                ToolCallRequest(id="tc2", name="exec", arguments={"cmd": "bad"}),
             ],
             usage={},
         )
@@ -1636,13 +1636,13 @@ async def test_check_tool_loop_non_param_errors_ignored():
     runner = AgentRunner(MagicMock())
     state = _ToolLoopState()
     tc = MagicMock()
-    type(tc).name = PropertyMock(return_value="exec_tool")
+    type(tc).name = PropertyMock(return_value="exec")
     ev = {"status": "error", "detail": "ExecutionError: command not found"}
 
     result = await runner._check_tool_loop(state, [tc], [ev], [], iteration=1)
     assert result is None
     assert state.count == 1  # non-param errors ARE tracked now
-    assert state.tool_name == "exec_tool"
+    assert state.tool_name == "exec"
 
 
 # ===========================================================================
@@ -2149,7 +2149,7 @@ async def test_correction_integration_triggers_assess_me():
         if call_count <= 2:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="read_file_tool", arguments={})],
+                tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="read_file", arguments={})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         return LLMResponse(content="done", tool_calls=[], usage={"prompt_tokens": 10, "completion_tokens": 5})
@@ -2159,7 +2159,7 @@ async def test_correction_integration_triggers_assess_me():
     llm_set_llm(provider, "test-model")
 
     tools = MagicMock()
-    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file_tool"}}]
+    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file"}}]
     tools.execute = AsyncMock(return_value="file content")
 
     runner = AgentRunner(provider)
@@ -2204,7 +2204,7 @@ async def test_correction_guard_prevents_repeat():
         if call_count <= 3:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="read_file_tool", arguments={})],
+                tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="read_file", arguments={})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         return LLMResponse(content="ok", tool_calls=[], usage={})
@@ -2214,7 +2214,7 @@ async def test_correction_guard_prevents_repeat():
     llm_set_llm(provider, "test-model")
 
     tools = MagicMock()
-    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file_tool"}}]
+    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file"}}]
     tools.execute = AsyncMock(return_value="data")
 
     runner = AgentRunner(provider)
@@ -2256,7 +2256,7 @@ async def test_no_correction_normal_flow():
         if call_count == 1:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id="tc1", name="read_file_tool", arguments={})],
+                tool_calls=[ToolCallRequest(id="tc1", name="read_file", arguments={})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         return LLMResponse(content="normal result", tool_calls=[], usage={})
@@ -2266,7 +2266,7 @@ async def test_no_correction_normal_flow():
     llm_set_llm(provider, "test-model")
 
     tools = MagicMock()
-    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file_tool"}}]
+    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file"}}]
     tools.execute = AsyncMock(return_value="data")
 
     runner = AgentRunner(provider)
@@ -2364,7 +2364,7 @@ async def test_correction_at_start_only_triggers_once():
         if call_count <= 2:
             return LLMResponse(
                 content=None,
-                tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="read_file_tool", arguments={})],
+                tool_calls=[ToolCallRequest(id=f"tc{call_count}", name="read_file", arguments={})],
                 usage={"prompt_tokens": 10, "completion_tokens": 5},
             )
         return LLMResponse(content="ok", tool_calls=[], usage={})
@@ -2374,7 +2374,7 @@ async def test_correction_at_start_only_triggers_once():
     llm_set_llm(provider, "test-model")
 
     tools = MagicMock()
-    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file_tool"}}]
+    tools.get_definitions.return_value = [{"type": "function", "function": {"name": "read_file"}}]
     tools.execute = AsyncMock(return_value="file content")
 
     runner = AgentRunner(provider)

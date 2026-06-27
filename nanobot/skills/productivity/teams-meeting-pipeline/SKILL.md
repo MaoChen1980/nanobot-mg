@@ -10,7 +10,7 @@ prerequisites:
 
 Use this skill whenever the user asks about Microsoft Teams meeting summaries, transcripts, recordings, action items, Graph subscriptions, or any operational question about the Teams meeting pipeline. Works in any language — the triggers below are examples, not an exhaustive list.
 
-Everything operator-facing is a CLI subcommand run via `exec_tool`. There are no new model tools for this pipeline — the CLI is the surface.
+Everything operator-facing is a CLI subcommand run via `exec`. There are no new model tools for this pipeline — the CLI is the surface.
 
 ## When to use this skill
 

@@ -22,9 +22,9 @@ def _make_mocked_app() -> GatewayApplication:
     app.proxy_manager = MagicMock()
     app.proxy_manager.has_proxy = MagicMock(return_value=False)
     app.proxy_manager.deliver_to_proxy = AsyncMock(return_value=True)
-    message_tool = MagicMock(spec=MessageTool)
+    message = MagicMock(spec=MessageTool)
     app.agent = MagicMock()
-    app.agent.tools = {"message_tool": message_tool}
+    app.agent.tools = {"message": message}
     app.cron = MagicMock()
     return app
 
@@ -38,7 +38,7 @@ class TestDeliverToChannel:
     @pytest.fixture
     def deliver_fn(self, app):
         app._wire_callbacks()
-        return app.agent.tools["message_tool"].set_send_callback.call_args[0][0]
+        return app.agent.tools["message"].set_send_callback.call_args[0][0]
 
     @pytest.mark.asyncio
     async def test_record_creates_session(self, app, deliver_fn):

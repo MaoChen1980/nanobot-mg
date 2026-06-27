@@ -37,8 +37,8 @@ def _make_mocked_app(config: Config | None = None) -> GatewayApplication:
     app.agent.extractor = MagicMock()
     app.agent.close_mcp = AsyncMock()
     app.agent.stop = MagicMock()
-    message_tool = MagicMock(spec=MessageTool)
-    app.agent.tools = {"message_tool": message_tool}
+    message = MagicMock(spec=MessageTool)
+    app.agent.tools = {"message": message}
     app.agent.sessions = MagicMock()
     app.agent.sessions.flush_all = MagicMock(return_value=2)
     app.channels = MagicMock()
@@ -676,7 +676,7 @@ class TestOnCronJob:
         """When _sent_in_turn is True, returns early without evaluate_response."""
         app = _make_mocked_app(config)
         app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Hello!"))
-        app.agent.tools["message_tool"]._sent_in_turn = True
+        app.agent.tools["message"]._sent_in_turn = True
 
         with patch("nanobot.utils.evaluator.evaluate_response") as mock_eval:
             app._wire_callbacks()
@@ -696,7 +696,7 @@ class TestOnCronJob:
         """evaluate_response returns False -> message is NOT delivered."""
         app = _make_mocked_app(config)
         app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Routine"))
-        app.agent.tools["message_tool"]._sent_in_turn = False
+        app.agent.tools["message"]._sent_in_turn = False
 
         app._wire_callbacks()
         with patch(
@@ -721,10 +721,10 @@ class TestOnCronJob:
 
         app = _make_mocked_app(config)
         app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Hi"))
-        cron_tool = MagicMock(spec=CronTool)
-        cron_tool.set_cron_context.return_value = "ctx-token"
-        cron_tool.set_current_job_id.return_value = "job-token"
-        app.agent.tools["cron_tool"] = cron_tool
+        cron = MagicMock(spec=CronTool)
+        cron.set_cron_context.return_value = "ctx-token"
+        cron.set_current_job_id.return_value = "job-token"
+        app.agent.tools["cron"] = cron
         app._wire_callbacks()
         job = CronJob(
             id="r1", name="reminder",
@@ -734,8 +734,8 @@ class TestOnCronJob:
         result = await app.cron.on_job(job)
 
         assert result == "Hi"
-        cron_tool.set_cron_context.assert_called_once_with(True, dry_run=True)
-        cron_tool.reset_cron_context.assert_called_once_with("ctx-token")
+        cron.set_cron_context.assert_called_once_with(True, dry_run=True)
+        cron.reset_cron_context.assert_called_once_with("ctx-token")
 
     async def test_no_message_tool_still_processes(self, config: Config) -> None:
         """Reminder works even when agent has no 'message' tool."""

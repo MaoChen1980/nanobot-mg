@@ -7,9 +7,9 @@
 
 ## 步骤
 
-1. **查重** — 用 `glob_tool` 或 `read_file` 检查 `{{ workspace_path }}/skills/` 下已有 skill。如果已有 skill 已覆盖，评估是否需要更新
+1. **查重** — 用 `glob` 或 `read_file` 检查 `{{ workspace_path }}/skills/` 下已有 skill。如果已有 skill 已覆盖，评估是否需要更新
 2. **对比决策** — 如有功能重复的已有 skill，参考 `skill-manager` 的对比流程（`read_file` 读 `skills/skill-manager/SKILL.md`），判断是替换/合并/跳过
-3. **创建或更新** — 无覆盖时 `exec_tool mkdir -p` 创建目录再写 `SKILL.md`，需更新时替换或合并
+3. **创建或更新** — 无覆盖时 `exec mkdir -p` 创建目录再写 `SKILL.md`，需更新时替换或合并
 4. **决定加载策略**：
    - 影响**每个**任务的模式（如"验证工具结果再假设"）→ frontmatter 设置 `always: true`
    - 任务特定模式（如"debug FastAPI 启动"）→ 省略 `always: true`，靠 Available Skills 的 description 触发

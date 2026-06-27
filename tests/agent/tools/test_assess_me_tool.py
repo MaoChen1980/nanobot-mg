@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from nanobot.agent.tools.assess_me_tool import AssessMeTool
+from nanobot.agent.tools.assess_me import AssessMeTool
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ class TestExecute:
 class TestToolMetadata:
 
     def test_tool_name(self):
-        assert AssessMeTool.name == "assess_me_tool"
+        assert AssessMeTool.name == "assess_me"
 
     def test_read_only(self):
         assert AssessMeTool.read_only is True

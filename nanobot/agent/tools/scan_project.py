@@ -23,18 +23,19 @@ class ScanProjectTool(Tool):
 
     def __init__(self, loop: AgentLoop) -> None:
         self._loop = loop
+    instruction = (
+        "Scan overall project structure. Call this first when user asks you to look at or modify a project. "
+        "For detailed file analysis use analyze."
+    )
 
-    name = "scan_project_tool"
+    name = "scan_project"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Scan a project directory and generate a project card so the agent understands the project structure.\n\n"
-            "**When to use**:\n"
-            "- A user asks you to look at or modify a project — call this tool first to scan it\n"
-            "- You want to understand project structure, language, build tools, and test framework\n\n"
-            "**Notes**:\n"
-            "- path must be the absolute path to the project root directory"
+            "Scan a project directory and generate a project card: "
+            "language, build tools, test framework, and overall structure. "
+            "Path must be the absolute project root."
         )
 
     async def execute(self, path: str, **kwargs: Any) -> str:

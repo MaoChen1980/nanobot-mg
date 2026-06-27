@@ -480,8 +480,8 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
         "| `updated` | yes | Last update date YYYY-MM-DD |\n"
         "| `completed` | no | Completion date YYYY-MM-DD |\n\n"
         "## Operations\n\n"
-        "- Read: `read_file_tool` reads `tasks/tree.json`\n"
-        "- Write: `edit_file_tool` / `write_file_tool` modifies JSON\n"
+        "- Read: `read_file` reads `tasks/tree.json`\n"
+        "- Write: `edit_file` / `write_file` modifies JSON\n"
         "- Do not delete historical nodes. failed/paused preserve trace\n"
         "- Archive: root completed --> children moved to `tasks/<project-id>/index.md` and removed from tree.json\n"
     )

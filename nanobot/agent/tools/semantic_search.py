@@ -32,8 +32,12 @@ _MAX_TEXT_BYTES = 5 * 1024 * 1024  # 5 MB
 )
 class SearchTextTool(Tool):
     """Search a block of text semantically."""
+    instruction = (
+        "Semantic/vector search for concepts and intent — use when you know what you're looking "
+        "for but not the exact keyword/symbol. For exact keyword searches use grep."
+    )
 
-    name = "search_text_tool"
+    name = "semantic_search"
     read_only = True
 
     def __init__(
@@ -45,28 +49,10 @@ class SearchTextTool(Tool):
         self._allowed_dir = allowed_dir
 
     description = (
-        "**Purpose**: Semantically search for relevant passages in a given text or file "
-        "without reading the entire document. Pass either text or path (not both).\n\n"
-        "**Search type: semantic (vector embeddings), NOT pattern matching**\n"
-        "- Understands concepts and meaning — `query='timeout handling'` can find "
-        "passages about 'retry logic', 'deadline exceeded', or 'connection reset'\n"
-        "- Does NOT do substring/regex matching — use grep_tool for exact patterns\n\n"
-        "**When to use**:\n"
-        "- You know roughly what you're looking for but not the exact keywords or symbols\n"
-        "- You're exploring an unfamiliar codebase and want to find e.g. 'timeout handling' "
-        "without knowing the function name\n"
-        "- A long document covers many topics and you want to find passages related "
-        "to a specific concept (security, auth, encryption, etc.)\n\n"
-        "**When NOT to use**:\n"
-        "- You already know the exact keyword or symbol → use grep_tool\n"
-        "- You want to read the entire file from start to finish → use read_file_tool\n\n"
-        "**Query tips**:\n"
-        "- Combine a concept with domain-specific terms for better results\n"
-        "- 2-5 specific words usually works better than a full sentence\n\n"
-        "**Examples**:\n"
-        "  search_text_tool(query='error handling timeout logic', path='/src/main.py')\n"
-        "  search_text_tool(query='authentication encryption security', text='...')\n"
-        "  search_text_tool(query='configuration setup initialization', path='/app/config.py')\n"
+        "Semantically search for relevant passages in text or a file using vector embeddings. "
+        "Understands concepts — 'timeout handling' finds 'retry logic' or 'deadline exceeded'. "
+        "Not for substring/regex matching (use grep). "
+        "Query tips: 2-5 specific words work better than full sentences."
     )
 
     async def execute(

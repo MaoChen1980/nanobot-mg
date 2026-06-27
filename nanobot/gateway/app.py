@@ -381,9 +381,9 @@ class GatewayApplication:
 
             await self.bus.publish_outbound(msg)
 
-        message_tool = getattr(self.agent, "tools", {}).get("message_tool")
-        if isinstance(message_tool, MessageTool):
-            message_tool.set_send_callback(_deliver_to_channel)
+        message = getattr(self.agent, "tools", {}).get("message")
+        if isinstance(message, MessageTool):
+            message.set_send_callback(_deliver_to_channel)
 
         # Cron job handler
         async def on_cron_job(job: Any) -> str | None:
@@ -415,7 +415,7 @@ class GatewayApplication:
                 return None
 
             # Check if this is a test/dry-run execution
-            isinstance(getattr(self.agent.tools.get("cron_tool"), "_test_mode", None), object)
+            isinstance(getattr(self.agent.tools.get("cron"), "_test_mode", None), object)
 
             reminder_note = (
                 "The scheduled time has arrived. Deliver this reminder to the user now, "
@@ -424,16 +424,16 @@ class GatewayApplication:
                 "like 'Done' or 'Reminded'.\n\n"
                 f"Reminder: {job.payload.message}\n\n"
                 "You can use `cron` tool to manage this job:\n"
-                f"- `cron_tool action=update job_id={job.id} message=\"...\"` — update the reminder for next run\n"
-                f"- `cron_tool action=list` — check job status\n"
-                f"- `cron_tool action=remove job_id={job.id}` — cancel this job"
+                f"- `cron action=update job_id={job.id} message=\"...\"` — update the reminder for next run\n"
+                f"- `cron action=list` — check job status\n"
+                f"- `cron action=remove job_id={job.id}` — cancel this job"
             )
 
 # Check if this is a test/dry-run execution
-            cron_tool = self.agent.tools.get("cron_tool")
+            cron = self.agent.tools.get("cron")
             cron_token = None
             cron_job_token = None
-            if isinstance(cron_tool, CronTool):
+            if isinstance(cron, CronTool):
                 # Safely access deliver flag - with verbose error for debugging
                 try:
                     job_deliver = getattr(job.payload, "deliver", True)
@@ -447,7 +447,7 @@ class GatewayApplication:
                 except Exception as e:
                     logger.warning("Failed to access job.payload.deliver: {}, job.payload={}", e, job.payload)
                     dry_run = False
-                cron_token = cron_tool.set_cron_context(True, dry_run=dry_run)
+                cron_token = cron.set_cron_context(True, dry_run=dry_run)
 
             # Build progress callback for visible execution
             async def _progress(step: str, done: bool = False) -> None:
@@ -456,17 +456,17 @@ class GatewayApplication:
                 pass
 
             message_record_token = None
-            if isinstance(message_tool, MessageTool):
+            if isinstance(message, MessageTool):
                 message_record_token = (
-                    message_tool.set_record_channel_delivery(True)
+                    message.set_record_channel_delivery(True)
                 )
 
             # Wire progress callback: capture agent tool steps for display
             async def _visible_progress(
                 content: str, *, tool_hint: bool = False, tool_events: list = None
             ) -> None:
-                if isinstance(cron_tool, CronTool):
-                    log = cron_tool.get_execution_log()
+                if isinstance(cron, CronTool):
+                    log = cron.get_execution_log()
                     if tool_events:
                         for ev in tool_events:
                             if ev.get("event") == "start":
@@ -482,7 +482,7 @@ class GatewayApplication:
                 pass
 
             # Determine on_progress: use visible in test mode, silent otherwise
-            is_test = getattr(cron_tool, "_test_mode", None) and cron_tool._test_mode.get()
+            is_test = getattr(cron, "_test_mode", None) and cron._test_mode.get()
             on_progress = _visible_progress if is_test else _silent
 
             try:
@@ -494,23 +494,23 @@ class GatewayApplication:
                     on_progress=on_progress,
                 )
             finally:
-                if isinstance(cron_tool, CronTool) and cron_token is not None:
-                    cron_tool.reset_cron_context(cron_token)
-                if isinstance(cron_tool, CronTool) and cron_job_token is not None:
-                    cron_tool.reset_current_job_id(cron_job_token)
+                if isinstance(cron, CronTool) and cron_token is not None:
+                    cron.reset_cron_context(cron_token)
+                if isinstance(cron, CronTool) and cron_job_token is not None:
+                    cron.reset_current_job_id(cron_job_token)
                 if (
-                    isinstance(message_tool, MessageTool)
+                    isinstance(message, MessageTool)
                     and message_record_token is not None
                 ):
-                    message_tool.reset_record_channel_delivery(
+                    message.reset_record_channel_delivery(
                         message_record_token
                     )
 
             response = resp.content if resp else ""
 
             # In test mode: append execution log to result
-            if is_test and isinstance(cron_tool, CronTool):
-                log = cron_tool.get_execution_log()
+            if is_test and isinstance(cron, CronTool):
+                log = cron.get_execution_log()
                 if log:
                     response = "[Test Execution Log]\n" + "\n".join(log) + "\n\n[Result]\n" + response
 
@@ -520,8 +520,8 @@ class GatewayApplication:
 
             if (
                 job.payload.deliver
-                and isinstance(message_tool, MessageTool)
-                and message_tool._sent_in_turn
+                and isinstance(message, MessageTool)
+                and message._sent_in_turn
             ):
                 return response
 
@@ -689,7 +689,7 @@ class GatewayApplication:
                         "然后：\n"
                         "1. 识别可以改进的地方\n"
                         "2. 评估置信度 (>90% 再改)\n"
-                        "3. 有把握就自己改（edit_file_tool/write_file_tool）\n"
+                        "3. 有把握就自己改（edit_file/write_file）\n"
                         "4. 验证改动：运行相关测试（python -m pytest 相关测试路径 --tb=short），"
                         "检查是否有语法错误\n"
                         "5. 如果验证失败，回退改动并记录失败原因\n"

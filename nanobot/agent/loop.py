@@ -399,8 +399,8 @@ class AgentLoop:
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
         # Lazy imports — deferred to here so module-level import doesn't pull in all tool modules
-        from nanobot.agent.tools.analyze_tool import AnalyzeTool
-        from nanobot.agent.tools.assess_me_tool import AssessMeTool
+        from nanobot.agent.tools.analyze import AnalyzeTool
+        from nanobot.agent.tools.assess_me import AssessMeTool
         from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
         from nanobot.agent.tools.check_subagent import CheckSubagentTool
         from nanobot.agent.tools.conversation_search import ConversationSearchTool
@@ -417,7 +417,7 @@ class AgentLoop:
         from nanobot.agent.tools.reframe import ReframeTool
         from nanobot.agent.tools.scan_project import ScanProjectTool
         from nanobot.agent.tools.search import GlobTool, GrepTool
-        from nanobot.agent.tools.self_restart_tool import SelfRestartTool
+        from nanobot.agent.tools.restart_agent import SelfRestartTool
         from nanobot.agent.tools.semantic_search import SearchTextTool
         from nanobot.agent.tools.send_message import SendMessageTool
         from nanobot.agent.tools.shell import ExecTool
@@ -511,20 +511,20 @@ class AgentLoop:
             include_timestamps=True, timezone=self.context.timezone
         )
 
-        for name in ("message_tool", "spawn_tool", "cron_tool", "self_tool", "assess_me_tool", "debug_root_cause_tool"):
+        for name in ("message", "spawn", "cron", "config", "assess_me", "debug_root_cause"):
             tool = self.tools.get(name)
             if tool is None:
                 continue
             sc = getattr(tool, "set_context", None)
             if not sc:
                 continue
-            if name == "spawn_tool":
+            if name == "spawn":
                 sc(channel, chat_id, effective_key=effective_key)
-            elif name == "cron_tool":
+            elif name == "cron":
                 sc(channel, chat_id, metadata=metadata, session_key=session_key)
-            elif name in ("assess_me_tool", "debug_root_cause_tool"):
+            elif name in ("assess_me", "debug_root_cause"):
                 sc(messages=history)
-            elif name == "message_tool":
+            elif name == "message":
                 sc(channel, chat_id, message_id, metadata=metadata)
             else:
                 sc(channel, chat_id)
@@ -760,7 +760,10 @@ class AgentLoop:
         # updates from subagents that write mid-run.
         ctx = self.context
         sk = session.key if session else None
-        instructions = lambda: ctx.build_instructions_section(session_key=sk)
+        instructions = lambda: ctx.build_instructions_section(
+            session_key=sk,
+            tool_instruction_map=self.tools.get_instruction_map(),
+        )
 
         result = await self.runner.run(AgentRunSpec(
             initial_messages=initial_messages,
@@ -1196,11 +1199,11 @@ class AgentLoop:
                 "这是主动性机会，你是项目经理，请自主判断下一步行动：\n"
                 "\n"
                 "**进度跟踪**\n"
-                "• Subagent 进展如何？用 list_subagents_tool / check_subagent_tool 检查状态，有没卡住或完成的\n"
+                "• Subagent 进展如何？用 list_subagents / check_subagent 检查状态，有没卡住或完成的\n"
                 f"• 读 team_board{suffix}.md — subagent 可能写了事实发现、踩坑、洞察，需要你关注或同步\n"
                 f"• 读 tree{suffix}.json（不存在则创建空树 `{{\"items\": []}}`）— 检查 task backlog，决定下一步调度\n"
-                "• 需要你回复或指导某个 subagent 吗？→ send_message_tool 发送指令\n"
-                "• 发现信息不对称？→ send_message_tool 主动告知，不要等 subagent 来问\n"
+                "• 需要你回复或指导某个 subagent 吗？→ send_message 发送指令\n"
+                "• 发现信息不对称？→ send_message 主动告知，不要等 subagent 来问\n"
                 "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
                 "\n"
                 "**调度决策**\n"

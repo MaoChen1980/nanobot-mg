@@ -137,10 +137,10 @@ class TestSelfLogHookCapture:
         hook._append_log = lambda e: captured.append(e)
         ctx = _FakeContext(
             tool_results=[],
-            tool_calls=[FakeToolCall("read_file_tool"), FakeToolCall("grep_tool")],
+            tool_calls=[FakeToolCall("read_file"), FakeToolCall("grep")],
         )
         hook._capture(ctx)
         hook._append_log = orig
         assert len(captured) == 1
         assert captured[0]["tool_count"] == 2
-        assert captured[0]["tool_names"] == ["read_file_tool", "grep_tool"]
+        assert captured[0]["tool_names"] == ["read_file", "grep"]

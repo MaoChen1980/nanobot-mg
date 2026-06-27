@@ -70,19 +70,16 @@ _LANG_PATTERNS: dict[str, list[tuple[str, str]]] = {
 )
 class ExploreModuleTool(_FsTool):
     """Get a bird's-eye view of a code module — classes, functions, their signatures and line numbers."""
+    instruction = "Understand code module/file structure (classes, functions, line numbers). For file searches use glob."
 
-    name = "explore_module_tool"
+    name = "explore_module"
     read_only = True
 
     description = (
-        "**Purpose**: Get a structured overview of a code file or directory (function/class definitions, signatures, line numbers).\n\n"
-        "**Output format**:\n"
-        "- Function and class definitions with 1-indexed line numbers (directly usable as read_file_tool offset param)\n"
-        "- Python uses AST parsing (precise), other languages use regex (may be incomplete)\n"
-        "- **Supported file types**: .py, .js, .ts, .go, .rs, .java, .kt\n"
-        "- Appends a read_file_tool tip command ready to copy-paste\n\n"
-        "**When to use**:\n"
-        "- When you want a quick overview of what classes and functions exist in a file or directory and where they are defined\n\n"
+        "Get a structured overview of a code file or directory: classes, functions, "
+        "signatures, and 1-indexed line numbers. "
+        "Python uses AST parsing (precise), other languages use regex (may be incomplete). "
+        "Supported: .py, .js, .ts, .go, .rs, .java, .kt."
     )
 
     async def execute(

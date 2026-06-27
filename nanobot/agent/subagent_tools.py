@@ -17,10 +17,10 @@ from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.explore_module import ExploreModuleTool
 from nanobot.agent.tools.checkpoint import SaveCheckpointTool, ListCheckpointsTool, RestoreCheckpointTool
-from nanobot.agent.tools.analyze_tool import AnalyzeTool
+from nanobot.agent.tools.analyze import AnalyzeTool
 from nanobot.agent.tools.reframe import ReframeTool
 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
-from nanobot.agent.tools.assess_me_tool import AssessMeTool
+from nanobot.agent.tools.assess_me import AssessMeTool
 from nanobot.agent.tools.semantic_search import SearchTextTool
 from nanobot.agent.tools.memory_search import MemorySearchTool
 from nanobot.agent.tools.conversation_search import ConversationSearchTool

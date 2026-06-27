@@ -1,6 +1,6 @@
 ---
 name: simplify-code
-description: "Parallel 3-agent cleanup of recent code changes via spawn_tool."
+description: "Parallel 3-agent cleanup of recent code changes via spawn."
 version: 1.0.0
 platforms: [linux, macos, windows]
 ---
@@ -43,14 +43,14 @@ Capture the diff to review. Pick the source by what the user asked for, in
 this default order:
 
 ```bash
-exec_tool("git diff")
+exec("git diff")
 # 2. If that's empty, include staged changes
-exec_tool("git diff HEAD")
+exec("git diff HEAD")
 # 3. Scoped variants:
-exec_tool("git diff --staged")
-exec_tool("git diff HEAD~1")
-exec_tool("git diff main...HEAD")
-exec_tool("git diff -- src/foo.py")
+exec("git diff --staged")
+exec("git diff HEAD~1")
+exec("git diff main...HEAD")
+exec("git diff -- src/foo.py")
 ```
 
 If `git diff` and `git diff HEAD` are both empty and there's no git repo or no
@@ -64,11 +64,11 @@ before proceeding.
 
 ### Phase 2 — Launch three reviewers in parallel
 
-Use `spawn_tool` with three tasks in the `tasks` array so they run concurrently.
+Use `spawn` with three tasks in the `tasks` array so they run concurrently.
 
 Give **every** reviewer the **complete diff** (not fragments — cross-file
-issues hide in the gaps). Each reviewer should use tools like `grep_tool`,
-`glob_tool`, `read_file_tool` to search the wider codebase.
+issues hide in the gaps). Each reviewer should use tools like `grep`,
+`glob`, `read_file` to search the wider codebase.
 
 Tell each reviewer to:
 - Search the existing codebase for evidence (don't reason from the diff alone).
@@ -80,13 +80,13 @@ Tell each reviewer to:
 Pass these three tasks (drop any the user's focus excludes):
 
 ```
-spawn_tool(tasks=[
+spawn(tasks=[
     {
         "label": "review-reuse",
         "role": "code reuse reviewer",
         "task": """Review this diff for code that duplicates functionality already in the
 codebase. Search utility modules, shared helpers, and adjacent files
-(use grep_tool / glob_tool) for existing functions, constants, or patterns
+(use grep / glob) for existing functions, constants, or patterns
 the new code could call instead of reimplementing. Flag: new functions
 that duplicate existing ones; hand-rolled logic that an existing utility
 already does (manual string/path manipulation, custom env checks, ad-hoc
@@ -148,7 +148,7 @@ Wait for all three results to arrive (via system message notifications).
    argue with a reviewer, just drop weak or wrong suggestions silently.
 3. **Resolve conflicts.** Reviewers can disagree. Default resolution order:
    **correctness > the user's stated focus > readability/reuse > micro-perf.**
-4. **Apply** the surviving fixes with `edit_file_tool` / `write_file_tool` —
+4. **Apply** the surviving fixes with `edit_file` / `write_file` —
    unless the user asked for a dry run, in which case present the list and ask first.
 5. **Verify** you didn't break anything: run the project's targeted tests for
    the touched files (not the full suite), and re-run any linter/type check the

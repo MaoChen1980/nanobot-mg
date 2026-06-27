@@ -34,18 +34,18 @@ class TestToolCalls:
     """insert_tool_call and query_tool_calls."""
 
     def test_insert_and_query(self, db):
-        db.insert_tool_call("s1", iteration=1, turn=1, tool_name="read_file_tool", params={"path": "/tmp"})
-        db.insert_tool_call("s1", iteration=1, turn=2, tool_name="exec_tool", params={"cmd": "ls"})
+        db.insert_tool_call("s1", iteration=1, turn=1, tool_name="read_file", params={"path": "/tmp"})
+        db.insert_tool_call("s1", iteration=1, turn=2, tool_name="exec", params={"cmd": "ls"})
         results = db.query_tool_calls(session_key="s1", limit=10)
         assert len(results) == 2
-        assert results[0]["tool_name"] == "exec_tool"
+        assert results[0]["tool_name"] == "exec"
 
     def test_query_filters(self, db):
-        db.insert_tool_call("s1", iteration=1, turn=1, tool_name="read_file_tool", success=True)
-        db.insert_tool_call("s1", iteration=1, turn=2, tool_name="exec_tool", success=False)
+        db.insert_tool_call("s1", iteration=1, turn=1, tool_name="read_file", success=True)
+        db.insert_tool_call("s1", iteration=1, turn=2, tool_name="exec", success=False)
         failed = db.query_tool_calls(success=False, limit=10)
         assert len(failed) == 1
-        assert failed[0]["tool_name"] == "exec_tool"
+        assert failed[0]["tool_name"] == "exec"
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ class TestSurrogateSerialization:
     def test_insert_tool_call_surrogate_result_string(self, db):
         db.insert_tool_call(
             "s1", iteration=1, turn=1,
-            tool_name="exec_tool", params={},
+            tool_name="exec", params={},
             result="normal prefix \ud800 suffix",
             success=True,
         )
@@ -152,7 +152,7 @@ class TestSurrogateSerialization:
     def test_insert_tool_call_surrogate_at_start(self, db):
         db.insert_tool_call(
             "s1", iteration=1, turn=1,
-            tool_name="exec_tool", params={},
+            tool_name="exec", params={},
             result="\ud800 starts here",
             success=True,
         )
@@ -162,7 +162,7 @@ class TestSurrogateSerialization:
     def test_insert_tool_call_high_surrogate(self, db):
         db.insert_tool_call(
             "s1", iteration=1, turn=1,
-            tool_name="exec_tool", params={},
+            tool_name="exec", params={},
             result="high \udfff end",
             success=True,
         )

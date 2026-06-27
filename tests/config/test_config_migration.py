@@ -146,7 +146,7 @@ def test_load_config_migrates_restrict_to_workspace(tmp_path) -> None:
     config_path.write_text(
         json.dumps({
             "tools": {
-                "exec_tool": {"restrictToWorkspace": False},
+                "exec": {"restrictToWorkspace": False},
             },
         }),
         encoding="utf-8",

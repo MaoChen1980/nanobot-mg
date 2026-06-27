@@ -13,16 +13,16 @@ This skill covers **PDFs and scanned documents**.
 
 ## Step 1: Remote URL Available?
 
-If the document has a URL, **always try `web_fetch_tool` first**:
+If the document has a URL, **always try `web_fetch` first**:
 
 ```
-web_fetch_tool(urls=["https://arxiv.org/pdf/2402.03300"])
-web_fetch_tool(urls=["https://example.com/report.pdf"])
+web_fetch(urls=["https://arxiv.org/pdf/2402.03300"])
+web_fetch(urls=["https://example.com/report.pdf"])
 ```
 
 This handles PDF-to-markdown conversion via Firecrawl with no local dependencies.
 
-Only use local extraction when: the file is local, web_fetch_tool fails, or you need batch processing.
+Only use local extraction when: the file is local, web_fetch fails, or you need batch processing.
 
 ## Step 2: Choose Local Extractor
 
@@ -46,7 +46,7 @@ Only use local extraction when: the file is local, web_fetch_tool fails, or you 
 **Decision**: Use pymupdf unless you need OCR, equations, forms, or complex layout analysis.
 
 If the user needs marker capabilities but the system lacks ~5GB free disk:
-> "This document needs OCR/advanced extraction (marker-pdf), which requires ~5GB for PyTorch and models. Your system has [X]GB free. Options: free up space, provide a URL so I can use web_fetch_tool, or I can try pymupdf which works for text-based PDFs but not scanned documents or equations."
+> "This document needs OCR/advanced extraction (marker-pdf), which requires ~5GB for PyTorch and models. Your system has [X]GB free. Options: free up space, provide a URL so I can use web_fetch, or I can try pymupdf which works for text-based PDFs but not scanned documents or equations."
 
 ---
 
@@ -108,13 +108,13 @@ marker /path/to/folder --workers 4    # Batch
 
 ```
 # Abstract only (fast)
-web_fetch_tool(urls=["https://arxiv.org/abs/2402.03300"])
+web_fetch(urls=["https://arxiv.org/abs/2402.03300"])
 
 # Full paper
-web_fetch_tool(urls=["https://arxiv.org/pdf/2402.03300"])
+web_fetch(urls=["https://arxiv.org/pdf/2402.03300"])
 
 # Search
-web_search_tool(query="arxiv GRPO reinforcement learning 2026")
+web_search(query="arxiv GRPO reinforcement learning 2026")
 ```
 
 ## Split, Merge & Search
@@ -157,7 +157,7 @@ No extra dependencies needed — pymupdf covers split, merge, search, and text e
 
 ## Notes
 
-- `web_fetch_tool` is always first choice for URLs
+- `web_fetch` is always first choice for URLs
 - pymupdf is the safe default — instant, no models, works everywhere
 - marker-pdf is for OCR, scanned docs, equations, complex layouts — install only when needed
 - Both helper scripts accept `--help` for full usage

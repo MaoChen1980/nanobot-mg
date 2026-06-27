@@ -23,15 +23,12 @@ from nanobot.agent.tools.schema import p
 }, required=["path"])
 class DeleteFileTool(_FsTool):
     """Delete a single file. Absolute path only."""
+    instruction = "Delete files. Use with caution — action is irreversible. For modifying content use edit_file, not delete_file."
 
-    name = "delete_file_tool"
+    name = "delete_file"
     description = (
-        "**Purpose**: Delete a single file.\n\n"
-        "**When to use**:\n"
-        "- When a file is no longer needed and should be deleted\n"
-        "- When safer deletion than exec rm is desired (workspace-guarded with auto-verification)\n\n"
-        "**Danger detection**: Enabled by default. Deleting files triggers a warning. "
-        "Use danger_override=true to proceed when you are sure.\n"
+        "Delete a single file. Workspace-guarded with auto-verification. "
+        "Danger detection enabled by default — use danger_override=true to proceed."
     )
 
     _pre_validators = [PathExists("path"), PathType("path", "file")]
@@ -51,7 +48,7 @@ class DeleteFileTool(_FsTool):
                 problem=f"This will permanently delete {resolved.name}{size_str}",
                 risk="Permanent data loss — deleted files cannot be recovered",
                 suggestion="Back up the file first (e.g., git commit, save_checkpoint, or copy to a temp location) or confirm it's no longer needed before proceeding",
-                tool_name="delete_file_tool",
+                tool_name="delete_file",
             )
 
         resolved.unlink()

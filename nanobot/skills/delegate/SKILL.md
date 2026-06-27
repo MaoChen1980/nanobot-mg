@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: Strategic delegation for multi-step coding, research, or verification work. Use when a task can be split into parent reasoning plus focused sub-agent execution through spawn_tool.
+description: Strategic delegation for multi-step coding, research, or verification work. Use when a task can be split into parent reasoning plus focused sub-agent execution through spawn.
 metadata:
   short-description: Delegate focused work to sub-agents
 ---
@@ -30,10 +30,10 @@ Do not delegate tiny one-step tasks, ambiguous product decisions, destructive op
 
 ## Spawn Sub-agents
 
-Use `spawn_tool` to delegate. Pass one or more tasks in the `tasks` array:
+Use `spawn` to delegate. Pass one or more tasks in the `tasks` array:
 
 ```
-spawn_tool(tasks=[{
+spawn(tasks=[{
     "task": "Inspect src/config.rs and src/settings.rs for duplicate model-default logic. Return file/line findings only; do not edit files.",
     "label": "config_audit",
     "role": "explore"
@@ -43,7 +43,7 @@ spawn_tool(tasks=[{
 For code changes, give the subagent a precise write boundary:
 
 ```
-spawn_tool(tasks=[{
+spawn(tasks=[{
     "task": "Update only docs/configuration.md to document the new [statusline] keys. Match the surrounding style. Do not edit other files.",
     "label": "docs_patch",
     "role": "implementer"
@@ -53,7 +53,7 @@ spawn_tool(tasks=[{
 Run independent subagents in parallel by passing multiple tasks:
 
 ```
-spawn_tool(tasks=[
+spawn(tasks=[
     {"task": "Analyze module A for dead code. Report findings only.", "label": "mod-a", "role": "explore"},
     {"task": "Analyze module B for dead code. Report findings only.", "label": "mod-b", "role": "explore"},
 ], team_context="Both subagents audit dead code independently. Results will be merged by the main agent.")
@@ -61,8 +61,8 @@ spawn_tool(tasks=[
 
 ## Track and Verify
 
-spawn_tool is fire-and-forget. Results arrive asynchronously as system messages.
-Use `check_subagent_tool(label="...")` to proactively query progress.
+spawn is fire-and-forget. Results arrive asynchronously as system messages.
+Use `check_subagent(label="...")` to proactively query progress.
 
 Sub-agent outputs are self-reports. Re-check material claims before relying on them:
 

@@ -93,7 +93,7 @@ class TestChat:
 
     @pytest.mark.asyncio
     async def test_passes_tools(self) -> None:
-        tools = [{"type": "function", "function": {"name": "read_file_tool"}}]
+        tools = [{"type": "function", "function": {"name": "read_file"}}]
         await chat([{"role": "user", "content": "hi"}], tools=tools)
         _, kwargs = self.provider.chat_stream.call_args
         assert kwargs["tools"] == tools
@@ -152,7 +152,7 @@ class TestChatStreamWithRetry:
 
     @pytest.mark.asyncio
     async def test_passes_tools(self) -> None:
-        tools = [{"type": "function", "function": {"name": "read_file_tool"}}]
+        tools = [{"type": "function", "function": {"name": "read_file"}}]
         await chat_stream_with_retry([{"role": "user", "content": "hi"}], tools=tools)
         _, kwargs = self.provider.chat_stream_with_retry.call_args
         assert kwargs["tools"] == tools

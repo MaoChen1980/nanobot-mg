@@ -109,30 +109,20 @@ _RCA_METHODS = """
 )
 class DebugRootCauseTool(Tool):
     """Analyse conversation history and recommend a root-cause investigation direction."""
+    instruction = (
+        "Systematic root cause analysis. Use when stuck on errors or unexpected behavior — "
+        "any tool returns an error, you hit dead ends, or you're about to grep/read/write/exec "
+        "your way through a problem. Your first instinct when anything goes wrong."
+    )
 
-    name = "debug_root_cause_tool"
+    name = "debug_root_cause"
     description = (
-        "**Purpose**: When you need to figure out how to debug something — whether "
-        "you're just starting an investigation, stuck mid-way, or want to double-check "
-        "your approach — call this to get a structured methodology recommendation. "
-        "It reads the full conversation so your question can be brief.\n\n"
-        "**When to call — when anything goes wrong, this is your first instinct**:\n"
-        "- Any tool returns an error or unexpected result\n"
-        "- You see an error and need to figure out how to approach it\n"
-        "- You tried a few things but kept hitting dead ends\n"
-        "- You're about to grep/read/write/exec your way through a problem — stop first, "
-        "get a methodology\n\n"
-        "**Output**: Recommended method(s) from 20 RCA approaches (divide & conquer, "
-        "comparison, rollback, hypothesis testing, reverse inference, trial & error, "
-        "look inside, single variable, boundary testing, reproduction, elimination, "
-        "substitution, chain tracing, log injection, time travel, wait & observe, "
-        "layer stripping, outlier analysis, force failure, peer review) + concrete "
-        "things to examine. You decide which tools to use for the actual investigation.\n\n"
-        "**How it differs from other tools**:\n"
-        "- `assess_me_tool` audits what you know vs assume (cognition audit)\n"
-        "- `reframe_tool` re-states the problem cleanly for a fresh perspective\n"
-        "- `debug_root_cause_tool` gives you a **systematic investigation strategy** — "
-        "which method to use and what to look for"
+        "Read the full conversation and recommend a structured investigation methodology "
+        "from 20 RCA approaches (divide & conquer, comparison, rollback, hypothesis testing, "
+        "reverse inference, trial & error, look inside, single variable, boundary testing, "
+        "reproduction, elimination, substitution, chain tracing, log injection, time travel, "
+        "wait & observe, layer stripping, outlier analysis, force failure, peer review). "
+        "You decide which tools to use for the actual investigation."
     )
 
     read_only = True

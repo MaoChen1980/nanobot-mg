@@ -49,17 +49,17 @@ def registry() -> ToolRegistry:
 class TestSchemaContract:
     def test_list_accepted_without_message(self, registry: ToolRegistry) -> None:
         # action='list' must pass schema validation with nothing but 'action'.
-        _, _, err = registry.prepare_call("cron_tool", {"action": "list"})
+        _, _, err = registry.prepare_call("cron", {"action": "list"})
         assert err is None
 
     def test_remove_accepted_without_message(self, registry: ToolRegistry) -> None:
         # action='remove' must pass schema validation with just 'action' + 'job_id'.
-        _, _, err = registry.prepare_call("cron_tool", {"action": "remove", "job_id": "abc"})
+        _, _, err = registry.prepare_call("cron", {"action": "remove", "job_id": "abc"})
         assert err is None
 
     def test_add_with_message_accepted(self, registry: ToolRegistry) -> None:
         _, _, err = registry.prepare_call(
-            "cron_tool", {"action": "add", "message": "ping", "at": "2030-01-01T00:00:00"}
+            "cron", {"action": "add", "message": "ping", "at": "2030-01-01T00:00:00"}
         )
         assert err is None
 
@@ -71,7 +71,7 @@ class TestSchemaContract:
         # doesn't loop like #3113 reports.
         import asyncio
 
-        tool = registry._tools["cron_tool"]  # type: ignore[attr-defined]
+        tool = registry._tools["cron"]  # type: ignore[attr-defined]
         out = asyncio.run(tool.execute(action="add", at="2030-01-01T00:00:00"))
         assert "message" in out
         assert "add" in out

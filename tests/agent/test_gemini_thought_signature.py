@@ -19,7 +19,7 @@ GEMINI_EXTRA = {"google": {"thought_signature": "sig-abc-123"}}
 def test_tool_call_request_serializes_extra_content() -> None:
     tc = ToolCallRequest(
         id="abc123xyz",
-        name="read_file_tool",
+        name="read_file",
         arguments={"path": "todo.md"},
         extra_content=GEMINI_EXTRA,
     )
@@ -33,7 +33,7 @@ def test_tool_call_request_serializes_extra_content() -> None:
 def test_tool_call_request_serializes_provider_fields() -> None:
     tc = ToolCallRequest(
         id="abc123xyz",
-        name="read_file_tool",
+        name="read_file",
         arguments={"path": "todo.md"},
         provider_specific_fields={"custom_key": "custom_val"},
         function_provider_specific_fields={"inner": "value"},

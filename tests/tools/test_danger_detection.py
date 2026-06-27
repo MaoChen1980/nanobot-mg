@@ -146,7 +146,7 @@ def test_safety_warning_not_error():
 
 @pytest.mark.asyncio
 async def test_exec_tool_dangerous_command_returns_warning(tmp_path):
-    """exec_tool should return ⚠️ Danger: for dangerous commands (not Error)."""
+    """exec should return ⚠️ Danger: for dangerous commands (not Error)."""
     tool = ExecTool(timeout=5, working_dir=str(tmp_path))
     result = await tool.execute(command="git push --force")
     assert result.startswith("⚠️ Danger:")
@@ -155,7 +155,7 @@ async def test_exec_tool_dangerous_command_returns_warning(tmp_path):
 
 @pytest.mark.asyncio
 async def test_exec_tool_danger_override_bypasses(tmp_path):
-    """With danger_override=true, exec_tool should execute the command."""
+    """With danger_override=true, exec should execute the command."""
     tool = ExecTool(timeout=5, working_dir=str(tmp_path))
     result = await tool.execute(command="echo danger_override_works", danger_override=True)
     assert "danger_override_works" in result

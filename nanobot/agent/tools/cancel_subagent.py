@@ -22,19 +22,15 @@ class CancelSubagentTool(Tool):
 
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
+    instruction = "Cancel a running subagent. Use list_subagents first to get the label."
 
-    name = "cancel_subagent_tool"
+    name = "cancel_subagent"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Cancel a specific running subagent by its subagent label. "
-            "The subagent will be force-stopped and you will receive a cancellation notice.\n\n"
-            "**When to use**:\n"
-            "- A subagent is no longer needed (task abandoned)\n"
-            "- A subagent is stuck and needs to be terminated\n"
-            "- You want to reassign resources to a different task\n\n"
-            "Use `list_subagents_tool` first to see active subagent labels.\n"
+            "Cancel and force-stop a running subagent by its label. "
+            "Use list_subagents first to get the label."
         )
 
     async def execute(self, label: str, **kwargs: Any) -> str:

@@ -109,7 +109,7 @@ class TestDispatch:
 
         loop, _bus = _make_loop(exec_config=ExecToolConfig(enable=False))
 
-        assert loop.tools.get("exec_tool") is None
+        assert loop.tools.get("exec") is None
 
     @pytest.mark.asyncio
     async def test_dispatch_processes_and_publishes(self):
@@ -254,7 +254,7 @@ class TestSubagentCancellation:
         mgr._announce_result = AsyncMock()
 
         async def fake_run(spec):
-            assert spec.tools.get("exec_tool") is None
+            assert spec.tools.get("exec") is None
             return SimpleNamespace(
                 stop_reason="done",
                 final_content="done",

@@ -162,7 +162,7 @@ This works with plain `git` — no `gh` needed:
 git fetch origin pull/123/head:pr-123
 git checkout pr-123
 
-# Now you can use read_file_tool, grep_tool, exec_tool, etc.
+# Now you can use read_file, grep, exec, etc.
 
 # View diff against the base branch
 git diff main...pr-123
@@ -354,7 +354,7 @@ curl -s -H "Authorization: token $GITHUB_TOKEN" \
 
 ### Step 3: Check out the PR locally
 
-This gives you full access to `read_file_tool`, `grep_tool`, `exec_tool`, and the ability to run tests.
+This gives you full access to `read_file`, `grep`, `exec`, and the ability to run tests.
 
 ```bash
 git fetch origin pull/$PR_NUMBER/head:pr-$PR_NUMBER

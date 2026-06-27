@@ -335,7 +335,7 @@ class TestDbSurrogateHandling:
         try:
             db.insert_tool_call(
                 "s1", iteration=1, turn=1,
-                tool_name="exec_tool",
+                tool_name="exec",
                 params={"cmd": "test"},
                 result="hello \ud800 world",
                 success=True,
@@ -352,7 +352,7 @@ class TestDbSurrogateHandling:
         try:
             db.insert_tool_call(
                 "s1", iteration=1, turn=1,
-                tool_name="exec_tool",
+                tool_name="exec",
                 params={"cmd": "test \udfff"},
                 result="ok",
                 success=True,
@@ -385,7 +385,7 @@ class TestDbSurrogateHandling:
             }
             db.insert_tool_call(
                 "s1", iteration=1, turn=1,
-                tool_name="exec_tool",
+                tool_name="exec",
                 params={"cmd": "test"},
                 result=str(result),
                 success=False,

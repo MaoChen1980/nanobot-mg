@@ -45,21 +45,19 @@ class MemorySearchTool(Tool):
 
     def __init__(self, store: MemoryStore):
         self._store = store
+    instruction = (
+        "Search the knowledge base for historical experiences/decisions. "
+        "Use when user references past experience. Not for code search — use grep/glob for that."
+    )
 
-    name = "memory_search_tool"
+    name = "memory_search"
     read_only = True
 
     description = (
-        "**Purpose**: Search the knowledge base (memory/) by semantic similarity (FAISS). "
-        "Understands concepts — `query='deploy failure'` can find entries about 'rollback issues'.\n\n"
-        "**When to use**: User references past experience (\"we learned this\", \"we did this before\"), "
-        "or you need to recall accumulated knowledge, decisions, or conceptually related information.\n\n"
-        "**Query tips**: Use 2-5 specific terms at section-heading granularity. "
-        "Avoid single vague words like `memory` — they return noise.\n\n"
-        "**Examples**:\n"
-        "  memory_search_tool(query='memory extraction and consolidation', k=5)\n"
-        "  memory_search_tool(query='android build gradle apk config')\n"
-        "  memory_search_tool(query='subagent spawn orchestration lifecycle')"
+        "Search the knowledge base (memory/) by semantic similarity (FAISS). "
+        "Understands concepts — 'deploy failure' finds 'rollback issues'. "
+        "Also searches tasks/ and skills/ indexes. "
+        "Returns source file, heading, score, text excerpt, and cross-references."
     )
 
     async def execute(self, query: str, k: int = 5, **kwargs: Any) -> str:

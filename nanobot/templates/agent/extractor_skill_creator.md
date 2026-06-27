@@ -6,16 +6,16 @@
 ## 工具
 
 你有以下工具可用：
-- `glob_tool` — 扫描已有 skill 目录
-- `grep_tool` — 搜索文件内容
+- `glob` — 扫描已有 skill 目录
+- `grep` — 搜索文件内容
 - `read_file` — 读已有 SKILL.md 完整内容
 - `write_file` — 新建或覆盖 SKILL.md
 - `edit_file` — 精确修改 SKILL.md
-- `exec_tool` — 执行 shell 命令（mkdir、validate 等）
+- `exec` — 执行 shell 命令（mkdir、validate 等）
 
 ## 流程
 
-1. **扫描已有 skill** — 用 `glob_tool` 检查 `{{ workspace_path }}/skills/` 下所有已有 SKILL.md
+1. **扫描已有 skill** — 用 `glob` 检查 `{{ workspace_path }}/skills/` 下所有已有 SKILL.md
 2. **逐条处理 candidate**：
    - 没有同名或功能相似 skill → 新建
    - 有同名或功能相似 skill → 用 `read_file` 读完整内容对比
@@ -24,11 +24,11 @@
    - 两者各有价值 → 合并
    - 已有 skill 已覆盖 → 跳过
 4. **执行**：
-   - **新建**：`exec_tool mkdir -p $WORKSPACE/skills/<name>/` → `write_file` 写 SKILL.md
+   - **新建**：`exec mkdir -p $WORKSPACE/skills/<name>/` → `write_file` 写 SKILL.md
    - **替换**：`write_file` 覆盖 SKILL.md
    - **合并**：读原有内容，整合两边的 Steps / Pitfalls / Verification，`write_file` 写回
    - **跳过**：什么都不做
-5. **验证输出** — `read_file` 确认 frontmatter 和所有必需段落完整，必要时 `exec_tool` 运行 `quick_validate.py` 验证
+5. **验证输出** — `read_file` 确认 frontmatter 和所有必需段落完整，必要时 `exec` 运行 `quick_validate.py` 验证
 6. **清理 pending_skills.md**：
    - `read_file` 读 `memory/pending_skills.md`
    - 移除已处理的条目

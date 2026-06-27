@@ -22,16 +22,16 @@ class CheckSubagentTool(Tool):
 
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
+    instruction = "Check a specific subagent's status. Use list_subagents first to get the task_id."
 
-    name = "check_subagent_tool"
+    name = "check_subagent"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Query the execution progress and result of a background subagent (started by spawn).\n\n"
-            "**When to use**:\n"
-            "- After spawning a subagent, proactively check its completion status\n"
-            "- Want to confirm subagent progress without waiting for a notification\n\n"
+            "Query a subagent's execution status: phase, iteration count, "
+            "tools executed, token usage, and any error. "
+            "Use list_subagents first to get the task_id."
         )
 
     async def execute(self, task_id: str, **kwargs: Any) -> str:

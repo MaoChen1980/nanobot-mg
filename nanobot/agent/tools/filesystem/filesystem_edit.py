@@ -140,31 +140,14 @@ class EditFileTool(_FsTool):
 
     _MAX_EDIT_FILE_SIZE = 1024 * 1024 * 1024  # 1 GiB
     _MARKDOWN_EXTS = frozenset({".md", ".mdx", ".markdown"})
+    instruction = "Edit existing files — must call read_file first to get current content. For new files use write_file."
 
-    name = "edit_file_tool"
+    name = "edit_file"
 
     description = (
-        "**Purpose**: Modify file content via text matching or line number ranges.\n\n"
-        "**Prerequisite — Read the file first**:\n"
-        "You MUST read a file with read_file_tool before editing it. edit_file_tool checks whether the file\n"
-        "was read; if not, it returns a warning asking you to read first. This ensures you have the latest\n"
-        "content and can provide correct old_text or line numbers. Reading also lets the system detect\n"
-        "concurrent modifications via SHA256 hash verification.\n\n"
-        "**Two Modes**:\n"
-        "- **old_text/new_text** (default) — exact text match replacement, suitable for small replacements\n"
-        "- **first_line/last_line** (line number range) — replace by line numbers, just pass the line numbers\n\n"
-        "**Auto Protection**:\n"
-        "Checks if the file was modified externally after reading (SHA256 full-file hash).\n"
-        "If the file has changed, the tool includes a warning in the result (does not affect edit execution).\n\n"
-        "**Limitations**:\n"
-        "- Does not support cross-file find-and-replace\n"
-        "- Text matching is exact (no fuzzy or whitespace-tolerant matching)\n\n"
-        "**Error Handling**:\n"
-        "- old_text not found → shows diff to help locate\n"
-        "- old_text appears multiple times and replace_all=false → shows line numbers for each match\n"
-        "- File does not exist → returns error\n\n"
-        "**Minimal Example**: edit_file_tool(path='main.py', first_line=42, last_line=45, new_text='def bar():')\n"
-        "→ First use read_file_tool to read the file, then call edit_file_tool with the correct line numbers"
+        "Edit a file by replacing text (exact substring match) or line range. "
+        "Supports replace_all for multi-occurrence edits, then_grep for verification. "
+        "Requires reading the file with read_file first (SHA256 verification)."
     )
 
     @staticmethod
@@ -197,9 +180,9 @@ class EditFileTool(_FsTool):
                     risk="Large content removal may delete more than intended, "
                          "especially if old_text matches unexpected locations",
                     suggestion="Back up the file first (git commit or save_checkpoint), then read it "
-                               "with read_file_tool to verify the exact text you want to remove "
+                               "with read_file to verify the exact text you want to remove "
                                "before editing",
-                    tool_name="edit_file_tool",
+                    tool_name="edit_file",
                 )
 
             # Line-based mode: replace lines first_line through last_line
@@ -221,7 +204,7 @@ class EditFileTool(_FsTool):
             if old_text is None:
                 return "Error: old_text is required in text-match mode. Omit old_text only when using first_line+last_line for line-range replacement."
 
-            # .ipynb files are valid JSON — edit_file_tool handles them fine
+            # .ipynb files are valid JSON — edit_file handles them fine
 
             fp = self._resolve(path)
 

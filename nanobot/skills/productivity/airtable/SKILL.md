@@ -10,7 +10,7 @@ prerequisites:
 
 # Airtable — Bases, Tables & Records
 
-Work with Airtable's REST API directly via `curl` using `exec_tool`. No MCP server, no OAuth flow, no Python SDK — just `curl` and a personal access token.
+Work with Airtable's REST API directly via `curl` using `exec`. No MCP server, no OAuth flow, no Python SDK — just `curl` and a personal access token.
 
 ## Prerequisites
 
@@ -215,7 +215,7 @@ done
 
 ## Important Notes
 
-- **Always use `exec_tool` or direct shell commands with `curl`.** Do NOT use `web_fetch_tool` (it can't send auth headers).
+- **Always use `exec` or direct shell commands with `curl`.** Do NOT use `web_fetch` (it can't send auth headers).
 - **`AIRTABLE_API_KEY` must be exported before using curl** — ensure the env var is set.
 - **Escape curly braces in formulas carefully.** In a heredoc body, `{Status}` is literal. In a shell argument, `{Status}` is safe outside `{...}` brace-expansion context — but pass dynamic strings through `python3 urllib.parse.quote` before splicing into a URL.
 - **Pretty-print with `python3 -m json.tool`** (always present) rather than `jq` (optional). Only reach for `jq` when you need filtering/projection.

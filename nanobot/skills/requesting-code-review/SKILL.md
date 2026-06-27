@@ -26,18 +26,18 @@ quality gates, an independent reviewer subagent, and an auto-fix loop.
 ## Step 1 — Get the diff
 
 ```bash
-exec_tool("git diff --cached")
+exec("git diff --cached")
 ```
 
-If empty, try `exec_tool("git diff")` then `exec_tool("git diff HEAD~1 HEAD")`.
+If empty, try `exec("git diff")` then `exec("git diff HEAD~1 HEAD")`.
 
 If `git diff --cached` is empty but `git diff` shows changes, tell the user to
 `git add <files>` first. If still empty, run `git status` — nothing to verify.
 
 If the diff exceeds 15,000 characters, split by file:
 ```bash
-exec_tool("git diff --name-only")
-exec_tool("git diff HEAD -- specific_file.py")
+exec("git diff --name-only")
+exec("git diff HEAD -- specific_file.py")
 ```
 
 ## Step 2 — Static security scan
@@ -45,9 +45,9 @@ exec_tool("git diff HEAD -- specific_file.py")
 Scan added lines only. Any match is a security concern fed into the reviewer.
 
 ```bash
-exec_tool("git diff --cached | grep '^+' | grep -iE '(api_key|secret|password|token|passwd)\\s*=\\s*['\\\"][^'\\\"]{6,}['\\\"]'")
-exec_tool("git diff --cached | grep '^+' | grep -E 'os\\.system\\(|subprocess.*shell=True'")
-exec_tool("git diff --cached | grep '^+' | grep -E '\\beval\\(|\\bexec\\('")
+exec("git diff --cached | grep '^+' | grep -iE '(api_key|secret|password|token|passwd)\\s*=\\s*['\\\"][^'\\\"]{6,}['\\\"]'")
+exec("git diff --cached | grep '^+' | grep -E 'os\\.system\\(|subprocess.*shell=True'")
+exec("git diff --cached | grep '^+' | grep -E '\\beval\\(|\\bexec\\('")
 ```
 
 ## Step 3 — Baseline tests and linting
@@ -58,15 +58,15 @@ Only NEW failures introduced by your changes block the commit.
 
 **Test frameworks** (auto-detect by project files):
 ```bash
-exec_tool("python -m pytest --tb=no -q 2>&1 | tail -5")
-exec_tool("npm test -- --passWithNoTests 2>&1 | tail -5")
-exec_tool("cargo test 2>&1 | tail -5")
+exec("python -m pytest --tb=no -q 2>&1 | tail -5")
+exec("npm test -- --passWithNoTests 2>&1 | tail -5")
+exec("cargo test 2>&1 | tail -5")
 ```
 
 **Linting and type checking** (run only if installed):
 ```bash
-exec_tool("which ruff && ruff check . 2>&1 | tail -10")
-exec_tool("which mypy && mypy . --ignore-missing-imports 2>&1 | tail -10")
+exec("which ruff && ruff check . 2>&1 | tail -10")
+exec("which mypy && mypy . --ignore-missing-imports 2>&1 | tail -10")
 ```
 
 **Baseline comparison:** If baseline was clean and your changes introduce failures,
@@ -91,7 +91,7 @@ Spawn a reviewer subagent with the diff and static scan results. The reviewer
 gets ONLY the diff — no shared context with the implementer.
 
 ```
-spawn_tool(tasks=[{
+spawn(tasks=[{
     "label": "code-reviewer",
     "role": "independent code reviewer",
     "task": """You are an independent code reviewer. You have no context about how
@@ -134,7 +134,7 @@ Return ONLY this JSON:
 }], team_context="Independent code review. Return only JSON verdict.")
 ```
 
-**Important:** spawn_tool is fire-and-forget. After spawning, continue with other
+**Important:** spawn is fire-and-forget. After spawning, continue with other
 work. The result arrives as a system message — read the verdict when it comes in.
 
 ## Step 6 — Evaluate results
@@ -152,7 +152,7 @@ Combine results from Steps 2, 3, and 5 when the reviewer result arrives.
 Spawn a fix agent that fixes ONLY the reported issues:
 
 ```
-spawn_tool(tasks=[{
+spawn(tasks=[{
     "label": "code-fixer",
     "role": "code fix agent",
     "task": """You are a code fix agent. Fix ONLY the specific issues listed below.
@@ -183,7 +183,7 @@ After the fix agent completes, re-run Steps 1-6 (full verification cycle).
 If verification passed:
 
 ```bash
-exec_tool("git add -A && git commit -m '[verified] <description>'")
+exec("git add -A && git commit -m '[verified] <description>'")
 ```
 
 The `[verified]` prefix indicates an independent reviewer approved this change.

@@ -108,25 +108,27 @@ class SelfTool(Tool):
 
     @property
     def name(self) -> str:
-        return "self_tool"
+        return "config"
+
+    @property
+    def instruction(self) -> str:
+        return (
+            "View or modify framework configuration. "
+            "Use config(action='check') to inspect, config(action='set') to change. "
+            "Before setting state, predict the potential impact — "
+            "warn the user if the change could cause crashes or instability."
+        )
 
     @property
     def description(self) -> str:
         base = (
-            "**Purpose**: View and modify the agent loop's runtime state.\n\n"
-            "**When to use**:\n"
-            "- check (no key) → shows full configuration overview\n"
-            "- check (with key) → view a specific value, supports dot-path (e.g. '_last_usage.prompt_tokens')\n"
-            "- set (with key, value) → modify configuration or store scratchpad notes\n\n"
+            "View and modify the agent loop's runtime state. "
+            "check (no key) → shows full configuration overview. "
+            "check (with key) → view a specific value (supports dot-path). "
+            "set (with key, value) → modify configuration or store scratchpad notes."
         )
         if not self._modify_allowed:
             base += "\nREAD-ONLY MODE: set is disabled."
-        else:
-            base += (
-                "\nIMPORTANT: Before setting state, predict the potential impact. "
-                "If the operation could cause crashes or instability "
-                "(e.g. changing model), warn the user first."
-            )
         return base
 
     @property
@@ -290,7 +292,7 @@ class SelfTool(Tool):
         if action in ("inspect", "check"):
             return self._inspect(key)
         if not self._modify_allowed:
-            return "Error: set is disabled (tools.self_tool.allow_set is false)"
+            return "Error: set is disabled (tools.config.allow_set is false)"
         if action in ("modify", "set"):
             return self._modify(key, value)
         return f"Unknown action: {action}"

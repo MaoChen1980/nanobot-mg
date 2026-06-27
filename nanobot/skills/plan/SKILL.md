@@ -36,7 +36,7 @@ If the task is code-related, include exact file paths, likely test targets, and 
 
 ## Save location
 
-Save the plan with `write_file_tool` under:
+Save the plan with `write_file` under:
 - `tasks/YYYY-MM-DD_HHMMSS-<slug>.md`
 
 ## Interaction style
@@ -106,7 +106,7 @@ def test_specific_behavior():
 
 **Step 2: Run test to verify failure**
 
-Run: `exec_tool("pytest tests/path/test.py::test_specific_behavior -v")`
+Run: `exec("pytest tests/path/test.py::test_specific_behavior -v")`
 Expected: FAIL — "function not defined"
 
 **Step 3: Write minimal implementation**
@@ -118,7 +118,7 @@ def function(input):
 
 **Step 4: Run test to verify pass**
 
-Run: `exec_tool("pytest tests/path/test.py::test_specific_behavior -v")`
+Run: `exec("pytest tests/path/test.py::test_specific_behavior -v")`
 Expected: PASS
 
 **Step 5: Commit**
@@ -145,16 +145,16 @@ Use nanobot tools to understand the project:
 
 ```python
 # Understand project structure
-glob_tool(pattern="src/**/*.py")
+glob(pattern="src/**/*.py")
 
 # Look at similar features
-grep_tool(pattern="similar_pattern", path="src/")
+grep(pattern="similar_pattern", path="src/")
 
 # Check existing tests
-glob_tool(pattern="tests/**/*.py")
+glob(pattern="tests/**/*.py")
 
 # Read key files
-read_file_tool(path="src/app.py")
+read_file(path="src/app.py")
 ```
 
 ### Step 3: Design Approach
@@ -211,9 +211,9 @@ Check:
 
 After saving the plan, offer the execution approach:
 
-**"Plan complete and saved. Ready to execute — I'll dispatch subagents via spawn_tool per task. Shall I proceed?"**
+**"Plan complete and saved. Ready to execute — I'll dispatch subagents via spawn per task. Shall I proceed?"**
 
-When executing, use `spawn_tool` for each task with full context, verify results, and proceed task by task.
+When executing, use `spawn` for each task with full context, verify results, and proceed task by task.
 
 ## Remember
 

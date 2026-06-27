@@ -55,19 +55,16 @@ class LogEventTool(Tool):
     def __init__(self, store: MemoryStore):
         self._store = store
         self._events_dir = Path(store.workspace) / "memory" / "events"
+    instruction = "Record a decision, preference change, bug fix, milestone, or significant event for future reference. Do NOT use for routine operations or temporary state."
 
-    name = "log_event_tool"
+    name = "log_event"
     read_only = False
 
     description = (
-        "**Purpose**: Record a timestamped event to the memory event timeline.\n\n"
-        "**When to use**: A significant occurrence happens during conversation — "
-        "a user preference change, a bug cause found, a project decision made, "
-        "a health metric noted, a purchase completed.\n\n"
-        "**You only need to decide WHAT is worth recording** — "
-        "this tool handles file format, dedup (by summary + detail), and date sorting.\n\n"
-        "**Access pattern**: Later use `read_file_tool(\"memory/events/<topic>.md\")` "
-        "to read the full timeline. Events are NOT in FAISS vectors (semantic search won't find them)."
+        "Record a timestamped event to memory/events/{topic}.md. "
+        "Handles file creation, dedup (by summary + detail), and date sorting. "
+        "Events are appended to a ## Timeline section. "
+        "NOT indexed by FAISS — use read_file to access."
     )
 
     async def execute(self, topic: str, summary: str, detail: str = "", **kwargs: Any) -> str:

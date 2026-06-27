@@ -32,9 +32,9 @@ async def test_subagent_exec_tool_receives_allowed_env_keys(tmp_path):
     mgr._announce_result = AsyncMock()
 
     async def fake_run(spec):
-        exec_tool = spec.tools.get("exec_tool")
-        assert exec_tool is not None
-        assert exec_tool.allowed_env_keys == ["GOPATH", "JAVA_HOME"]
+        exec = spec.tools.get("exec")
+        assert exec is not None
+        assert exec.allowed_env_keys == ["GOPATH", "JAVA_HOME"]
         return SimpleNamespace(
             stop_reason="done",
             final_content="done",

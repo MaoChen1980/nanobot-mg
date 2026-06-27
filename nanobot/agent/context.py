@@ -203,43 +203,50 @@ class ContextBuilder:
         return normalize_paths(result)
 
     def _build_tools_section(self, tool_definitions: list[dict[str, Any]]) -> str:
-        """Build the available tools section for the system prompt."""
+        """Build the available tools reference section for the system prompt.
+
+        Shows only tool name + parameter signatures (compact reference).
+        Behavioral rules (when to use/not use) belong in build_instructions_section(),
+        NOT here — LLMs treat system prompt as reference, instructions as directives.
+        """
         if not tool_definitions:
             return ""
         lines = [
             "# Available Tools\n",
-            "注意：只读工具（exec_tool/read_file_tool/glob_tool 等）相同参数 60s 内重复调用返回缓存结果。"
-            "任何工具连续返回相同内容会被去重为简短提示。\n",
+            "工具名 + 参数签名。使用规则见下方指令区。\n",
         ]
         for schema in tool_definitions:
             fn = schema.get("function", {})
             name = fn.get("name", "unknown")
-            desc = fn.get("description", "")
-            # Truncate at 10K to prevent MCP mega-descriptions from
-            # dominating the prompt.  Keeps \n\n section boundaries intact.
-            if len(desc) > 10_000:
-                truncated = desc[:9_997]
-                last_break = truncated.rfind("\n\n")
-                if last_break > 1000:
-                    desc = truncated[:last_break]
+            params = fn.get("parameters", {})
+            props = params.get("properties", {})
+            required = set(params.get("required", []))
+
+            # Build compact param signature: name(type, required?, default?)
+            param_parts = []
+            for pname, pinfo in props.items():
+                ptype = pinfo.get("type", "")
+                pdefault = pinfo.get("default", None)
+                penum = pinfo.get("enum", None)
+                if penum:
+                    type_str = "|".join(str(e) for e in penum)
+                elif ptype == "array":
+                    items = pinfo.get("items", {})
+                    item_type = items.get("type", "")
+                    type_str = f"{item_type}[]" if item_type else "array"
                 else:
-                    desc = truncated + "..."
-            # Indent continuation lines for LLM-readable hierarchy (list+join avoids O(n²))
-            _desc_lines = desc.split("\n")
-            _parts = [_desc_lines[0]]
-            for _line in _desc_lines[1:]:
-                _parts.append("\n  " + _line if _line.strip() else "\n")
-            indented_desc = "".join(_parts)
-            lines.append(f"- **{name}**: {indented_desc}")
-            lines.append("")  # blank line between tools
-        lines.append(
-            "**⚠️ 不要在 content 中写工具名**：上面的工具名（`exec_tool`、`read_file_tool` 等）仅用于 tool_call API。"
-            "如果需要在文本中提及工具操作，用自然语言描述（如'执行命令''读取文件'），不要写出工具名字符串。"
-            "框架会自动检测 content 中的工具名并触发重试。\n"
-        )
+                    type_str = ptype or ""
+                suffix = "?" if pname not in required else ""
+                if pdefault is not None:
+                    default_str = json.dumps(pdefault, ensure_ascii=False)
+                    suffix += f"={default_str}"
+                param_parts.append(f"{pname}({type_str}{suffix})")
+            params_str = ", ".join(param_parts) if param_parts else "(no params)"
+            lines.append(f"- **{name}**: {params_str}")
         return "\n".join(lines)
 
-    def build_instructions_section(self, *, for_subagent: bool = False, session_key: str | None = None) -> str:
+    def build_instructions_section(self, *, for_subagent: bool = False, session_key: str | None = None,
+                                    tool_instruction_map: dict[str, str] | None = None) -> str:
         """Build instructions block (prepended to last user message, near generation point).
 
         These are directive/procedural rules that LLMs treat as instructions
@@ -248,6 +255,11 @@ class ContextBuilder:
 
         When *for_subagent* is True, uses subagent-specific snippets and
         skips orchestrator-only content (orchestration_guide).
+
+        When *tool_instruction_map* is provided (name -> behavioral rule),
+        auto-generates the Tool Usage Rules section from it instead of
+        loading the static tool_usage.md template — one-source-of-truth
+        from tool class instructions.
         """
         sections: list[str] = []
 
@@ -268,6 +280,7 @@ class ContextBuilder:
             snippet_names = [
                 "external_content_safety",
                 "output_rules_subagent",
+                "tool_usage",
                 "think_triggers",
                 "search_tool_selector",
                 "operating_principles_subagent",
@@ -281,6 +294,7 @@ class ContextBuilder:
             snippet_names = [
                 "external_content_safety",
                 "output_rules",
+                "tool_usage",
                 "think_triggers",
                 "search_tool_selector",
                 "operating_principles",
@@ -291,6 +305,11 @@ class ContextBuilder:
                 "tool_result_summary",
                 "memory_usage",
             ]
+
+        # When tool_instruction_map is provided, auto-generate tool usage from
+        # tool class instructions instead of loading static tool_usage.md.
+        if tool_instruction_map:
+            snippet_names = [n for n in snippet_names if n != "tool_usage"]
         template_kwargs = dict(
             workspace_path=self._workspace_path_str,
             tree_path=f"{self._workspace_path_str}/{tree_rel}",
@@ -307,6 +326,14 @@ class ContextBuilder:
             )
             if content.strip():
                 sections.append(content)
+
+        # Auto-generate tool usage section from tool class instructions
+        # (one-source-of-truth — instructions on each tool subclass).
+        if tool_instruction_map:
+            tool_usage_lines = ["## Tool Usage Rules\n"]
+            for name, rule in sorted(tool_instruction_map.items()):
+                tool_usage_lines.append(f"- **{name}**: {rule}")
+            sections.append("\n".join(tool_usage_lines))
 
         # Post-process: replace well-known path references with session-scoped equivalents.
         # This covers templates that still use `{{ workspace_path }}/tasks/tree.json` etc.
@@ -331,7 +358,7 @@ class ContextBuilder:
                     "## Active Skills\n\n"
                     f"{always_content}\n\n"
                     "> **Always 调优**：根据当前的工作场景，如果某个 skill 值得常驻或不再需要常驻，"
-                    "直接用 edit_file_tool 修改其 SKILL.md frontmatter 的 `always` 字段，下次会自动注入或移除。"
+                    "直接用 edit_file 修改其 SKILL.md frontmatter 的 `always` 字段，下次会自动注入或移除。"
                 )
 
         # Available skills summary — dynamically built, excludes always-skills
@@ -340,7 +367,7 @@ class ContextBuilder:
             sections.append(
                 "### Available Skills\n\n"
                 "以下 skills 扩展了你的能力。当用户输入匹配某个 skill 的描述时，"
-                "必须优先加载该 skill——用 read_file_tool 阅读其 SKILL.md 并按步骤执行。\n\n"
+                "必须优先加载该 skill——用 read_file 阅读其 SKILL.md 并按步骤执行。\n\n"
                 f"{skills_summary}"
             )
 
@@ -369,7 +396,7 @@ class ContextBuilder:
             heading = (
                 "## Team Board — 当前项目事实黑板\n\n"
                 "以下是当前项目所有节点共享的事实发现。这些信息已自动注入上下文，"
-                "无需额外 read_file_tool。\n\n"
+                "无需额外 read_file。\n\n"
                 if for_subagent
                 else "## Team Board\n\n"
             )
@@ -392,7 +419,7 @@ class ContextBuilder:
         if len(content) > _MAX_BOARD_CHARS:
             truncation_note = (
                 f"\n\n> ⚠️ Board truncated ({len(content)} chars > {_MAX_BOARD_CHARS} limit). "
-                "Use `read_file_tool` to see full content."
+                "Use `read_file` to see full content."
             )
             content = content[:_MAX_BOARD_CHARS] + truncation_note
         return self._shift_headings(content, offset=1)
@@ -565,7 +592,7 @@ class ContextBuilder:
         return (
             f"# Task Tree - {self._workspace_path_str}/{tree_rel}\n\n"
             f"Current task tree. Tree data is in {tree_rel} — "
-            "use read_file_tool/write_file_tool/edit_file_tool to update it. "
+            "use read_file/write_file/edit_file to update it. "
             "Schema reference: tasks/tree.schema.md.\n\n"
             + rendered
         )
@@ -618,7 +645,7 @@ class ContextBuilder:
         return (
             f"# Working Context - {self._workspace_path_str}/{current_rel}\n\n"
             "Project-level working context. Tracks the current project node's progress. "
-            "Create and update it with write_file_tool.\n\n"
+            "Create and update it with write_file.\n\n"
             + self._shift_headings(content, offset=1)
         )
 

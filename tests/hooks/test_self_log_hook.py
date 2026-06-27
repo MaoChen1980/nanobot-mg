@@ -32,9 +32,9 @@ class FakeContext:
 class TestCapture:
     def test_capture_with_tool_calls_and_results(self, hook):
         tc1 = MagicMock()
-        tc1.name = "web_search_tool"
+        tc1.name = "web_search"
         tc2 = MagicMock()
-        tc2.name = "read_file_tool"
+        tc2.name = "read_file"
         ctx = FakeContext(
             tool_calls=[tc1, tc2],
             tool_results=["result"],
@@ -71,12 +71,12 @@ class TestCapture:
     def test_capture_duration_from_tool_events(self, hook):
         """duration_ms lives in tool_events, not tool_results."""
         tc = MagicMock()
-        tc.name = "exec_tool"
+        tc.name = "exec"
         ctx = FakeContext(
             tool_calls=[tc],
             tool_results=["ok"],
             tool_events=[
-                {"name": "exec_tool", "status": "ok", "detail": "ok", "duration_ms": 1500},
+                {"name": "exec", "status": "ok", "detail": "ok", "duration_ms": 1500},
             ],
             usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
             iteration=1,
@@ -88,7 +88,7 @@ class TestCapture:
     def test_capture_discomfort_signals_with_tool_name(self, hook):
         """discomfort_signals now returns {pattern, tool} dicts, not plain strings."""
         tc = MagicMock()
-        tc.name = "read_file_tool"
+        tc.name = "read_file"
         ctx = FakeContext(
             tool_calls=[tc],
             tool_results=["Error: file not found"],
@@ -98,7 +98,7 @@ class TestCapture:
         )
         hook._capture(ctx)
         entry = json.loads(hook.LOG_FILE.read_text())
-        assert entry["discomfort_signals"] == [{"pattern": "error", "tool": "read_file_tool"}]
+        assert entry["discomfort_signals"] == [{"pattern": "error", "tool": "read_file"}]
         assert entry["error_count"] == 1
 
 

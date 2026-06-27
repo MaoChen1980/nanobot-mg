@@ -37,22 +37,21 @@ class SendMessageTool(Tool):
         self._manager = manager
         self._subagent_id = subagent_id
         self._subagent_label = subagent_label
+    instruction = (
+        "Send a message to a running subagent. Use list_subagents first to get the recipient name. "
+        "Fire-and-forget — execution continues immediately on both sides. "
+        "The recipient will see your message in their next iteration."
+    )
 
-    name = "send_message_tool"
+    name = "send_message"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Send a message to the Orchestrator or a Subagent (non-blocking).\n\n"
-            "- From Subagent → Orchestrator: `send_message_tool(recipient='main', message=...)`\n"
-            "- From Orchestrator → Subagent: `send_message_tool(recipient='subagent:<label>', message=...)`\n\n"
-            "**Fire-and-forget**: execution continues immediately on both sides.\n"
-            "The recipient will see your message in their next iteration.\n\n"
-            "**Priority** (Subagent→Orchestrator only):\n"
-            "- info: General information, progress reports\n"
-            "- suggestion: Improvement suggestions (found a better approach)\n"
-            "- blocker: Blocking issue requiring Orchestrator decision\n\n"
-            "If you need a reply from the recipient, the Orchestrator will re-spawn you."
+            "Send a message to the Orchestrator or a Subagent (non-blocking). "
+            "Subagent→Orchestrator: recipient='main'. "
+            "Orchestrator→Subagent: recipient='subagent:<label>'. "
+            "Priority (Subagent→Orchestrator only): info, suggestion, blocker."
         )
 
     async def execute(
@@ -65,7 +64,7 @@ class SendMessageTool(Tool):
         # Subagent → Orchestrator
         if recipient == "main":
             if self._subagent_id is None or self._subagent_label is None:
-                return "Error: send_message_tool from 'main' is only available to Subagents."
+                return "Error: send_message from 'main' is only available to Subagents."
             if priority not in ("info", "suggestion", "blocker"):
                 priority = "info"
             return await self._manager.notify_orchestrator(

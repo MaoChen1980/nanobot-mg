@@ -14,18 +14,18 @@ Treat this skill as CLI-first automation. Do not pivot to `@playwright/test` unl
 Before proposing commands, check whether `npx` is available:
 
 ```bash
-exec_tool("command -v npx >/dev/null 2>&1")
+exec("command -v npx >/dev/null 2>&1")
 ```
 
 If it is not available, pause and ask the user to install Node.js/npm. Provide these steps verbatim:
 
 ```bash
 # Verify Node/npm are installed
-exec_tool("node --version")
-exec_tool("npm --version")
+exec("node --version")
+exec("npm --version")
 
 # If missing, install Node.js/npm, then:
-exec_tool("npx @playwright/mcp playwright-cli --help")
+exec("npx @playwright/mcp playwright-cli --help")
 ```
 
 Once `npx` is present, proceed.
@@ -33,19 +33,19 @@ Once `npx` is present, proceed.
 ## Quick start
 
 ```bash
-exec_tool('npx @playwright/mcp playwright-cli open https://playwright.dev')
-exec_tool('npx @playwright/mcp playwright-cli snapshot')
-exec_tool('npx @playwright/mcp playwright-cli click e15')
-exec_tool('npx @playwright/mcp playwright-cli fill e1 "search text"')
-exec_tool('npx @playwright/mcp playwright-cli press Enter')
-exec_tool('npx @playwright/mcp playwright-cli screenshot')
+exec('npx @playwright/mcp playwright-cli open https://playwright.dev')
+exec('npx @playwright/mcp playwright-cli snapshot')
+exec('npx @playwright/mcp playwright-cli click e15')
+exec('npx @playwright/mcp playwright-cli fill e1 "search text"')
+exec('npx @playwright/mcp playwright-cli press Enter')
+exec('npx @playwright/mcp playwright-cli screenshot')
 ```
 
 If the user prefers a global install, this is also valid:
 
 ```bash
-exec_tool("npm install -g @playwright/mcp@latest")
-exec_tool("playwright-cli --help")
+exec("npm install -g @playwright/mcp@latest")
+exec("playwright-cli --help")
 ```
 
 But default to `npx` — no global install needed.
@@ -61,10 +61,10 @@ But default to `npx` — no global install needed.
 Minimal loop:
 
 ```bash
-exec_tool('npx @playwright/mcp playwright-cli open https://example.com')
-exec_tool('npx @playwright/mcp playwright-cli snapshot')
-exec_tool('npx @playwright/mcp playwright-cli click e3')
-exec_tool('npx @playwright/mcp playwright-cli snapshot')
+exec('npx @playwright/mcp playwright-cli open https://example.com')
+exec('npx @playwright/mcp playwright-cli snapshot')
+exec('npx @playwright/mcp playwright-cli click e3')
+exec('npx @playwright/mcp playwright-cli snapshot')
 ```
 
 ## When to snapshot again
@@ -83,30 +83,30 @@ Refs can go stale. When a command fails due to a missing ref, snapshot again.
 ### Form fill and submit
 
 ```bash
-exec_tool('npx @playwright/mcp playwright-cli open https://example.com/form')
-exec_tool('npx @playwright/mcp playwright-cli snapshot')
-exec_tool('npx @playwright/mcp playwright-cli fill e1 "user@example.com"')
-exec_tool('npx @playwright/mcp playwright-cli fill e2 "password123"')
-exec_tool('npx @playwright/mcp playwright-cli click e3')
-exec_tool('npx @playwright/mcp playwright-cli snapshot')
+exec('npx @playwright/mcp playwright-cli open https://example.com/form')
+exec('npx @playwright/mcp playwright-cli snapshot')
+exec('npx @playwright/mcp playwright-cli fill e1 "user@example.com"')
+exec('npx @playwright/mcp playwright-cli fill e2 "password123"')
+exec('npx @playwright/mcp playwright-cli click e3')
+exec('npx @playwright/mcp playwright-cli snapshot')
 ```
 
 ### Debug a UI flow with traces
 
 ```bash
-exec_tool('npx @playwright/mcp playwright-cli open https://example.com')
-exec_tool('npx @playwright/mcp playwright-cli tracing-start')
+exec('npx @playwright/mcp playwright-cli open https://example.com')
+exec('npx @playwright/mcp playwright-cli tracing-start')
 # ...interactions...
-exec_tool('npx @playwright/mcp playwright-cli tracing-stop')
+exec('npx @playwright/mcp playwright-cli tracing-stop')
 ```
 
 ### Multi-tab work
 
 ```bash
-exec_tool('npx @playwright/mcp playwright-cli tab-new https://example.com')
-exec_tool('npx @playwright/mcp playwright-cli tab-list')
-exec_tool('npx @playwright/mcp playwright-cli tab-select 0')
-exec_tool('npx @playwright/mcp playwright-cli snapshot')
+exec('npx @playwright/mcp playwright-cli tab-new https://example.com')
+exec('npx @playwright/mcp playwright-cli tab-list')
+exec('npx @playwright/mcp playwright-cli tab-select 0')
+exec('npx @playwright/mcp playwright-cli snapshot')
 ```
 
 ## Guardrails

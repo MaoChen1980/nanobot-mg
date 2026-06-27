@@ -50,24 +50,14 @@ class ReadFileTool(_FsTool):
     _MAX_CHARS = 256_000
     _DEFAULT_LIMIT = 2000
     _MAX_PDF_PAGES = 20
+    instruction = "Read file contents (text/images/PDF/Office). For file/directory searches use glob, not read_file."
 
-    name = "read_file_tool"
+    name = "read_file"
 
     description = (
-        "**Purpose**: Read file contents (text/images/PDF/Office). Supports mode selection, regex filtering, and line-based pagination.\n\n"
-        "**Output Format (mode=full)**:\n"
-        "Each line is formatted as `LINENO:4CHAR_TAG| CONTENT` (e.g. `42:Q8fA| def foo():`).\n"
-        "The TAG is a 4-character checksum of the line content for visual change detection.\n\n"
-        "**Modes**:\n"
-        "- `mode=full` (default) — Full read, supports offset+limit pagination\n"
-        "- `mode=overview` — For large files: previews structure (headings/sections) without reading full content into context, so you can decide which sections to read\n"
-        "- `extract=regex` — Return only matching lines + 1 line of context before/after each match, replaces grep+cat combo\n\n"
-        "**When to use**:\n"
-        "- When viewing file contents\n"
-        "- Large files: first use `mode=overview` to preview structure, then read the relevant section\n"
-        "- When reading large files in segments via offset+limit\n"
-        "- When extracting text from PDF or Office documents\n"
-        "- When extracting matching lines via regex\n\n"
+        "Read file contents with optional line-based pagination, regex filtering, "
+        "and mode selection (full/overview). "
+        "Supports text, images, PDFs, and Office documents (.docx/.xlsx/.pptx)."
     )
 
     read_only = True
@@ -264,5 +254,4 @@ class ReadFileTool(_FsTool):
 # ---------------------------------------------------------------------------
 # write_file
 # ---------------------------------------------------------------------------
-
 

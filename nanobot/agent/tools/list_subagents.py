@@ -15,17 +15,15 @@ class ListSubagentsTool(Tool):
 
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
+    instruction = "List all running subagents and their status. Use before check/cancel/send_message to get task_id or label."
 
-    name = "list_subagents_tool"
+    name = "list_subagents"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: List all running background subagents and their status.\n\n"
-            "**When to use**:\n"
-            "- Want to know how many subagents are currently running\n"
-            "- Forgot a subagent's task_id\n"
-            "- Batch-check subagent progress\n\n"
+            "List all active subagents with their task_id, label, phase, "
+            "and iteration count."
         )
 
     async def execute(self, **kwargs: Any) -> str:

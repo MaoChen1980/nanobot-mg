@@ -1,8 +1,8 @@
 """Tests for MemorySearchTool and ConversationSearchTool.
 
 Regression and integration tests for:
-  - Semantic search (FAISS) — memory_search_tool
-  - Character substring search (SQL LIKE) — conversation_search_tool
+  - Semantic search (FAISS) — memory_search
+  - Character substring search (SQL LIKE) — conversation_search
   - | OR operator for multi-keyword session search
   - MEMORY.md matching with OR
   - Edge cases (empty keyword, separator-only, etc.)
@@ -87,11 +87,11 @@ class TestMemorySearchToolBasic:
 
     def test_tool_name(self, tmp_path: Path):
         tool = MemorySearchTool(_make_store(tmp_path))
-        assert tool.name == "memory_search_tool"
+        assert tool.name == "memory_search"
 
     def test_tool_description(self, tmp_path: Path):
         tool = MemorySearchTool(_make_store(tmp_path))
-        assert "memory_search_tool" in tool.description or "知识库" in tool.description
+        assert "memory_search" in tool.description or "知识库" in tool.description
 
     def test_tool_is_read_only(self, tmp_path: Path):
         tool = MemorySearchTool(_make_store(tmp_path))
@@ -161,11 +161,11 @@ class TestConversationSearchToolBasic:
 
     def test_tool_name(self, tmp_path: Path):
         tool = ConversationSearchTool(_make_store(tmp_path))
-        assert tool.name == "conversation_search_tool"
+        assert tool.name == "conversation_search"
 
     def test_tool_description(self, tmp_path: Path):
         tool = ConversationSearchTool(_make_store(tmp_path))
-        assert "conversation_search_tool" in tool.description or "对话" in tool.description
+        assert "conversation_search" in tool.description or "对话" in tool.description
 
     def test_tool_is_read_only(self, tmp_path: Path):
         tool = ConversationSearchTool(_make_store(tmp_path))
@@ -328,7 +328,7 @@ class TestConversationSearchOROperator:
 # ===========================================================================
 
 class TestConversationSearchScenario:
-    """Realistic scenario tests for conversation_search_tool."""
+    """Realistic scenario tests for conversation_search."""
 
     @pytest.mark.asyncio
     async def test_deploy_rollback_scenario(self, tmp_path: Path):

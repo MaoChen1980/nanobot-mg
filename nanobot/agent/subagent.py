@@ -50,7 +50,7 @@ class _SubagentHook(AgentHook):
 
         # Inject conversation context into thinking tools that need it
         if self._tools is not None:
-            for name in ("assess_me_tool", "debug_root_cause_tool"):
+            for name in ("assess_me", "debug_root_cause"):
                 tool = self._tools.get(name)
                 if tool is not None:
                     sc = getattr(tool, "set_context", None)
@@ -253,7 +253,7 @@ class SubagentManager:
                     injection_callback=_drain_inbox,
                     reasoning_effort=self.runner.provider.generation.reasoning_effort,
                     session_key=origin["session_key"],
-                    instructions=lambda: self._context_builder.build_instructions_section(for_subagent=True, session_key=origin["session_key"]) if self._context_builder else None,
+                    instructions=lambda: self._context_builder.build_instructions_section(for_subagent=True, session_key=origin["session_key"], tool_instruction_map=tools.get_instruction_map()) if self._context_builder else None,
                 ))
 
                 # Save conversation snapshot for MemoryExtractor

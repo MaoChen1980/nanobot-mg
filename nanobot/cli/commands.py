@@ -716,12 +716,12 @@ def agent(
         # Wire cron handler for interactive mode
         async def _cli_cron_handler(job: Any) -> str | None:
             from nanobot.agent.tools.cron import CronTool
-            cron_tool = agent_loop.tools.get("cron_tool")
+            cron = agent_loop.tools.get("cron")
             cron_token = None
             cron_job_token = None
-            if isinstance(cron_tool, CronTool):
-                cron_token = cron_tool.set_cron_context(True)
-                cron_job_token = cron_tool.set_current_job_id(job.id)
+            if isinstance(cron, CronTool):
+                cron_token = cron.set_cron_context(True)
+                cron_job_token = cron.set_current_job_id(job.id)
 
             reminder_note = (
                 "The scheduled time has arrived. Deliver this reminder to the user now, "
@@ -742,10 +742,10 @@ def agent(
                     chat_id=job.payload.to or cli_chat_id,
                 )
             finally:
-                if isinstance(cron_tool, CronTool) and cron_token is not None:
-                    cron_tool.reset_cron_context(cron_token)
-                if isinstance(cron_tool, CronTool) and cron_job_token is not None:
-                    cron_tool.reset_current_job_id(cron_job_token)
+                if isinstance(cron, CronTool) and cron_token is not None:
+                    cron.reset_cron_context(cron_token)
+                if isinstance(cron, CronTool) and cron_job_token is not None:
+                    cron.reset_current_job_id(cron_job_token)
             response = resp.content if resp else ""
             if response:
                 console.print(f"\n[bold yellow]⏰ Cron:[/bold yellow] {response}\n")

@@ -35,31 +35,19 @@ class ReframeTool(Tool):
 
     def __init__(self, workspace: Path | None = None) -> None:
         self._workspace = workspace
+    instruction = (
+        "Reset focus when stuck in a loop or state is corrupted. "
+        "Call when: any error or unexpected result, picture is getting messy after multiple attempts, "
+        "you have multiple paths and need trade-off analysis, or you keep hitting the same wall. "
+        "Compare with debug_root_cause which recommends an investigation methodology."
+    )
 
-    name = "reframe_tool"
+    name = "reframe"
     description = (
-        "**Purpose**: Strip away the noise of everything you've tried and get a clean, "
-        "focused answer from the model on what to do next. You provide the facts (what "
-        "happened, what you tried, what went wrong), the model sees only that — not the "
-        "surrounding tool call clutter — and gives you an unbiased direction.\n\n"
-        "**When to call — when you need a clean break from the noise**:\n"
-        "- Any error or unexpected result — reframe instead of retrying blindly\n"
-        "- You tried a few things and the picture is getting messy — reframe to organize "
-        "what you know\n"
-        "- You have multiple paths forward and need a trade-off analysis\n"
-        "- You keep hitting the same wall and need a fresh perspective on the same evidence\n\n"
-        "**What to provide**:\n"
-        "- `question` and `goal` are required — be precise about what happened and what "
-        "you want\n"
-        "- Fill `attempts`, `difficulties`, `constraints`, `resources` as needed — more "
-        "context = better answer\n\n"
-        "**How it differs from `debug_root_cause_tool`**:\n"
-        "- `debug_root_cause_tool` recommends an investigation **methodology** "
-        "(which RCA approach to use and what to look for)\n"
-        "- `reframe_tool` strips tool noise and gets the model to **answer the question "
-        "directly** — useful when you already know what the problem is but need a "
-        "clear direction\n\n"
-        "**Note**: This costs tokens. Be specific for best results."
+        "Provide the facts (what happened, what you tried, what went wrong) and get a clean, "
+        "focused answer without tool call clutter. "
+        "question and goal are required. Fill attempts, difficulties, constraints, resources "
+        "for better context. Costs tokens — be specific."
     )
 
     read_only = True

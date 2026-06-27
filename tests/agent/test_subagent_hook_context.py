@@ -6,7 +6,7 @@ import pytest
 
 from nanobot.agent.hook import AgentHookContext
 from nanobot.agent.subagent import _SubagentHook
-from nanobot.agent.tools.assess_me_tool import AssessMeTool
+from nanobot.agent.tools.assess_me import AssessMeTool
 from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
 from nanobot.agent.tools.registry import ToolRegistry
 

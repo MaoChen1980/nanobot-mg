@@ -14,7 +14,7 @@ from nanobot.agent.tools import file_state
 @tool_parameters(
     build_parameters_schema(
         path=p("string", "Absolute path to a file to write. OVERWRITES existing file, auto-creates parent directories."),
-        content=p("string", "Full file content to write. Replaces entire file — use edit_file_tool for partial edits or substitutions.", minLength=0),
+        content=p("string", "Full file content to write. Replaces entire file — use edit_file for partial edits or substitutions.", minLength=0),
         then_exec=p("string",
             "If set to a shell command string, executes it after writing (and after then_check if set) "
             "and returns the command output. Working directory is the written file's parent. "
@@ -42,20 +42,14 @@ from nanobot.agent.tools import file_state
 )
 class WriteFileTool(_FsTool):
     """Write content to a file. Overwrites if it exists; creates parent dirs as needed."""
+    instruction = "Create or overwrite a file with content. Use edit_file for surgical edits to existing files."
 
-    name = "write_file_tool"
+    name = "write_file"
 
     description = (
-        "**Purpose**: Create a new file or fully overwrite an existing file.\n\n"
-        "**When to use**:\n"
-        "- When creating a new file\n"
-        "- When fully replacing file contents\n"
-        "- When auto-verification, type-checking, or command execution is needed after writing\n\n"
-        "**Post-processing chain** (executed in order):\n"
-        "- `then_grep` — Search for a string after writing to verify success without re-reading the whole file\n"
-        "- `then_check` — Run type-checking (pyright/tsc) after writing, returns pass/fail + error details\n"
-        "- `then_exec` — Execute a shell command after writing and verification (working directory is the file's parent)\n"
-        "All three can be combined, e.g. write → then_check → then_exec.\n\n"
+        "Create a new file or fully overwrite an existing file. "
+        "Auto-creates parent directories. Supports post-processing chain: "
+        "then_grep (verify), then_check (type-check), then_exec (run command)."
     )
 
     async def execute(
@@ -89,9 +83,9 @@ class WriteFileTool(_FsTool):
                         problem=reason,
                         risk="You may overwrite content you haven't verified — potential data loss",
                         suggestion="Back up the file first (git commit or save_checkpoint), "
-                                   "then read it with read_file_tool to verify its contents, "
-                                   "or use edit_file_tool for targeted edits",
-                        tool_name="write_file_tool",
+                                   "then read it with read_file to verify its contents, "
+                                   "or use edit_file for targeted edits",
+                        tool_name="write_file",
                     )
 
             # Read-before-write check: warn if overwriting unread content
@@ -122,11 +116,11 @@ class WriteFileTool(_FsTool):
             exec_result = ""
             if then_exec:
                 from nanobot.agent.tools.shell import ExecTool
-                exec_tool = ExecTool(
+                exec = ExecTool(
                     working_dir=str(fp.parent),
                     restrict_to_workspace=True,
                 )
-                exec_result = f"\n\nExec output:\n{await exec_tool.execute(then_exec)}"
+                exec_result = f"\n\nExec output:\n{await exec.execute(then_exec)}"
 
             parts = [write_result]
             if verify_result:
@@ -159,15 +153,15 @@ class WriteFileTool(_FsTool):
         from nanobot.agent.tools.shell import ExecTool
 
         wd = self._workspace or fp.parent
-        exec_tool = ExecTool(working_dir=str(wd), restrict_to_workspace=True)
+        exec = ExecTool(working_dir=str(wd), restrict_to_workspace=True)
 
         if checker == "pyright":
             cmd = f"npx --prefix tools pyright {fp} --outputjson"
-            raw = await exec_tool.execute(cmd)
+            raw = await exec.execute(cmd)
             return self._format_pyright_result(raw)
         elif checker == "tsc":
             cmd = f"npx --prefix tools tsc --noEmit --allowJs --checkJs {fp}"
-            raw = await exec_tool.execute(cmd)
+            raw = await exec.execute(cmd)
             return self._format_tsc_result(raw)
         else:
             return f"\nCheck: unknown checker '{checker}' (use 'auto', 'pyright', or 'tsc')"

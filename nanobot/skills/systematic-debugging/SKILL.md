@@ -68,7 +68,7 @@ You MUST complete each phase before proceeding to the next.
 - Read stack traces completely
 - Note line numbers, file paths, error codes
 
-**Action:** Use `read_file_tool` on the relevant source files. Use `grep_tool` to find the error string in the codebase.
+**Action:** Use `read_file` on the relevant source files. Use `grep` to find the error string in the codebase.
 
 ### 2. Reproduce Consistently
 
@@ -77,7 +77,7 @@ You MUST complete each phase before proceeding to the next.
 - Does it happen every time?
 - If not reproducible → gather more data, don't guess
 
-**Action:** Use `exec_tool` to run the failing test or trigger the bug:
+**Action:** Use `exec` to run the failing test or trigger the bug:
 
 ```bash
 # Run specific failing test
@@ -131,14 +131,14 @@ THEN investigate that specific component.
 - Keep tracing upstream until you find the source
 - Fix at the source, not at the symptom
 
-**Action:** Use `grep_tool` to trace references:
+**Action:** Use `grep` to trace references:
 
 ```python
 # Find where the function is called
-grep_tool(pattern="function_name(", path="src/")
+grep(pattern="function_name(", path="src/")
 
 # Find where the variable is set
-grep_tool(pattern="variable_name\\s*=", path="src/")
+grep(pattern="variable_name\\s*=", path="src/")
 ```
 
 ### Phase 1 Completion Checklist
@@ -163,10 +163,10 @@ grep_tool(pattern="variable_name\\s*=", path="src/")
 - Locate similar working code in the same codebase
 - What works that's similar to what's broken?
 
-**Action:** Use `grep_tool` to find comparable patterns:
+**Action:** Use `grep` to find comparable patterns:
 
 ```python
-grep_tool(pattern="similar_pattern", path="src/")
+grep(pattern="similar_pattern", path="src/")
 ```
 
 ### 2. Compare Against References
@@ -321,17 +321,17 @@ If you catch yourself thinking:
 
 Use these tools during Phase 1:
 
-- **`grep_tool` / `glob_tool`** — Find error strings, trace function calls, locate patterns
-- **`read_file_tool`** — Read source code with line numbers for precise analysis
-- **`exec_tool`** — Run tests, check git history, reproduce bugs
-- **`web_search_tool` / `web_fetch_tool`** — Research error messages, library docs
+- **`grep` / `glob`** — Find error strings, trace function calls, locate patterns
+- **`read_file`** — Read source code with line numbers for precise analysis
+- **`exec`** — Run tests, check git history, reproduce bugs
+- **`web_search` / `web_fetch`** — Research error messages, library docs
 
-### With spawn_tool
+### With spawn
 
 For complex multi-component debugging, dispatch investigation subagents:
 
 ```
-spawn_tool(tasks=[{
+spawn(tasks=[{
     "label": "debug-investigator",
     "role": "debug investigator",
     "task": """Follow systematic-debugging skill:

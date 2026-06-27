@@ -334,7 +334,7 @@ class HubTCPServer:
             tool_hint: bool = False,
             tool_events: list | None = None,
         ) -> None:
-            _user_tools = frozenset(["message_tool"])
+            _user_tools = frozenset(["message"])
             has_non_user_event = False
             if tool_events:
                 for te in tool_events:

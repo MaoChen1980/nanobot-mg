@@ -133,7 +133,7 @@ def check_command_safety(
             risk="Potential data loss, system damage, or security breach",
             suggestion="Consider using dedicated file/edit/delete tools instead of raw shell commands. "
                        "If you must proceed, ensure you have a rollback plan (e.g., git commit first)",
-            tool_name="exec_tool",
+            tool_name="exec",
         )
 
     if allow_patterns:
@@ -142,7 +142,7 @@ def check_command_safety(
                 problem="Command does not match any allowed pattern",
                 risk="The command is not in the configured allowlist",
                 suggestion="Use a command that matches one of the allowed patterns",
-                tool_name="exec_tool",
+                tool_name="exec",
             )
 
     error = _check_internal_url(cmd)
@@ -150,8 +150,8 @@ def check_command_safety(
         return danger_warning(
             problem="Command targets an internal or private network address",
             risk="May accidentally access or expose internal services",
-            suggestion="Use web_fetch_tool for HTTP requests — it has built-in SSRF protection",
-            tool_name="exec_tool",
+            suggestion="Use web_fetch for HTTP requests — it has built-in SSRF protection",
+            tool_name="exec",
         )
 
     error = _check_path_traversal(cmd, restrict_to_workspace)
@@ -160,7 +160,7 @@ def check_command_safety(
             problem="Command contains path traversal (../)",
             risk="May access files outside the allowed workspace",
             suggestion="Use absolute paths within the workspace",
-            tool_name="exec_tool",
+            tool_name="exec",
         )
 
     error = _check_workspace_boundary(cmd, cwd, workspace_root, restrict_to_workspace)
@@ -169,7 +169,7 @@ def check_command_safety(
             problem="Command accesses paths outside the allowed workspace",
             risk="May modify files outside the project directory",
             suggestion="Use paths within the workspace",
-            tool_name="exec_tool",
+            tool_name="exec",
         )
 
     return None

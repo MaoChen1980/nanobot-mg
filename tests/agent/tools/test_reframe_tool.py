@@ -229,7 +229,7 @@ class TestExecuteErrors:
 class TestToolMetadata:
 
     def test_tool_name(self):
-        assert ReframeTool.name == "reframe_tool"
+        assert ReframeTool.name == "reframe"
 
     def test_read_only(self):
         assert ReframeTool.read_only is True

@@ -175,7 +175,7 @@ class TestExecuteErrors:
 class TestToolMetadata:
 
     def test_tool_name(self):
-        assert DebugRootCauseTool.name == "debug_root_cause_tool"
+        assert DebugRootCauseTool.name == "debug_root_cause"
 
     def test_read_only(self):
         assert DebugRootCauseTool.read_only is True
@@ -184,7 +184,7 @@ class TestToolMetadata:
         assert "Purpose" in DebugRootCauseTool.description
 
     def test_description_differentiates_from_assess_me(self):
-        assert "assess_me_tool" in DebugRootCauseTool.description
+        assert "assess_me" in DebugRootCauseTool.description
 
 
 # ---------------------------------------------------------------------------

@@ -146,7 +146,7 @@ def is_assessment_message(msg: dict) -> bool:
     """Check if a message is an assessment (prefixed with the reminder marker).
 
     Only matches ``role=user`` messages — tool results with the same prefix
-    (from explicit ``assess_me_tool`` calls) are left alone.
+    (from explicit ``assess_me`` calls) are left alone.
     """
     if msg.get("role") != "user":
         return False

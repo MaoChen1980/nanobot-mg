@@ -19,27 +19,19 @@ from nanobot.agent.tools.schema import p, build_parameters_schema
 )
 class AssessMeTool(Tool):
     """Audit your own cognition: separate LLM reads the full conversation as a neutral observer and reports what you know, don't know, are assuming, and have left unverified."""
+    instruction = (
+        "Get a second LLM evaluation when unsure about direction or correctness. "
+        "Call when: a tool returned confusing results, you're going in circles, "
+        "you have multiple competing hypotheses, or before doing something expensive "
+        "to check if your premise is solid."
+    )
 
-    name = "assess_me_tool"
+    name = "assess_me"
     description = (
-        "**What it does**: A separate LLM reads this entire conversation as a neutral observer "
-        "and tells you whether your debugging direction is sound — whether your assumptions "
-        "hold up, what you might have missed, and whether you're going in circles. It's an "
-        "objective second opinion without leaving the conversation.\n\n"
-        "**When to call — when you need a sanity check on your debugging direction**:\n"
-        "- A tool returned a confusing result and you're not sure if you misused it or "
-        "the problem is elsewhere\n"
-        "- You tried a few approaches but keep getting the same or similar errors — "
-        "call with `verify=\"my direction is right, the problem is in X\"` to get a pass/fail\n"
-        "- You feel like you're going in circles — call with `focus=\"direction\"` to get "
-        "an outside view on whether your approach makes sense\n"
-        "- You're about to try something expensive (long exec, many greps) and want to "
-        "check if your premise is solid first\n"
-        "- You have multiple competing hypotheses and want to know which one has the "
-        "most evidence behind it\n\n"
-        "**Key difference**: This doesn't search code or fetch new information. "
-        "It re-reads everything you've already done and tells you if you're on the "
-        "right track or wasting time."
+        "A separate LLM reads this entire conversation as a neutral observer and reports "
+        "whether your debugging direction is sound, what assumptions need verification, "
+        "and what you might have missed. Focus options: direction, gaps, assumptions, "
+        "progress. Also supports verify= for pass/fail on specific claims."
     )
     read_only = True
 

@@ -110,20 +110,15 @@ class MessageTool(Tool):
     @_sent_in_turn.setter
     def _sent_in_turn(self, value: bool) -> None:
         self._sent_in_turn_var.set(value)
+    instruction = "Send messages/files/buttons to the user. Do NOT use exec or plain text replies to send messages."
 
-    name = "message_tool"
+    name = "message"
 
     description = (
-        "**Purpose**: Send a message to the user, optionally with file attachments, "
-        "then continue working. "
-        "Unlike natural text output (which ends the turn and waits for user reply), "
-        "this tool delivers the message immediately while the agent loop continues.\n\n"
-        "**When to use**:\n"
-        "- You need to send a text message without stopping the agent loop\n"
-        "- You need to send files (documents, images, PDFs, spreadsheets, etc.) to the user — "
-        "pass their absolute paths via the **media** parameter\n"
-        "**When NOT to use**:\n"
-        "- If you're done working and just want to reply — use natural text output instead\n"
+        "Send a message or results to the user through chat channels. "
+        "Supports text, file attachments (media), inline keyboard buttons, "
+        "and cross-channel replies. Unlike text output, sending a message "
+        "does not end the turn."
     )
 
     async def execute(

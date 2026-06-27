@@ -25,15 +25,13 @@ from nanobot.agent.tools.schema import p
 }, required=["source", "dest"])
 class MoveFileTool(_FsTool):
     """Move or rename a file. Workspace-guarded, single-file only."""
+    instruction = "Move or rename files. Source and destination must be on the same filesystem."
 
-    name = "move_file_tool"
+    name = "move_file"
     description = (
-        "**Purpose**: Move or rename a single file.\n\n"
-        "**When to use**:\n"
-        "- When moving a file to another directory\n"
-        "- When renaming a file\n\n"
-        "**Danger detection**: Enabled by default. Overwriting an existing file triggers a warning. "
-        "Use danger_override=true to proceed when you are sure.\n"
+        "Move or rename a single file. If destination is an existing directory, "
+        "the file is moved inside with original name. "
+        "Danger detection enabled by default for overwriting existing destinations."
     )
 
     _pre_validators = [PathExists("source"), PathType("source", "file")]
@@ -54,7 +52,7 @@ class MoveFileTool(_FsTool):
                 problem=f"Destination already exists: {dst_resolved.name}{size_str}",
                 risk="Moving will overwrite the existing destination file — potential data loss",
                 suggestion="Back up the destination file first (git commit or save_checkpoint), read its contents to verify, or choose a different destination path",
-                tool_name="move_file_tool",
+                tool_name="move_file",
             )
 
         shutil.move(str(src_resolved), str(dst_resolved))

@@ -17,10 +17,10 @@ This skill sets up authentication so the agent can work with GitHub repositories
 When a user asks you to work with GitHub, run this check first:
 
 ```bash
-exec_tool("git --version")
-exec_tool("gh --version 2>/dev/null || echo 'gh not installed'")
-exec_tool("gh auth status 2>/dev/null || echo 'gh not authenticated'")
-exec_tool("git config --global credential.helper 2>/dev/null || echo 'no git credential helper'")
+exec("git --version")
+exec("gh --version 2>/dev/null || echo 'gh not installed'")
+exec("gh auth status 2>/dev/null || echo 'gh not authenticated'")
+exec("git config --global credential.helper 2>/dev/null || echo 'no git credential helper'")
 ```
 
 **Decision tree:**
@@ -56,12 +56,12 @@ Tell the user to go to: **https://github.com/settings/tokens**
 ```bash
 # Set up the credential helper to cache credentials
 # "store" saves to ~/.git-credentials in plaintext (simple, persistent)
-exec_tool("git config --global credential.helper store")
+exec("git config --global credential.helper store")
 
 # Now do a test operation that triggers auth — git will prompt for credentials
 # Username: <their-github-username>
 # Password: <paste the personal access token, NOT their GitHub password>
-exec_tool("git ls-remote https://github.com/<their-username>/<any-repo>.git")
+exec("git ls-remote https://github.com/<their-username>/<any-repo>.git")
 ```
 
 After entering credentials once, they're saved and reused for all future operations.
@@ -69,28 +69,28 @@ After entering credentials once, they're saved and reused for all future operati
 **Alternative: cache helper (credentials expire from memory)**
 
 ```bash
-exec_tool("git config --global credential.helper 'cache --timeout=28800'")
+exec("git config --global credential.helper 'cache --timeout=28800'")
 ```
 
 **Alternative: set the token directly in the remote URL (per-repo)**
 
 ```bash
-exec_tool("git remote set-url origin https://<username>:<token>@github.com/<owner>/<repo>.git")
+exec("git remote set-url origin https://<username>:<token>@github.com/<owner>/<repo>.git")
 ```
 
 **Step 3: Configure git identity**
 
 ```bash
-exec_tool("git config --global user.name 'Their Name'")
-exec_tool("git config --global user.email 'their-email@example.com'")
+exec("git config --global user.name 'Their Name'")
+exec("git config --global user.email 'their-email@example.com'")
 ```
 
 **Step 4: Verify**
 
 ```bash
-exec_tool("git ls-remote https://github.com/<their-username>/<any-repo>.git")
-exec_tool("git config --global user.name")
-exec_tool("git config --global user.email")
+exec("git ls-remote https://github.com/<their-username>/<any-repo>.git")
+exec("git config --global user.name")
+exec("git config --global user.email")
 ```
 
 ### Option B: SSH Key Authentication
@@ -100,14 +100,14 @@ Good for users who prefer SSH or already have keys set up.
 **Step 1: Check for existing SSH keys**
 
 ```bash
-exec_tool("ls -la ~/.ssh/id_*.pub 2>/dev/null || echo 'No SSH keys found'")
+exec("ls -la ~/.ssh/id_*.pub 2>/dev/null || echo 'No SSH keys found'")
 ```
 
 **Step 2: Generate a key if needed**
 
 ```bash
-exec_tool("ssh-keygen -t ed25519 -C 'their-email@example.com' -f ~/.ssh/id_ed25519 -N ''")
-exec_tool("cat ~/.ssh/id_ed25519.pub")
+exec("ssh-keygen -t ed25519 -C 'their-email@example.com' -f ~/.ssh/id_ed25519 -N ''")
+exec("cat ~/.ssh/id_ed25519.pub")
 ```
 
 Tell the user to add the public key at: **https://github.com/settings/keys**
@@ -118,21 +118,21 @@ Tell the user to add the public key at: **https://github.com/settings/keys**
 **Step 3: Test the connection**
 
 ```bash
-exec_tool("ssh -T git@github.com")
+exec("ssh -T git@github.com")
 # Expected: "Hi <username>! You've successfully authenticated..."
 ```
 
 **Step 4: Configure git to use SSH for GitHub**
 
 ```bash
-exec_tool('git config --global url."git@github.com:".insteadOf "https://github.com/"')
+exec('git config --global url."git@github.com:".insteadOf "https://github.com/"')
 ```
 
 **Step 5: Configure git identity**
 
 ```bash
-exec_tool("git config --global user.name 'Their Name'")
-exec_tool("git config --global user.email 'their-email@example.com'")
+exec("git config --global user.name 'Their Name'")
+exec("git config --global user.email 'their-email@example.com'")
 ```
 
 ---
@@ -144,20 +144,20 @@ If `gh` is installed, it handles both API access and git credentials in one step
 ### Interactive Browser Login (Desktop)
 
 ```bash
-exec_tool("gh auth login")
+exec("gh auth login")
 ```
 
 ### Token-Based Login (Headless / SSH Servers)
 
 ```bash
-exec_tool("echo '<THEIR_TOKEN>' | gh auth login --with-token")
-exec_tool("gh auth setup-git")
+exec("echo '<THEIR_TOKEN>' | gh auth login --with-token")
+exec("gh auth setup-git")
 ```
 
 ### Verify
 
 ```bash
-exec_tool("gh auth status")
+exec("gh auth status")
 ```
 
 ---

@@ -50,15 +50,12 @@ _CRON_PARAMETERS = build_parameters_schema(
     ),
     required=["action"],
     description=(
-        "Schedule recurring or one-shot tasks.\n\n"
-        "Use this when:\n"
-        "- You need a reminder at a specific time or interval\n"
-        "- You want to schedule recurring checks or maintenance\n"
-        "- You need to run a task at a future time\n\n"
+        "Schedule timed/recurring tasks. "
+        "当用户说'每天早上X点'、'每X小时'、'定期'、'定时'时，使用此工具安排任务。\n\n"
         "Actions: add (needs message + schedule), remove (needs job_id), "
-        "update (job_id + fields to change), list (view all), "
-        "test (run immediately for debugging). "
-        "Schedule options: every_seconds, cron_expr, or at (ISO 8601)."
+        "update, list, test. "
+        "Schedule options: every_N_seconds, cron_expr, or at (ISO 8601 time).\n\n"
+        "Do NOT use glob or grep for scheduling — use this tool."
     ),
 )
 
@@ -146,17 +143,17 @@ class CronTool(Tool):
 
         dt = datetime.fromtimestamp(ms / 1000, tz=ZoneInfo(tz_name))
         return _format_datetime(dt)
+    instruction = "Schedule timed/recurring tasks. Trigger phrases: '每天早上X点', '每X小时', '定期', '定时'. Call this tool directly — do NOT search for how to schedule."
 
-    name = "cron_tool"
+    name = "cron"
 
     @property
     def description(self) -> str:
         return (
-            "**Purpose**: Schedule timed or recurring tasks.\n\n"
-            "**When to use**:\n"
-            "- When you need to execute tasks at fixed intervals, via cron expressions, or as one-time scheduled tasks\n"
-            "- Supports three scheduling modes: every_seconds (interval), cron_expr (cron expression), at (one-time)\n\n"
-            "**Note**: tz parameter can only be used together with cron_expr. "
+            "Schedule timed/recurring tasks. Supports three modes: "
+            "every_seconds (interval), cron_expr (cron expression), at (one-time). "
+            "Actions: add, remove, update, list, test. "
+            "tz parameter works only with cron_expr. "
             "System tasks (e.g., extractor) cannot be deleted/modified."
         )
 

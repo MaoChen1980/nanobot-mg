@@ -55,9 +55,9 @@ def test_openai_compat_marks_builtin_boundary_and_tail_tool() -> None:
     ]
     _, marked_tools = OpenAICompatProvider._apply_cache_control(
         messages,
-        _openai_tools("read_file_tool", "write_file_tool", "mcp_fs_ls", "mcp_git_status"),
+        _openai_tools("read_file", "write_file", "mcp_fs_ls", "mcp_git_status"),
     )
-    assert _marked_openai_tool_names(marked_tools) == ["write_file_tool", "mcp_git_status"]
+    assert _marked_openai_tool_names(marked_tools) == ["write_file", "mcp_git_status"]
 
 
 def test_anthropic_marks_builtin_boundary_and_tail_tool() -> None:
@@ -69,9 +69,9 @@ def test_anthropic_marks_builtin_boundary_and_tail_tool() -> None:
     _, _, marked_tools = AnthropicProvider._apply_cache_control(
         "system",
         messages,
-        _anthropic_tools("read_file_tool", "write_file_tool", "mcp_fs_ls", "mcp_git_status"),
+        _anthropic_tools("read_file", "write_file", "mcp_fs_ls", "mcp_git_status"),
     )
-    assert _marked_anthropic_tool_names(marked_tools) == ["write_file_tool", "mcp_git_status"]
+    assert _marked_anthropic_tool_names(marked_tools) == ["write_file", "mcp_git_status"]
 
 
 def test_openai_compat_marks_only_tail_without_mcp() -> None:
@@ -82,6 +82,6 @@ def test_openai_compat_marks_only_tail_without_mcp() -> None:
     ]
     _, marked_tools = OpenAICompatProvider._apply_cache_control(
         messages,
-        _openai_tools("read_file_tool", "write_file_tool"),
+        _openai_tools("read_file", "write_file"),
     )
-    assert _marked_openai_tool_names(marked_tools) == ["write_file_tool"]
+    assert _marked_openai_tool_names(marked_tools) == ["write_file"]

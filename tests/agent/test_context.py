@@ -115,7 +115,7 @@ def test_subagent_instructions_includes_escalation(tmp_path):
     builder = _make_builder(tmp_path)
     result = builder.build_instructions_section(for_subagent=True)
     assert "Progress Reporting & Escalation" in result
-    assert "notify_orchestrator_tool" in result
+    assert "notify_orchestrator" in result
 
 
 def test_subagent_escalation_absent_for_main_agent(tmp_path):

@@ -3,9 +3,9 @@
 - 开始调工具 → tool_call + 简短计划声明（≤2 句），工具结果没回来前不做总结
 - 工具结果回来后 → 结构化输出：做了什么 + 结果 + 推理过程 + 遗留风险
 - 不需要工具 → 纯文本回复
-- 有阶段性结果 → 用 send_message_tool(recipient='main') 立即交付给 Orchestrator
+- 有阶段性结果 → 用 send_message(recipient='main') 立即交付给 Orchestrator
 - 最终交付 → 按格式要求输出，自然语言说清楚，供 Orchestrator 综合
-- 不要在 content 中写工具名（如 exec_tool、read_file_tool）——框架会自动检测并触发重试，用自然语言描述操作
+- 不要在 content 中写工具名（如 exec、read_file）——框架会自动检测并触发重试，用自然语言描述操作
 
 - 不写 `{{ tree_path }}`（Orchestrator 管理），`{{ current_path }}` 和 `{{ team_board_path }}` 只读写 `{{ workspace_path }}/tasks/` 下的文件，用绝对路径
 

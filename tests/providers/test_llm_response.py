@@ -16,7 +16,7 @@ from nanobot.providers.base import LLMResponse, ToolCallRequest
 
 def _response(finish_reason: str, *, with_tool_call: bool = True) -> LLMResponse:
     tool_calls = (
-        [ToolCallRequest(id="call_1", name="glob_tool", arguments={"pattern": "*", "path": "."})]
+        [ToolCallRequest(id="call_1", name="glob", arguments={"pattern": "*", "path": "."})]
         if with_tool_call
         else []
     )

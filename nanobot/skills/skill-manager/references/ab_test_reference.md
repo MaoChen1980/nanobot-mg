@@ -22,8 +22,8 @@ The `SpawnTool` has the same pattern — it accesses `self._manager` which holds
    - `provider` — get from `self._loop.provider` in a tool
    - `task` — the task description string to test
    - `skill` — the skill name under test
-3. Write the filled script to workspace with `write_file_tool`
-4. Run with `exec_tool`
+3. Write the filled script to workspace with `write_file`
+4. Run with `exec`
 5. Read results from `ab_test_result.json`
 
 ## Interpreting Results
@@ -36,7 +36,7 @@ The `SpawnTool` has the same pattern — it accesses `self._manager` which holds
     "success": true,
     "tool_events": [...],
     "stop_reason": "completed",
-    "tools_used": ["grep_tool", "read_file_tool"]
+    "tools_used": ["grep", "read_file"]
   },
   "with": { ... },
   "diff": {

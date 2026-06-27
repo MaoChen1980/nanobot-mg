@@ -1,4 +1,4 @@
-"""Web tools: web_search_tool and web_fetch_tool."""
+"""Web tools: web_search and web_fetch."""
 
 from __future__ import annotations
 
@@ -116,14 +116,15 @@ def _format_results(query: str, items: list[dict[str, Any]], n: int) -> str:
 class WebSearchTool(WebToolBase, Tool):
     """Search the web using configured provider."""
 
-    name = "web_search_tool"
+    instruction = (
+        "Search the web for the latest information. "
+        "Use for: unfamiliar topics, news, documentation, technical solutions."
+    )
+    name = "web_search"
     description = (
-        "**Purpose**: Search the web for the latest information.\n\n"
-        "**When to use**:\n"
-        "- When you need to look up unfamiliar information, latest news, or online documentation\n"
-        "- When you need to find the latest technical solutions or best practices\n\n"
-        "**Note**: Results come from search engines, 100% accuracy is not guaranteed. "
-        "Returns 5 results by default, up to 10 max."
+        "Search the web. Supports Brave, Tavily, DuckDuckGo, SearXNG, Jina, "
+        "and Kagi providers. Returns text results with title, URL, and snippet. "
+        "Results from search engines — 100% accuracy is not guaranteed."
     )
 
     def __init__(self, config: WebSearchConfig | None = None, proxy: str | None = None, user_agent: str | None = None):
@@ -312,19 +313,14 @@ class WebSearchTool(WebToolBase, Tool):
 )
 class WebFetchTool(WebToolBase, Tool):
     """Fetch and extract content from a URL."""
+    instruction = "Read URL content. Not for search — use web_search first."
 
     _MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB hard cap
-    name = "web_fetch_tool"
+    name = "web_fetch"
     description = (
-        "**Purpose**: Fetch URL content and extract readable text, with support for truncated previews and regex filtering.\n\n"
-        "**When to use**:\n"
-        "- When you already have a URL and need to fetch page content\n"
-        "- Unsure if the page content is useful → preview with `maxChars=1000` first, then decide whether to read in full (default 100000)\n\n"
-        "**Note**: JS-heavy pages may not render completely.\n\n"
-        "**Useful Parameters**:\n"
-        "- `maxChars` — controls the number of returned characters (default 100000), small values for preview, large values for deep reading\n"
-        "- `format` — `markdown` (structured) or `text` (plain text)\n"
-        "- `extract` — regex filtering, only returns matching lines"
+        "Fetch URL content and extract readable text (markdown or plain). "
+        "Supports regex filtering (extract), truncated previews (max_chars), "
+        "and image rendering. JS-heavy pages may not render completely."
     )
 
     def __init__(self, config: WebFetchConfig | None = None, proxy: str | None = None, user_agent: str | None = None, max_chars: int = 100000):

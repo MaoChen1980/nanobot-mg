@@ -323,8 +323,8 @@ class MCPServerConfig(Base):
 class MyToolConfig(Base):
     """Self-inspection tool configuration."""
 
-    enable: bool = True  # register the `self_tool` (agent runtime state inspection)
-    allow_set: bool = False  # let `self_tool` modify loop state (read-only if False)
+    enable: bool = True  # register the `config` (agent runtime state inspection)
+    allow_set: bool = False  # let `config` modify loop state (read-only if False)
 
 
 class ToolsConfig(Base):

@@ -33,7 +33,7 @@ def _fake_chat_response(content: str = "ok") -> SimpleNamespace:
 def _fake_tool_call_response() -> SimpleNamespace:
     """Build a minimal chat response that includes Gemini-style extra_content."""
     function = SimpleNamespace(
-        name="exec_tool",
+        name="exec",
         arguments='{"cmd":"ls"}',
         provider_specific_fields={"inner": "value"},
     )
@@ -608,7 +608,7 @@ def _tool_call(call_id: str) -> dict:
     return {
         "id": call_id,
         "type": "function",
-        "function": {"name": "self_tool", "arguments": "{}"},
+        "function": {"name": "config", "arguments": "{}"},
     }
 
 
@@ -617,7 +617,7 @@ def test_deepseek_thinking_preserves_tool_history_backfills_reasoning_content() 
         {"role": "system", "content": "system"},
         {"role": "user", "content": "can we use wechat?"},
         {"role": "assistant", "content": "", "tool_calls": [_tool_call("call_bad")]},
-        {"role": "tool", "tool_call_id": "call_bad", "name": "self_tool", "content": "channels"},
+        {"role": "tool", "tool_call_id": "call_bad", "name": "config", "content": "channels"},
         {"role": "user", "content": "continue"},
     ])
 
@@ -629,7 +629,7 @@ def test_deepseek_thinking_preserves_tool_history_backfills_reasoning_content() 
     assert msgs[2]["role"] == "assistant"
     assert msgs[2]["content"] is None
     assert msgs[2]["reasoning_content"] == " "
-    assert msgs[2]["tool_calls"][0]["function"]["name"] == "self_tool"
+    assert msgs[2]["tool_calls"][0]["function"]["name"] == "config"
     # Tool message preserved
     assert msgs[3]["role"] == "tool"
     assert msgs[3]["content"] == "channels"
@@ -646,7 +646,7 @@ def test_deepseek_thinking_keeps_tool_history_with_reasoning_content() -> None:
             "reasoning_content": "I should inspect supported channels.",
             "tool_calls": [_tool_call("call_good")],
         },
-        {"role": "tool", "tool_call_id": "call_good", "name": "self_tool", "content": "channels"},
+        {"role": "tool", "tool_call_id": "call_good", "name": "config", "content": "channels"},
         {"role": "user", "content": "continue"},
     ])
 
@@ -661,7 +661,7 @@ def test_deepseek_thinking_preserves_orphan_tool_turn() -> None:
         {"role": "system", "content": "system"},
         {"role": "user", "content": "can we use wechat?"},
         {"role": "assistant", "content": "", "tool_calls": [_tool_call("call_bad")]},
-        {"role": "tool", "tool_call_id": "call_bad", "name": "self_tool", "content": "channels"},
+        {"role": "tool", "tool_call_id": "call_bad", "name": "config", "content": "channels"},
     ])
 
     msgs = kwargs["messages"]
@@ -672,7 +672,7 @@ def test_deepseek_thinking_preserves_orphan_tool_turn() -> None:
     assert msgs[2]["role"] == "assistant"
     assert msgs[2]["content"] is None
     assert msgs[2]["reasoning_content"] == " "
-    assert msgs[2]["tool_calls"][0]["function"]["name"] == "self_tool"
+    assert msgs[2]["tool_calls"][0]["function"]["name"] == "config"
     # Tool message preserved
     assert msgs[3]["role"] == "tool"
     assert msgs[3]["content"] == "channels"
@@ -692,11 +692,11 @@ def test_openai_compat_keeps_tool_calls_after_consecutive_assistant_messages() -
                 {
                     "id": "call_function_akxp3wqzn7ph_1",
                     "type": "function",
-                    "function": {"name": "exec_tool", "arguments": "{}"},
+                    "function": {"name": "exec", "arguments": "{}"},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_function_akxp3wqzn7ph_1", "name": "exec_tool", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_function_akxp3wqzn7ph_1", "name": "exec", "content": "ok"},
         {"role": "user", "content": "多少star了呢"},
     ])
 
@@ -719,11 +719,11 @@ def test_openai_compat_stringifies_dict_tool_arguments() -> None:
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "exec_tool", "arguments": {"cmd": "ls -la"}},
+                    "function": {"name": "exec", "arguments": {"cmd": "ls -la"}},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_1", "name": "exec_tool", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_1", "name": "exec", "content": "ok"},
         {"role": "user", "content": "done"},
     ])
 
@@ -743,11 +743,11 @@ def test_openai_compat_repairs_non_json_tool_arguments_string() -> None:
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "exec_tool", "arguments": "{'cmd': 'pwd'}"},
+                    "function": {"name": "exec", "arguments": "{'cmd': 'pwd'}"},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_1", "name": "exec_tool", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_1", "name": "exec", "content": "ok"},
         {"role": "user", "content": "done"},
     ])
 
@@ -767,11 +767,11 @@ def test_openai_compat_defaults_missing_tool_arguments_to_empty_object() -> None
                 {
                     "id": "call_1",
                     "type": "function",
-                    "function": {"name": "exec_tool"},
+                    "function": {"name": "exec"},
                 }
             ],
         },
-        {"role": "tool", "tool_call_id": "call_1", "name": "exec_tool", "content": "ok"},
+        {"role": "tool", "tool_call_id": "call_1", "name": "exec", "content": "ok"},
         {"role": "user", "content": "done"},
     ])
 
@@ -906,7 +906,7 @@ def test_deepseek_backfills_reasoning_content_on_legacy_tool_call_messages() -> 
     messages = [
         {"role": "user", "content": "search for news"},
         {"role": "assistant", "content": "", "tool_calls": [
-            {"id": "tc1", "type": "function", "function": {"name": "web_search_tool", "arguments": "{}"}}
+            {"id": "tc1", "type": "function", "function": {"name": "web_search", "arguments": "{}"}}
         ]},
         {"role": "tool", "tool_call_id": "tc1", "content": "result"},
         {"role": "assistant", "content": "Here are the results."},
@@ -931,7 +931,7 @@ def test_backfill_touches_messages_when_thinking_uses_default() -> None:
     messages = [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "", "tool_calls": [
-            {"id": "tc1", "type": "function", "function": {"name": "web_search_tool", "arguments": "{}"}}
+            {"id": "tc1", "type": "function", "function": {"name": "web_search", "arguments": "{}"}}
         ]},
         {"role": "tool", "tool_call_id": "tc1", "content": "result"},
         {"role": "user", "content": "thanks"},
