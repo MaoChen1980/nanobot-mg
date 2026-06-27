@@ -119,8 +119,8 @@ class SelfEvolutionEngine:
         pattern = re.compile(r".*-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.pt$")
 
         candidates: list[tuple[Path, datetime]] = []
-        for f in sorted(self.prompts_dir.iterdir(), reverse=True):
-            if f.suffix != ".pt":
+        for f in sorted(self.prompts_dir.rglob("*.pt"), reverse=True):
+            if not f.is_file():
                 continue
             m = pattern.search(f.name)
             if m:
