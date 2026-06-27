@@ -92,19 +92,7 @@ class ReadFileTool(_FsTool):
             if mime and mime.startswith("image/"):
                 return build_image_content_blocks(raw, mime, str(fp), f"(Image file: {path})")
 
-            # Read dedup: same path + offset + limit + unchanged mtime + unchanged hash → stub
-            entry = file_state._default_manager.get_read_state(fp)
-            try:
-                current_mtime = os.path.getmtime(fp)
-            except OSError:
-                current_mtime = 0.0
-            if entry and entry.can_dedup and entry.offset == offset and entry.limit == limit:
-                if current_mtime == entry.mtime:
-                    current_hash = file_state._hash_file(str(fp))
-                    if current_hash == entry.content_hash:
-                        return f"[File unchanged since last read: {path}]"
-
-            # Read the file content (no dedup or file changed)
+            # Read the file content
             raw = fp.read_bytes()
             try:
                 text_content = raw.decode("utf-8")

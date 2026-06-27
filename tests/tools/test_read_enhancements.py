@@ -33,7 +33,7 @@ class TestReadDescriptionFix:
 # ---------------------------------------------------------------------------
 
 class TestReadDedup:
-    """Same file + same offset/limit + unchanged mtime -> short stub."""
+    """Same file + same offset/limit + unchanged mtime -> normal content (no stub)."""
 
     @pytest.fixture()
     def tool(self, tmp_path):
@@ -44,15 +44,14 @@ class TestReadDedup:
         return WriteFileTool(workspace=tmp_path)
 
     @pytest.mark.asyncio
-    async def test_second_read_returns_unchanged_stub(self, tool, tmp_path):
+    async def test_second_read_returns_full_content(self, tool, tmp_path):
         f = tmp_path / "data.txt"
         f.write_text("\n".join(f"line {i}" for i in range(100)), encoding="utf-8")
         first = await tool.execute(path=str(f))
         assert "line 0" in first
         second = await tool.execute(path=str(f))
-        assert "unchanged" in second.lower()
-        # Stub should not contain file content
-        assert "line 0" not in second
+        # Dedup was removed — second read returns full content
+        assert "line 0" in second
 
     @pytest.mark.asyncio
     async def test_read_after_external_modification_returns_full(self, tool, tmp_path):

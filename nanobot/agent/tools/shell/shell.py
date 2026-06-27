@@ -149,7 +149,16 @@ class ExecTool(Tool):
         self.restrict_to_workspace = restrict_to_workspace
         self.path_append = path_append
         self.allowed_env_keys = allowed_env_keys or []
-    instruction = "Execute shell commands. Only use when explicitly requested or for file operations not covered by dedicated tools."
+
+        if _IS_WINDOWS:
+            self.instruction = (
+                "Execute shell commands. The shell is pwsh (PowerShell 7+), not bash. "
+                "Use PowerShell syntax: `Get-Content` not `cat`, `dir` not `ls`, "
+                "`Select-String` not `grep`, `Measure-Object` not `wc`. "
+                "Only use exec for tasks not covered by dedicated tools."
+            )
+        else:
+            self.instruction = "Execute shell commands. Only use for tasks not covered by dedicated tools."
 
     name = "exec"
 

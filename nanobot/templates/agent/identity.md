@@ -2,6 +2,9 @@
 ## Environment
 
 **OS:** `{{ os_platform }} {{ os_version }} {{ arch }}, Python {{ python_version }}`
+{% if os_platform == "Windows" %}**Shell:** `pwsh` (PowerShell 7+) — native shell is PowerShell, not bash. Use PowerShell syntax (e.g., `Get-Content` not `cat`, no `grep | wc -l` pipelines).
+{% else %}**Shell:** platform-default POSIX shell (`sh`/`bash`/`zsh`)
+{% endif %}
 **`$WORKSPACE`:** `{{ workspace_path }}`
 {% if project_root %}**`$PROJECT_ROOT`:** `{{ project_root }}`
 {% endif %}> Your working directory. Contains `{{ workspace_path }}/SOUL.md` (identity), `{{ workspace_path }}/USER.md` (preferences), `{{ workspace_path }}/TOOLS.md` (CLI assets), `{{ workspace_path }}/memory/` (long-term memory), `{{ workspace_path }}/tasks/` (task tree), `{{ workspace_path }}/skills/` (extensions), and `{{ workspace_path }}/framework/` (workflows & rules).
