@@ -82,3 +82,7 @@ ACTION: 先调用对应工具验证。搜索工具选择优先级：
 - 单文档语义搜索 → semantic_search（按语义找相关段落）
 - 跨文档记忆检索 → memory_search（FAISS + 关键词混合）
 - 历史对话事实 → conversation_search
+
+**Verify Tool Result Completeness:**
+TRIGGER: 准备用工具结果得出结论之前
+ACTION: 确认结果是否完整。例如文件计数：glob 返回的 matched 数是否与预期一致？如果结果偏少，检查 pattern/path 参数是否覆盖了所有目标位置。工具返回 "matched: 3 files" 且你期望更多，则参数可能不对，修正后重试。不要假设工具结果自动完整。

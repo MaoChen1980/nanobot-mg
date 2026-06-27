@@ -489,6 +489,7 @@ class ContextBuilder:
 
         kwargs: dict[str, object] = dict(
             workspace_path=workspace_path,
+            project_root=self.project_root.as_posix() if self.project_root else None,
             data_dir=data_dir,
             os_platform=os_platform,
             os_version=platform.release(),

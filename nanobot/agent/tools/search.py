@@ -72,13 +72,15 @@ def _paginate(items: list[T], limit: int | None, offset: int) -> tuple[list[T], 
 
 
 def _pagination_note(limit: int | None, offset: int, truncated: bool) -> str | None:
+    parts = []
     if truncated:
         if limit is None:
-            return f"(pagination: offset={offset})"
-        return f"(pagination: limit={limit}, offset={offset})"
-    if offset > 0:
-        return f"(pagination: offset={offset})"
-    return None
+            parts.append(f"(pagination: offset={offset})")
+        else:
+            parts.append(f"(pagination: limit={limit}, offset={offset})")
+    elif offset > 0:
+        parts.append(f"(pagination: offset={offset})")
+    return " ".join(parts) if parts else None
 
 
 def _matches_type(name: str, file_type: str | None) -> bool:
@@ -258,8 +260,10 @@ class GlobTool(_SearchTool):
             ordered = [name for name, _ in matches]
             paged, truncated = _paginate(ordered, limit, offset)
             result = "\n".join(paged)
+            meta = f"(matched: {len(ordered)} file{'s' if len(ordered) != 1 else ''})"
             if note := _pagination_note(limit, offset, truncated):
-                result += f"\n\n{note}"
+                meta = f"{note} {meta}"
+            result += f"\n\n{meta}"
             return result
         except PermissionError as e:
             logger.warning("Glob permission denied: {}", e)
