@@ -744,10 +744,12 @@ class FeishuProxyChannel(BaseProxyChannel):
             path = path.strip()
             if not os.path.exists(path):
                 logger.warning("Feishu media send: file not found: {}", path)
+                self._send_plain_text(chat_id, f"文件发送失败：找不到文件 {path}", root_id)
                 continue
             file_key = self._upload_media_to_feishu(path, msg_type)
             if not file_key:
                 logger.error("Feishu media send failed: could not upload {}", path)
+                self._send_plain_text(chat_id, "文件发送失败：上传到飞书 API 出错", root_id)
                 continue
 
             try:
@@ -774,10 +776,12 @@ class FeishuProxyChannel(BaseProxyChannel):
                     resp = self._client.im.v1.message.create(request)
                 if resp.code != 0:
                     logger.error("Feishu send media failed: code={} msg={}", resp.code, resp.msg)
+                    self._send_plain_text(chat_id, f"文件发送失败：飞书 API 错误 ({resp.msg})", root_id)
                 else:
                     logger.info("Feishu media sent: {} → chat={}", os.path.basename(path), chat_id)
             except Exception as e:
                 logger.exception("Feishu media send error: {}", e)
+                self._send_plain_text(chat_id, f"文件发送异常：{e}", root_id)
 
     # ------------------------------------------------------------------
     # Reply / reaction helpers
