@@ -31,7 +31,7 @@ class SubagentResult:
 
     task_id: str
     label: str
-    status: str  # "ok" | "error"
+    status: str  # "ok" | "error" | "needs_review"
     final_content: str | None
     tools_used: list[str]
     duration_s: float
@@ -39,6 +39,7 @@ class SubagentResult:
     token_usage: dict
     errors: list[str]
     output_schema: str | None = None
+    assessment: str | None = None  # assess_me self-check result
 
 
 def format_error_progress(result) -> str:

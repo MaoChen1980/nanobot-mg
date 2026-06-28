@@ -107,7 +107,7 @@ def build_subagent_prompt(
         fw_content = fw_content.replace(old_board, f"{ws_path}/{team_board_rel}")
     parts.append(fw_content)
 
-    # 9. Output schema (optional)
+    # 8. Output schema (optional)
     if output_schema:
         parts.append(
             "## Output Schema\n\n"
@@ -117,7 +117,7 @@ def build_subagent_prompt(
             "Do NOT include any text outside the JSON code block."
         )
 
-    # 11. Role identity and constraints (reference — who the subagent is)
+    # 9. Role identity and constraints (reference — who the subagent is)
     role_line = (
         f"Your expert role: **{role}**. Operate at that level."
         if role else
@@ -140,7 +140,7 @@ def build_subagent_prompt(
         "then stop. The Orchestrator will re-spawn with better instructions."
     )
 
-    # Runtime context (always last — dynamic content for KV cache preservation)
+    # 10. Runtime context (always last — dynamic content for KV cache preservation)
     from nanobot.utils.helpers import current_time_str
     parts.append(f"# Runtime Context\n\nCurrent Time: {current_time_str(timezone)}")
 

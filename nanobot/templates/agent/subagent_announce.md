@@ -1,4 +1,6 @@
 [Subagent '{{ label }}' {{ status_text }}]
+{% if status == "needs_review" %}⚠️ 自检发现问题，需要 Orchestrator 审查后再使用结果
+{% endif %}
 
 Task: {{ task }}
 {% if duration_s %}耗时：{{ "%.1f"|format(duration_s) }}s
@@ -8,7 +10,11 @@ Task: {{ task }}
 
 Result:
 {{ result }}
-{% if output_schema %}
+{% if assessment %}--- self-assessment ---
+{{ assessment | truncate(600) }}
+
+--- /self-assessment ---
+{% endif %}{% if output_schema %}
 --- structured ---
 Status: {{ status }}
 Output Schema: {{ output_schema }}

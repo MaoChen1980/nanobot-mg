@@ -78,6 +78,7 @@ def build_context_block(workspace: Path | None = None, team_context: str | None 
                     "role": {"type": "string", "description": "Optional expert role specification (e.g. 'Python 安全专家')"},
                     "output_schema": {"type": "string", "description": "Optional JSON output schema"},
                     "max_iterations": {"type": "integer", "description": "Max tool iterations (default 100, max 200)", "default": 100, "maximum": 200},
+                    "max_timeout": {"type": "integer", "description": "Optional wall-clock timeout in seconds (default 3600, max 7200). Subagent is killed if it exceeds this limit.", "default": 3600, "minimum": 1},
                 },
                 "required": ["task"],
             }
@@ -120,6 +121,7 @@ class SpawnTool(Tool):
             "without blocking the current conversation. "
             "Fire-and-forget — results arrive asynchronously, no ordering guarantee. "
             "Max 200 tool-call iterations per subtask (adjustable via max_iterations). "
+            "Wall-clock timeout in seconds (adjustable via max_timeout — subagent killed on expiry). "
             "Cannot nest spawn calls. Each subtask gets a snapshot of context at spawn time. "
             "Use check_subagent to query progress, send_message to communicate with running subagents."
         )
@@ -144,6 +146,7 @@ class SpawnTool(Tool):
             role = t.get("role")
             output_schema = t.get("output_schema")
             max_iterations = t.get("max_iterations", 100)
+            max_timeout = t.get("max_timeout")
             result = await self._manager.spawn(
                 task=task,
                 label=label,
@@ -154,6 +157,7 @@ class SpawnTool(Tool):
                 origin_chat_id=self._origin_chat_id.get(),
                 session_key=self._session_key.get(),
                 max_iterations=max_iterations,
+                max_timeout=max_timeout,
             )
             results.append(result)
         summary = "\n".join(results)

@@ -101,6 +101,9 @@ class SubagentManager:
         self.db = db
         self._memory_store = memory_store
         self._context_builder = context_builder
+        # Concurrency cap: env var overrides default 5
+        _max_sa = int(os.environ.get("NANOBOT_MAX_SUBAGENTS", "5"))
+        self._spawn_semaphore = asyncio.Semaphore(max(1, _max_sa))
         self.runner = AgentRunner(provider, db=db)
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._task_statuses: dict[str, SubagentStatus] = {}
@@ -133,6 +136,7 @@ class SubagentManager:
         session_key: str | None = None,
         max_iterations: int | None = None,
         output_schema: str | None = None,
+        max_timeout: int | None = None,
     ) -> str:
         """Spawn a subagent to execute a task in the background."""
         task_id = str(uuid.uuid4())[:8]
@@ -161,7 +165,7 @@ class SubagentManager:
             self._session_spawned.add(session_key)
 
         bg_task = asyncio.create_task(
-            self._run_subagent(task_id, task, display_label, origin, status, context, max_iterations, output_schema, role=role)
+            self._run_subagent(task_id, task, display_label, origin, status, context, max_iterations, output_schema, role=role, max_timeout=max_timeout)
         )
         self._running_tasks[task_id] = bg_task
         if session_key:
@@ -194,6 +198,7 @@ class SubagentManager:
         max_iterations: int | None = None,
         output_schema: str | None = None,
         role: str | None = None,
+        max_timeout: int | None = None,
     ) -> None:
         """Execute the subagent task and announce the result."""
         logger.info("Subagent [{}] starting task: {}", task_id, label)
@@ -202,122 +207,162 @@ class SubagentManager:
             status.phase = payload.get("phase", status.phase)
             status.iteration = payload.get("iteration", status.iteration)
 
+        effective_timeout = min(max_timeout or 3600, 7200)
         try:
-            tools = build_subagent_tools(self.workspace, self.web_config, self.exec_config, self.restrict_to_workspace, self._memory_store)
+            async with self._spawn_semaphore:
+                tools = build_subagent_tools(self.workspace, self.web_config, self.exec_config, self.restrict_to_workspace, self._memory_store)
 
-            # Register team communication tools
-            from nanobot.agent.tools.notify_orchestrator import NotifyOrchestratorTool
-            from nanobot.agent.tools.send_message import SendMessageTool
-            tools.register(NotifyOrchestratorTool(
-                manager=self, subagent_id=task_id, subagent_label=label,
-            ))
-            tools.register(SendMessageTool(
-                manager=self, subagent_id=task_id, subagent_label=label,
-            ))
-            system_prompt = build_subagent_prompt(
-                self.workspace,
-                self.disabled_skills,
-                timezone=getattr(self, 'timezone', None),
-                db=self.db,
-                tool_definitions=tools.get_definitions(),
-                project_root=self.project_root,
-                output_schema=output_schema,
-                role=role,
-                session_key=origin["session_key"],
-            )
-            messages: list[dict[str, Any]] = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"{task}\n\n{context}" if context.strip() else task},
-            ]
-
-            # Mark execution as subagent context — blocks nested spawn at tool level
-            token = _in_subagent.set(True)
-            try:
-                # Injection callback for main→subagent messages
-                inbox = self._subagent_inboxes.get(task_id)
-
-                async def _drain_inbox(*, limit: int = 10) -> list[dict[str, Any]]:
-                    if inbox is None:
-                        return []
-                    items: list[dict[str, Any]] = []
-                    while len(items) < limit:
-                        try:
-                            text = inbox.get_nowait()
-                            items.append({"role": "user", "content": text})
-                        except asyncio.QueueEmpty:
-                            break
-                    return items
-
-                result = await self.runner.run(AgentRunSpec(
-                    initial_messages=messages,
-                    tools=tools,
-                    model=self.model,
-                    max_iterations=max_iterations or 100,
-                    max_tool_result_chars=self.max_tool_result_chars,
-                    hook=_SubagentHook(task_id, tools=tools, status=status),
-                    max_iterations_message="任务已完成但未生成最终回复。",
-                    error_message=None,
-                    fail_on_tool_error=False,
-                    concurrent_tools=True,
-                    checkpoint_callback=_on_checkpoint,
-                    injection_callback=_drain_inbox,
-                    reasoning_effort=self.runner.provider.generation.reasoning_effort,
-                    session_key=origin["session_key"],
-                    instructions=lambda: self._context_builder.build_instructions_section(for_subagent=True, session_key=origin["session_key"], tool_instruction_map=tools.get_instruction_map()) if self._context_builder else None,
+                # Register team communication tools
+                from nanobot.agent.tools.notify_orchestrator import NotifyOrchestratorTool
+                from nanobot.agent.tools.send_message import SendMessageTool
+                tools.register(NotifyOrchestratorTool(
+                    manager=self, subagent_id=task_id, subagent_label=label,
                 ))
-
-                # Save conversation snapshot for MemoryExtractor
-                pt_path = MemoryExtractor.save_prompt_snapshot(
-                    result.messages,
-                    self.workspace / "prompts",
-                    f"subagent:{task_id}",
-                )
-
-                status.phase = "done"
-                status.stop_reason = result.stop_reason
-                status.completed_at = time.monotonic()
-                status.tools_ran = list(result.tools_used)
-
-                duration_s = status.completed_at - status.started_at
-                token_usage = dict(result.usage or {})
-
-                sub_result = SubagentResult(
-                    task_id=task_id,
-                    label=label,
-                    status="ok" if result.stop_reason in ("completed", "stop", "empty_final_response", "tool_loop_breaker") else "error",
-                    final_content=result.final_content,
-                    tools_used=list(result.tools_used),
-                    duration_s=duration_s,
-                    iteration_count=status.iteration,
-                    token_usage=token_usage,
-                    errors=[result.error] if result.error else [],
+                tools.register(SendMessageTool(
+                    manager=self, subagent_id=task_id, subagent_label=label,
+                ))
+                system_prompt = build_subagent_prompt(
+                    self.workspace,
+                    self.disabled_skills,
+                    timezone=getattr(self, 'timezone', None),
+                    db=self.db,
+                    tool_definitions=tools.get_definitions(),
+                    project_root=self.project_root,
                     output_schema=output_schema,
+                    role=role,
+                    session_key=origin["session_key"],
                 )
+                messages: list[dict[str, Any]] = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"{task}\n\n{context}" if context.strip() else task},
+                ]
 
-                if result.stop_reason == "tool_error":
-                    status.tool_events = list(result.tool_events)
-                    await self._announce_result(
-                        task_id, label, task,
-                        format_error_progress(result),
-                        origin, "error", sub_result=sub_result, pt_path=pt_path,
+                # Mark execution as subagent context — blocks nested spawn at tool level
+                token = _in_subagent.set(True)
+                try:
+                    # Injection callback for main→subagent messages
+                    inbox = self._subagent_inboxes.get(task_id)
+
+                    async def _drain_inbox(*, limit: int = 10) -> list[dict[str, Any]]:
+                        if inbox is None:
+                            return []
+                        items: list[dict[str, Any]] = []
+                        while len(items) < limit:
+                            try:
+                                text = inbox.get_nowait()
+                                items.append({"role": "user", "content": text})
+                            except asyncio.QueueEmpty:
+                                break
+                        return items
+
+                    run_coro = self.runner.run(AgentRunSpec(
+                        initial_messages=messages,
+                        tools=tools,
+                        model=self.model,
+                        max_iterations=max_iterations or 100,
+                        max_tool_result_chars=self.max_tool_result_chars,
+                        hook=_SubagentHook(task_id, tools=tools, status=status),
+                        max_iterations_message="任务已完成但未生成最终回复。",
+                        error_message=None,
+                        fail_on_tool_error=False,
+                        concurrent_tools=True,
+                        checkpoint_callback=_on_checkpoint,
+                        injection_callback=_drain_inbox,
+                        reasoning_effort=self.runner.provider.generation.reasoning_effort,
+                        session_key=origin["session_key"],
+                        instructions=lambda: self._context_builder.build_instructions_section(for_subagent=True, session_key=origin["session_key"], tool_instruction_map=tools.get_instruction_map()) if self._context_builder else None,
+                    ))
+                    result = await asyncio.wait_for(run_coro, timeout=effective_timeout)
+
+                    # Self-assessment — run assess_me on completed conversation
+                    assessment: str | None = None
+                    try:
+                        from nanobot.agent.assess_me import assess_me as _run_self_assess
+                        assess_text = await _run_self_assess(result.messages, has_active_task=True)
+                        if assess_text:
+                            assessment = assess_text
+                            import re as _re
+                            stripped = _re.sub(r"<think>.*?</think>", "", assess_text, flags=_re.DOTALL).strip()
+                            logger.info("Subagent [{}] self-assessment: {}", task_id, stripped[:200])
+                    except Exception:
+                        logger.debug("Subagent [{}] self-assessment skipped", task_id)
+
+                    # Assess-verify: check for unresolved gaps/blockers
+                    needs_review = False
+                    if assessment:
+                        low = assessment.lower()
+                        if any(kw in low for kw in ("盲点", "未验证", "blocker", "信息不足", "gap", "假设未验证", "findings")):
+                            needs_review = True
+                            logger.info("Subagent [{}] assessment flagged issues, marking needs_review", task_id)
+
+                    # Save conversation snapshot for MemoryExtractor
+                    pt_path = MemoryExtractor.save_prompt_snapshot(
+                        result.messages,
+                        self.workspace / "prompts",
+                        f"subagent:{task_id}",
                     )
-                elif result.stop_reason == "error":
-                    await self._announce_result(
-                        task_id, label, task,
-                        result.error or "Error: subagent execution failed.",
-                        origin, "error", sub_result=sub_result, pt_path=pt_path,
+
+                    status.phase = "done"
+                    status.stop_reason = result.stop_reason
+                    status.completed_at = time.monotonic()
+                    status.tools_ran = list(result.tools_used)
+
+                    duration_s = status.completed_at - status.started_at
+                    token_usage = dict(result.usage or {})
+
+                    eff_status = "needs_review" if needs_review else \
+                        ("ok" if result.stop_reason in ("completed", "stop", "empty_final_response", "tool_loop_breaker") else "error")
+
+                    sub_result = SubagentResult(
+                        task_id=task_id,
+                        label=label,
+                        status=eff_status,
+                        final_content=result.final_content,
+                        tools_used=list(result.tools_used),
+                        duration_s=duration_s,
+                        iteration_count=status.iteration,
+                        token_usage=token_usage,
+                        errors=[result.error] if result.error else [],
+                        output_schema=output_schema,
+                        assessment=assessment,
                     )
-                else:
-                    final_result = result.final_content or "Task completed but no final response was generated."
-                    announce_status = "error" if sub_result.status == "error" else "ok"
-                    if announce_status == "ok":
-                        logger.info("Subagent [{}] completed successfully", task_id)
+
+                    if result.stop_reason == "tool_error":
+                        status.tool_events = list(result.tool_events)
+                        await self._announce_result(
+                            task_id, label, task,
+                            format_error_progress(result),
+                            origin, "error", sub_result=sub_result, pt_path=pt_path,
+                        )
+                    elif result.stop_reason == "error":
+                        await self._announce_result(
+                            task_id, label, task,
+                            result.error or "Error: subagent execution failed.",
+                            origin, "error", sub_result=sub_result, pt_path=pt_path,
+                        )
                     else:
-                        logger.warning("Subagent [{}] stopped with status {}", task_id, result.stop_reason)
-                    await self._announce_result(task_id, label, task, final_result, origin, announce_status, sub_result=sub_result, pt_path=pt_path)
-            finally:
-                _in_subagent.reset(token)
+                        final_result = result.final_content or "Task completed but no final response was generated."
+                        announce_status = "needs_review" if needs_review else \
+                            ("error" if sub_result.status == "error" else "ok")
+                        if announce_status == "ok":
+                            logger.info("Subagent [{}] completed successfully", task_id)
+                        elif announce_status == "needs_review":
+                            logger.warning("Subagent [{}] completed but assessment flagged issues", task_id)
+                        else:
+                            logger.warning("Subagent [{}] stopped with status {}", task_id, result.stop_reason)
+                        await self._announce_result(task_id, label, task, final_result, origin, announce_status, sub_result=sub_result, pt_path=pt_path)
+                finally:
+                    _in_subagent.reset(token)
 
+        except asyncio.TimeoutError:
+            status.phase = "timeout"
+            timeout_s = effective_timeout
+            logger.warning("Subagent [{}] timed out after {}s", task_id, timeout_s)
+            await self._announce_result(
+                task_id, label, task,
+                f"Subagent timed out after {timeout_s}s. The task may be too large — consider splitting.",
+                origin, "error",
+            )
         except asyncio.CancelledError:
             status.phase = "cancelled"
             logger.warning("Subagent [{}] cancelled by orchestrator", task_id)
@@ -377,7 +422,7 @@ class SubagentManager:
         """Announce the subagent result to the main agent via the message bus."""
         from nanobot.utils.prompt_templates import render_template
 
-        status_text = "completed successfully" if status == "ok" else "failed"
+        status_text = "completed successfully" if status == "ok" else "completed with issues — needs review" if status == "needs_review" else "failed"
         _schema = sub_result.output_schema if sub_result else None
         _pt_path = str(pt_path) if pt_path else ""
 
@@ -393,6 +438,7 @@ class SubagentManager:
             status=status,
             output_schema=_schema,
             pt_path=_pt_path,
+            assessment=sub_result.assessment if sub_result and sub_result.assessment else "",
         )
 
         await self._inject_to_orchestrator(
