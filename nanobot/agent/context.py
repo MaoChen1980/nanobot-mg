@@ -421,7 +421,7 @@ class ContextBuilder:
         content = content.strip()
         if not content:
             return ""
-        # Cap at 4000 chars to prevent unbounded context consumption
+        # Cap at 8000 chars to prevent unbounded context consumption
         _MAX_BOARD_CHARS = 8000
         if len(content) > _MAX_BOARD_CHARS:
             truncation_note = (

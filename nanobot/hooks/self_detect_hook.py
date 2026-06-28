@@ -300,6 +300,7 @@ class SelfDetectHook(AgentHook):
         self._interval = interval if interval is not None else self.DEFAULT_INTERVAL
         self._total_iterations = 0  # total iterations across turns
         self._workspace: Path | None = None
+        self._project_type: str = "unknown"  # detected once in set_workspace()
 
     def set_workspace(self, workspace_path: Path) -> None:
         """Set the workspace path for writing findings doc.
@@ -308,6 +309,8 @@ class SelfDetectHook(AgentHook):
         same pattern as set_provider().
         """
         self._workspace = workspace_path
+        # Detect project_type once here instead of redundantly in _detect_project_type
+        self._project_type = self._detect_project_type()
 
     # -- after_iteration: accumulate metrics in memory ------------------------
 
@@ -331,8 +334,8 @@ class SelfDetectHook(AgentHook):
             from nanobot.hooks.context_inject_hook import get_session_context_dir
 
             scd = get_session_context_dir()
-            # Derive project_type from workspace if ContextInjectHook didn't set scd
-            project_type = self._detect_project_type()
+            # project_type already detected and cached in set_workspace()
+            project_type = self._project_type
             if scd is None and self._workspace is not None:
                 # Fallback: build session context dir ourselves
                 scd = (

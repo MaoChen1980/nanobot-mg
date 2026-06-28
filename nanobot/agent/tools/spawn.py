@@ -45,18 +45,20 @@ def build_context_block(workspace: Path | None = None, team_context: str | None 
             if content:
                 parts.append(f"=== {(workspace / rel).as_posix()} ===\n{content[:8000]}\n===============")
 
-    recent = messages[-10:] if len(messages) > 10 else messages
+    user_msgs = [m for m in messages if m.get("role") != "system"]
+    recent = user_msgs[-10:] if len(user_msgs) > 10 else user_msgs
     if recent:
-        parts.append("### Recent Conversation")
+        parts.append("### 近期对话")
         for msg in recent:
             role = msg.get("role", "?")
-            content = msg.get("content", "")
-            text = content[:400] + "..." if len(content) > 400 else content if content else ""
-            rc = msg.get("reasoning_content")
-            if isinstance(rc, str) and rc.strip():
-                think = rc.strip()[:200] + "..." if len(rc) > 200 else rc.strip()
-                text = f"[think]: {think}\n{text}" if text else f"[think]: {think}"
-            if text:
+            content = msg.get("content", "") or ""
+            if not content.strip():
+                continue
+            if role == "user":
+                text = content[:2000] + "..." if len(content) > 2000 else content
+                parts.append(f"**用户原话**: {text}")
+            else:
+                text = content[:600] + "..." if len(content) > 600 else content
                 parts.append(f"[{role}]: {text}")
 
     if team_context:
@@ -102,7 +104,11 @@ class SpawnTool(Tool):
         "Dispatch parallel independent tasks via fire-and-forget subagents. "
         "Use for: independent parallel subtasks, time-consuming work that benefits from its own context. "
         "Do NOT use when you need synchronous results, sequential execution, or zero interruption risk. "
-        "After spawning: update the task tree, notify the user, continue working."
+        "After spawning: "
+        "1) If spawn covered ALL remaining work → stop tool_calls. "
+        "Results arrive automatically as user messages — do NOT poll with check_subagent+exec(sleep). "
+        "2) If you still have independent non-delegated work → do it in parallel. "
+        "3) When a subagent result arrives → integrate it. If partial, spawn another for the missing scope."
     )
 
     name = "spawn"

@@ -108,6 +108,14 @@ class SubagentManager:
         self._subagent_origin: dict[str, dict[str, str]] = {}  # task_id -> origin info
         self._subagent_label_to_id: dict[str, str] = {}  # label -> task_id
         self._subagent_inboxes: dict[str, "asyncio.Queue[str]"] = {}  # task_id -> inbox
+        # Tracks sessions that ever spawned subagents (persists after cleanup)
+        # so process_direct can detect the case where a subagent finished
+        # during _process_message and cleanup already fired.
+        self._session_spawned: set[str] = set()
+
+    def was_spawned_in_session(self, session_key: str) -> bool:
+        """Return True if any subagent was ever spawned in this session."""
+        return session_key in self._session_spawned
 
     def set_provider(self, provider: LLMProvider, model: str) -> None:
         self.provider = provider
@@ -149,6 +157,8 @@ class SubagentManager:
             started_at=time.monotonic(),
         )
         self._task_statuses[task_id] = status
+        if session_key:
+            self._session_spawned.add(session_key)
 
         bg_task = asyncio.create_task(
             self._run_subagent(task_id, task, display_label, origin, status, context, max_iterations, output_schema, role=role)
@@ -217,7 +227,7 @@ class SubagentManager:
             )
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": task},
+                {"role": "user", "content": f"{task}\n\n{context}" if context.strip() else task},
             ]
 
             # Mark execution as subagent context — blocks nested spawn at tool level

@@ -32,12 +32,24 @@
 - 搜最新信息 → `web_search`
 - 读取 URL 内容 → `web_fetch`
 
-### 子 Agent
-- 并行派发独立任务 → `spawn`（fire-and-forget）
-- 查看子 agent 列表 → `list_subagents`
-- 检查某个子 agent 状态 → `check_subagent(task_id)`
-- 取消子 agent → `cancel_subagent(label)`（先 list 得到 label）
-- 给子 agent 发消息 → `send_message(recipient, message)`
+### 子 Agent — spawn 调度模式
+**推荐模式（file-batched fan-out）：**
+1. 主 agent 用 glob 发现所有需要分析的文件
+2. 按 3-5 个文件一批，每批 spawn 一个 subagent
+3. 每个 subagent 的 task 里直接写文件路径（subagent 不需要 rediscover）
+4. 主 agent 可同时做其他工作，或与用户交互
+5. subagent 结果自动注入，主 agent 汇总
+
+**不推荐模式：**
+- dimension-batched：让每个 subagent 自己重新扫描全部文件 → 重复劳动
+- full delegation：一个 subagent 包揽整个大任务 → iteration 不够就断
+
+**通信控制：**
+- spawn（fire-and-forget，结果自动返回）
+- check_subagent(task_id) — 仅用于确认是否存活，不要轮询
+- send_message(recipient, message) — 发给 subagent / 从 subagent 发回
+- cancel_subagent(label) — 取消运行中的 subagent
+- list_subagents — 查看所有运行中的 subagent
 
 ### 用户交互
 - 发送消息/文件/按钮给用户 → `message`（不会结束当前轮）

@@ -1685,15 +1685,100 @@ class AgentLoop:
                 pending_queue=pending_queue,
                 extra_hooks=extra_hooks,
             )
-            # Same post-dispatch monitor trigger as _dispatch() — ensures proxy
-            # sessions also get proactive subagent checks.
-            if self.subagents.get_running_count_by_session(session_key) > 0:
+            # ---------------------------------------------------------------
+            # Bus-driven wait loop for subagent completion
+            # ---------------------------------------------------------------
+            # After _process_message returns, subagents may still be running.
+            # Instead of returning immediately (which triggers close_mcp() and
+            # kills the bus), enter a wait loop that:
+            #   1. Consumes bus messages (subagent announcements) and dispatches
+            #      them via _dispatch() so the main agent processes results
+            #   2. Periodically triggers proactive checks when idle
+            #   3. Exits only when all subagents for this session complete
+            #
+            # This ensures the orchestrator stays alive to receive and integrate
+            # subagent results — the core fix for "subagent done but nobody home".
+            # If any subagent was spawned during this session, drain pending
+            # announcements and wait for still-running ones.  This catches the
+            # case where a subagent finishes DURING _process_message — by the
+            # time we reach this check, the subagent cleanup has already fired
+            # and get_running_count_by_session returns 0, but the announcement
+            # is still sitting in the bus inbound queue.
+            has_subagents = self.subagents.was_spawned_in_session(session_key)
+            has_pending = self.bus.inbound.qsize() > 0
+
+            if has_subagents or has_pending:
                 now = time.time()
                 state = self._last_subagent_check.get(session_key)
                 last = state.last_check if state else 0
                 if now - last >= self._PROACTIVE_CHECK_INTERVAL:
                     self._last_subagent_check[session_key] = _SubagentCheckState(now, channel, chat_id)
                     await self._publish_subagent_check(session_key, channel, chat_id)
+
+                while True:
+                    still_running = self.subagents.get_running_count_by_session(session_key) > 0
+                    if not still_running and self.bus.inbound.qsize() == 0:
+                        break
+                    try:
+                        bus_msg = await asyncio.wait_for(
+                            self.bus.consume_inbound(), timeout=3.0,
+                        )
+                        eff_key = self._dispatch_manager._effective_session_key(bus_msg)
+                        if eff_key == session_key:
+                            try:
+                                await self._dispatch(bus_msg)
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception:
+                                logger.exception(
+                                    "Subagent dispatch failed for session {}", session_key,
+                                )
+                                continue
+                            # Drain outbound messages so CLI user sees them.
+                            # The dispatch publishes streamed content + final
+                            # response — we forward the full text to on_stream.
+                            captured = ""
+                            last_ob = None
+                            while self.bus.outbound.qsize() > 0:
+                                try:
+                                    ob = self.bus.outbound.get_nowait()
+                                except asyncio.QueueEmpty:
+                                    break
+                                if ob and ob.content and not ob.metadata.get("_stream_delta"):
+                                    captured = ob.content
+                                    last_ob = ob
+                            if captured and on_stream:
+                                await on_stream(captured)
+                            if captured and on_progress:
+                                await on_progress(captured.strip(), tool_hint=False)
+                            if captured and on_stream_end:
+                                await on_stream_end()
+                            # Update response with subagent dispatch results
+                            # so SDK callers get accurate content/usage/etc.
+                            if last_ob and response:
+                                response = OutboundMessage(
+                                    channel=response.channel,
+                                    chat_id=response.chat_id,
+                                    content=captured or response.content,
+                                    tools_used=last_ob.tools_used or response.tools_used,
+                                    usage=last_ob.usage or response.usage,
+                                    stop_reason=last_ob.stop_reason or response.stop_reason,
+                                    error=last_ob.error or response.error,
+                                )
+                            elif last_ob:
+                                response = last_ob
+                    except asyncio.TimeoutError:
+                        if still_running:
+                            now = time.time()
+                            state = self._last_subagent_check.get(session_key)
+                            if state and now - state.last_check >= self._PROACTIVE_CHECK_INTERVAL:
+                                state.last_check = now
+                                await self._publish_subagent_check(
+                                    session_key, state.channel, state.chat_id,
+                                )
+                    except asyncio.CancelledError:
+                        if not self._running:
+                            break
             return response
         finally:
             await self.close_mcp()
