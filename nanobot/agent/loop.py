@@ -89,6 +89,23 @@ class _SubagentCheckState:
     chat_id: str
 
 
+def _make_skill_done_callback(loop: AgentLoop, dedup_key: str) -> Callable[[asyncio.Task], None]:
+    """Build a done-callback for _spawn_skill_creator tasks.
+
+    Using a named factory function avoids the lambda closure pitfalls:
+    ``dedup_key`` is captured by value, and ``CancelledError`` is handled.
+    """
+    def _cb(t: asyncio.Task) -> None:
+        try:
+            exc = t.exception()
+        except asyncio.CancelledError:
+            exc = None
+        loop._skill_creation_inflight.discard(dedup_key)
+        if exc is not None:
+            logger.error("Skill creation failed: {}", exc)
+    return _cb
+
+
 class AgentLoop:
     """
     The agent loop is the core processing engine.
@@ -958,11 +975,7 @@ class AgentLoop:
                         loop._spawn_skill_creator(skill_pattern, session_key=session.key if session else None),
                     )
                     task.add_done_callback(
-                        lambda t: (
-                            loop._skill_creation_inflight.discard(dedup_key),
-                            logger.error("Skill creation failed: {}", t.exception())
-                            if t.exception() else None,
-                        )
+                        _make_skill_done_callback(loop, dedup_key)
                     )
                     logger.info("assess_me detected reusable pattern — spawning skill creation")
                 else:
@@ -1633,6 +1646,8 @@ class AgentLoop:
         Creates a fresh event loop in the call thread to avoid conflicts
         with the caller's event loop.
         """
+        from nanobot.agent.llm_context import set_llm
+        set_llm(self.runner.provider, getattr(self, 'model', None))
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
