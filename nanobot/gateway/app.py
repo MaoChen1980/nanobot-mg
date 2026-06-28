@@ -341,6 +341,14 @@ class GatewayApplication:
             elif self.proxy_manager.has_proxy(f"proxy:{msg.channel}"):
                 proxy_key = f"proxy:{msg.channel}"
 
+            # Fallback: short channel name → match any proxy with that prefix
+            # e.g. "feishu" → "feishu:feishu1", "slack" → "slack:workspace"
+            if not proxy_key:
+                for k in self.proxy_manager.get_proxy_keys():
+                    if k.startswith(f"{msg.channel}:"):
+                        proxy_key = k
+                        break
+
             if proxy_key:
                 # Handle both bare chat_id (oc_...) and prefixed formats
                 # (feishu:feishu1:oc_... or proxy:feishu:feishu1:oc_...).

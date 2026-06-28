@@ -19,8 +19,9 @@ from nanobot.config.paths import get_workspace_path
     build_parameters_schema(
         content=p("string", "The message content to send"),
         channel=p("string",
-            "Optional: target channel override (e.g. 'slack', 'feishu'). "
-            "Defaults to the current conversation channel.",
+            "Optional: target channel override. Defaults to current conversation's "
+            "channel+bot (e.g. 'feishu:bot_name'). In most cases you don't need to "
+            "set this — just send to the current conversation.",
         ),
         chat_id=p("string",
             "Optional: target chat/recipient override. "
