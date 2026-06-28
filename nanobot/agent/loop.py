@@ -1140,7 +1140,7 @@ class AgentLoop:
                     if _pre_stop_busy:
                         asyncio.create_task(self._dispatch(InboundMessage(
                             channel=msg.channel, sender_id=msg.sender_id,
-                            chat_id=msg.chat_id, content="/stop",
+                            chat_id=msg.chat_id, content="stop.",
                             media=[], metadata={"_stop_redispatch": True},
                         )))
                     # Same for /new/clear/reset — feed to LLM after cancellation

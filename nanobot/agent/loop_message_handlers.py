@@ -362,15 +362,10 @@ class UserMessageHandler:
         """Run command dispatch, return result if handled."""
         from nanobot.command import CommandContext
         ctx = CommandContext(msg=msg, session=session, key=key, raw=msg.content.strip(), loop=self._loop)
-        # Priority commands (e.g. /stop, /restart) are checked before the
-        # dispatch lock in the bus loop path; for direct/proxy messages we
-        # must check them here too since they aren't in the regular dispatch.
-        # When a priority handler returns None (e.g. re-dispatched /stop with
-        # _stop_redispatch), DO NOT fall through to dispatch() — that would
-        # hit cmd_unknown and return "Unknown command" instead of letting the
-        # LLM process it (e.g. to update tree.json).
-        if self._loop.commands.is_priority(ctx.raw):
-            return await self._loop.commands.dispatch_priority(ctx)
+        # Priority commands — re-dispatched stop/new now carry plain-text
+        # content (e.g. "stop.") so they won't match is_priority and will
+        # fall through to dispatch → interceptors → cmd_unknown returns
+        # None (no "/" prefix) → LLM processes the message normally.
         result = await self._loop.commands.dispatch_priority(ctx)
         if result:
             return result
