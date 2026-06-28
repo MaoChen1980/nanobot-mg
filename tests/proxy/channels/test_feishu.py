@@ -1,4 +1,4 @@
-"""Tests for FeishuProxyChannel — _download_media path traversal prevention."""
+"""Tests for FeishuProxyChannel — _download_media path traversal prevention and _send_media error notification."""
 
 from __future__ import annotations
 
@@ -82,3 +82,83 @@ def test_empty_filename_uses_fallback(tmp_path):
     assert result is not None
     assert "abc123" in result
     assert result.endswith(".png")
+
+
+class MockFeishuChannel(FeishuProxyChannel):
+    """Subclass with mocked client for _send_media tests."""
+    def __init__(self, tmp_path):
+        super().__init__(
+            config={"_workspace_path": str(tmp_path), "appId": "test", "appSecret": "test"},
+            hub_tcp_host="127.0.0.1", hub_tcp_port=9999,
+            channel="feishu", bot="test",
+        )
+        self._client = MagicMock()
+        self.sent_errors: list[str] = []
+
+    def _send_plain_text(self, chat_id: str, content: str, root_id: str | None = None) -> None:
+        self.sent_errors.append(content)
+
+
+def test_send_media_file_not_found_reports_error(tmp_path):
+    """File not found sends error notification instead of silent skip."""
+    ch = MockFeishuChannel(tmp_path)
+    ch._send_media("chat_1", None, ["/nonexistent/file.pptx"], msg_type="file")
+    assert len(ch.sent_errors) == 1
+    assert "找不到文件" in ch.sent_errors[0]
+
+
+def test_send_media_upload_failure_reports_error(tmp_path):
+    """Upload failure sends error notification."""
+    ch = MockFeishuChannel(tmp_path)
+    f = tmp_path / "test.pptx"
+    f.write_bytes(b"fake pptx content")
+    ch._upload_media_to_feishu = MagicMock(return_value=None)  # upload fails
+    ch._send_media("chat_1", None, [str(f)], msg_type="file")
+    assert len(ch.sent_errors) == 1
+    assert "出错" in ch.sent_errors[0]
+
+
+def test_send_media_api_error_reports_error(tmp_path):
+    """API error after upload sends error notification."""
+    ch = MockFeishuChannel(tmp_path)
+    f = tmp_path / "test.pptx"
+    f.write_bytes(b"fake pptx content")
+    ch._upload_media_to_feishu = MagicMock(return_value="valid_file_key")
+
+    mock_resp = MagicMock()
+    mock_resp.code = 234006
+    mock_resp.msg = "file too large"
+    ch._client.im.v1.message.create.return_value = mock_resp
+
+    ch._send_media("chat_1", None, [str(f)], msg_type="file")
+    assert len(ch.sent_errors) == 1
+    assert "file too large" in ch.sent_errors[0]
+
+
+def test_send_media_exception_reports_error(tmp_path):
+    """Exception during send sends error notification."""
+    ch = MockFeishuChannel(tmp_path)
+    f = tmp_path / "test.pptx"
+    f.write_bytes(b"fake pptx content")
+    ch._upload_media_to_feishu = MagicMock(return_value="valid_file_key")
+    ch._client.im.v1.message.create.side_effect = RuntimeError("connection lost")
+
+    ch._send_media("chat_1", None, [str(f)], msg_type="file")
+    assert len(ch.sent_errors) == 1
+    assert "connection lost" in ch.sent_errors[0]
+
+
+def test_send_media_success_no_error(tmp_path):
+    """Successful send does NOT send error notification."""
+    ch = MockFeishuChannel(tmp_path)
+    f = tmp_path / "test.pptx"
+    f.write_bytes(b"fake pptx content")
+    ch._upload_media_to_feishu = MagicMock(return_value="valid_file_key")
+
+    mock_resp = MagicMock()
+    mock_resp.code = 0
+    mock_resp.msg = "success"
+    ch._client.im.v1.message.create.return_value = mock_resp
+
+    ch._send_media("chat_1", None, [str(f)], msg_type="file")
+    assert len(ch.sent_errors) == 0
