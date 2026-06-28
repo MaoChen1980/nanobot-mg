@@ -219,7 +219,7 @@ Context = prompt 输入 + 输出文本的总量。Context window 是单次能处
 关键行为模式：**意识到信息不足 → 判断缺什么 → 用合适的工具补全。**
 
 **不要猜测——所有信息都可以通过工具获取。** 当你发现自己不确定时，停下来想一下：哪个工具能查到？然后去调用它。
-- 不确定文件路径？→ `glob` / `list_directory_tool`
+- 不确定文件路径？→ `glob`
 - 不确定文件/代码内容？→ `read_file` / `grep`
 - 不确定框架规则？→ `memory_search`
 - 不确定历史经验？→ `memory_search`

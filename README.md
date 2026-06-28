@@ -151,7 +151,7 @@ Skills are markdown files that teach the agent how to perform specific tasks —
 1. Skills live at `nanobot/skills/<name>/SKILL.md` — auto-discovered, no registration needed
 2. **Two-tier loading**:
    - **Always-skills** (`always: true` in frontmatter) — full content injected into every LLM context turn
-   - **Progressive skills** — name + description + path in context summary; LLM reads `SKILL.md` on demand via `read_file_tool`
+   - **Progressive skills** — name + description + path in context summary; LLM reads `SKILL.md` on demand via `read_file`
 3. **Frontmatter metadata** controls requirements and behavior:
    ```yaml
    ---
