@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -86,6 +88,8 @@ class SubagentManager:
         project_root: Path | None = None,
         memory_store: Any | None = None,
         context_builder: Any | None = None,
+        history_token_limit: int | None = None,
+        compress_trigger_tokens: int | None = None,
     ):
         self.provider = provider
         self.workspace = workspace
@@ -101,6 +105,8 @@ class SubagentManager:
         self.db = db
         self._memory_store = memory_store
         self._context_builder = context_builder
+        self._history_token_limit = history_token_limit
+        self._compress_trigger_tokens = compress_trigger_tokens
         # Concurrency cap: env var overrides default 5
         _max_sa = int(os.environ.get("NANOBOT_MAX_SUBAGENTS", "5"))
         self._spawn_semaphore = asyncio.Semaphore(max(1, _max_sa))
@@ -255,6 +261,97 @@ class SubagentManager:
                                 break
                         return items
 
+                    from nanobot.agent.runner import AssessResult
+
+                    async def _assess_callback(msgs: list[dict]) -> AssessResult:
+                        """Full assess_me + debug_root_cause chain — same as main agent.
+
+                        Runs periodic self-assessment, injects findings, and triggers
+                        root-cause analysis when a blocker is detected.
+                        """
+                        from nanobot.agent.assess_me import (
+                            assess_me as _run_sa,
+                            build_assessment_message,
+                            build_debug_root_cause_message,
+                            is_assessment_message,
+                            is_debug_root_cause_message,
+                        )
+                        try:
+                            assess_text = await _run_sa(msgs, has_active_task=True)
+                            if not assess_text:
+                                return AssessResult()
+                        except Exception:
+                            logger.debug("Subagent [{}] periodic assess_me failed", task_id)
+                            return AssessResult()
+
+                        # Parse JSON output — handle <think> tags, code fences, trailing text
+                        text = re.sub(r"<think>.*?</think>", "", assess_text, flags=re.DOTALL).strip()
+                        text = re.sub(r"^```\w*\n?", "", text)
+                        text = _re.sub(r"\n?```$", "", text).strip()
+                        start = text.find("{")
+                        if start < 0:
+                            logger.debug("Subagent [{}] assess_me non-JSON: {}…", task_id, assess_text[:100])
+                            return AssessResult()
+                        text = text[start:]
+                        try:
+                            decoder = json.JSONDecoder()
+                            parsed, _ = decoder.raw_decode(text)
+                        except Exception:
+                            logger.debug("Subagent [{}] assess_me JSON parse failed", task_id)
+                            return AssessResult()
+
+                        status = parsed.get("status", "findings")
+                        needs_revision = parsed.get("needs_revision") is True
+
+                        if status == "ok" and not needs_revision:
+                            logger.info("Subagent [{}] assess_me: all clear", task_id)
+                            return AssessResult()
+
+                        # Build injection text
+                        parts = []
+                        summary = parsed.get("summary", "")
+                        if summary and summary != "null":
+                            parts.append(f"## {summary}")
+                        content = parsed.get("content", "")
+                        if content and content != "null":
+                            parts.append(content)
+                        injection_text = "\n\n".join(parts) if parts else assess_text
+
+                        if needs_revision:
+                            injection_text += (
+                                "\n\n以上评估发现需要修正的问题，请直接修正内容，"
+                                "而非解释评估结果。如果修正涉及对话上下文中的信息，"
+                                "请综合上下文完成修正。"
+                            )
+
+                        # Keep at most one assess_me message
+                        for i in range(len(msgs) - 1, -1, -1):
+                            if is_assessment_message(msgs[i]):
+                                msgs.pop(i)
+                        msgs.append(build_assessment_message(injection_text))
+                        logger.info("Subagent [{}] periodic assess_me injected", task_id)
+
+                        # DRC — blocker triggers root cause analysis
+                        blocker = parsed.get("blocker")
+                        if blocker and blocker != "null":
+                            try:
+                                from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
+                                dcr = DebugRootCauseTool()
+                                dcr.set_context(msgs)
+                                dcr_result = await dcr.execute(problem=blocker)
+                                if dcr_result and not dcr_result.startswith("Error:"):
+                                    for i in range(len(msgs) - 1, -1, -1):
+                                        if is_debug_root_cause_message(msgs[i]):
+                                            msgs.pop(i)
+                                    msgs.append(build_debug_root_cause_message(dcr_result))
+                                    logger.info("Subagent [{}] debug_root_cause injected", task_id)
+                            except Exception:
+                                logger.debug("Subagent [{}] debug_root_cause failed", task_id)
+                        else:
+                            logger.debug("Subagent [{}] debug_root_cause skipped — no blocker", task_id)
+
+                        return AssessResult(injected=True, needs_revision=needs_revision)
+
                     run_coro = self.runner.run(AgentRunSpec(
                         initial_messages=messages,
                         tools=tools,
@@ -271,6 +368,10 @@ class SubagentManager:
                         reasoning_effort=self.runner.provider.generation.reasoning_effort,
                         session_key=origin["session_key"],
                         instructions=lambda: self._context_builder.build_instructions_section(for_subagent=True, session_key=origin["session_key"], tool_instruction_map=tools.get_instruction_map()) if self._context_builder else None,
+                        history_token_limit=self._history_token_limit,
+                        compress_trigger_tokens=self._compress_trigger_tokens,
+                        assess_me_callback=_assess_callback,
+                        assess_interval=10,
                     ))
                     result = await asyncio.wait_for(run_coro, timeout=effective_timeout)
 
@@ -281,8 +382,7 @@ class SubagentManager:
                         assess_text = await _run_self_assess(result.messages, has_active_task=True)
                         if assess_text:
                             assessment = assess_text
-                            import re as _re
-                            stripped = _re.sub(r"<think>.*?</think>", "", assess_text, flags=_re.DOTALL).strip()
+                            stripped = re.sub(r"<think>.*?</think>", "", assess_text, flags=re.DOTALL).strip()
                             logger.info("Subagent [{}] self-assessment: {}", task_id, stripped[:200])
                     except Exception:
                         logger.debug("Subagent [{}] self-assessment skipped", task_id)

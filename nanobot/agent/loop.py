@@ -223,6 +223,8 @@ class AgentLoop:
             project_root=self.project_root,
             memory_store=self.context.memory,
             context_builder=self.context,
+            history_token_limit=self._history_token_limit,
+            compress_trigger_tokens=self._compress_trigger_tokens,
         )
         self._running = False
         self._last_subagent_check: dict[str, _SubagentCheckState] = {}

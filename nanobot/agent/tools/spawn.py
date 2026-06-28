@@ -102,14 +102,16 @@ class SpawnTool(Tool):
         self._origin_chat_id.set(chat_id)
         self._session_key.set(effective_key or f"{channel}:{chat_id}")
     instruction = (
-        "Dispatch parallel independent tasks via fire-and-forget subagents. "
-        "Use for: independent parallel subtasks, time-consuming work that benefits from its own context. "
-        "Do NOT use when you need synchronous results, sequential execution, or zero interruption risk. "
+        "Delegate ONE PART of your work to a subagent. "
+        "Spawn is middleware — it covers only the subtask you pass, not the entire workflow. "
+        "Use for: well-scoped subtasks with clear deliverables, parallel independent work, "
+        "background investigation that doesn't need synchronous results. "
+        "Do NOT use for: full end-to-end workflows, tasks you could do in 1-2 tool calls yourself. "
         "After spawning: "
-        "1) If spawn covered ALL remaining work → stop tool_calls. "
-        "Results arrive automatically as user messages — do NOT poll with check_subagent+exec(sleep). "
-        "2) If you still have independent non-delegated work → do it in parallel. "
-        "3) When a subagent result arrives → integrate it. If partial, spawn another for the missing scope."
+        "1) STOP tool_calls in this response (results arrive async as user messages). "
+        "2) While subagents run → continue your own independent work: discover, prepare, do other spawns. "
+        "3) When subagent result arrives → integrate, then continue to the next step of your workflow. "
+        "   Spawn may happen multiple times across a workflow — each is just one phase."
     )
 
     name = "spawn"
