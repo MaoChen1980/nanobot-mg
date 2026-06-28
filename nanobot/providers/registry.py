@@ -361,6 +361,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         display_name="MiniMax (Anthropic)",
         backend="anthropic",
         default_api_base="https://api.minimax.io/anthropic",
+        stream_idle_timeout=90,
     ),
     # MiniMax-cn OpenAI-compatible API
     ProviderSpec(
@@ -381,6 +382,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         display_name="MiniMax CN (Anthropic)",
         backend="anthropic",
         default_api_base="https://api.minimaxi.com/anthropic",
+        stream_idle_timeout=90,
     ),
     # Mistral AI: OpenAI-compatible API
     ProviderSpec(

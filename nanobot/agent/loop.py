@@ -655,8 +655,9 @@ class AgentLoop:
         """
         observe_think = self._session_observe["_observe_think"].get(session_key or "", True)
         observe_tool = self._session_observe["_observe_tool"].get(session_key or "", True)
-        if self._session_observe["_observe_debug"].get(session_key or "", False):
-            _current_debug_enabled.set(True)
+        _current_debug_enabled.set(
+            self._session_observe["_observe_debug"].get(session_key or "", False)
+        )
         loop_hook = _LoopHook(
             self,
             on_progress=on_progress,

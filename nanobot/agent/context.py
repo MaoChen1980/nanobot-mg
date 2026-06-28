@@ -263,10 +263,14 @@ class ContextBuilder:
         """
         sections: list[str] = []
 
-        # Core golden rule — most prominent position, before everything else
+        # Core golden rule — most prominent position, before everything else.
+        # MUST start with task decomposition, then emit tool_call in same response.
+        # Orchestration Guide (main agent only) has the detailed decomposition format.
+        guide_ref = "（见下方 Orchestration Guide）" if not for_subagent else ""
         sections.append(
             "## Core Rule\n\n"
-            "开始调用工具时：先写一句话说明当前步骤，然后**在同一轮回复中发出 tool_call**。"
+            f"每次任务的第一轮回复必须先输出任务分解{guide_ref}，"
+            "**完成分解后在同一轮回复中发出 tool_call**。"
             "纯文本不带 tool_call 会结束当前任务循环。\n"
         )
 

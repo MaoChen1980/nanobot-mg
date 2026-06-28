@@ -769,7 +769,10 @@ class AnthropicProvider(LLMProvider):
             extra_body=extra_body,
         )
         spec_idle = self._spec.stream_idle_timeout if self._spec else 0
-        idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", str(spec_idle or 30)))
+        if spec_idle:
+            idle_timeout_s = spec_idle
+        else:
+            idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "30"))
         try:
             async with self._client.messages.stream(**kwargs) as stream:
                 final_message = None

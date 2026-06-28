@@ -596,6 +596,7 @@ def agent(
     project_root: str | None = typer.Option(None, "--project-root", "-p", help="Project root directory (enables coding agent mode with project card)"),
     markdown: bool = typer.Option(True, "--markdown/--no-markdown", help="Render assistant output as Markdown"),
     logs: bool = typer.Option(False, "--logs/--no-logs", help="Show nanobot runtime logs during chat"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug mode (save raw prompts to ~/.nanobot/debug/)"),
 ):
     """Interact with the agent directly."""
     from pathlib import Path
@@ -605,6 +606,10 @@ def agent(
     from nanobot.agent.loop import AgentLoop
     from nanobot.bus.queue import MessageBus
     from nanobot.cron.service import CronService
+
+    if debug:
+        from nanobot.agent.context_vars import _current_debug_enabled
+        _current_debug_enabled.set(True)
 
     config = _load_runtime_config(config, workspace)
     project_root_path = Path(project_root).expanduser().resolve() if project_root else None

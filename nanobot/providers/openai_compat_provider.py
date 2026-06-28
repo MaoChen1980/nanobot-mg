@@ -1372,7 +1372,10 @@ class OpenAICompatProvider(LLMProvider):
         on_reasoning_delta: Callable[[str], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         spec_idle = (self._spec.stream_idle_timeout if self._spec else 0)
-        idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", str(spec_idle or 30)))
+        if spec_idle:
+            idle_timeout_s = spec_idle
+        else:
+            idle_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "30"))
         stream = None
         try:
             if self._should_use_responses_api(model, reasoning_effort):
