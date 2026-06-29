@@ -1124,7 +1124,7 @@ class AgentLoop:
                 if self.commands.is_priority(raw):
                     # Check if session was busy before /stop clears dispatch state
                     _pre_stop_busy = (
-                        raw.lower() == "/stop"
+                        raw.lower().rstrip(",.;!?，。！？、") == "/stop"
                         and self._dispatch_manager._effective_session_key(msg) in self._session_dispatch
                     )
                     _pre_new_busy = (

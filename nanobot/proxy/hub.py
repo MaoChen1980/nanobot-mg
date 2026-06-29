@@ -439,7 +439,7 @@ class HubTCPServer:
         # mid-turn injection rather than blocking on the lock — except /stop
         # which cancels the running task immediately.
         if session_lock.locked():
-            if msg.content.strip() == "/stop":
+            if msg.content.strip().rstrip(",.;!?，。！？、") == "/stop":
                 task = self._session_tasks.get(session_key)
                 if task and not task.done():
                     task.cancel()
