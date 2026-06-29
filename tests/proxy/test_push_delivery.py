@@ -204,20 +204,20 @@ class TestFeishuHandleDeliver:
 
 
 # ---------------------------------------------------------------------------
-# FeishuProxyChannel._wrap_tables_in_code_fences & _has_rich_content
+# FeishuProxyChannel._convert_tables_to_code_fences & _has_rich_content
 # ---------------------------------------------------------------------------
 
 
-class TestFeishuWrapTablesInCodeFences:
-    """_wrap_tables_in_code_fences wraps markdown tables in code blocks for post/lark_md."""
+class TestFeishuConvertTablesToCodeFences:
+    """_convert_tables_to_code_fences (ported from openclaw's convertMarkdownTables)."""
 
     def test_no_table_passthrough(self):
-        result = FeishuProxyChannel._wrap_tables_in_code_fences("**bold** and `code`")
+        result = FeishuProxyChannel._convert_tables_to_code_fences("**bold** and `code`")
         assert result == "**bold** and `code`"
 
     def test_wraps_table_in_code_fence(self):
         content = "before\n| A | B |\n|---|---|\n| 1 | 2 |\nafter"
-        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
+        result = FeishuProxyChannel._convert_tables_to_code_fences(content)
         assert "```" in result
         assert "| A | B |" in result
         parts = result.split("```")
@@ -226,31 +226,31 @@ class TestFeishuWrapTablesInCodeFences:
         assert "| 1 | 2 |" in parts[1]
 
     def test_no_wrap_for_single_pipe_line(self):
-        result = FeishuProxyChannel._wrap_tables_in_code_fences("| just a line")
+        result = FeishuProxyChannel._convert_tables_to_code_fences("| just a line")
         assert "```" not in result
 
     def test_multiple_tables(self):
         content = "| A | B |\n|---|---|\n| 1 | 2 |\n\n| X | Y |\n|---|---|\n| 3 | 4 |"
-        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
+        result = FeishuProxyChannel._convert_tables_to_code_fences(content)
         assert result.count("```") == 4
 
     def test_table_at_end_of_content(self):
         content = "text\n| A | B |\n|---|---|\n| 1 | 2 |"
-        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
+        result = FeishuProxyChannel._convert_tables_to_code_fences(content)
         assert "```" in result
 
     def test_pipe_in_normal_text_not_wrapped(self):
         content = "this | is not a table"
-        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
+        result = FeishuProxyChannel._convert_tables_to_code_fences(content)
         assert "```" not in result
 
     def test_empty_content(self):
-        assert FeishuProxyChannel._wrap_tables_in_code_fences("") == ""
-        assert FeishuProxyChannel._wrap_tables_in_code_fences("\n\n") == "\n\n"
+        assert FeishuProxyChannel._convert_tables_to_code_fences("") == ""
+        assert FeishuProxyChannel._convert_tables_to_code_fences("\n\n") == "\n\n"
 
     def test_two_row_header_table(self):
         content = "| | QwenPaw | nanobot |\n|---|---|---|\n| 多 Looper | ✅ | ❌ |"
-        result = FeishuProxyChannel._wrap_tables_in_code_fences(content)
+        result = FeishuProxyChannel._convert_tables_to_code_fences(content)
         assert "```" in result
         assert "| | QwenPaw | nanobot |" in result
 

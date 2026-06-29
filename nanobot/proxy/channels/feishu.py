@@ -791,11 +791,11 @@ class FeishuProxyChannel(BaseProxyChannel):
 
     @staticmethod
     def _has_rich_content(text: str) -> bool:
-        """Detect content that benefits from interactive card rendering.
+        """Openclaw shouldUseCard: check if content needs card rendering.
 
-        Checks for code blocks (```` ``` ````) and markdown tables (``|...|``
-        followed by a separator line ``|---|``), which Feishu post messages
-        and legacy ``lark_md`` tags cannot render properly.
+        Returns True if text contains code blocks (```` ``` ````) or
+        markdown tables (``|...|\n|---|``), which Feishu ``tag: "md"``
+        in post messages cannot render properly.
         """
         if "```" in text:
             return True
@@ -869,11 +869,11 @@ class FeishuProxyChannel(BaseProxyChannel):
     # ── Table fallback for non-card paths ──────────────────────────────
 
     @staticmethod
-    def _wrap_tables_in_code_fences(content: str) -> str:
-        """Wrap markdown tables in code fences for compatibility with non-card message types.
+    def _convert_tables_to_code_fences(content: str) -> str:
+        """Convert markdown tables to code fences (ported from openclaw's convertMarkdownTables mode="code").
 
-        ``tag: "md"`` in post messages and ``lark_md`` in v1 cards cannot render
-        pipe-delimited tables, so wrapping them in ``` fences preserves layout.
+        ``tag: "md"`` in post messages cannot render pipe-delimited tables,
+        so wrapping them in ``` fences preserves readable layout.
         """
         lines = content.split("\n")
         result: list[str] = []
@@ -934,12 +934,8 @@ class FeishuProxyChannel(BaseProxyChannel):
             from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
             header_text, body = self._extract_header(content)
-            # Escape $ to \$ — Feishu card markdown treats $ as inline math
-            # delimiter ($...$), which silently breaks rendering when content
-            # starts with $ (e.g. tool hints like "$ python3 -c '...'").
-            md_content = (body or content).replace("$", "\\$")
             elements: list[dict[str, Any]] = [
-                {"tag": "markdown", "content": md_content},
+                {"tag": "markdown", "content": body or content},
             ]
 
             if quick_replies:
@@ -1130,17 +1126,19 @@ class FeishuProxyChannel(BaseProxyChannel):
     # ── Public send ────────────────────────────────────────────────────
 
     def _send_formatted_reply(self, chat_id: str, root_id: str | None, content: str) -> None:
-        """Send a reply with automatic format selection based on content and config.
+        """Send text reply with format routing (ported from openclaw sendText).
 
-        Routing logic (config key ``renderMode``):
-          * ``card`` (default) — always use interactive card v2.0 (native markdown with tables)
-          * ``raw`` — use post message (lightweight, tables → code fences)
-          * ``auto`` — detect rich content (code blocks, tables) → card; else post
+        Two paths (matching openclaw's sendText/sendMessageFeishu/sendMarkdownCardFeishu):
+          * ``renderMode="card"`` or ``("auto" + rich content)`` → interactive card v2.0
+          * Otherwise → post (``tag: "md"``) with tables converted to code fences
+          * Final fallback → plain text
+
+        Rich content = code blocks or markdown tables (see :meth:`_has_rich_content`).
 
         When the content contains a ``---quick-replies`` section, card mode is
         forced and buttons are rendered from the parsed labels.
 
-        Falls back through the chain: card → post → plain text.
+        Config key ``renderMode``: ``card`` (default), ``auto``, or ``raw``.
         """
         cleaned, qrs = self._parse_quick_replies(content)
         render_mode = self.config.get("renderMode", "card")
@@ -1152,7 +1150,7 @@ class FeishuProxyChannel(BaseProxyChannel):
             if self._send_card_reply(chat_id, cleaned, root_id=root_id, quick_replies=qrs):
                 return
 
-        processed = self._wrap_tables_in_code_fences(cleaned)
+        processed = self._convert_tables_to_code_fences(cleaned)
         if self._send_post_reply(chat_id, processed, root_id=root_id):
             return
 
