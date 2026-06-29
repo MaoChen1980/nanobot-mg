@@ -44,6 +44,10 @@ class ProxyMessage:
             timestamp=datetime.fromisoformat(self.timestamp) if self.timestamp else datetime.now(timezone.utc),
             media=self.media,
             metadata=self.metadata,
+            # Match hub's session key format (channel:bot:sender_id) so the bus
+            # dispatch path uses the same lock key as the hub path, preventing
+            # concurrent processing of the same user's messages.
+            session_key_override=f"{self.channel}:{self.bot}:{self.sender_id}",
         )
 
     @classmethod

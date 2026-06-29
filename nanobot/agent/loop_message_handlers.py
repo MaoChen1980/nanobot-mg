@@ -18,6 +18,7 @@ from nanobot.agent.context import ContextState, _sanitize_session_key
 
 from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
+from nanobot.utils.tool_hints import format_single_tool_hint
 
 _STALE_MESSAGE_MINUTES = 20
 
@@ -388,13 +389,46 @@ class UserMessageHandler:
         return initial_messages, None
 
     def _make_bus_progress_callback(self, msg):
+        # Derive proxy_key from "proxy:channel:bot" prefix so the gateway can
+        # route progress messages to the correct proxy connection.
+        proxy_key: str | None = None
+        channel = msg.channel
+        if channel.startswith("proxy:"):
+            proxy_key = channel[len("proxy:"):]  # e.g. "feishu:feishu1"
+
         async def _bus_progress(content, *, tool_hint=False, tool_events=None):
             meta = dict(msg.metadata or {})
             meta["_progress"] = True
             meta["_tool_hint"] = tool_hint
+            if proxy_key:
+                meta["_proxy_key"] = proxy_key
+            # Format tool_events into inline text (same pattern as hub's
+            # _on_progress) so they aren't silently dropped — the gateway
+            # only delivers the content field.
+            parts: list[str] = []
             if tool_events:
-                meta["_tool_events"] = tool_events
-            await self._loop.bus.publish_outbound(OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content, metadata=meta))
+                for te in tool_events:
+                    if not isinstance(te, dict):
+                        continue
+                    phase = te.get("phase", "")
+                    name = te.get("name", "tool")
+                    if phase == "end":
+                        args = te.get("arguments", {})
+                        hint = format_single_tool_hint(name, args) if isinstance(args, dict) and args else name
+                        parts.append(f"✅ {hint} completed")
+                    elif phase == "error":
+                        error = te.get("error", "")
+                        args = te.get("arguments", {})
+                        hint = format_single_tool_hint(name, args) if isinstance(args, dict) and args else name
+                        parts.append(f"❌ {hint}: {error}" if error else f"❌ {hint} failed")
+            formatted = "\n".join(parts)
+            final_content = content
+            if formatted:
+                final_content = (content + "\n" + formatted) if content else formatted
+            await self._loop.bus.publish_outbound(OutboundMessage(
+                channel=msg.channel, chat_id=msg.chat_id,
+                content=final_content, metadata=meta,
+            ))
         return _bus_progress
 
     def _make_retry_wait_callback(self, msg, on_progress=None):

@@ -1012,10 +1012,33 @@ class GatewayApplication:
                 continue
 
             try:
-                # Skip streaming / progress / control messages
                 meta = msg.metadata or {}
-                if any(meta.get(k) for k in ("_stream_delta", "_stream_end",
-                                              "_progress", "_retry_wait", "_tool_hint")):
+
+                # Streaming deltas handled by hub's on_stream callback — skip.
+                if meta.get("_stream_delta") or meta.get("_stream_end"):
+                    continue
+
+                # Progress / tool_hint / retry_wait: route via embedded proxy_key.
+                # These are produced by the bus progress fallback when on_progress
+                # is not provided (e.g. bus dispatch path).
+                if any(meta.get(k) for k in ("_progress", "_tool_hint", "_retry_wait")):
+                    proxy_key = meta.get("_proxy_key")
+                    if not proxy_key or not self.proxy_manager.has_proxy(proxy_key):
+                        logger.debug(
+                            "Progress for {} skipped (proxy_key={})",
+                            msg.channel, proxy_key,
+                        )
+                    else:
+                        ok = await self.proxy_manager.deliver_to_proxy(proxy_key, {
+                            "type": "deliver",
+                            "chat_id": msg.chat_id,
+                            "content": msg.content,
+                        })
+                        if not ok:
+                            logger.warning(
+                                "Progress not delivered to proxy {} (disconnected)",
+                                proxy_key,
+                            )
                     continue
 
                 # Only route messages with session_key metadata (from subagent results)
