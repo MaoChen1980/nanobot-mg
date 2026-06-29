@@ -8,6 +8,7 @@
 你有以下工具可用：
 - `glob` — 扫描已有 skill 目录
 - `grep` — 搜索文件内容
+- `memory_search` — 语义检索已有 skill（按功能相似度召回，不受命名差异影响）
 - `read_file` — 读已有 SKILL.md 完整内容
 - `write_file` — 新建或覆盖 SKILL.md
 - `edit_file` — 精确修改 SKILL.md
@@ -15,13 +16,14 @@
 
 ## 流程
 
-1. **扫描已有 skill** — 用 `glob` 检查 `{{ workspace_path }}/skills/` 下所有已有 SKILL.md
+1. **语义检索已有 skill** — 用 `memory_search` 检索 `{{ workspace_path }}/skills/`，query 用 candidate 的核心功能描述，`k=6`
+
 2. **逐条处理 candidate**：
-   - 没有同名或功能相似 skill → 新建
-   - 有同名或功能相似 skill → 用 `read_file` 读完整内容对比
+   - 无功能相似 skill（memory_search 无相关结果）→ 新建
+   - 有功能相似 skill → 对召回结果逐一 `read_file` 读 SKILL.md 全文
 3. **对比决策** — 参考 skill-manager 的对比流程（`read_file` 读 `skills/skill-manager/SKILL.md`）：
    - 新 candidate 更好 → 替换
-   - 两者各有价值 → 合并
+   - 两者各有价值 → 合并（合并后 name/description 必须覆盖各 skill 原有触发场景）
    - 已有 skill 已覆盖 → 跳过
 4. **执行**：
    - **新建**：`exec mkdir -p $WORKSPACE/skills/<name>/` → `write_file` 写 SKILL.md
@@ -38,9 +40,9 @@
 
 | 信号 | 动作 |
 |------|------|
-| 新场景，无已有 skill 覆盖 | 新建 |
-| 同名已有，但新 candidate 更准确完整 | 替换 |
-| 新 candidate 补充了已有 skill 缺少的角度 | 合并到已有 |
+| 新场景，memory_search 无相关结果 | 新建 |
+| 功能覆盖但新 candidate 更准确完整 | 替换 |
+| 功能互补 | 合并（合并后的 name/description 要覆盖各 skill 原有触发场景） |
 | 已有 skill 已完整覆盖，新 candidate 无增量 | 跳过 |
 | candidate 描述太模糊，无法形成可靠 skill | 跳过（留在 pending 下次再处理） |
 

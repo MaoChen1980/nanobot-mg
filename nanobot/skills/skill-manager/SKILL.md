@@ -74,7 +74,7 @@ category: agent
 既然你使用标准文件工具来管理 skills，以下是各操作的具体方法：
 
 ### Create a skill
-1. **检查重复**：扫描 `skills_summary`（始终在你的 prompt 中）——如果已有 skill 覆盖此功能，则跳过。
+1. **检查重复**：用 `memory_search` 语义检索已有 skill，query 用 candidate 的核心功能描述，`k=6`。对召回结果逐一 `read_file` 读 SKILL.md 全文，判断是否功能重复。如有覆盖则跳过或合并。
 2. **检查 trigger**：确认有明确的触发信号（用户关键词、消息类型、工具返回、cron 周期）。没有外部 trigger 的 skill 不应创建。
 3. **创建目录**：`mkdir -p $WORKSPACE/skills/<name>/`
 4. **写入 SKILL.md** 使用 `write_file(path="$WORKSPACE/skills/<name>/SKILL.md", content="...")`。必须包含 `## When to Use`、`## Steps`、`## Verification` 三个章节。末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
@@ -114,7 +114,7 @@ category: agent
    - 新 candidate 明显更好 → **替换**（write_file 覆盖）
    - 各有价值 → **合并**（读原有内容，整合 Steps/Pitfalls/Verification，write_file 写回）
    - 已有 skill 已完整覆盖 → **跳过**
-4. **合并注意事项**：保留两边的 Pitfalls 去重、Verification 取并集、Steps 按顺序整合
+4. **合并注意事项**：保留两边的 Pitfalls 去重、Verification 取并集、Steps 按顺序整合。**合并后的 name/description 必须覆盖各 skill 原有的触发场景**，确保原来的用户场景不会因改名而丢失触发覆盖。
 
 ### Add supporting files
 `write_file(path="$WORKSPACE/skills/<name>/references/<filename>.md", content="...")`

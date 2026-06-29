@@ -7,7 +7,7 @@
 
 ## 步骤
 
-1. **查重** — 用 `glob` 或 `read_file` 检查 `{{ workspace_path }}/skills/` 下已有 skill。如果已有 skill 已覆盖，评估是否需要更新
+1. **语义查重** — 用 `memory_search` 检索 `{{ workspace_path }}/skills/`，query 用新 skill 的核心功能描述，`k=6`。对召回结果 `read_file` 读全文
 2. **对比决策** — 如有功能重复的已有 skill，参考 `skill-manager` 的对比流程（`read_file` 读 `skills/skill-manager/SKILL.md`），判断是替换/合并/跳过
 3. **创建或更新** — 无覆盖时 `exec mkdir -p` 创建目录再写 `SKILL.md`，需更新时替换或合并
 4. **决定加载策略**：
