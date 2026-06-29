@@ -129,8 +129,8 @@ async def test_registry_executes_decorated_tool_end_to_end() -> None:
     reg = ToolRegistry()
     reg.register(DecoratedSampleTool())
 
-    ok = await reg.execute("decorated_sample", {"query": "hello", "count": "3"})
-    assert ok == "ok:3 ✓"
+    ok = await reg.execute("decorated_sample", {"query": "hello", "count": 3})
+    assert ok == "ok:3"
 
     err = await reg.execute("decorated_sample", {"query": "h", "count": 3})
     assert "Invalid parameters" in err
@@ -149,6 +149,7 @@ def test_validate_params_type_and_range() -> None:
 
     errors = tool.validate_params({"query": "hi", "count": "2"})
     assert any("count should be integer" in e for e in errors)
+    assert any("str('2')" in e for e in errors)
 
 
 def test_validate_params_enum_and_min_length() -> None:
@@ -182,6 +183,71 @@ async def test_registry_returns_validation_error() -> None:
     reg.register(SampleTool())
     result = await reg.execute("sample", {"query": "hi"})
     assert "Invalid parameters" in result
+
+
+# --- Enhanced error message tests ---
+
+
+def test_validate_params_enhanced_error_messages() -> None:
+    """Error messages should include actual type and value for type mismatches."""
+    tool = SampleTool()
+
+    # integer type mismatch
+    errors = tool.validate_params({"query": "hi", "count": "not_a_number"})
+    assert any("count should be integer" in e for e in errors)
+    assert any("str('not_a_number')" in e for e in errors)
+
+    # boolean type mismatch
+    errors2 = tool.validate_params({"query": "hi", "count": 2, "mode": True})
+    assert any("mode should be string" in e for e in errors2)
+    assert any("bool(True)" in e for e in errors2)
+
+    # array instead of string
+    errors3 = tool.validate_params({"query": "hi", "count": 2, "mode": ["fast"]})
+    assert any("mode should be string" in e for e in errors3)
+    assert any("list" in e for e in errors3)
+
+
+def test_validate_json_schema_value_direct_enhanced_errors() -> None:
+    """Direct Schema.validate_json_schema_value calls also get enhanced errors."""
+    errors = Schema.validate_json_schema_value("hello", {"type": "integer"}, "val")
+    assert any("str('hello')" in e for e in errors)
+
+    errors = Schema.validate_json_schema_value(42, {"type": "string"}, "val")
+    assert any("int(42)" in e for e in errors)
+
+
+def test_validate_params_empty_string_minlength() -> None:
+    """Empty string on a minLength param should produce a validation error."""
+    tool = SampleTool()
+    errors = tool.validate_params({"query": "", "count": 2})
+    assert any("query must be at least 2 chars" in e for e in errors)
+
+
+def test_cast_params_int_to_number_allowed() -> None:
+    """int→float for 'number' type is kept (JSON serialization reality)."""
+    tool = CastTestTool(
+        {
+            "type": "object",
+            "properties": {"rate": {"type": "number"}},
+        }
+    )
+    result = tool.cast_params({"rate": 42})
+    assert result["rate"] == 42.0
+    assert isinstance(result["rate"], float)
+
+
+def test_validate_params_string_for_bool_fails_with_detailed_error() -> None:
+    """String passed to bool field should fail with type+value in error."""
+    tool = CastTestTool(
+        {
+            "type": "object",
+            "properties": {"flag": {"type": "boolean"}},
+        }
+    )
+    errors = tool.validate_params({"flag": "true"})
+    assert any("flag should be boolean" in e for e in errors)
+    assert any("str('true')" in e for e in errors)
 
 
 # --- ExecTool enhancement tests ---
@@ -258,7 +324,8 @@ class CastTestTool(Tool):
         return "ok"
 
 
-def test_cast_params_string_to_int() -> None:
+def test_cast_params_does_not_coerce_string_to_int() -> None:
+    """String values must NOT be silently coerced to int — validation catches it."""
     tool = CastTestTool(
         {
             "type": "object",
@@ -266,11 +333,12 @@ def test_cast_params_string_to_int() -> None:
         }
     )
     result = tool.cast_params({"count": "42"})
-    assert result["count"] == 42
-    assert isinstance(result["count"], int)
+    assert result["count"] == "42"
+    assert isinstance(result["count"], str)
 
 
-def test_cast_params_string_to_number() -> None:
+def test_cast_params_does_not_coerce_string_to_number() -> None:
+    """String values must NOT be silently coerced to float — validation catches it."""
     tool = CastTestTool(
         {
             "type": "object",
@@ -278,23 +346,27 @@ def test_cast_params_string_to_number() -> None:
         }
     )
     result = tool.cast_params({"rate": "3.14"})
-    assert result["rate"] == 3.14
-    assert isinstance(result["rate"], float)
+    assert result["rate"] == "3.14"
+    assert isinstance(result["rate"], str)
 
 
-def test_cast_params_string_to_bool() -> None:
+def test_cast_params_does_not_coerce_string_to_bool() -> None:
+    """String values must NOT be silently coerced to bool — validation catches it."""
     tool = CastTestTool(
         {
             "type": "object",
             "properties": {"enabled": {"type": "boolean"}},
         }
     )
-    assert tool.cast_params({"enabled": "true"})["enabled"] is True
-    assert tool.cast_params({"enabled": "false"})["enabled"] is False
-    assert tool.cast_params({"enabled": "1"})["enabled"] is True
+    result = tool.cast_params({"enabled": "true"})
+    assert result["enabled"] == "true"
+    assert isinstance(result["enabled"], str)
+    result = tool.cast_params({"enabled": "false"})
+    assert result["enabled"] == "false"
 
 
-def test_cast_params_array_items() -> None:
+def test_cast_params_array_items_preserves_types() -> None:
+    """Array items should not have their types silently coerced."""
     tool = CastTestTool(
         {
             "type": "object",
@@ -304,10 +376,11 @@ def test_cast_params_array_items() -> None:
         }
     )
     result = tool.cast_params({"nums": ["1", "2", "3"]})
-    assert result["nums"] == [1, 2, 3]
+    assert result["nums"] == ["1", "2", "3"]
 
 
-def test_cast_params_nested_object() -> None:
+def test_cast_params_nested_object_preserves_types() -> None:
+    """Nested object values should not have types silently coerced."""
     tool = CastTestTool(
         {
             "type": "object",
@@ -323,8 +396,10 @@ def test_cast_params_nested_object() -> None:
         }
     )
     result = tool.cast_params({"config": {"port": "8080", "debug": "true"}})
-    assert result["config"]["port"] == 8080
-    assert result["config"]["debug"] is True
+    assert result["config"]["port"] == "8080"
+    assert isinstance(result["config"]["port"], str)
+    assert result["config"]["debug"] == "true"
+    assert isinstance(result["config"]["debug"], str)
 
 
 def test_cast_params_bool_not_cast_to_int() -> None:
@@ -353,28 +428,19 @@ def test_cast_params_preserves_empty_string() -> None:
     assert result["name"] == ""
 
 
-def test_cast_params_bool_string_false() -> None:
-    """Test that 'false', '0', 'no' strings convert to False."""
+def test_cast_params_bool_string_invalid_or_no_coercion() -> None:
     tool = CastTestTool(
         {
             "type": "object",
             "properties": {"flag": {"type": "boolean"}},
         }
     )
-    assert tool.cast_params({"flag": "false"})["flag"] is False
-    assert tool.cast_params({"flag": "False"})["flag"] is False
-    assert tool.cast_params({"flag": "0"})["flag"] is False
-    assert tool.cast_params({"flag": "no"})["flag"] is False
-    assert tool.cast_params({"flag": "NO"})["flag"] is False
-
-
-def test_cast_params_bool_string_invalid() -> None:
-    tool = CastTestTool(
-        {
-            "type": "object",
-            "properties": {"flag": {"type": "boolean"}},
-        }
-    )
+    # No coercion — string stays string
+    result = tool.cast_params({"flag": "true"})
+    assert result["flag"] == "true"
+    result = tool.cast_params({"flag": "false"})
+    assert result["flag"] == "false"
+    # Invalid bool strings also stay as-is
     result = tool.cast_params({"flag": "random"})
     assert result["flag"] == "random"
     result = tool.cast_params({"flag": "maybe"})
@@ -414,6 +480,7 @@ def test_validate_params_bool_not_accepted_as_number() -> None:
     )
     errors = tool.validate_params({"rate": False})
     assert any("rate should be number" in e for e in errors)
+    assert any("bool" in e for e in errors)
 
 
 def test_cast_params_none_values() -> None:

@@ -82,3 +82,44 @@ async def test_web_fetch_blocks_private_redirect_before_returning_image(monkeypa
     data = json.loads(result)
     assert "error" in data
     assert "redirect blocked" in data["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_web_fetch_rejects_backtick_wrapped_url():
+    """URL wrapped in backticks must fail validation (no silent stripping)."""
+    tool = WebFetchTool()
+    result = await tool.execute(url="`https://example.com`")
+    data = json.loads(result)
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_web_fetch_rejects_single_quote_wrapped_url():
+    """URL wrapped in single quotes must fail validation (no silent stripping)."""
+    tool = WebFetchTool()
+    result = await tool.execute(url="'https://example.com'")
+    data = json.loads(result)
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_web_fetch_rejects_double_quote_wrapped_url():
+    """URL wrapped in double quotes must fail validation (no silent stripping)."""
+    tool = WebFetchTool()
+    result = await tool.execute(url='"https://example.com"')
+    data = json.loads(result)
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_web_fetch_accepts_clean_url():
+    """Clean URL without wrapping must still pass initial validation."""
+    tool = WebFetchTool()
+    def _resolve_public(hostname, port=None, family=0, type=0, proto=0, flags=0):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 0))]
+    with patch("nanobot.security.network.socket.getaddrinfo", _resolve_public):
+        result = await tool.execute(url="https://example.com")
+    data = json.loads(result)
+    # It may fail later (DNS/HTTP), but the initial validation should pass
+    assert "Only http/https" not in data.get("error", "")
+    assert "Missing domain" not in data.get("error", "")

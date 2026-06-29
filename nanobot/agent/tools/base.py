@@ -45,13 +45,13 @@ class Schema(ABC):
         if nullable and val is None:
             return []
         if t == "integer" and (not isinstance(val, int) or isinstance(val, bool)):
-            return [f"{label} should be integer"]
+            return [f"{label} should be integer, got {type(val).__name__}({val!r})"]
         if t == "number" and (
             not isinstance(val, _JSON_TYPE_MAP["number"]) or isinstance(val, bool)
         ):
-            return [f"{label} should be number"]
+            return [f"{label} should be number, got {type(val).__name__}({val!r})"]
         if t in _JSON_TYPE_MAP and t not in ("integer", "number") and not isinstance(val, _JSON_TYPE_MAP[t]):
-            return [f"{label} should be {t}"]
+            return [f"{label} should be {t}, got {type(val).__name__}({val!r})"]
 
         errors: list[str] = []
         if "enum" in schema and val not in schema["enum"]:
@@ -296,8 +296,6 @@ class Tool(ABC):
         return self._tool_parameters_schema
 
     _TYPE_MAP = _JSON_TYPE_MAP
-    _BOOL_TRUE = frozenset(("true", "1", "yes"))
-    _BOOL_FALSE = frozenset(("false", "0", "no"))
 
     @staticmethod
     def _resolve_type(t: Any) -> str | None:
@@ -319,35 +317,18 @@ class Tool(ABC):
         t = self._resolve_type(schema.get("type"))
         if t == "boolean" and isinstance(val, bool):
             return val
-        if t == "boolean" and isinstance(val, int) and val in (0, 1):
-            return bool(val)
+        # int→float: JSON Schema "number" accepts integers (JSON serialization reality)
         if t == "number" and isinstance(val, int) and not isinstance(val, bool):
             return float(val)
         if t == "integer" and isinstance(val, int) and not isinstance(val, bool):
             return val
-        if t in self._TYPE_MAP and t not in ("boolean", "integer", "array", "object"):
+        if t in ("string", "boolean", "array", "object"):
+            # No silent type coercion — let validation catch type mismatches
+            return val
+        if t in self._TYPE_MAP:
             expected = self._TYPE_MAP[t]
             if isinstance(val, expected):
                 return val
-        if isinstance(val, str) and t in ("integer", "number"):
-            try:
-                return int(val) if t == "integer" else float(val)
-            except ValueError:
-                return val
-        if t == "string":
-            return val if val is None else str(val)
-        if t == "boolean" and isinstance(val, str):
-            low = val.lower()
-            if low in self._BOOL_TRUE:
-                return True
-            if low in self._BOOL_FALSE:
-                return False
-            return val
-        if t == "array" and isinstance(val, list):
-            items = schema.get("items")
-            return [self._cast_value(x, items) for x in val] if items else val
-        if t == "object" and isinstance(val, dict):
-            return self._cast_object(val, schema)
         return val
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:

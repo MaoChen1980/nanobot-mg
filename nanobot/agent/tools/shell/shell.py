@@ -294,23 +294,19 @@ class ExecTool(Tool):
 
         if _IS_WINDOWS:
             cwd = os.path.normpath(cwd)
-            # PowerShell's `curl` is an alias for Invoke-WebRequest, not
-            # the real curl.exe.  Replace bare `curl` at start-of-command
-            # so piped/inlined invocations like `curl -s url | grep ...`
-            # don't block waiting for interactive Uri parameter input.
-            command = re.sub(r'^(\s*)curl(?=\s|$)', r'\1curl.exe', command, count=1)
-            # `$null` after a redirection operator is valid PowerShell but creates
-            # a literal file named `$null` in cmd.exe.  Replace with `NUL` (the
-            # Windows device that discards output) so the LLM's idiomatic
-            # "suppress output" pattern works correctly.
-            command = re.sub(
-                r'(>>?|2>>?|>&1)\s*\$null\b',
-                r'\1 NUL',
-                command,
-            )
-            # `mkdir -p` is bash syntax; cmd.exe treats `-p` as a directory name.
-            # cmd.exe's mkdir already creates parent directories automatically.
-            command = re.sub(r'\bmkdir\s+-p\b', 'mkdir', command)
+            # Detect cross-platform traps that silently do the wrong thing in cmd.exe.
+            # Do NOT add detections for commands that produce an actual error — the
+            # natural error message is sufficient for the LLM to self-correct.
+            if re.search(r'(>>?|2>>?|>&1)\s*\$null\b', command):
+                return (
+                    "Error: '$null' after redirection creates a literal file named '$null' "
+                    "in cmd.exe. Use 'NUL' to discard output on Windows."
+                )
+            if re.search(r'\bmkdir\s+-p\b', command):
+                return (
+                    "Error: 'mkdir -p' is bash syntax. Windows mkdir creates parent "
+                    "directories automatically; use 'mkdir' without '-p'."
+                )
 
         if self.path_append:
             if _IS_WINDOWS:

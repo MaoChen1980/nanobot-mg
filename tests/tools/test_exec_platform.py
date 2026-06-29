@@ -249,14 +249,145 @@ class TestSandboxPlatform:
 
 
 # ---------------------------------------------------------------------------
-# $null → NUL translation (Windows only)
+# $null error detection (Windows only) — now returns error instead of replacing
 # ---------------------------------------------------------------------------
 
-class TestNullToNulTranslation:
+class TestNullErrorOnWindows:
 
     @pytest.mark.asyncio
-    async def test_redirect_stdout_to_null(self, tmp_path):
-        """> $null redirect should be replaced with > NUL."""
+    async def test_redirect_stdout_to_null_returns_error(self, tmp_path):
+        """> $null redirect should return an error on Windows."""
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="echo hi > $null")
+
+        assert "Error:" in result
+        assert "$null" in result
+        assert "NUL" in result
+
+    @pytest.mark.asyncio
+    async def test_redirect_stderr_and_stdout_to_null_returns_error(self, tmp_path):
+        """2>&1 > $null redirect should return an error on Windows."""
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="make 2>&1 > $null")
+
+        assert "Error:" in result
+        assert "$null" in result
+
+    @pytest.mark.asyncio
+    async def test_no_space_before_null_returns_error(self, tmp_path):
+        """>$null without space should still be detected."""
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="echo hi>$null")
+
+        assert "Error:" in result
+        assert "$null" in result
+
+    @pytest.mark.asyncio
+    async def test_null_without_redirect_no_error(self, tmp_path):
+        """$null without a redirect operator must NOT trigger the error."""
+        mock_proc = AsyncMock()
+        mock_proc.communicate.return_value = (b"ok", b"")
+        mock_proc.returncode = 0
+
+        captured_cmd = None
+        async def capture_spawn(cmd, cwd, env):
+            nonlocal captured_cmd
+            captured_cmd = cmd
+            return mock_proc
+
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
+            patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="echo $null is not a file")
+
+        assert "ok" in result
+
+    @pytest.mark.asyncio
+    async def test_append_stdout_to_null_returns_error(self, tmp_path):
+        """>> $null append redirect should return an error on Windows."""
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="echo log >> $null")
+
+        assert "Error:" in result
+        assert "$null" in result
+
+    @pytest.mark.asyncio
+    async def test_no_error_on_unix(self, tmp_path):
+        """$null redirect must NOT trigger an error on Unix."""
+        mock_proc = AsyncMock()
+        mock_proc.communicate.return_value = (b"hi", b"")
+        mock_proc.returncode = 0
+
+        captured_cmd = None
+        async def capture_spawn(cmd, cwd, env):
+            nonlocal captured_cmd
+            captured_cmd = cmd
+            return mock_proc
+
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", False),
+            patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="echo hi > $null")
+
+        assert "hi" in result
+
+
+# ---------------------------------------------------------------------------
+# mkdir -p error detection (Windows only)
+# ---------------------------------------------------------------------------
+
+class TestMkdirPErrorOnWindows:
+
+    @pytest.mark.asyncio
+    async def test_mkdir_p_returns_error(self, tmp_path):
+        """mkdir -p should return an error on Windows."""
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="mkdir -p foo/bar")
+
+        assert "Error:" in result
+        assert "mkdir" in result
+
+    @pytest.mark.asyncio
+    async def test_mkdir_p_with_multiple_args_returns_error(self, tmp_path):
+        """mkdir -p with multiple dirs should return an error on Windows."""
+        with (
+            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
+            patch.object(ExecTool, "_guard_command", return_value=None),
+        ):
+            tool = ExecTool(working_dir=str(tmp_path))
+            result = await tool.execute(command="mkdir -p dir1 dir2 dir3")
+
+        assert "Error:" in result
+
+    @pytest.mark.asyncio
+    async def test_mkdir_without_p_no_error(self, tmp_path):
+        """mkdir without -p must NOT trigger the error."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"", b"")
         mock_proc.returncode = 0
@@ -273,105 +404,13 @@ class TestNullToNulTranslation:
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
             tool = ExecTool(working_dir=str(tmp_path))
-            await tool.execute(command="echo hi > $null")
+            result = await tool.execute(command="mkdir foo")
 
-        assert captured_cmd == "echo hi > NUL"
-
-    @pytest.mark.asyncio
-    async def test_redirect_stderr_and_stdout_to_null(self, tmp_path):
-        """2>&1 > $null should replace only the $null part."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-
-        captured_cmd = None
-        async def capture_spawn(cmd, cwd, env):
-            nonlocal captured_cmd
-            captured_cmd = cmd
-            return mock_proc
-
-        with (
-            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
-            patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
-            patch.object(ExecTool, "_guard_command", return_value=None),
-        ):
-            tool = ExecTool(working_dir=str(tmp_path))
-            await tool.execute(command="make 2>&1 > $null")
-
-        assert captured_cmd == "make 2>&1 > NUL"
+        assert "Exit: 0" in result
 
     @pytest.mark.asyncio
-    async def test_no_space_before_null(self, tmp_path):
-        """>$null without space should still be replaced."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-
-        captured_cmd = None
-        async def capture_spawn(cmd, cwd, env):
-            nonlocal captured_cmd
-            captured_cmd = cmd
-            return mock_proc
-
-        with (
-            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
-            patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
-            patch.object(ExecTool, "_guard_command", return_value=None),
-        ):
-            tool = ExecTool(working_dir=str(tmp_path))
-            await tool.execute(command="echo hi>$null")
-
-        assert captured_cmd == "echo hi> NUL"
-
-    @pytest.mark.asyncio
-    async def test_null_not_replaced_without_redirect(self, tmp_path):
-        """$null without a redirect operator before it must NOT be replaced."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-
-        captured_cmd = None
-        async def capture_spawn(cmd, cwd, env):
-            nonlocal captured_cmd
-            captured_cmd = cmd
-            return mock_proc
-
-        with (
-            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
-            patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
-            patch.object(ExecTool, "_guard_command", return_value=None),
-        ):
-            tool = ExecTool(working_dir=str(tmp_path))
-            await tool.execute(command="echo $null is not a file")
-
-        assert captured_cmd == "echo $null is not a file"
-
-    @pytest.mark.asyncio
-    async def test_append_stdout_to_null(self, tmp_path):
-        """>> $null append redirect should be replaced with >> NUL."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-
-        captured_cmd = None
-        async def capture_spawn(cmd, cwd, env):
-            nonlocal captured_cmd
-            captured_cmd = cmd
-            return mock_proc
-
-        with (
-            patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
-            patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
-            patch.object(ExecTool, "_guard_command", return_value=None),
-        ):
-            tool = ExecTool(working_dir=str(tmp_path))
-            await tool.execute(command="echo log >> $null")
-
-        assert captured_cmd == "echo log >> NUL"
-
-    @pytest.mark.asyncio
-    async def test_no_replacement_on_unix(self, tmp_path):
-        """$null must NOT be replaced on Unix."""
+    async def test_mkdir_p_no_error_on_unix(self, tmp_path):
+        """mkdir -p must NOT trigger an error on Unix."""
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"", b"")
         mock_proc.returncode = 0
@@ -388,9 +427,9 @@ class TestNullToNulTranslation:
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
             tool = ExecTool(working_dir=str(tmp_path))
-            await tool.execute(command="echo hi > $null")
+            result = await tool.execute(command="mkdir -p foo/bar")
 
-        assert captured_cmd == "echo hi > $null"
+        assert "Exit: 0" in result
 
 
 # ---------------------------------------------------------------------------

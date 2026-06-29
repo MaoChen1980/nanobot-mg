@@ -333,8 +333,8 @@ class WebFetchTool(WebToolBase, Tool):
     read_only = True
 
     async def execute(self, url: str, format: str = "markdown", max_chars: int | None = None, extract: str | None = None, **kwargs: Any) -> Any:
-        # Strip whitespace, markdown backticks, and quotes that LLM-generated URLs often carry
-        url = url.strip().strip("`").strip('"').strip("'")
+        # Strip whitespace that LLM-generated URLs often carry
+        url = url.strip()
         max_chars = max_chars or self.max_chars
         is_valid, error_msg = await _validate_url_safe(url)
         if not is_valid:
