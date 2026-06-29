@@ -506,6 +506,6 @@ class UserMessageHandler:
         if on_stream is not None and stop_reason != "error":
             meta["_streamed"] = True
         error = self._loop._last_error
-        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=final_content, metadata=meta, buttons=buttons,
+        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=final_content, metadata=meta,
                                tools_used=self._loop._last_tools_used, usage=self._loop.last_usage, stop_reason=stop_reason,
                                error=error)
