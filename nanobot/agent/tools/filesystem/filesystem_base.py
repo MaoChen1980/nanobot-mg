@@ -28,7 +28,8 @@ def _resolve_path(
     """
     p = Path(path).expanduser()
     if not p.is_absolute():
-        raise ValueError(f"Path must be absolute, got: {path}")
+        hint = " Resolve $WORKSPACE to the actual workspace path." if "$WORKSPACE" in path else ""
+        raise ValueError(f"Path must be absolute, got: {path}.{hint}")
     resolved = p.resolve()
     if allowed_dir:
         from nanobot.agent.tools import filesystem as _fs_mod
