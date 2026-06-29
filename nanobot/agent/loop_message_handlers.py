@@ -26,7 +26,7 @@ def _has_stale_duplicate(session, message_id: str) -> bool:
     """Check if a message with the same ID was already processed long ago.
 
     Only matches by ``message_id`` — no content matching.
-    Only returns True if the original message is older than ``_STALE_MESSAGE_HOURS``.
+    Only returns True if the original message is older than ``_STALE_MESSAGE_MINUTES``.
     """
     if not message_id:
         return False
@@ -503,7 +503,6 @@ class UserMessageHandler:
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
         meta = dict(msg.metadata or {})
-        buttons: list = []
         if on_stream is not None and stop_reason != "error":
             meta["_streamed"] = True
         error = self._loop._last_error

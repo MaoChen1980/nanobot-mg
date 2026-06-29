@@ -49,3 +49,4 @@ async def close_mcp(loop: AgentLoop) -> None:
         except RuntimeError:
             logger.debug("MCP server '{}' cleanup error (can be ignored)", name)
     loop._mcp_stacks.clear()
+    loop._mcp_connected = False

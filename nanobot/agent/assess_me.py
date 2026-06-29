@@ -10,7 +10,7 @@ from loguru import logger
 from nanobot.agent.llm_context import chat_stream_with_retry
 from nanobot.utils.prompt_templates import render_template
 
-_MAX_TOOL_RESULT_CHARS = 300
+_MAX_TOOL_RESULT_CHARS = 2000
 _ASSESSMENT_PREFIX = "[assess]"
 _ASSESSMENT_SUFFIX = "\n[/assess]"
 

@@ -287,7 +287,7 @@ class SubagentManager:
                         # Parse JSON output — handle <think> tags, code fences, trailing text
                         text = re.sub(r"<think>.*?</think>", "", assess_text, flags=re.DOTALL).strip()
                         text = re.sub(r"^```\w*\n?", "", text)
-                        text = _re.sub(r"\n?```$", "", text).strip()
+                        text = re.sub(r"\n?```$", "", text).strip()
                         start = text.find("{")
                         if start < 0:
                             logger.debug("Subagent [{}] assess_me non-JSON: {}…", task_id, assess_text[:100])
@@ -457,11 +457,37 @@ class SubagentManager:
         except asyncio.TimeoutError:
             status.phase = "timeout"
             timeout_s = effective_timeout
-            logger.warning("Subagent [{}] timed out after {}s", task_id, timeout_s)
+            elapsed_s = int(time.monotonic() - status.started_at)
+            last_tools = [e["name"] for e in status.tool_events[-3:]]
+            logger.warning(
+                "Subagent [{}] timed out after {}s ({} iterations, phase={})",
+                task_id, timeout_s, status.iteration, status.phase,
+            )
+            partial_result = SubagentResult(
+                task_id=task_id,
+                label=label,
+                status="error",
+                final_content=None,
+                tools_used=list({e["name"] for e in status.tool_events}),
+                duration_s=elapsed_s,
+                iteration_count=status.iteration,
+                token_usage=dict(status.usage),
+                errors=[f"Timeout after {timeout_s}s"],
+                output_schema=output_schema,
+            )
+            msg = (
+                f"Subagent timed out after {timeout_s}s. "
+                f"Completed {status.iteration} iterations in phase '{status.phase}'."
+            )
+            if last_tools:
+                msg += f"\nLast tools: {', '.join(last_tools)}"
+            msg += (
+                "\n\n以上为超时前的部分结果。如需继续处理剩余部分请重新分拆任务，"
+                "或基于已有结果继续推进。"
+            )
             await self._announce_result(
-                task_id, label, task,
-                f"Subagent timed out after {timeout_s}s. The task may be too large — consider splitting.",
-                origin, "error",
+                task_id, label, task, msg, origin, "error",
+                sub_result=partial_result,
             )
         except asyncio.CancelledError:
             status.phase = "cancelled"

@@ -33,11 +33,11 @@ class TestFormatConversation:
         assert "[user] hello" in result
 
     def test_tool_result_truncated(self) -> None:
-        long = "x" * 500
+        long = "x" * 2500
         msgs = [{"role": "tool", "name": "read_file", "content": long}]
         result = format_conversation(msgs)
-        assert len(result) < 450
-        assert "(truncated, 500 chars)" in result
+        assert len(result) < 2200
+        assert "(truncated, 2500 chars)" in result
 
     def test_tool_call_only_assistant_collapsed(self) -> None:
         msgs = [
@@ -77,11 +77,11 @@ class TestFormatConversation:
 
     def test_user_content_truncated(self) -> None:
         """Long user content is truncated like tool results."""
-        long = "x" * 500
+        long = "x" * 2500
         msgs = [{"role": "user", "content": long}]
         result = format_conversation(msgs)
-        assert len(result) < 450
-        assert "(truncated, 500 chars)" in result
+        assert len(result) < 2200
+        assert "(truncated, 2500 chars)" in result
 
 
 # =========================================================================
