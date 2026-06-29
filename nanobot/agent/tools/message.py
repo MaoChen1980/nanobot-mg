@@ -69,11 +69,12 @@ class MessageTool(Tool):
             "message_default_metadata",
             default={},
         )
-        self._sent_in_turn_var: ContextVar[bool] = ContextVar("message_sent_in_turn", default=False)
         self._record_channel_delivery_var: ContextVar[bool] = ContextVar(
             "message_record_channel_delivery",
             default=False,
         )
+        self._deferred: list[OutboundMessage] = []
+        self._defer_mode: bool = False
 
     def set_context(
         self,
@@ -92,9 +93,23 @@ class MessageTool(Tool):
         """Set the callback for sending messages."""
         self._send_callback = callback
 
-    def start_turn(self) -> None:
-        """Reset per-turn send tracking."""
-        self._sent_in_turn = False
+    def set_defer_mode(self, active: bool) -> None:
+        """When active, execute() queues messages instead of sending."""
+        self._defer_mode = active
+
+    async def flush_deferred(self) -> None:
+        """Send all deferred messages and clear the queue."""
+        for msg in self._deferred:
+            await self._send_callback(msg)
+        self._deferred.clear()
+
+    def clear_deferred(self) -> None:
+        """Discard all deferred messages without sending."""
+        self._deferred.clear()
+
+    @property
+    def has_deferred(self) -> bool:
+        return bool(self._deferred)
 
     def set_record_channel_delivery(self, active: bool):
         """Mark tool-sent messages as proactive channel deliveries."""
@@ -104,13 +119,6 @@ class MessageTool(Tool):
         """Restore previous proactive delivery recording state."""
         self._record_channel_delivery_var.reset(token)
 
-    @property
-    def _sent_in_turn(self) -> bool:
-        return self._sent_in_turn_var.get()
-
-    @_sent_in_turn.setter
-    def _sent_in_turn(self, value: bool) -> None:
-        self._sent_in_turn_var.set(value)
     instruction = "Send messages/files/buttons to the user. Do NOT use exec or plain text replies to send messages."
 
     name = "message"
@@ -191,10 +199,12 @@ class MessageTool(Tool):
             metadata=metadata,
         )
 
+        if self._defer_mode:
+            self._deferred.append(msg)
+            return "```queued\n[Message queued for delivery — pending quality assessment]\n```"
+
         try:
             await self._send_callback(msg)
-            if channel == default_channel and chat_id == default_chat_id:
-                self._sent_in_turn = True
             media_info = f" with {len(media)} attachments" if media else ""
             button_info = f" with {sum(len(row) for row in buttons)} button(s)" if buttons else ""
             return f"Message sent to {channel}:{chat_id}{media_info}{button_info}"

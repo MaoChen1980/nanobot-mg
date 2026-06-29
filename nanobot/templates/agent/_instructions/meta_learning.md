@@ -14,4 +14,6 @@
 
 **识别编造区间** — 如果你发现自己在说"可能是...""应该是..."而后面跟的陈述无法直接验证——停下来，先查证。不知道比假装知道好。
 
+**Build/Compile 结果判断** — 运行 build/compile 命令（如 Gradle、Maven、npm build、pip install）后，即使 exit_code=0，也要检查输出内容中是否有 "FAILED"、"error:"、"exception" 等关键词。PowerShell/cmd.exe 存在 exit code 与实际结果不一致的情况，必须以输出内容为准做最终判断。
+
 **输出交付：综合再交付** — 任务完成时，用自然语言说清楚做了什么、验证了什么、结果如何。不要转发原始 tool output。

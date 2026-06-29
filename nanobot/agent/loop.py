@@ -1752,11 +1752,14 @@ class AgentLoop:
                                     "Subagent dispatch failed for session {}", session_key,
                                 )
                                 continue
-                            # Drain outbound messages so CLI user sees them.
-                            # The dispatch publishes streamed content + final
-                            # response — we forward the full text to on_stream.
+                            # Drain outbound messages from this dispatch.
+                            # Subagent dispatches may produce content independently;
+                            # forward it to the user via streaming so they see
+                            # real-time progress.  We do NOT overwrite the original
+                            # _process_message response — concurrent dispatches
+                            # (e.g. proactive checks from the main bus loop) would
+                            # otherwise replace the authoritative content.
                             captured = ""
-                            last_ob = None
                             while self.bus.outbound.qsize() > 0:
                                 try:
                                     ob = self.bus.outbound.get_nowait()
@@ -1764,27 +1767,12 @@ class AgentLoop:
                                     break
                                 if ob and ob.content and not ob.metadata.get("_stream_delta"):
                                     captured = ob.content
-                                    last_ob = ob
                             if captured and on_stream:
                                 await on_stream(captured)
                             if captured and on_progress:
                                 await on_progress(captured.strip(), tool_hint=False)
                             if captured and on_stream_end:
                                 await on_stream_end()
-                            # Update response with subagent dispatch results
-                            # so SDK callers get accurate content/usage/etc.
-                            if last_ob and response:
-                                response = OutboundMessage(
-                                    channel=response.channel,
-                                    chat_id=response.chat_id,
-                                    content=captured or response.content,
-                                    tools_used=last_ob.tools_used or response.tools_used,
-                                    usage=last_ob.usage or response.usage,
-                                    stop_reason=last_ob.stop_reason or response.stop_reason,
-                                    error=last_ob.error or response.error,
-                                )
-                            elif last_ob:
-                                response = last_ob
                     except asyncio.TimeoutError:
                         if still_running:
                             now = time.time()

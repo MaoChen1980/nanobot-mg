@@ -526,13 +526,6 @@ class GatewayApplication:
             if not job.payload.deliver:
                 return response
 
-            if (
-                job.payload.deliver
-                and isinstance(message, MessageTool)
-                and message._sent_in_turn
-            ):
-                return response
-
             if job.payload.deliver and job.payload.to and response:
                 should_notify = await evaluate_response(
                     response,

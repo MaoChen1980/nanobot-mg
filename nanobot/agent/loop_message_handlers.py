@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
 from nanobot.agent.context import ContextState, _sanitize_session_key
 
-from nanobot.agent.tools.message import MessageTool
 from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 
@@ -246,7 +245,6 @@ class UserMessageHandler:
 
         # Stage 2: tool context
         self._loop._set_tool_context(msg.channel, chat_id, msg.metadata.get("message_id"), msg.metadata, session_key=key)
-        self._maybe_start_message_tool()
         logger.info("STAGE_DBG: tool context done")
 
         # Stage 3: build initial messages
@@ -370,12 +368,6 @@ class UserMessageHandler:
         if result:
             return result
         return await self._loop.commands.dispatch(ctx)
-
-    def _maybe_start_message_tool(self):
-        """Notify message tool that a turn has started."""
-        if message := self._loop.tools.get("message"):
-            if isinstance(message, MessageTool):
-                message.start_turn()
 
     def _build_initial_messages(self, msg, history, pending, session, key=None):
         """Build the initial message list for the agent loop."""
@@ -506,9 +498,6 @@ class UserMessageHandler:
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
         """Format the final OutboundMessage for the user."""
-        if not msg.ephemeral and (mt := self._loop.tools.get("message")) and isinstance(mt, MessageTool) and mt._sent_in_turn:
-            if not had_injections or stop_reason == "empty_final_response":
-                return None
         if final_content is None:
             final_content = ""
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content

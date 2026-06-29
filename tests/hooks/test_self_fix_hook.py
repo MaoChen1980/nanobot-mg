@@ -189,6 +189,7 @@ class TestBeforeIteration:
     @pytest.mark.asyncio
     async def test_injects_and_updates_last_injected(self, hook):
         ctx = FakeContext()
+        hook._disabled = False  # enable hook (default is disabled)
         with patch.object(hook, "_build_finding_insight", return_value="new insight"):
             await hook.before_iteration(ctx)
             assert hook._last_injected == "new insight"

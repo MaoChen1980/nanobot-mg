@@ -721,6 +721,12 @@ class AgentRunner:
                     messages.pop()  # No tools to execute, remove assistant with stale tool_calls
                     continue
 
+                # Defer message tool sends until end-of-loop assess approves
+                if any(tc.name == "message" for tc in tool_calls):
+                    mt = spec.tools.get("message")
+                    if mt is not None and hasattr(mt, "set_defer_mode"):
+                        mt.set_defer_mode(True)
+
                 (results, new_events, fatal_error, was_interrupted,
                  injection_cycles, executed_count, saved_injections) = await execute_tools(
                     self, spec, tool_calls, external_lookup_counts, messages,
@@ -1132,17 +1138,29 @@ class AgentRunner:
             if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _end_assess_ran = True
                 assess_result = await self._run_assess_callback(spec, messages, timeout=180)
-                if assess_result.needs_revision:
+                if assess_result.needs_revision or assess_result:
                     logger.info(
-                        "End-of-loop assess needs revision (iter={}, session={}) — continuing",
+                        "End-of-loop assess {} (iter={}, session={}) — continuing",
+                        "needs revision" if assess_result.needs_revision else "injected context",
                         iteration, spec.session_key or "default",
                     )
+                    # Pop the last text-only assistant message — the LLM produced
+                    # this response without seeing the assess injection, so it must
+                    # not see its own unsent answer in the next iteration or it
+                    # will conclude it already delivered the response.
+                    for i in range(len(messages) - 1, -1, -1):
+                        if messages[i].get("role") == "assistant" and not messages[i].get("tool_calls"):
+                            messages.pop(i)
+                            break
+                    had_injections = True
+                    # If there are deferred message tool sends, replace all
+                    # placeholder tool results with assess feedback so the LLM
+                    # sees what was wrong and can revise.
+                    if _has_deferred_message(spec):
+                        _replace_message_tool_result_with_feedback(messages)
+                    _clear_msg_deferred(spec)
+                    _end_assess_ran = False  # re-evaluate corrected content next iteration
                     continue
-                if assess_result:
-                    logger.info(
-                        "End-of-loop assess injected context (iter={}, session={})",
-                        iteration, spec.session_key or "default",
-                    )
 
             # Before breaking: check for pending subagents. If any are still
             # running, wait for them (no LLM calls during wait). Subagent
@@ -1199,6 +1217,13 @@ class AgentRunner:
             )
             if drained_after_max_iterations:
                 had_injections = True
+
+        # Flush or discard deferred message tool content
+        await _flush_msg_deferred(spec, stop_reason)
+        # Reset defer mode so the same tool instance isn't stuck in defer mode
+        mt = spec.tools.get("message")
+        if mt is not None and hasattr(mt, "set_defer_mode"):
+            mt.set_defer_mode(False)
 
         self._current_spec = None
         return AgentRunResult(
@@ -1404,6 +1429,74 @@ class AgentRunner:
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)
     _backfill_missing_tool_results = staticmethod(backfill_missing_tool_results)
 
+
+def _clear_msg_deferred(spec) -> None:
+    """Discard pending message tool sends (assess failed)."""
+    mt = spec.tools.get("message")
+    if mt is not None and hasattr(mt, "clear_deferred"):
+        mt.clear_deferred()
+
+
+def _has_deferred_message(spec) -> bool:
+    """Check if there are pending deferred message tool sends."""
+    mt = spec.tools.get("message")
+    if mt is not None and hasattr(mt, "has_deferred"):
+        return mt.has_deferred
+    return False
+
+
+def _replace_message_tool_result_with_feedback(messages: list[dict]) -> None:
+    """Replace the last message tool's placeholder result with assess feedback.
+
+    Extracts the first assess_me injection's content (between [assess]...[/assess])
+    and sets it as the message tool's result, so the LLM sees targeted feedback
+    and can revise the message content.
+    """
+    feedback = None
+    for msg in messages:
+        if is_assessment_message(msg):
+            content = msg.get("content", "")
+            # is_assessment_message already confirmed startswith(_ASSESSMENT_PREFIX)
+            end = content.find("[/assess]")
+            if end != -1:
+                text = content[len(_ASSESSMENT_PREFIX):end].strip()
+                if text:
+                    feedback = text
+                    break
+
+    if not feedback:
+        feedback = "Your message needs revision. Please revise and resend via the message tool."
+
+    result = (
+        "```message_quality_check\n"
+        "Content needs revision before delivery. "
+        "Please revise and send again via the message tool.\n\n"
+        f"{feedback}\n"
+        "```"
+    )
+
+    replaced = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "tool" and messages[i].get("name") == "message":
+            messages[i]["content"] = result
+            replaced += 1
+    if replaced:
+        logger.info("Replaced {} message tool result(s) with assess feedback", replaced)
+    else:
+        logger.warning("No message tool result found to replace with assess feedback")
+
+
+async def _flush_msg_deferred(spec, stop_reason: str) -> None:
+    """Flush or discard deferred message tool content based on exit reason."""
+    mt = spec.tools.get("message")
+    if mt is None or not hasattr(mt, "has_deferred") or not mt.has_deferred:
+        return
+    if stop_reason in ("error", "tool_error", "tool_loop_breaker", "empty_final_response"):
+        mt.clear_deferred()
+        logger.info("Cleared deferred message tool content (stop_reason={})", stop_reason)
+    else:
+        await mt.flush_deferred()
+        logger.info("Flushed deferred message tool content (stop_reason={})", stop_reason)
 
 
 def _force_final_response(messages: list[dict], text: str) -> str:

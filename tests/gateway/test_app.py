@@ -672,31 +672,10 @@ class TestOnCronJob:
         app.agent.process_direct.assert_awaited_once()
         app.bus.publish_outbound.assert_not_called()
 
-    async def test_reminder_with_delivery_and_already_sent(self, config: Config) -> None:
-        """When _sent_in_turn is True, returns early without evaluate_response."""
-        app = _make_mocked_app(config)
-        app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Hello!"))
-        app.agent.tools["message"]._sent_in_turn = True
-
-        with patch("nanobot.utils.evaluator.evaluate_response") as mock_eval:
-            app._wire_callbacks()
-            job = CronJob(
-                id="r1", name="reminder",
-                payload=CronPayload(
-                    message="Test", deliver=True,
-                    channel="cli", to="user1",
-                ),
-            )
-            result = await app.cron.on_job(job)
-
-        assert result == "Hello!"
-        mock_eval.assert_not_called()
-
     async def test_reminder_delivery_evaluate_skips(self, config: Config) -> None:
         """evaluate_response returns False -> message is NOT delivered."""
         app = _make_mocked_app(config)
         app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Routine"))
-        app.agent.tools["message"]._sent_in_turn = False
 
         app._wire_callbacks()
         with patch(
