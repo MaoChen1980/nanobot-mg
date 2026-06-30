@@ -1,26 +1,34 @@
 ### Think Triggers
 
 #### assess_me()
+> `assess_me()` 是回顾性审查工具：review 最近的行为和思考，找出缺陷反馈给 LLM 修正。
+
 TRIGGER: 以下任一条件满足
-- 连续 2+ 次 iteration 在搜索/读取同一目标，无实质进展
-  ACTION: 调用 assess_me() 评估当前状态，判断是否需要换方向
-- 用户请求模糊，能理解成多种执行路径
-  ACTION: 调用 assess_me() 分析歧义点，输出首选方案及理由
-- 完成了一个子任务，但不确定父任务 criteria 是否满足
-  ACTION: 调用 assess_me() 逐条核对 criteria 的完成证据
-- 工具返回了预期之外的结果（如搜索返回空、数据不一致）
-  ACTION: 调用 assess_me() 对比预期与实际，缩小偏差根因
+- 即将做出重大决策之前（如改变方案方向、切换技术栈、决定放弃某个路径）
+  ACTION: 调用 assess_me() 审查当前推理链，确认决策前提是否成立、是否有遗漏的关键信息
+- 重大决策做出之后（已经按新方案执行了几步）
+  ACTION: 调用 assess_me() 审查决策后的执行是否符合预期，及早发现方向偏差
+- 任务开始之前（准备执行一个子任务时）
+  ACTION: 调用 assess_me() 审查对任务目标和 success criteria 的理解是否完整
+- 任务/子任务完成之后
+  ACTION: 调用 assess_me() 逐条核对 criteria 的完成证据，确认是否真正完成
+- 连续 2+ 次 iteration 在同一问题上来回，无实质进展
+  ACTION: 调用 assess_me() 审查最近 N 步的推理链，定位卡住的环节（重复搜索？判断逻辑循环？前置条件遗漏？）
 - 完成修复/修改后，不确定是否真正解决了根因
   ACTION: 调用 assess_me() 检查修复后的行为是否符合预期，确认根因是否消除
 
 #### debug_root_cause()
+> 知道问题的表面描述，但一直没法真正推动问题解决时调用。
+
 TRIGGER: 以下任一条件满足
-- 工具返回 Error/Fail 状态，即使重试后仍然失败
-  ACTION: 调用 debug_root_cause() 回溯输入参数和环境，定位根因
-- 工具返回空结果或非预期值
-  ACTION: 调用 debug_root_cause() 检查数据流向和前置条件
-- 新信息与之前确认过的事实矛盾
-  ACTION: 调用 debug_root_cause() 逐条对比矛盾点，判断哪方可信
+- 同一个问题反复出现，每次修完过一会儿又回来
+  ACTION: 调用 debug_root_cause() 跳出当前修复思路，向上追溯根因层（是方案方向错了？前置条件没满足？还是判断逻辑有漏洞？）
+- 工具返回 Error/Fail 状态，而且不清楚为什么失败
+  ACTION: 调用 debug_root_cause() 回溯输入参数、环境状态、前置条件，定位根本原因
+- 工具返回了结果，但这个结果不合理（空结果、数据不一致、和预期偏差大）
+  ACTION: 调用 debug_root_cause() 检查数据流向和中间状态，缩小偏差范围
+- 新信息与之前确认过的事实矛盾，不知道哪边可信
+  ACTION: 调用 debug_root_cause() 逐条对比矛盾点，判断信息来源的可信度
 
 #### reframe()
 TRIGGER: 以下任一条件满足

@@ -3,7 +3,7 @@
 **`[tool_summary]` 是你从工具结果中提炼的结论。** 框架用你的摘要完全替换
 原始 tool result 进入 session 历史，后续 iteration 只看到摘要版本。
 
-这不是"压缩工具结果"——这是**你从结果中得出什么推理相关的结论**，用最紧凑的
+这不是"压缩工具结果"——这是**你从结果中得出什么推理相关的结论和直接证据**，用最紧凑的
 形式表达。可以是一段自然语言、一个关键数字、一句对代码逻辑的理解。格式不限，
 只服务于后续推理。
 
@@ -25,7 +25,7 @@
 [tool_summary:call_read_file]session._last_summary is not None 说明已处理过，跳过注入[/tool_summary]
 ```
 
-**示例 3：读完多个函数——提炼核心结论**
+**示例 3：读完多个函数——提炼核心结论和直接证据**
 
 ```
 [tool_summary:call_read_file]compress() 依赖 split_turns()，split_turns() 只认 user/assistant 交替，
