@@ -291,6 +291,7 @@ class ContextBuilder:
             snippet_names = [
                 "external_content_safety",
                 "output_rules_subagent",
+                "candidate_evaluation",
                 "tool_usage",
                 "think_triggers",
                 "search_tool_selector",
@@ -305,6 +306,7 @@ class ContextBuilder:
             snippet_names = [
                 "external_content_safety",
                 "output_rules",
+                "candidate_evaluation",
                 "tool_usage",
                 "think_triggers",
                 "search_tool_selector",
