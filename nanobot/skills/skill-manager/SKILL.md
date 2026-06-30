@@ -154,12 +154,13 @@ always: false
 ---
 ```
 
-**关键**：`description` 是 **trigger 信号**，必须使用三段式格式：
-1. **功能** — 一句话概述 skill 做什么
-2. **场景** — 列举用户说/做什么时触发，结尾加"必须使用此 Skill"
-3. **关键词 + 隐含触发** — 让不精确的描述也能匹配
+**关键**：description **全部是 trigger 信号**，三段式不存在"功能说明"和"触发条件"两个角色——所有部分都服务于同一个目标：让 LLM 在 skills_summary 中匹配到它。
 
-LLM 在 skills_summary 只看这一行来决定是否 `read_file`。**简短、准确、推动性强。**
+1. **功能** — 主 trigger。从"管什么方面的问题"角度匹配，是 LLM 扫读时的第一筛
+2. **场景** — 精确 trigger。用户具体说什么/做什么时激活，结尾必须加"必须使用此 Skill"
+3. **关键词 + 隐含触发** — 兜底 trigger。用户没说精确词但涉及相关概念时也能匹配
+
+LLM 在 skills_summary 只看这一行来决定是否 `read_file`。**所有部分都服务于匹配命中，不存在非 trigger 的内容。**
 
 ### 核心原则：Trigger → Action → Goal
 
