@@ -1,6 +1,10 @@
 ---
 name: codegraph
-description: "Analyze indexed codebases via graph database (neug) and vector index (zvec). Covers call graphs, dependencies, dead code, hotspots, module coupling, architecture reports, semantic search, impact analysis, bug root cause from GitHub issues, class diagrams (UML), and PR review (risk scoring, conflict detection, auto-merge candidates, labeling). Also covers creating, inspecting, and repairing a CodeScope index. Use for: code structure, who calls what, why something changed, similar functions, module boundaries, bug tracing, class relationships, PR risk/conflicts, or any question benefiting from a code knowledge graph. Applies when a `.codegraph` index exists in the workspace, or when the user wants to create one."
+description: >
+  代码知识图谱分析：调用链、依赖、死代码、热点、架构分析、语义搜索、影响分析。
+  当用户要求分析代码结构、查调用关系、找依赖、做架构报告、搜索相似函数、追溯 bug 根因、或评审 PR（风险评估、冲突检测）时，必须使用此 Skill。
+  关键词：调用图、依赖图、死代码、架构分析、模块耦合、语义搜索、影响分析、UML、PR 评审。
+  即使用户没有明确说"图谱"，只要涉及问代码结构和关系的深层分析，都应触发。
 category: code-analysis
 ---
 

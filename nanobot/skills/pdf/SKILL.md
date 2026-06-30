@@ -1,6 +1,10 @@
 ---
 name: pdf
-description: Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.
+description: >
+  PDF 文件处理：提取文本/表格、创建、合并/拆分、填写表单。
+  当用户要求处理 PDF 文件、提取内容、创建新 PDF、合并拆分文档、或填写 PDF 表单时，必须使用此 Skill。
+  关键词：PDF、提取文本、创建 PDF、合并、拆分、表单填写、pypdf、pdf 处理。
+  即使用户没有明确说"用 python 处理 PDF"，只要涉及对 PDF 文件的操作，都应触发。
 license: Proprietary. LICENSE.txt has complete terms
 official: true
 category: domain-specific

@@ -1,10 +1,10 @@
 ---
 name: stock-analyzer
-description: >-
-  A comprehensive stock deep analysis tool that combines real-time quotes, fundamental metrics,
-  technical indicators, and growth analysis into a single professional report.
-  Supports A-share, US stocks, HK stocks. Generates detailed investment recommendations
-  with risk assessment and actionable trading strategies.
+description: >
+  股票深度分析：实时行情、基本面指标、技术指标、增长分析、投资建议。
+  当用户要求分析某只股票（A股/美股/港股）、查询估值指标、技术面信号、或生成投资报告时，必须使用此 Skill。
+  关键词：股票、A股、美股、港股、估值、PE、PB、RSI、MACD、K线、技术分析、基本面。
+  即使用户没有明确说"深度分析"，只要涉及对具体股票的多维度评估，都应触发。
 official: true
 category: domain-specific
 ---

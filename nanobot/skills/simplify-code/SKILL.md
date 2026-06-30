@@ -1,6 +1,10 @@
 ---
 name: simplify-code
-description: "Parallel 3-agent cleanup of recent code changes via spawn."
+description: >
+  并行代码简化：三路 Agent 并行审查近期代码变更，聚合建议并自动修复。
+  当用户要求清理代码、简化逻辑、减少重复、优化效率、或说"帮我优化代码"时，必须使用此 Skill。
+  关键词：代码简化、重构、code cleanup、reduce duplication、优化、review changes。
+  即使用户没有明确说"simplify"，只要涉及对最近变更代码的质量改进，都应触发。
 version: 1.0.0
 platforms: [linux, macos, windows]
 category: code-analysis

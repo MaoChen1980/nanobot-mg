@@ -1,6 +1,10 @@
 ---
 name: improve-codebase-architecture
-description: Find deepening opportunities in a codebase, informed by the domain language in CONTEXT.md and the decisions in docs/adr/. Use when the user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.
+description: >
+  代码架构改进：发现重构机会、降低模块耦合、提升可测试性和 AI 可导航性。
+  当用户要求改进架构、重构、整合紧耦合模块、或说"让代码更好维护"时，必须使用此 Skill。
+  关键词：架构改进、重构、模块解耦、深度设计、seam、adapter、可测试性、深化设计。
+  即使用户没有明确说"架构分析"，只要涉及有意识地改进代码结构，都应触发。
 category: coding
 ---
 

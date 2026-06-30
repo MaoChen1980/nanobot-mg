@@ -1,6 +1,10 @@
 ---
 name: pptx
-description: "Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks"
+description: >
+  PPT 演示文稿创建、编辑、分析：布局、评论、演讲者备注。
+  当用户要求创建/修改 .pptx 文件、操作幻灯片布局、添加备注或批注时，必须使用此 Skill。
+  关键词：PowerPoint、PPT、pptx、演示文稿、幻灯片、布局、演讲者备注。
+  即使用户没有明确说"pptx"，只要涉及创建或编辑演示文稿文件，都应触发。
 license: Proprietary. LICENSE.txt has complete terms
 official: true
 category: domain-specific

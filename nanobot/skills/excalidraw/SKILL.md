@@ -1,6 +1,10 @@
 ---
 name: excalidraw
-description: "Hand-drawn Excalidraw JSON diagrams (arch, flow, seq)."
+description: >
+  Excalidraw 手绘风格图表：架构图、流程图、序列图 JSON。
+  当用户要求画手绘风格图表、流程图、架构草图、或导出 .excalidraw 文件时，必须使用此 Skill。
+  关键词：Excalidraw、手绘、白板、流程图、架构图、序列图、JSON 图表。
+  即使用户没有明确说"Excalidraw"，只要要求可编辑的手绘风格图表，都应触发。
 version: 1.0.0
 author: Hermes Agent
 license: MIT

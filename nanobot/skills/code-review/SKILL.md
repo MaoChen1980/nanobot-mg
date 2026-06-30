@@ -1,6 +1,11 @@
 ---
 name: code-review
-description: "Review code for bugs, security issues, code smells, and maintainability. Use for PR review, pre-commit diff review, or when user asks 'review this code' / 'code review'."
+description: >
+  代码审查：检查 Bug、安全问题、代码异味、可维护性。
+  当用户说"review this code"、"帮我看看代码"、"审查代码"、"code review"、
+  或在合并前审查变更时，必须使用此 Skill。
+  关键词：code review、审查代码、代码质量、Bug 检查、安全问题、review diff。
+  即使用户没有明确说"正式 code review"，只要要求评估代码质量或检查问题，都应触发。
 category: code-review
 ---
 

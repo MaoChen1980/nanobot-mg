@@ -1,6 +1,10 @@
 ---
 name: xurl
-description: "X/Twitter via xurl CLI: post, search, DM, media, v2 API."
+description: >
+  X/Twitter API 操作：发帖、搜索、私信、媒体上传。
+  当用户要求发布推文、搜索 X/Twitter 内容、发送 DM、上传媒体、或调用 X API v2 时，必须使用此 Skill。
+  关键词：Twitter、X、推文、tweet、发帖、社交网络、xurl、私信、DM。
+  即使用户没有明确说"用 xurl"，只要涉及 X/Twitter 平台上的操作，都应触发。
 version: 1.1.1
 author: xdevplatform + openclaw + Hermes Agent
 license: MIT

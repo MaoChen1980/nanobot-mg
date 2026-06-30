@@ -1,6 +1,10 @@
 ---
 name: github-auth
-description: "GitHub auth setup: HTTPS tokens, SSH keys, gh CLI login."
+description: >
+  GitHub 认证设置：HTTPS Token、SSH 密钥、gh CLI 登录。
+  当用户需要配置 GitHub 访问权限、认证失败报错、或首次使用 GitHub 相关 skill 时，必须使用此 Skill。
+  关键词：GitHub 认证、token、SSH 密钥、gh auth、登录配置、认证设置。
+  即使用户没有明确说"认证"，只要涉及 GitHub 操作的权限不足问题，都应触发。
 version: 1.1.0
 platforms: [linux, macos, windows]
 category: domain-specific

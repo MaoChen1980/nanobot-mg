@@ -1,6 +1,10 @@
 ---
 name: github-repo-management
-description: "Clone/create/fork repos; manage remotes, releases."
+description: >
+  GitHub 仓库管理：克隆、创建、Fork、配置远程、管理 Release。
+  当用户要求创建仓库、克隆代码、Fork 项目、管理 Release 版本时，必须使用此 Skill。
+  关键词：GitHub 仓库、clone、fork、release、远程仓库、创建 repo、git remote。
+  即使用户没有明确说"gh"，只要涉及 GitHub 仓库级别的操作，都应触发。
 version: 1.1.0
 platforms: [linux, macos, windows]
 category: project-management

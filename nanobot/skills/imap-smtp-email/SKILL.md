@@ -1,6 +1,10 @@
 ---
 name: imap-smtp-email
-description: Read and send email via IMAP/SMTP. Check for new/unread messages, fetch content, search mailboxes, mark as read/unread, and send emails with attachments. Works with any IMAP/SMTP server including Gmail, Outlook, 163.com, vip.163.com, 126.com, vip.126.com, 188.com, and vip.188.com.
+description: >
+  邮件收发：通过 IMAP/SMTP 读取、搜索、发送邮件，支持附件。
+  当用户要求查邮件、发邮件、搜索收件箱、标记已读/未读时，必须使用此 Skill。
+  关键词：邮件、email、IMAP、SMTP、Gmail、Outlook、163、126、收件箱、发信。
+  即使用户没有明确说"IMAP/SMTP"，只要涉及发送或读取电子邮件，都应触发。
 official: true
 version: 1.0.1
 category: domain-specific

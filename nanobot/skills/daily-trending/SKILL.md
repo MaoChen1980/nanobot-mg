@@ -1,8 +1,10 @@
 ---
 name: daily-trending
-description: >-
-  Fetch today's trending topics from tophub.today across multiple platforms.
-  Triggered when users ask "what's trending today", "hot topics", "今日热搜", or "微博热搜".
+description: >
+  今日热搜/热门话题：从 tophub.today 获取多平台热搜榜。
+  当用户问"今天热搜"、"微博热搜"、"热门话题"、"什么在 trending"、"今日热点"时，必须使用此 Skill。
+  关键词：热搜、热门、今日热点、trending、微博、知乎、百度、头条、热搜榜。
+  即使用户没有明确说"tophub"，只要涉及查询当下热门话题和趋势，都应触发。
 official: true
 category: project-management
 ---

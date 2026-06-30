@@ -1,6 +1,10 @@
 ---
 name: docx
-description: "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks"
+description: >
+  Word 文档创建、编辑、分析：修订、批注、格式保留、文本提取。
+  当用户要求创建/修改 .docx 文件、跟踪修订、添加评论、或提取文档内容时，必须使用此 Skill。
+  关键词：Word、docx、文档编辑、修订、批注、文本提取、格式保留。
+  即使用户没有明确说"docx"，只要涉及创建或编辑 Word 文档，都应触发。
 license: Proprietary. LICENSE.txt has complete terms
 official: true
 category: domain-specific

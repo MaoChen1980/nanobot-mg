@@ -1,6 +1,10 @@
 ---
 name: codebase-inspection
-description: "Inspect codebases w/ pygount: LOC, languages, ratios."
+description: >
+  代码库统计：pygount 分析 LOC、语言占比、代码/注释比例。
+  当用户要求统计代码行数、了解项目语言组成、报告代码量或注释率时，必须使用此 Skill。
+  关键词：代码统计、LOC、行数、语言占比、pygount、代码分析、仓库度量。
+  即使用户没有明确说"pygount"，只要涉及量化分析代码库组成，都应触发。
 version: 1.0.0
 author: Hermes Agent
 license: MIT

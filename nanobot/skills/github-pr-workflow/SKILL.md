@@ -1,6 +1,10 @@
 ---
 name: github-pr-workflow
-description: "GitHub PR lifecycle: branch, commit, open, CI, merge."
+description: >
+  GitHub PR 流程全生命周期：分支、提交、开 PR、CI 检查、合并。
+  当用户要求创建 PR、查看 PR 状态、处理合并冲突、触发 CI、或合入代码时，必须使用此 Skill。
+  关键词：pull request、PR、合并、CI、git branch、code review、merge、workflow。
+  即使用户没有明确说"gh"，只要涉及 GitHub 上 PR 相关操作，都应触发。
 version: 1.1.0
 platforms: [linux, macos, windows]
 category: project-management

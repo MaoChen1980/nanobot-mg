@@ -1,6 +1,10 @@
 ---
 name: github-issues
-description: "Create, triage, label, assign GitHub issues via gh or REST."
+description: >
+  GitHub Issue 管理：创建、分类、打标、分配、搜索。
+  当用户要求创建 Issue、查看 Issue 列表、给 Issue 打标签、分配负责人、或搜索 Issue 时，必须使用此 Skill。
+  关键词：GitHub Issue、issue 管理、创建 issue、triage、label、分配、bug report。
+  即使用户没有明确说"用 gh"，只要涉及 GitHub 上的 Issue 操作，都应触发。
 version: 1.1.0
 platforms: [linux, macos, windows]
 category: project-management

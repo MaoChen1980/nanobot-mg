@@ -1,6 +1,10 @@
 ---
 name: github-code-review
-description: "Review PRs: diffs, inline comments via gh or REST."
+description: >
+  GitHub PR 代码审查：本地 diff 审查、远程 PR inline 评论。
+  当用户要求审查 PR 代码、在 PR 中添加 inline 评论、或审查本地变更后推送时，必须使用此 Skill。
+  关键词：PR 审查、code review、inline comment、diff 审查、git diff、REST API review。
+  即使用户没有明确说"用 gh review"，只要涉及对 GitHub 上 PR 的代码审查，都应触发。
 version: 1.1.0
 platforms: [linux, macos, windows]
 category: code-review

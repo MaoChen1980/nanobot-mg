@@ -1,8 +1,10 @@
 ---
 name: bugfix
-description: Fix a bug from a GitHub issue, following the reproduce-first
-  workflow. Use when the user asks to fix a bug, investigate a GitHub issue, or
-  debug a user-reported problem. Takes a GitHub issue URL or number as input.
+description: >
+  GitHub Issue Bug 修复：先复现再修复，基于 Issue URL 或编号。
+  当用户要求修复 Bug、调查 GitHub Issue、或调试用户报告的问题时，必须使用此 Skill。
+  关键词：Bug 修复、GitHub Issue、复现、reproduce、debug、问题修复、issue fix。
+  即使用户没有明确说"先复现"，只要涉及从 GitHub Issue 修复代码缺陷，都应触发。
 category: coding
 ---
 
