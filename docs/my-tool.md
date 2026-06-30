@@ -1,207 +1,179 @@
-# My Tool
+# My 工具（SelfTool / check_config）
 
-Let the agent sense and adjust its own runtime state — like asking a coworker "are you busy? can you switch to a bigger monitor?"
+My 工具是 NanoBot 中让 AI 代理查看和修改代理循环（AgentLoop）运行时配置的工具。通过它可以管理用户个人信息、调整运行时参数、存储草稿笔记等。
 
-## Why You Need It
+## 工具标识
 
-Normal tools let the agent operate on the outside world (read/write files, search code). But the agent knows nothing about itself — it doesn't know which model it's running on, how many iterations are left, or how many tokens it has consumed.
+- **名称**：`check_config`
+- **所属类**：`SelfTool`
+- **代码位置**：[self.py](file:///e:/claude/nanobot-mg/nanobot/agent/tools/self.py)
 
-My tool fills this gap. With it, the agent can:
+## 功能说明
 
-- **Know who it is**: What model am I using? Where is my workspace? How many iterations remain?
-- **Adapt on the fly**: Complex task? Expand the context window. Simple chat? Switch to a faster model.
-- **Remember across turns**: Store notes in your scratchpad that persist into the next conversation turn.
+`SelfTool` 提供两种操作：
 
-## Configuration
+| 操作 | 别名 | 功能 |
+|---|---|---|
+| `check` / `inspect` | 查看 | 查看运行时状态或特定配置 |
+| `set` / `modify` | 设置 | 修改运行时设置或存储笔记 |
 
-Enabled by default (read-only mode). The agent can check its state but not set it.
+### 查看操作
 
-```yaml
+**无参数**：显示完整运行时概览，包含：
+
+- RESTRICTED 键值（`max_iterations`、`context_window_tokens`、`model`）
+- 其他顶层属性（workspace、provider_retry_mode、web_config、exec_config、subagents）
+- Token 使用情况（`_last_usage`）
+- 草稿板（`_runtime_vars`，即 scratchpad）
+- 工作区钩子（hooks）
+- 可用技能列表（skills）
+
+**带参数 `key`**：检查特定属性，支持点号路径访问（如 `exec_config.sandbox_enabled`）
+
+**特殊别名**：
+- `scratchpad` — 映射到 `_runtime_vars`
+- `shell` — 映射到 `exec_config`
+
+### 设置操作
+
+设置操作受 `modify_allowed` 标志控制（由配置 `tools.config.allow_set` 决定）。
+
+支持三种设置模式：
+
+1. **限制字段**（`RESTRICTED`）：
+   - `max_iterations` — int，范围 1-100
+   - `context_window_tokens` — int，范围 4096-1000000
+   - `model` — string，至少 1 字符（会尝试通过 `switch_model()` 切换提供者）
+
+2. **自由字段**：AgentLoop 已有的属性，类型需兼容
+
+3. **草稿板存储**：不存在的键会存入 `_runtime_vars`（最多 64 个键），存储 JSON 安全的值
+
+## 配置结构
+
+配置存在于代理循环（AgentLoop）的运行时状态中。以下为可通过 `check_config` 查看和管理的字段：
+
+### 示例配置结构
+
+```json
+{
+  "max_iterations": 30,
+  "context_window_tokens": 128000,
+  "model": "claude-sonnet-4-20250514",
+  "workspace": "/path/to/workspace",
+  "provider_retry_mode": "simple",
+  "max_tool_result_chars": 20000,
+  "_current_iteration": 5,
+  "web_config": { ... },
+  "exec_config": { ... },
+  "subagents": { ... },
+  "_last_usage": { ... },
+  "_runtime_vars": {
+    "user_name": "张三",
+    "preferred_language": "中文"
+  }
+}
+```
+
+### 用户信息存储方式
+
+用户个人信息存储在 `_runtime_vars`（scratchpad）中。典型的用户信息键包括：
+
+| 键 | 说明 | 示例值 |
+|---|---|---|
+| `name` | 用户姓名 | `"张三"` |
+| `bio` | 用户简介 | `"Python 开发者，擅长后端"` |
+| `preferences` | 用户偏好 | `{"language": "zh-CN", "verbosity": "concise"}` |
+| `skills` | 用户技能列表 | `["Python", "Docker", "Kubernetes"]` |
+
+这些值可通过 `check_config(action='set', key='name', value='张三')` 设置，通过 `check_config(action='check', key='name')` 查看。
+
+### 配置访问限制
+
+`SelfTool` 定义了多个安全层级，防止代理访问或修改敏感配置：
+
+**BLOCKED**（完全不可访问）：
+- `bus`, `provider`, `_running`, `tools` — 核心基础设施
+- `_runtime_vars` — 配置管理
+- `runner`, `sessions`, `context`, `commands` — 子系统
+- `_mcp_servers`, `_mcp_stacks` — MCP 服务器
+- `_session_dispatch`, `_session_locks`, `_background_tasks` — 会话/任务追踪
+- `restrict_to_workspace`, `channels_config` — 安全边界
+- `_concurrency_gate`, `_extra_hooks` — 内部机制
+
+**READ_ONLY**（可查看，不可修改）：
+- `subagents` — 子代理状态
+- `_current_iteration` — 当前迭代次数
+- `exec_config` — 执行配置
+- `web_config` — Web 配置
+
+**DENIED_ATTRS**（Python 内部属性）：
+- `__class__`, `__dict__`, `__init__`, `__code__` 等魔术方法
+
+**SENSITIVE_NAMES**（敏感字段名）：
+- `api_key`, `secret`, `password`, `token`, `credential`, `private_key`, `access_token`, `refresh_token`, `auth`
+
+点路径访问时，路径中的每个部分都会经过以上安全检查。
+
+## 启用配置
+
+`SelfTool` 的修改能力由 `tools.config.allow_set` 配置控制：
+
+```
 tools:
-  my:
-    enable: true       # default: true
-    allow_set: false   # default: false (read-only)
+  config:
+    allow_set: true   # 允许修改配置
+    # allow_set: false  # 只读模式
 ```
 
-To allow the agent to set its configuration (e.g. switch models, adjust parameters), set `tools.my.allow_set: true`.
+当 `allow_set` 为 `false` 时，`set`/`modify` 操作会返回错误信息：`"Error: set is disabled (tools.config.allow_set is false)"`。
 
-Legacy `tools.myEnabled` / `tools.mySet` keys are auto-migrated on load, and
-rewritten in-place the next time `nanobot onboard` refreshes the config.
+## 使用示例
 
-All modifications are held in memory only — restart restores defaults.
+### 查看完整运行时状态
 
----
-
-## check — Check "my" current state
-
-Without parameters, returns a key config overview:
-
-```text
-my(action="check")
-# → max_iterations: 40
-#   context_window_tokens: 65536
-#   model: 'anthropic/claude-sonnet-4-20250514'
-#   workspace: PosixPath('/tmp/workspace')
-#   provider_retry_mode: 'standard'
-#   max_tool_result_chars: 16000
-#   _current_iteration: 3
-#   _last_usage: {'prompt_tokens': 45000, 'completion_tokens': 8000}
-#   Note: prompt_tokens is cumulative across all turns, not current context window occupancy.
+```
+action: "check"
 ```
 
-With a key parameter, drill into a specific config:
+返回所有关键配置的概览。
 
-```text
-my(action="check", key="_last_usage.prompt_tokens")
-# → How many prompt tokens I've used so far
+### 查看特定配置
 
-my(action="check", key="model")
-# → What model I'm currently running on
-
-my(action="check", key="web_config.enable")
-# → Whether web search is enabled
+```
+action: "check", key: "max_iterations"
 ```
 
-### What you can do with it
+返回：`max_iterations: 30`
 
-| Scenario | How |
-|----------|-----|
-| "What model are you using?" | `check("model")` |
-| "How many more tool calls can you make?" | `check("max_iterations")` minus `check("_current_iteration")` |
-| "How many tokens has this conversation used?" | `check("_last_usage")` — cumulative across all turns |
-| "Where is your working directory?" | `check("workspace")` |
-| "Show me your full config" | `check()` |
-| "Are there any subagents running?" | `check("subagents")` — shows phase, iteration, elapsed time, tool events |
+### 设置运行时参数
 
----
-
-## set — Runtime tuning
-
-Changes take effect immediately, no restart required.
-
-```text
-my(action="set", key="max_iterations", value=80)
-# → Bump iteration limit from 40 to 80
-
-my(action="set", key="model", value="fast-model")
-# → Switch to a faster model
-
-my(action="set", key="context_window_tokens", value=131072)
-# → Expand context window for long documents
+```
+action: "set", key: "max_iterations", value: 50
 ```
 
-You can also store custom state in your scratchpad:
+返回：`Set max_iterations = 50 (was 30)`
 
-```text
-my(action="set", key="current_project", value="nanobot")
-my(action="set", key="user_style_preference", value="concise")
-my(action="set", key="task_complexity", value="high")
-# → These values persist into the next conversation turn
+### 存储用户信息到草稿板
+
+```
+action: "set", key: "user_name", value: "张三"
 ```
 
-### Protected parameters
+返回：`Set scratchpad.user_name = '张三'`
 
-These parameters have type and range validation — invalid values are rejected:
+### 切换模型
 
-| Parameter | Type | Range | Purpose |
-|-----------|------|-------|---------|
-| `max_iterations` | int | 1–100 | Max tool calls per conversation turn |
-| `context_window_tokens` | int | 4,096–1,000,000 | Context window size |
-| `model` | str | non-empty | LLM model to use |
-
-Other parameters (e.g. `workspace`, `provider_retry_mode`, `max_tool_result_chars`) can be set freely, as long as the value is JSON-safe.
-
----
-
-## Practical Scenarios
-
-### "This task is complex, I need more room"
-
-```text
-Agent: This codebase is large, let me expand my context window to handle it.
-→ my(action="set", key="context_window_tokens", value=131072)
+```
+action: "set", key: "model", value: "claude-4-haiku"
 ```
 
-### "Simple question, don't waste compute"
+框架会自动调用 `switch_model()` 查找可用提供者。如果找不到匹配的模型返回错误。
 
-```text
-Agent: This is a straightforward question, let me switch to a faster model.
-→ my(action="set", key="model", value="fast-model")
+### 查看子代理状态
+
+```
+action: "check", key: "subagents"
 ```
 
-### "Remember user preferences across turns"
-
-```text
-Turn 1: my(action="set", key="user_prefers_concise", value=True)
-Turn 2: my(action="check", key="user_prefers_concise")
-# → True (still remembers the user likes concise replies)
-```
-
-### "Self-diagnosis"
-
-```text
-User: "Why aren't you searching the web?"
-Agent: Let me check my web config.
-→ my(action="check", key="web_config.enable")
-# → False
-Agent: Web search is disabled — please set web.enable: true in your config.
-```
-
-### "Token budget management"
-
-```text
-Agent: Let me check how much budget I have left.
-→ my(action="check", key="_last_usage")
-# → {"prompt_tokens": 45000, "completion_tokens": 8000}
-Agent: I've used ~53k tokens total so far. I'll keep my remaining replies concise.
-```
-
-### "Subagent monitoring"
-
-```text
-Agent: Let me check on the background tasks.
-→ my(action="check", key="subagents")
-# → 2 subagent(s):
-#   [task-1] 'Code review'
-#     phase: running, iteration: 5, elapsed: 12.3s
-#     tools: read(✓), grep(✓)
-#     usage: {'prompt_tokens': 8000, 'completion_tokens': 1200}
-#   [task-2] 'Write tests'
-#     phase: pending, iteration: 0, elapsed: 0.2s
-#     tools: none
-Agent: The code review is progressing well. The test task hasn't started yet.
-```
-
----
-
-## Safety Mechanisms
-
-Core design principle: **All modifications live in memory only. Restart restores defaults.** The agent cannot cause persistent damage.
-
-### Off-limits (BLOCKED)
-
-Cannot be checked or modified — fully hidden:
-
-| Category | Attributes | Reason |
-|----------|-----------|--------|
-| Core infrastructure | `bus`, `provider`, `_running` | Changes would crash the system |
-| Tool registry | `tools` | Must not remove its own tools |
-| Subsystems | `runner`, `sessions`, `consolidator`, etc. | Affects other users/sessions |
-| Sensitive data | `_mcp_servers`, `_pending_queues`, etc. | Contains credentials and message routing |
-| Security boundaries | `restrict_to_workspace`, `channels_config` | Bypassing would violate isolation |
-| Python internals | `__class__`, `__dict__`, etc. | Prevents sandbox escape |
-
-### Read-only (check only)
-
-Can be checked but not set:
-
-| Category | Attributes | Reason |
-|----------|-----------|--------|
-| Subagent manager | `subagents` | Observable, but replacing breaks the system |
-| Execution config | `exec_config` | Can check sandbox/enable status, cannot change it |
-| Web config | `web_config` | Can check enable status, cannot change it |
-| Iteration counter | `_current_iteration` | Updated by runner only |
-
-### Sensitive field protection
-
-Sub-fields matching sensitive names (`api_key`, `password`, `secret`, `token`, etc.) are blocked from both check and set, regardless of parent path. This prevents credential leaks via dot-path traversal (e.g. `web_config.search.api_key`).
+返回子代理列表，包括每个代理的阶段、迭代次数、运行时间和工具使用情况。

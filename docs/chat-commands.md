@@ -1,30 +1,34 @@
-# In-Chat Commands
+# 聊天命令参考
 
-These commands work inside chat channels and interactive agent sessions:
+NanoBot 支持以下斜杠命令。在聊天输入框中输入 `/` 开头的命令即可使用。
 
-| Command | Description |
-|---------|-------------|
-| `/new` | Stop current task and start a new conversation |
-| `/stop` | Stop the current task |
-| `/restart` | Restart the bot |
-| `/status` | Show bot status |
-| `/dream` | Run Dream memory consolidation now |
-| `/dream-log` | Show the latest Dream memory change |
-| `/dream-log <sha>` | Show a specific Dream memory change |
-| `/dream-restore` | List recent Dream memory versions |
-| `/dream-restore <sha>` | Restore memory to the state before a specific change |
-| `/help` | Show available in-chat commands |
+## 会话管理
 
-## Periodic Tasks (Heartbeat)
+| 命令 | 别名 | 功能 |
+|---|---|---|
+| `/new` | `/clear`, `/reset` | 停止当前任务并开始新会话。取消所有正在运行的任务，将会话消息归档到历史记录，然后清空当前会话。 |
+| `/stop` | — | 取消当前会话的所有活动任务和子代理。如果没有活动任务则返回提示。 |
+| `/restart` | — | 重启整个机器人。写入重启标记文件，触发网关重启循环重新调用进程。 |
 
-The gateway wakes up every 30 minutes and queries active goals from the DB. If there are in-progress goals, the agent receives them via heartbeat message and can advance them, deliver results to your most recently active chat channel.
+## 信息查询
 
-**Setup:** use `write_goal` tool to create goals — the heartbeat will pick them up automatically:
+| 命令 | 功能 |
+|---|---|
+| `/help` | 显示所有可用命令及其说明。 |
+| `/status` | 显示机器人当前状态，包括：版本号、模型名称、启动时间、Token 使用情况、上下文窗口大小、会话消息数、搜索 API 用量、活动任务数、最大生成 Token 数。 |
+| `/sub` | 显示子代理状态。列出所有运行中的子代理及其：阶段（phase）、迭代次数（iteration）、运行时间、工具使用情况、错误信息（如有）。 |
 
-```
-write_goal(action="upsert", id="g1", title="Check weather forecast", status="in_progress")
-```
+## 观察控制
 
-The agent can also manage goals itself — ask it to "add a periodic task" and it will create a goal via `write_goal`.
+| 命令 | 功能 |
+|---|---|
+| `/think` | 切换显示/隐藏 LLM 推理过程（reasoning blocks）。 |
+| `/tool` | 切换显示/隐藏工具调用事件。 |
+| `/debug` | 将原始提示词保存到 `~/.nanobot/debug/` 目录，用于调试和分析。 |
 
-> **Note:** The gateway must be running (`nanobot gateway`) and you must have chatted with the bot at least once so it knows which channel to deliver to.
+## 命令使用说明
+
+- 命令匹配不区分大小写
+- 尾部标点会自动去除：`/help,`、`/clear。`、`/stop!` 均有效
+- `//` 开头的文本不会被当作命令处理
+- 未知命令会收到提示："Unknown command: <命令>. Type /help for available commands."

@@ -1,420 +1,395 @@
-# Agent Framework — LLM's Guide
+# NanoBot 代理系统
 
-这份文档面向 LLM（你），解释 nanobot 代理框架如何运作。理解这些机制，你才能有效地利用框架能力，避免踩坑。
+NanoBot 的代理系统由五个核心组件构成，协同实现从消息输入到智能回复的完整处理流水线。
 
----
-
-## 框架与你的关系
-
-nanobot 框架是你（LLM）的「操作系统」。你的一次「回复」在框架视角是一个或多个 **iteration（迭代）** 组成的 **turn（轮次）**。
+## 架构概览
 
 ```
-用户消息 → 框架组装上下文 → 你收到完整 prompt → 你输出 text/tool_calls → 框架执行工具 → 结果注入 → 你再次收到 → ...
-                                                                              ↓
-                                                          直到你输出纯文本（无 tool_calls），框架交付回复，turn 结束
+消息输入
+    │
+    ▼
+┌─────────────────────────────────────────────┐
+│              AgentLoop (loop.py)              │
+│  消息路由、会话管理、命令解析、子代理编排     │
+│                                              │
+│  ┌──────────┐  ┌──────────┐ ┌────────────┐  │
+│  │ AgentRunner │  │ Context  │ │   Hook    │  │
+│  │ (runner.py) │  │ Builder  │ │ (hook.py) │  │
+│  └──────┬───────┘  └──────────┘ └────────────┘  │
+│         │                                         │
+│         ▼                                         │
+│  ┌──────────────┐                                │
+│  │ Skill Loader │ (skills.py)                     │
+│  └──────────────┘                                │
+│         │                                         │
+│         ▼                                         │
+│    工具执行 → LLM 调用 → 结果回复                  │
+└─────────────────────────────────────────────┘
+    │
+    ▼
+消息输出
 ```
 
-- **你**：每次请求都是 stateless 的——框架每次重新组装完整 prompt，你看到的是当前快照，不记得之前的请求。
-- **框架**：stateful 的——它管理会话历史、执行工具、持久化结果、跨 turn 携带状态。
+---
 
-### 核心循环（AgentRunner）
+## AgentLoop（主循环）
 
-每次你被调用，框架执行以下治理步骤后才会把消息发给你：
+位于 [loop.py](../nanobot/agent/loop.py)，是代理系统的核心引擎。
+
+### 职责
+
+- 接收和路由入站消息（`InboundMessage`）
+- 管理会话生命周期（`SessionManager`, `SessionLifecycle`）
+- 解析斜杠命令（`CommandRouter`）
+- 编排子代理（`SubagentManager`）
+- 驱动消息处理流程（`process_direct`）
+- 检查点与恢复（`RecoveryManager`, checkpoints）
+- 消息总线集成（`MessageBus`）
+
+### 核心方法
+
+```python
+class AgentLoop:
+    async def process_direct(self, content, session_key, channel, chat_id,
+                             media=None, metadata=None, on_progress=None,
+                             pending_queue=None) -> OutboundMessage | None:
+        """
+        处理单条用户消息的完整生命周期：
+        1. 恢复或创建 Session
+        2. 构建系统提示（ContextBuilder）
+        3. 注册工具（ToolRegistry）
+        4. 调用 AgentRunner.run() 执行 LLM 循环
+        5. 持久化记忆（MemoryExtractor）
+        6. 返回 OutboundMessage
+        """
+```
+
+### 检查点系统
+
+支持中断恢复：
+
+```python
+from .loop_checkpoint import (
+    RecoveryManager,
+    set_runtime_checkpoint,
+    restore_and_clear_checkpoint,
+    mark_pending_user_turn,
+    clear_pending_user_turn,
+)
+```
+
+---
+
+## AgentRunner（执行器）
+
+位于 [runner.py](../nanobot/agent/runner.py)，是工具调用型代理的共享执行循环。
+
+### 职责
+
+- 驱动 LLM 请求-工具执行的迭代循环
+- 管理 LLM 调用重试（`BackoffStrategy`, `RetryContext`）
+- 注入消息（`injection_callback`）
+- 自我评估（`assess_me_callback`）
+- 限制迭代次数、Token 使用量
+
+### 核心类型
+
+```python
+@dataclass
+class AgentRunSpec:
+    initial_messages: list[dict]      # 初始消息列表
+    tools: ToolRegistry                # 可用工具
+    model: str                         # LLM 模型名
+    max_iterations: int                # 最大迭代次数
+    max_tool_result_chars: int         # 工具结果截断长度
+    hook: AgentHook                    # 生命周期钩子
+    injection_callback: Callable       # 消息注入回调
+    assess_me_callback: Callable       # 自我评估回调
+    assess_interval: int               # 评估轮次间隔
+    session_key: str | None            # 会话键
+    reasoning_effort: str | None       # 推理努力级别
+    ...
+
+class AgentRunner:
+    async def run(self, spec: AgentRunSpec) -> RunResult:
+        """
+        执行代理的 LLM 循环，直到：
+        - LLM 返回最终回复（无工具调用）
+        - 达到最大迭代次数
+        - 发生不可恢复错误
+        """
+```
+
+### 流程
 
 ```
-messages → drop_orphan_tool_results → backfill_missing_tool_results → snip_history → drop_orphan_tool_results → backfill_missing_tool_results → 发给你
+Loop:
+  1. 调用 injection_callback 注入新消息
+  2. 调用 assess_me_callback 进行自我评估
+  3. 调用 LLM（LLMProvider.stream/messages）
+  4. 解析响应中的工具调用
+  5. 执行工具（可能并发）
+  6. 记录结果到消息列表
+  7. 重复直到终止条件满足
 ```
 
-你在一个 turn 内可能经历多个 iteration：
-1. 框架发消息给你
-2. 你返回 tool_calls
-3. 框架执行工具，把结果追加到消息列表
-4. 重复 1-3
-5. 当你只输出文本（无 tool_calls），框架交付给用户，turn 结束
+### 重试策略
 
-**最大 iteration 数**：默认 200，超出后强制终止。你需要在用完之前完成工作。
-
-### 如何结束一个 turn
-
-- **正常结束**：输出纯文本，不含 tool_calls。框架立即交付。
-- **空输出**：框架重试 2 次，如果还是空就尝试 finalization（再给你一次机会），仍然空则返回 empty_final_response。
-- **输出截断**（finish_reason="length"）：框架自动触发最多 3 次 recovery 循环——追加 "please continue" 消息让你继续。
-- **ask_user**：你调用 `ask_user` 工具，框架暂停当前 turn 等待用户回复。回复到达后开始新 turn。
+```python
+BackoffConfig(
+    initial_delay=1.0,   # 初始重试延迟
+    multiplier=2.0,      # 指数退避乘数
+    max_delay=60.0,      # 最大延迟
+    jitter=0.1,          # 抖动因子
+)
+```
 
 ---
 
-## 上下文组装（ContextBuilder）
+## ContextBuilder（上下文管理）
 
-框架每次从零组装你的系统提示 + 消息列表。结构如下：
+位于 [context.py](../nanobot/agent/context.py)，负责组装代理的系统提示。
 
-### 系统提示（静态部分）
+### 职责
 
-1. **身份**（identity.md）：运行环境、工作区路径、渠道相关格式提示
-2. **可用工具列表**（按注册顺序排列——工作区工具（read_file/grep 等）排在 exec 之前，MCP 工具排最后）
-3. **Bootstrap 文件**：工作区中的 AGENTS.md（本文档）、SOUL.md、USER.md、TOOLS.md（自动加载。USER.md 和 TOOLS.md 如果未自定义则跳过）
-4. **always 技能**：标记为 `always: true` 的技能内容直接注入
-5. **技能摘要**：列出可用技能给延迟加载参考
+- 加载 bootstrap 文件（系统提示模板）
+- 构建工具定义描述
+- 集成技能（skill）内容
+- 注入工作区文件上下文
+- 处理媒体内容（图片压缩、base64 数据 URL）
 
-### 运行时上下文（动态部分，每轮注入）
+### 构建流程
 
-框架在每条用户消息前注入以下信息（用 `## Runtime Context` / `## /Runtime Context` 标记包裹，持久化时自动剥离）：
+```python
+class ContextBuilder:
+    def __init__(self, workspace, timezone=None, disabled_skills=None, db=None, project_root=None):
+        self.workspace = workspace
+        self.timezone = timezone
+        self.disabled_skills = disabled_skills or []
+        self.db = db
+        self.project_root = project_root
+        self._skills_loader = SkillsLoader(workspace)
+        self._template_cache: dict[str, tuple[float, str]] = {}
 
-- **消息时间**、**当前时间**
-- **渠道**（Channel）、**聊天 ID**（Chat ID）
-- **当前 iteration / 最大 iteration**
-- **向量记忆检索**（与当前消息语义相关的内容）
-- **长期记忆**（MEMORY.md + FAISS 检索结果）
-- **当前状态**：活跃目标 + 近期事件
+    def build(self, tool_definitions, messages=None, memory_context=None,
+              tree_data=None, current_task=None, session_key=None,
+              instructions_section=None, ...) -> list[dict]:
+        """
+        组装完整的消息列表：
+        1. 加载系统提示模板（bootstrap 文件）
+        2. 插入工具定义
+        3. 插入技能内容（always-inject skills）
+        4. 插入记忆上下文
+        5. 插入任务状态
+        6. 返回 [system_msg, ...history_messages, ...new_messages]
+        """
+```
 
-### 历史截断（snip_history）
+### 缓存机制
 
-当消息总 token 超过 `context_window - max_output - 4096`，框架会：
-
-1. 从末尾开始反向选取消息（保持完整回合）
-2. 确保以首个用户回合开头（避免工具结果孤零零挂在开头）
-3. 所以你不能依赖早期对话内容一直存在
-
----
-
-## 可用工具
-
-框架注册以下工具供你调用。
-
-### 工作区交互
-| 工具 | 用途 | 注意 |
-|------|------|------|
-| `read_file` | 读文件 | 支持 extract 参数提取特定行 |
-| `write_file` | 写/创建文件 | |
-| `edit_file` | 精确替换编辑 | 比 sed 更安全 |
-| `delete_file` | 删除文件 | |
-| `move_file` | 移动/重命名 | |
-| `glob` | 文件模式匹配 | |
-| `grep` | 文本搜索 | 支持正则 |
-| `search_text` | 语义文本搜索 | 嵌入搜索 |
-| `explore_module` | 探索 Python 模块 | |
-| `git_inspect` | Git 历史/差异 | |
-
-### 代码分析
-| 工具 | 用途 |
-|------|------|
-| `run_recipe` | 多步快捷操作（find_and_read、explore_source 等） |
-| `analyze_data` | 数据分析（导入/导出/调用关系树） |
-
-### 计算执行
-| 工具 | 用途 | 注意 |
-|------|------|------|
-| `exec` | 执行 shell 命令 | 注册在最后，工作区工具优先。有超时限制 |
-
-### 网络
-| 工具 | 用途 |
-|------|------|
-| `web_search` | 搜索网页 |
-| `web_fetch` | 获取网页内容 |
-
-### 通信
-| 工具 | 用途 | 注意 |
-|------|------|------|
-| `message` | 向用户发送消息（含媒体） | 发送文件必须用 message 工具，不能 read_file |
-| `ask_user` | 向用户提问，等待回复 | **之后的工具调用会被丢弃**，放最后 |
-
-### 记忆与状态
-| 工具 | 用途 |
-|------|------|
-| `recall` | 搜索历史对话（history 模式）或知识记忆（knowledge 模式） |
-| `tool_call_log` | 查询工具调用执行日志 |
-| `write_goal` | 创建/更新目标（含 priority、deadline、tags、subtasks） |
-| `list_goals` | 查看目标列表 |
-| `write_event` | 记录进度事件 |
-| `list_events` | 查看事件 |
-| `declare_checkpoint` | 声明 subtask 完成，保存检查点 |
-| `declare_assumption` | 声明关键假设（s0 必用） |
-| `verify_assumption` | 验证假设 |
-| `set_goal_priority` | 调整目标优先级 0-10 |
-| `set_goal_deadline` | 设置/更新截止日期 |
-| `add_goal_dependency` | 声明目标间依赖关系 |
-| `escalate_blocker` | 上报阻塞，附已尝试方案 |
-
-### 子代理
-| 工具 | 用途 |
-|------|------|
-| `spawn` | 启动后台子任务（fire-and-forget） |
-| `check_subagent` | 查询子任务进度 |
-| `list_subagents` | 列出活跃子任务 |
-
-### 定时任务
-| 工具 | 用途 |
-|------|------|
-| `cron` | 创建/列出/删除定时任务 |
-
-### MCP 工具
-配置的 MCP 服务器工具通过 `mcp_` 前缀注册，排在内置工具之后。
-
-### 工具执行特性
-
-- **只读工具缓存**：相同参数 60 秒内重复调用返回缓存结果
-- **结果去重**：连续返回相同内容会被替换为简短提示
-- **结果截断**：超过 `max_tool_result_chars`（默认 16000）的结果被截断。大输出用 `exec(capture_file=...)` 写入文件再分段读取
-- **并发执行**：独立工具可并行执行，同一文件的写操作串行化
+- 模板文件缓存（最多 20 个文件，以 mtime 校验）
+- 系统信息缓存（内存信息、GPU 信息，每个会话计算一次）
+- 工具索引缓存（`rebuild_tools_index`）
 
 ---
 
-## 会话系统
+## Hook 系统
 
-### Session
-每个对话渠道有一个 session，由 `channel:chat_id` 标识。会话持久化为 JSONL 文件。
+位于 [hook.py](../nanobot/agent/hook.py)，提供可扩展的生命周期钩子。
 
-### 回合归档（trim_old_turns）
-当回合数 > `max_turns`（默认 200）时，最旧的 `trim_batch`（默认 50）个回合被：
+### 钩子基类
 
-1. 从 session 中移除
-2. 压缩为摘要（用户输入/思考/工具/助手摘要）
-3. 写入 history（SQLite）
+```python
+class AgentHook:
+    # 运行级钩子
+    async def before_run(self, context: AgentRunHookContext)  # 运行前
+    async def after_run(self, context: AgentRunHookContext)   # 运行后
+    async def on_error(self, context: AgentRunHookContext)    # 出错时
+    async def on_finally(self, context: AgentRunHookContext)  # 最终清理
 
-这意味着：**超过 200 回合前的细节内容会丢失，只剩下摘要**。关键信息应该通过 `write_goal`/`write_event`/写文件持久化。
+    # 迭代级钩子
+    async def before_iteration(self, context: AgentHookContext)  # 每轮 LLM 调用前
+    async def after_iteration(self, context: AgentHookContext)   # 每轮 LLM 调用后
+    async def before_execute_tools(self, context: AgentHookContext)  # 工具执行前
+    async def on_stream(self, context, delta)      # 流式 token
+    async def on_stream_end(self, context, *, resuming)  # 流式结束
+    async def on_reasoning(self, context, delta)    # 推理 token
+    async def on_reasoning_end(self, context)       # 推理结束
+    async def after_turn(self)                      # 完整用户轮次结束
 
-### .pt 快照
-每 `pt_save_interval`（默认 30）个回合，框架保存一个 `.pt` 快照到 `workspace/prompts/`。这些快照由 MemoryExtractor 消费。
+    # 管道方法（多个钩子按顺序串联）
+    def before_llm_call(self, context, messages) -> list[dict]      # 修改 LLM 消息
+    def filter_tool_calls(self, context, tool_calls) -> list         # 过滤工具调用
+    def finalize_content(self, context, content) -> str | None      # 最终内容处理
+```
 
----
+### 上下文数据类
 
-## 记忆系统（Memory）
+```python
+@dataclass(slots=True)
+class AgentRunHookContext:
+    messages: list[dict]           # 完整消息列表
+    final_content: str | None      # 最终回复内容
+    tools_used: list[str]          # 使用过的工具
+    usage: dict[str, int]          # Token 用量
+    stop_reason: str | None        # 停止原因
+    error: str | None              # 错误信息
+    exception: BaseException | None
+    metadata: dict                 # 扩展元数据
 
-记忆分四个层次：
+@dataclass(slots=True)
+class AgentHookContext:
+    iteration: int                 # 当前迭代轮次
+    messages: list[dict]           # 当前消息列表
+    response: LLMResponse | None   # LLM 响应
+    tool_calls: list               # 当前工具调用
+    tool_results: list             # 工具执行结果
+    ...
+```
 
-### 1. 引导文件
-| 文件 | 用途 | 管理方式 |
-|------|------|----------|
-| `AGENTS.md` | 本文档——框架使用指南 | 由本文档维护 |
-| `SOUL.md` | 行为规则（WHEN...THEN...） | MemoryExtractor 自动追加 |
-| `USER.md` | 用户偏好 | MemoryExtractor 自动追加 |
-| `TOOLS.md` | 自定义工具表 | 手动维护 |
+### CompositeHook
 
-### 2. MEMORY.md + 分类文件
-`workspace/memory/` 目录下的 `.md` 文件，按主题分类存储知识/决策/架构事实。MEMORY.md 自动生成索引。
+`CompositeHook` 是钩子的组合器，将多个钩子按顺序串联：
 
-### 3. FAISS 向量索引
-- 模型：`BAAI/bge-small-zh-v1.5`（中英文通用）
-- 每轮自动检索并注入相关记忆（检索基于当前消息 + 活跃目标 + 近期事件）
+```python
+class CompositeHook(AgentHook):
+    # 安全执行每个钩子，单个钩子异常不影响其他钩子
+    async def _for_each_hook_safe(self, method_name, *args, **kwargs):
+        for h in self._hooks:
+            try:
+                await getattr(h, method_name)(*args, **kwargs)
+            except Exception:
+                logger.exception(...)
+```
 
-### 4. recall 工具
-- `mode='history'`：关键词搜索 MEMORY.md + SQLite 历史
-- `mode='knowledge'`：语义搜索 memory/ 目录
+### SDKCaptureHook
 
----
+`SDKCaptureHook` 专为 SDK 消费者设计，捕获工具名、消息、用量和停止原因：
 
-## MemoryExtractor（记忆提取器）
-
-MemoryExtractor 是从对话中提取经验、知识和偏好的后台系统，是框架自增强的核心。
-
-### 运行机制
-- 由 cron 系统定时触发
-- 扫描 `workspace/prompts/*.pt` 文件
-- 调用分析 LLM —— 你的一台「同事 LLM」来分析对话内容
-- 分析结果写入文件系统
-
-### 提取类型
-
-| 类型 | 写入位置 | 用途 |
-|------|----------|------|
-| `soul_rule` | `SOUL.md` | 行为规则，格式：WHEN...THEN... |
-| `user_preference` | `USER.md` | 用户偏好 |
-| `knowledge` | `memory/{topic}/{name}.md` | 技术知识、架构事实 |
-| `decision` | `memory/{topic}/{name}.md` | 架构决策（附理由） |
-| `reusable_pattern` | `skills/{name}/SKILL.md` | 可复用工作流 → 自动生成技能 |
-| `skip` | 跳过 | 没有新发现 |
-
-### 后处理
-写入后还会：
-1. **清理检查**：检查 SOUL.md/USER.md 中的矛盾、重复、过期内容
-2. **Git 自动提交**
-3. **重建 FAISS 向量索引**（确保新知识立即可检索）
-
-### 对你的意义
-- **你的经验会被自动学习**：从对话中提取有价值的信息并持久化
-- **技能会进化**：可复用的工作流 pattern 自动转化为技能
-- **错误模式也会被学习**：如果你不纠正，错误的 pattern 可能被固化
+```python
+class SDKCaptureHook(AgentHook):
+    # 用于 Nanobot.run() 填充 RunResult
+    self.tools_used: list[str] = []
+    self.messages: list[dict] = []
+    self.usage: dict[str, int] = {}
+    self.stop_reason: str | None = None
+```
 
 ---
 
 ## 技能系统（Skills）
 
-技能是 `SKILL.md` 文件（YAML 前置元数据 + Markdown 指令），放在 `workspace/skills/{name}/` 或内置 `nanobot/skills/{name}/` 下。
+位于 [skills.py](../nanobot/agent/skills.py)，为代理提供可插拔的能力。
 
-### 技能元数据
-```yaml
----
-name: skill-name
-description: 一句话描述
-always: false  # true = 始终注入系统提示
-requires:
-  bins: [python, node]  # 依赖的可执行文件
-  env: [API_KEY]         # 依赖的环境变量
----
+### SkillsLoader
+
+```python
+class SkillsLoader:
+    def __init__(self, workspace, builtin_skills_dir=None, disabled_skills=None):
+        self.workspace = workspace
+        self.workspace_skills = workspace / "skills"   # 用户自定义技能
+        self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR  # 内置技能
+        self.disabled_skills = disabled_skills or set()
 ```
 
-- `always: true`：内容直接注入系统提示的「Active Skills」段
-- `always: false`：只在技能摘要中列出，你可以用 `read_file` 延迟加载
+### 技能文件格式
 
-### 技能来源
-| 来源 | 位置 | 优先级 |
-|------|------|--------|
-| 内置技能 | `nanobot/skills/{name}/SKILL.md` | 低 |
-| 工作区技能 | `workspace/skills/{name}/SKILL.md` | 高（覆盖同名内置） |
-| 自生成技能 | MemoryExtractor 从 `reusable_pattern` 提取 | 工作区技能 |
+每个技能是一个 Markdown 文件（`SKILL.md`），包含 YAML frontmatter：
 
-### 技能自增强
-MemoryExtractor 从对话中检测 `reusable_pattern` 后：
-1. 调用 LLM 生成 SKILL.md（使用 skill-manager 模板）
-2. 写入 `workspace/skills/{name}/SKILL.md`
-3. 立即可用
-
-这意味着你可以通过**示例教学**让框架自动创建技能：多做几次类似的复杂操作，MemoryExtractor 可能从中识别 pattern 并生成技能。
-
+```markdown
+---
+name: my_skill
+description: 技能描述
+always: false  # true = 每轮注入到系统提示
 ---
 
-## 子代理系统（Subagent）
+## 技能内容
 
-子代理是在后台独立运行的任务，用于并行处理不阻塞主对话的工作。
-
-### 工作机制
-```
-你调用 spawn → 框架创建独立 AgentRunner（新 session、新上下文快照）→ 异步执行
-  → 完成后以系统消息（sender_id="subagent"）注入回你的对话
+详细的指令和说明...
 ```
 
-- 子代理有独立的 session，看不到 spawn 之后的对话
-- 完成结果以宣布格式注入到后续 turn
-- 可用 `check_subagent(task_id=...)` 主动查询进度
+### 技能目录结构
 
-### 子代理工具集
-子代理可使用：文件系统、Web、exec — **但不能**嵌套 spawn、cron、ask_user
-
-### 何时用 vs 自己做
-| 用 spawn | 自己做 |
-|----------|--------|
-| 独立可并行的任务（搜索、批量处理、调研） | 后续步骤依赖结果 |
-| 可能耗时不想让用户等 | 需要中间决策 |
-| 需要独立上下文 | 不接受异步不确定性 |
-
-### 结果格式
 ```
-[Subagent '<label>' completed successfully]
-Task: <原始任务>
-Duration: <耗时>
-Tools used: <工具>
-Iterations: <迭代次数>
-Result:
-<结果>
+skills/                    # 内置技能目录
+├── core/                  # 核心技能
+│   ├── SKILL.md
+│   └── ...
+├── productivity/          # 生产力技能
+│   └── SKILL.md
+└── code/                  # 编码技能
+    └── SKILL.md
+
+workspace/skills/          # 用户工作区自定义技能
+└── SKILL.md
 ```
 
----
+### 关键特性
 
-## Cron 系统
-
-### 三种调度方式
-| 方式 | 参数 | 示例 |
-|------|------|------|
-| 固定间隔 | `every_seconds` | `every_seconds=1200` |
-| Cron 表达式 | `cron_expr` + 可选 `tz` | `cron_expr="0 9 * * 1-5"` |
-| 一次性 | `at` | `at="2026-02-12T10:30:00"` |
-
-### 重要限制
-- **Cron 任务在独立 session 执行**（`cron:{job_id}`）——没有对话历史，打包所有上下文到 message
-- **不能在 cron 任务内创建新 cron 任务**——被框架阻止。update/remove 可以（jod_id 自动注入）
-- **系统任务**（如 MemoryExtractor）可见但不能删除/修改
-- 用 `cron(action="test", job_id="...")` 测试任务
+- **Frontmatter 解析**：使用正则 `^---\s*\r?\n(.*?)\r?\n---` 提取 YAML
+- **always-inject 机制**：标记了 `always: true` 的技能自动注入到每轮系统提示
+- **技能缓存**：`_skill_cache: dict[str, tuple[float, str, str]]` 以 mtime 校验
+- **列表缓存**：`_list_cache` 在技能目录 mtime 变化时自动失效
+- **自我优化**：支持技能文件的自动化验证与优化（通过 skill-manager）
 
 ---
 
-## Heartbeat 系统
+## Coding Agent 模式
 
-Heartbeat 是定时闹钟，定期检查活跃目标并向主 session 注入提醒。
+NanoBot 支持作为 Coding Agent 使用，能够扫描和分析项目代码。
 
-### 工作机制
-- 默认每 30 分钟触发一次
-- 查询 DB 中 `in_progress` 状态的目标
-- 构建消息（sender_id="boss"）通过消息总线发布
-- **ephemeral 消息不持久化到历史**——但它能打断你的当前对话
+### 项目扫描
 
-Heartbeat 消息示例：
-```
-定时检查 <当前时间>
-## Active Tasks
-- **目标1** [in_progress] [g1]
-- **目标2** [2/5 done] [in_progress] [g2]
+通过 `nanobot init` 命令或 `scan_project` 工具触发。
+
+[project_scanner.py](../nanobot/agent/project_scanner.py) 会：
+
+1. 扫描项目目录的实际文件系统内容
+2. 自动检测：语言、构建系统、测试框架、CI/CD 配置
+3. 识别：入口点、配置文件、依赖管理
+4. 生成 `project_card.md` — 结构化的项目卡片，供 AI 在后续操作中参考
+
+```bash
+# CLI 方式
+nanobot init /path/to/project
+
+# 在 Agent 交互中使用
+# AI 可自动调用 scan_project 工具来理解项目
 ```
 
-收到 heartbeat 时应该：更新状态、报告问题、标记完成的 goal。
+### 工作目录模式
+
+通过 `--project-root` 参数，CLI 可以指定项目根目录：
+
+```bash
+nanobot agent --project-root /path/to/project
+```
+
+此时 ContextBuilder 会：
+- 加载 `project_card.md` 作为上下文
+- 将工具的文件操作限制在项目目录内
+- 使用 Coding Agent 角色的提示词模板
 
 ---
 
-## 消息注入（Mid-turn Injection）
+## 组件协作流程
 
-在你的工具执行期间，框架可能在你完成前注入新消息：
-
-1. **子代理完成**：后台子任务结果到达
-2. **用户新消息**：排队的消息
-
-框架在以下时机检查待注入消息：
-- 工具执行后
-- 最终回复后
-- 错误后
-- 空响应后
-
-每轮最多 50 个注入，每秒最多 20 个注入周期。
-
-当注入发生时，未执行的工具标记为 `[ABANDONED]`，注入消息追加到消息列表，你继续处理。
-
----
-
-## 框架限制
-
-### 关键数字
-
-| 限制 | 值 | 影响 |
-|------|-----|------|
-| 每轮最大迭代 | 200 | 必须在此前完成工作 |
-| 历史 token 预算 | context_window - max_output - 4096 | 旧对话会被截断 |
-| 工具结果截断 | 16000 chars | 大输出要写文件分段读 |
-| 回合归档触发 | >200 回合 | 旧细节丢失，只剩摘要 |
-| 空响应重试 | 2 次 + finalization | 别返回空内容 |
-| 截断恢复 | 最多 3 次 | 提示请继续 |
-| .pt 快照间隔 | 30 回合 | MemoryExtractor 消费 |
-
-### 不能做的事
-- 不能在 cron 任务中创建新 cron 任务
-- 子代理不能嵌套 spawn
-- ask_user 之后的工具调用不执行
-- Heartbeat 消息不持久化
-
----
-
-## 全局决策优先级
-
-1. **用户当前消息** —— 永远最高
-2. **活跃目标**（`list_goals`）—— 需要主动推进
-3. **MEMORY.md** —— 持久化长期事实
-4. **运行时上下文** —— iteration、token 预算、渠道限制
-5. **Heartbeat** —— 只在消息到达时考虑，不要主动轮询
-
----
-
-## 最佳实践
-
-### 高效使用
-- **持久化关键信息**：跨 turn/session 需要保留的内容，用 `write_goal`/`write_event`/写文件保存
-- **大输出写文件**：工具结果有截断，大输出用 `exec(capture_file=...)` 写文件再分段读取
-- **ask_user 放最后**：之后的所有工具调用不执行
-- **先工作区工具再 exec**：read_file/grep/glob 比 shell 命令更高效
-- **利用技能自动生成**：多做几次结构化的复杂操作，MemoryExtractor 可能提取 pattern 生成技能
-- **主动管理目标**：设立 goal → 记录里程碑 → 标记完成
-
-### 避免的陷阱
-- 不要依赖早期对话细节——它们会被截断或归档
-- spawn 是 fire-and-forget——需要同步结果就自己做
-- cron 任务无上下文——pack 所有需要的信息到 message 中
-- 空输出会被视为异常——总是输出有意义的回复
-
----
-
-*本文档面向 LLM 读者，描述代理框架的架构和运作方式。*
+```
+1. 消息到达 AgentLoop.process_direct()
+2. 恢复 Session（SessionManager）
+3. ContextBuilder 构建系统提示：
+   a. 加载 bootstrap 模板
+   b. SkillsLoader 注入 always-inject 技能
+   c. 插入工具定义
+   d. 注入记忆上下文、任务状态
+4. ToolRegistry 注册所有可用工具
+5. AgentRunner.run() 开始 LLM 迭代循环：
+   a. 注入新消息（injection_callback）
+   b. 自我评估（assess_me_callback）
+   c. Hook.before_iteration → LLM 调用 → Hook.after_iteration
+   d. 解析工具调用 → Hook.before_execute_tools → 执行工具
+   e. 循环直到 LLM 返回纯文本回复
+6. MemoryExtractor 提取并持久化记忆
+7. Hook.after_turn
+8. 返回 OutboundMessage
+```

@@ -1,789 +1,605 @@
-# Configuration
+# Nanobot 配置文档
 
-Config file: `~/.nanobot/config.json`
+## 配置文件位置
 
-> [!NOTE]
-> If your config file is older than the current schema, you can refresh it without overwriting your existing values:
-> run `nanobot onboard`, then answer `N` when asked whether to overwrite the config.
-> nanobot will merge in missing default fields and keep your current settings.
+配置文件默认位于 `~/.nanobot/config.json`（JSON 格式），可通过 `--config` 命令行参数指定其他路径。
 
-## Environment Variables for Secrets
+配置文件也支持环境变量引用，使用 `${VAR_NAME}` 语法，在加载时会自动替换为对应的环境变量值。
 
-Instead of storing secrets directly in `config.json`, you can use `${VAR_NAME}` references that are resolved from environment variables at startup:
+此外，顶层配置项可以通过环境变量 `NANOBOT__{KEY}` 覆盖（例如 `NANOBOT__LOGGING__LEVEL=DEBUG`）。
 
-```
+---
+
+## 根级配置结构
+
+```jsonc
 {
-  "channels": {
-    "telegram": { "token": "${TELEGRAM_TOKEN}" },
-    "email": {
-      "imapPassword": "${IMAP_PASSWORD}",
-      "smtpPassword": "${SMTP_PASSWORD}"
-    }
-  },
-  "providers": {
-    "groq": { "apiKey": "${GROQ_API_KEY}" }
-  }
+  "agents": { /* Agent 配置 */ },
+  "providers": { /* LLM Provider 配置 */ },
+  "channels": { /* 消息通道配置 */ },
+  "tools": { /* 工具配置 */ },
+  "gateway": { /* 网关服务配置 */ },
+  "logging": { /* 日志配置 */ }
 }
 ```
 
-For **systemd** deployments, use `EnvironmentFile=` in the service unit to load variables from a file that only the deploying user can read:
+---
 
-```ini
-# /etc/systemd/system/nanobot.service (excerpt)
-[Service]
-EnvironmentFile=/home/youruser/nanobot_secrets.env
-User=nanobot
-ExecStart=...
-```
+## agents -- Agent 配置
+
+### agents.defaults -- 默认 Agent 参数
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `workspace` | `workspace` | `str` | `~/.nanobot/workspace` | Agent 工作目录 |
+| `model` | `model` | `str` | `minimax/MiniMax-M2.7` | 默认使用的模型名称 |
+| `provider` | `provider` | `str` | `auto` | Provider 名称（如 `anthropic`、`openrouter`）或 `auto` 自动检测 |
+| `maxTokens` | `max_tokens` | `int` | `30000` | 每次请求的最大生成 token 数 |
+| `contextWindowTokens` | `context_window_tokens` | `int` | `130000` | 上下文窗口大小（token 数） |
+| `contextBlockLimit` | `context_block_limit` | `int?` | `null` | 上下文块数量上限（不限制） |
+| `temperature` | `temperature` | `float` | `0.1` | 生成温度参数 |
+| `maxToolIterations` | `max_tool_iterations` | `int` | `2000` | 单轮最大工具调用次数 |
+| `maxToolResultChars` | `max_tool_result_chars` | `int` | `20000` | 工具返回结果的最大字符数 |
+| `providerRetryMode` | `provider_retry_mode` | `str` | `persistent` | Provider 重试模式：`standard` 或 `persistent` |
+| `reasoningEffort` | `reasoning_effort` | `str?` | `high` | 推理强度：`low` / `medium` / `high` / `max` / `adaptive` / `null`（null 表示关闭思考模式） |
+| `timezone` | `timezone` | `str` | 自动检测 | IANA 时区，如 `Asia/Shanghai`、`America/New_York`。Windows 系统会自动从注册表映射到 IANA 时区 |
+| `disabledSkills` | `disabled_skills` | `list[str]` | `[]` | 禁用的技能列表（如 `["summarize", "skill-manager"]`） |
+| `compressTriggerTokens` | `compress_trigger_tokens` | `int` | `100000` | 历史记录超过此 token 数时触发压缩（最小 1024） |
+| `historyTokenLimit` | `history_token_limit` | `int` | `50000` | 压缩后的目标 token 数（最小 1024） |
+| `assessInterval` | `assess_interval` | `int` | `12` | 自我评估间隔（轮次） |
+| `extractor` | `extractor` | `object` | (见下) | 记忆提取器配置 |
+| `selfReview` | `self_review` | `object` | (见下) | 自动自我审查配置 |
+
+### agents.defaults.extractor -- MemoryExtractor 配置
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `intervalH` | `interval_h` | `float` | `0.5` | Cron 间隔（小时），最小 0.5 |
+| `saveInterval` | `save_interval` | `int` | `30` | 每 N 轮对话保存一次 `.pt` 文件（按 session） |
+
+> 注意：`cron` 字段是遗留兼容字段（Cron 表达式），不在序列化输出中体现。
+
+### agents.defaults.selfReview -- 自我审查配置
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `channel` | `channel` | `str?` | `null` | 发送通道，如 `proxy:feishu:feishu1` |
+| `to` | `to` | `str?` | `null` | 接收方 ID（聊天/群组 ID） |
+| `sessionKey` | `session_key` | `str?` | `null` | 会话标识 |
+
+---
+
+## providers -- LLM Provider 配置
+
+每个 Provider 的公参结构相同：
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `apiKey` | `api_key` | `str?` | `null` | API 密钥 |
+| `apiBase` | `api_base` | `str?` | `null` | API 基础 URL（不填则使用 Provider 默认端点） |
+| `extraHeaders` | `extra_headers` | `dict[str,str]?` | `null` | 自定义 HTTP 头（如 AiHubMix 的 `APP-Code`） |
+| `extraBody` | `extra_body` | `dict?` | `null` | 合并到每个请求体中的额外字段 |
+
+### 支持的 Provider 完整列表
+
+#### 自定义 / 直连
+
+| 配置字段名 | 显示名称 | 环境变量 | 说明 | 默认 API Base |
+|-----------|---------|---------|------|-------------|
+| `custom` | Custom | (无) | 任意 OpenAI 兼容 endpoint。直接模式，需自行填写 `apiKey` 和 `apiBase` | - |
+| `azureOpenai` | Azure OpenAI | (无) | Azure OpenAI（model 字段填部署名）。直接模式 | - |
+
+#### 网关类
+
+| 配置字段名 | 显示名称 | 环境变量 | 说明 | 默认 API Base |
+|-----------|---------|---------|------|-------------|
+| `openrouter` | OpenRouter | `OPENROUTER_API_KEY` | 全局网关，支持 prompt caching。密钥以 `sk-or-` 开头 | `https://openrouter.ai/api/v1` |
+| `aihubmix` | AiHubMix | `OPENAI_API_KEY` | OpenAI 兼容网关，自动剥离模型前缀 | `https://aihubmix.com/v1` |
+| `siliconflow` | SiliconFlow | `OPENAI_API_KEY` | 硅基流动，OpenAI 兼容网关 | `https://api.siliconflow.cn/v1` |
+| `volcengine` | VolcEngine | `OPENAI_API_KEY` | 火山引擎，思考模式支持 `thinking_type` | `https://ark.cn-beijing.volces.com/api/v3` |
+| `volcengineCodingPlan` | VolcEngine Coding Plan | `OPENAI_API_KEY` | 火山引擎编程权益，同火山引擎 Key | `https://ark.cn-beijing.volces.com/api/coding/v3` |
+| `byteplus` | BytePlus | `OPENAI_API_KEY` | 火山引擎国际版，思考模式支持 `thinking_type` | `https://ark.ap-southeast.bytepluses.com/api/v3` |
+| `byteplusCodingPlan` | BytePlus Coding Plan | `OPENAI_API_KEY` | BytePlus 编程权益 | `https://ark.ap-southeast.bytepluses.com/api/coding/v3` |
+
+#### 标准 Provider
+
+| 配置字段名 | 显示名称 | 环境变量 | 说明 | 默认 API Base |
+|-----------|---------|---------|------|-------------|
+| `anthropic` | Anthropic | `ANTHROPIC_API_KEY` | 原生 Anthropic SDK。支持 prompt caching | - |
+| `openai` | OpenAI | `OPENAI_API_KEY` | OpenAI 官方 API | - |
+| `openaiCodex` | OpenAI Codex | (无) | OAuth 认证，非 API Key 模式 | `https://chatgpt.com/backend-api` |
+| `githubCopilot` | Github Copilot | (无) | OAuth 认证，非 API Key 模式 | `https://api.githubcopilot.com` |
+
+## OAuth 提供商
+
+`openaiCodex` 和 `githubCopilot` 是 OAuth 认证的提供商，无法直接配置 API Key，需要通过交互式命令行登录。
+
+### 前置条件
 
 ```bash
-# /home/youruser/nanobot_secrets.env (mode 600, owned by youruser)
-TELEGRAM_TOKEN=your-token-here
-IMAP_PASSWORD=your-password-here
+pip install oauth-cli-kit
 ```
 
-## Providers
+### OpenAI Codex 登录
 
-> [!TIP]
-> - **Voice transcription**: Voice messages (Telegram, WhatsApp) are automatically transcribed using Whisper. By default Groq is used (free tier). Set `"transcriptionProvider": "openai"` under `channels` to use OpenAI Whisper instead, and optionally set `"transcriptionLanguage": "en"` (or another ISO-639-1 code) for more accurate transcription. The API key is picked from the matching provider config.
-> - **MiniMax Coding Plan**: Exclusive discount links for the nanobot community: [Overseas](https://platform.minimax.io/subscribe/coding-plan?code=9txpdXw04g&source=link) · [Mainland China](https://platform.minimaxi.com/subscribe/token-plan?code=GILTJpMTqZ&source=link)
-> - **MiniMax (Mainland China)**: If your API key is from MiniMax's mainland China platform (minimaxi.com), set `"apiBase": "https://api.minimaxi.com/v1"` in your minimax provider config.
-> - **MiniMax thinking mode**: Use `providers.minimaxAnthropic` when you want `reasoningEffort` / thinking mode. MiniMax exposes that capability through its Anthropic-compatible endpoint, so nanobot keeps it as a separate provider instead of guessing MiniMax-specific thinking parameters on the generic OpenAI-compatible `minimax` endpoint. It uses the same `MINIMAX_API_KEY`. Default Anthropic-compatible base URL: `https://api.minimax.io/anthropic`; for mainland China use `https://api.minimaxi.com/anthropic`.
-> - **VolcEngine / BytePlus Coding Plan**: Use dedicated providers `volcengineCodingPlan` or `byteplusCodingPlan` instead of the pay-per-use `volcengine` / `byteplus` providers.
-> - **Zhipu Coding Plan**: If you're on Zhipu's coding plan, set `"apiBase": "https://open.bigmodel.cn/api/coding/paas/v4"` in your zhipu provider config.
-> - **Alibaba Cloud BaiLian**: If you're using Alibaba Cloud BaiLian's OpenAI-compatible endpoint, set `"apiBase": "https://dashscope.aliyuncs.com/compatible-mode/v1"` in your dashscope provider config.
-> - **Step Fun (Mainland China)**: If your API key is from Step Fun's mainland China platform (stepfun.com), set `"apiBase": "https://api.stepfun.com/v1"` in your stepfun provider config.
-
-| Provider | Purpose | Get API Key |
-|----------|---------|-------------|
-| `custom` | Any OpenAI-compatible endpoint | — |
-| `openrouter` | LLM (recommended, access to all models) | [openrouter.ai](https://openrouter.ai) |
-| `volcengine` | LLM (VolcEngine, pay-per-use) | [Coding Plan](https://www.volcengine.com/activity/codingplan?utm_campaign=nanobot&utm_content=nanobot&utm_medium=devrel&utm_source=OWO&utm_term=nanobot) · [volcengine.com](https://www.volcengine.com) |
-| `byteplus` | LLM (VolcEngine international, pay-per-use) | [Coding Plan](https://www.byteplus.com/en/activity/codingplan?utm_campaign=nanobot&utm_content=nanobot&utm_medium=devrel&utm_source=OWO&utm_term=nanobot) · [byteplus.com](https://www.byteplus.com) |
-| `anthropic` | LLM (Claude direct) | [console.anthropic.com](https://console.anthropic.com) |
-| `azure_openai` | LLM (Azure OpenAI) | [portal.azure.com](https://portal.azure.com) |
-| `openai` | LLM + Voice transcription (Whisper) | [platform.openai.com](https://platform.openai.com) |
-| `deepseek` | LLM (DeepSeek direct) | [platform.deepseek.com](https://platform.deepseek.com) |
-| `groq` | LLM + Voice transcription (Whisper, default) | [console.groq.com](https://console.groq.com) |
-| `minimax` | LLM (MiniMax direct) | [platform.minimaxi.com](https://platform.minimaxi.com) |
-| `minimax_anthropic` | LLM (MiniMax Anthropic-compatible endpoint, thinking mode) | [platform.minimaxi.com](https://platform.minimaxi.com) |
-| `minimax_cn` | LLM (MiniMax direct) | [platform.minimaxi.com](https://platform.minimaxi.com) |
-| `minimax_anthropic_cn` | LLM (MiniMax Anthropic-compatible endpoint, thinking mode) | [platform.minimaxi.com](https://platform.minimaxi.com) |
-| `gemini` | LLM (Gemini direct) | [aistudio.google.com](https://aistudio.google.com) |
-| `aihubmix` | LLM (API gateway, access to all models) | [aihubmix.com](https://aihubmix.com) |
-| `siliconflow` | LLM (SiliconFlow/硅基流动) | [siliconflow.cn](https://siliconflow.cn) |
-| `dashscope` | LLM (Qwen) | [dashscope.console.aliyun.com](https://dashscope.console.aliyun.com) |
-| `moonshot` | LLM (Moonshot/Kimi) | [platform.moonshot.cn](https://platform.moonshot.cn) |
-| `zhipu` | LLM (Zhipu GLM) | [open.bigmodel.cn](https://open.bigmodel.cn) |
-| `mimo` | LLM (MiMo) | [platform.xiaomimimo.com](https://platform.xiaomimimo.com) |
-| `ollama` | LLM (local, Ollama) | — |
-| `lm_studio` | LLM (local, LM Studio) | — |
-| `mistral` | LLM | [docs.mistral.ai](https://docs.mistral.ai/) |
-| `stepfun` | LLM (Step Fun/阶跃星辰) | [platform.stepfun.com](https://platform.stepfun.com) |
-| `ovms` | LLM (local, OpenVINO Model Server) | [docs.openvino.ai](https://docs.openvino.ai/2026/model-server/ovms_docs_llm_quickstart.html) |
-| `vllm` | LLM (local, any OpenAI-compatible server) | — |
-| `openai_codex` | LLM (Codex, OAuth) | `nanobot provider login openai-codex` |
-| `github_copilot` | LLM (GitHub Copilot, OAuth) | `nanobot provider login github-copilot` |
-| `qianfan` | LLM (Baidu Qianfan) | [cloud.baidu.com](https://cloud.baidu.com/doc/qianfan/s/Hmh4suq26) |
-
-
-<details>
-<summary><b>OpenAI Codex (OAuth)</b></summary>
-
-Codex uses OAuth instead of API keys. Requires a ChatGPT Plus or Pro account.
-No `providers.openaiCodex` block is needed in `config.json`; `nanobot provider login` stores the OAuth session outside config.
-
-**1. Login:**
 ```bash
 nanobot provider login openai-codex
 ```
 
-**2. Set model** (merge into `~/.nanobot/config.json`):
-```
-{
-  "agents": {
-    "defaults": {
-      "model": "openai-codex/gpt-5.1-codex"
-    }
-  }
-}
-```
+会打开浏览器进行 OAuth 认证。认证成功后 Token 会保存在本地。
 
-**3. Chat:**
-```bash
-nanobot agent -m "Hello!"
+### GitHub Copilot 登录
 
-# Target a specific workspace/config locally
-nanobot agent -c ~/.nanobot-telegram/config.json -m "Hello!"
-
-# One-off workspace override on top of that config
-nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test -m "Hello!"
-```
-
-> Docker users: use `docker run -it` for interactive OAuth login.
-
-</details>
-
-
-<details>
-<summary><b>GitHub Copilot (OAuth)</b></summary>
-
-GitHub Copilot uses OAuth instead of API keys. Requires a [GitHub account with a plan](https://github.com/features/copilot/plans) configured.
-No `providers.githubCopilot` block is needed in `config.json`; `nanobot provider login` stores the OAuth session outside config.
-
-**1. Login:**
 ```bash
 nanobot provider login github-copilot
 ```
 
-**2. Set model** (merge into `~/.nanobot/config.json`):
+使用 Device Flow 方式认证。终端会显示一个验证码，按提示在浏览器中打开 `https://github.com/login/device` 并输入验证码即可。
+
+### 令牌管理
+
+OAuth Token 保存在 `~/.nanobot/.oauth/` 目录下。Token 过期后会自动提示重新登录。
+
+### 查看状态
+
+```bash
+nanobot status
 ```
-{
-  "agents": {
-    "defaults": {
-      "model": "github-copilot/gpt-4.1"
+
+OAuth 提供商的状态会标注为 `✓ (OAuth)`。
+
+---
+
+## Provider 配置
+
+| `deepseek` | DeepSeek | `DEEPSEEK_API_KEY` | 思考模式支持 `thinking_type`，默认 `reasoningEffort=high` | `https://api.deepseek.com` |
+| `gemini` | Gemini | `GEMINI_API_KEY` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `zhipu` | Zhipu AI | `ZAI_API_KEY` | 智谱 GLM，同时注入 `ZHIPUAI_API_KEY` | `https://open.bigmodel.cn/api/paas/v4` |
+| `zhipuCodingPlan` | Zhipu AI Coding Plan | `ZAI_API_KEY` | 智谱编程权益 | `https://open.bigmodel.cn/api/coding/paas/v4` |
+| `dashscope` | DashScope | `DASHSCOPE_API_KEY` | 阿里通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `dashscopeCodingPlan` | DashScope Coding Plan | `DASHSCOPE_API_KEY` | 阿里云百炼编程权益 | `https://coding.dashscope.aliyuncs.com/v1` |
+| `moonshot` | Moonshot | `MOONSHOT_API_KEY` | 月之暗面 Kimi。K2.5/K2.6 强制 `temperature=1.0` | `https://api.moonshot.ai/v1` |
+| `kimiCode` | Kimi Code | `MOONSHOT_API_KEY` | 月之暗面编程权益 | `https://api.kimi.com/coding/v1` |
+| `minimax` | MiniMax | `MINIMAX_API_KEY` | MiniMax，流式超时 90s，思考模式 `reasoning_split` | `https://api.minimax.io/v1` |
+| `minimaxAnthropic` | MiniMax (Anthropic) | `MINIMAX_API_KEY` | MiniMax Anthropic 兼容端点（支持 thinking） | `https://api.minimax.io/anthropic` |
+| `minimaxCn` | MiniMax CN | `MINIMAX_API_KEY` | MiniMax 国内端点 | `https://api.minimaxi.com/v1` |
+| `minimaxAnthropicCn` | MiniMax CN (Anthropic) | `MINIMAX_API_KEY` | MiniMax 国内 Anthropic 兼容端点 | `https://api.minimaxi.com/anthropic` |
+| `mistral` | Mistral | `MISTRAL_API_KEY` | Mistral AI | `https://api.mistral.ai/v1` |
+| `stepfun` | Step Fun | `STEPFUN_API_KEY` | 阶跃星辰。`reasoning` 字段作为正式内容 | `https://api.stepfun.com/v1` |
+| `stepfunPlan` | Step Plan | `STEPFUN_API_KEY` | 阶跃星辰编程权益 | `https://api.stepfun.com/step_plan/v1` |
+| `xiaomiMimo` | Xiaomi MIMO | `XIAOMIMIMO_API_KEY` | 小米，思考模式 `thinking_type` | `https://api.xiaomimimo.com/v1` |
+| `qianfan` | Qianfan | `QIANFAN_API_KEY` | 百度千帆 ERNIE | `https://qianfan.baidubce.com/v2` |
+| `qianfanCodingPlan` | Qianfan Coding Plan | `QIANFAN_API_KEY` | 百度千帆编程权益 | `https://qianfan.baidubce.com/v2/coding` |
+| `hunyuan` | Hunyuan | `HUNYUAN_API_KEY` | 腾讯混元 | `https://api.hunyuan.cloud.tencent.com/v1` |
+| `hunyuanCodingPlan` | Hunyuan Coding Plan | `HUNYUAN_API_KEY` | 腾讯混元编程权益 | `https://api.lkeap.cloud.tencent.com/coding/v3` |
+| `minicpm` | MiniCPM | `MINICPM_API_KEY` | 面壁智能 | `https://api.modelbest.cn/v1` |
+| `xai` | xAI Grok | `XAI_API_KEY` | xAI Grok，支持 `max_completion_tokens` | `https://api.x.ai/v1` |
+| `xunfeiCoding` | Xunfei MaaS Coding | `XFYUN_API_KEY` | 讯飞星辰编程权益 | `https://maas-coding-api.cn-huabei-1.xf-yun.com/v2` |
+| `groq` | Groq | `GROQ_API_KEY` | 主要用于 Whisper 语音转录，也可用于 LLM | `https://api.groq.com/openai/v1` |
+
+#### 本地部署
+
+| 配置字段名 | 显示名称 | 环境变量 | 说明 | 默认 API Base |
+|-----------|---------|---------|------|-------------|
+| `vllm` | vLLM/Local | `HOSTED_VLLM_API_KEY` | vLLM 等 OpenAI 兼容本地服务 | - |
+| `ollama` | Ollama | `OLLAMA_API_KEY` | Ollama 本地模型 | `http://localhost:11434/v1` |
+| `lmStudio` | LM Studio | `LM_STUDIO_API_KEY` | LM Studio 本地模型 | `http://localhost:1234/v1` |
+| `ovms` | OpenVINO Model Server | (无) | OpenVINO Model Server，直接模式 | `http://localhost:8000/v3` |
+
+---
+
+## channels -- 消息通道配置
+
+### 顶层通道公共字段
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `sendProgress` | `send_progress` | `bool` | `true` | 是否将 Agent 文本进度流式发送到通道 |
+| `sendToolHints` | `send_tool_hints` | `bool` | `false` | 是否发送工具调用提示（如 `read_file("...")`） |
+| `sendMaxRetries` | `send_max_retries` | `int` | `3` | 最大投递尝试次数（0-10，包含首次发送） |
+| `transcriptionProvider` | `transcription_provider` | `str` | `groq` | 语音转录后端：`groq` 或 `openai` |
+| `transcriptionLanguage` | `transcription_language` | `str?` | `null` | 可选 ISO-639-1 语言代码提示（如 `zh`、`en`），用于音频转录 |
+
+### 各通道配置
+
+每个通道的名称作为 channels 下的一个键，内部结构为：
+
+```jsonc
+"feishu": {
+  "enabled": true,
+  "bots": [
+    {
+      "name": "bot1",
+      // 通道特定字段...
     }
-  }
+  ]
 }
 ```
 
-**3. Chat:**
-```bash
-nanobot agent -m "Hello!"
+#### 飞书 (feishu)
 
-# Target a specific workspace/config locally
-nanobot agent -c ~/.nanobot-telegram/config.json -m "Hello!"
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].appId` | `str` | - | **必填**。飞书应用 App ID |
+| `bots[].appSecret` | `str` | - | **必填**。飞书应用 App Secret |
+| `bots[].encryptKey` | `str` | `""` | 加密密钥 |
+| `bots[].verificationToken` | `str` | `""` | 验证令牌 |
+| `bots[].domain` | `str` | `feishu` | `feishu`（国内）或 `larksuite`（海外） |
+| `bots[].groupPolicy` | `str` | `mention` | 群组响应策略：`open`（所有消息）或 `mention`（仅 @bot） |
+| `bots[].streaming` | `bool` | `true` | 是否启用流式输出 |
+| `bots[].renderMode` | `str` | `card` | 消息渲染模式：`card`（卡片）或 `text`（纯文本） |
+| `bots[].reactEmoji` | `str` | `THUMBSUP` | 收到消息时的回应表情 |
+| `bots[].doneEmoji` | `str` | `OK` | Agent 处理完成后的回应表情 |
+| `bots[].cardTemplate` | `str` | `blue` | 卡片模板颜色 |
+| `bots[].allowFrom` | `list[str]` | `[]` | 允许的用户/群组 ID 白名单 |
+| `bots[].toolHintPrefix` | `str` | `🔧` | 工具调用提示前缀（仅 `sendToolHints: true` 时有效） |
+| `bots[].replyToMessage` | `bool` | `false` | 是否回复到原消息线程 |
 
-# One-off workspace override on top of that config
-nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test -m "Hello!"
-```
+#### 钉钉 (dingtalk)
 
-> Docker users: use `docker run -it` for interactive OAuth login.
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].clientId` | `str` | - | **必填**。钉钉应用 Client ID |
+| `bots[].clientSecret` | `str` | - | **必填**。钉钉应用 Client Secret |
+| `bots[].groupPolicy` | `str` | `mention` | 群组响应策略：`open` 或 `mention` |
 
-</details>
+#### Discord
 
-<details>
-<summary><b>Custom Provider (Any OpenAI-compatible API)</b></summary>
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].token` | `str` | - | **必填**。Discord Bot Token |
+| `bots[].intents` | `int` | `37377` | Discord Gateway Intents 位掩码 |
 
-Connects directly to any OpenAI-compatible endpoint — llama.cpp, Together AI, Fireworks, Azure OpenAI, or any self-hosted server. Model name is passed as-is.
+#### Telegram
 
-```
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].token` | `str` | - | **必填**。Telegram Bot Token |
+| `bots[].groupPolicy` | `str` | `mention` | 群组响应策略：`open` 或 `mention` |
+
+#### Slack
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].botToken` | `str` | - | **必填**。Slack Bot Token |
+| `bots[].appToken` | `str` | - | **必填**。Slack App Token |
+| `bots[].mode` | `str` | `socket` | 连接模式：`socket`（Socket Mode）或 `webhook` |
+| `bots[].groupPolicy` | `str` | `mention` | 群组响应策略：`mention` 或 `open` |
+
+#### QQ
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].appId` | `str` | - | **必填**。QQ 应用 App ID |
+| `bots[].secret` | `str` | - | **必填**。QQ 应用 Secret |
+| `bots[].msgFormat` | `str` | `plain` | 消息格式：`plain`（纯文本）或 `json` |
+
+#### Email
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].imapHost` | `str` | - | **必填**。IMAP 服务器地址 |
+| `bots[].imapUsername` | `str` | - | **必填**。IMAP 用户名 |
+| `bots[].imapPassword` | `str` | - | **必填**。IMAP 密码 |
+| `bots[].smtpHost` | `str` | - | **必填**。SMTP 服务器地址 |
+| `bots[].smtpUsername` | `str` | - | **必填**。SMTP 用户名 |
+| `bots[].smtpPassword` | `str` | - | **必填**。SMTP 密码 |
+| `bots[].fromAddress` | `str` | smtp_username | 发件人地址 |
+| `bots[].imapPort` | `int` | `993` | IMAP 端口 |
+| `bots[].imapUseSsl` | `bool` | `true` | IMAP 是否使用 SSL |
+| `bots[].imapMailbox` | `str` | `INBOX` | IMAP 邮箱文件夹 |
+| `bots[].markSeen` | `bool` | `true` | 读取后是否标记为已读 |
+| `bots[].maxBodyChars` | `int` | `12000` | 邮件正文最大字符数 |
+| `bots[].smtpPort` | `int` | `587` | SMTP 端口 |
+| `bots[].smtpUseTls` | `bool` | `true` | SMTP 是否使用 TLS |
+| `bots[].smtpUseSsl` | `bool` | `false` | SMTP 是否使用 SSL |
+| `bots[].pollIntervalSeconds` | `int` | `30` | 轮询新邮件间隔（秒，最小 5） |
+
+#### 微信 (weixin)
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].apiUrl` | `str` | `https://ilinkai.weixin.qq.com` | 微信 API 地址 |
+| `bots[].token` | `str` | `""` | 访问令牌 |
+
+#### WhatsApp
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+| `bots[].groupPolicy` | `str` | `open` | 群组响应策略：`open` 或 `mention` |
+
+> WhatsApp 没有强制的必填字段（使用 Cloud API 时需通过环境变量或额外字段配置凭证）。
+
+#### WebSocket (websocket)
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 是否启用 |
+| `bots[].name` | `str` | `bot1` | Bot 名称 |
+
+---
+
+## tools -- 工具配置
+
+### tools.web -- 网络工具
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `enable` | `enable` | `bool` | `true` | 是否启用网络工具 |
+| `proxy` | `proxy` | `str?` | `null` | HTTP/SOCKS5 代理 URL，如 `http://127.0.0.1:7890` 或 `socks5://127.0.0.1:1080` |
+| `userAgent` | `user_agent` | `str?` | `null` | 自定义 User-Agent |
+| `search` | `search` | `object` | (见下) | 网页搜索配置 |
+| `fetch` | `fetch` | `object` | (见下) | 网页抓取配置 |
+
+#### tools.web.search -- 网页搜索
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `provider` | `provider` | `str` | `duckduckgo` | 搜索引擎：`brave`、`tavily`、`duckduckgo`、`searxng`、`jina`、`kagi` |
+| `apiKey` | `api_key` | `str` | `""` | 搜索引擎 API Key |
+| `baseUrl` | `base_url` | `str` | `""` | SearXNG 基础 URL |
+| `maxResults` | `max_results` | `int` | `5` | 最大搜索结果数 |
+| `timeout` | `timeout` | `int` | `30` | 搜索超时（秒） |
+
+#### tools.web.fetch -- 网页抓取
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `useJinaReader` | `use_jina_reader` | `bool` | `true` | 使用 Jina Reader（`false` 则使用本地 readability-lxml） |
+
+### tools.exec -- Shell 执行工具
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `enable` | `enable` | `bool` | `true` | 是否启用命令执行 |
+| `timeout` | `timeout` | `int` | `60` | 命令超时（秒） |
+| `pathAppend` | `path_append` | `str` | `""` | 附加到 PATH 环境变量的路径 |
+| `sandbox` | `sandbox` | `str` | `""` | 沙箱后端：`""`（无）或 `bwrap` |
+| `allowedEnvKeys` | `allowed_env_keys` | `list[str]` | `[]` | 允许透传到子进程的环境变量名列表（如 `["GOPATH", "JAVA_HOME"]`） |
+
+### tools.my -- 自检工具
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `enable` | `enable` | `bool` | `true` | 是否注册 `config` 工具（Agent 运行时状态检视） |
+| `allowSet` | `allow_set` | `bool` | `false` | 是否允许 `config` 工具修改循环状态（`false` 为只读） |
+
+### tools -- 其他工具字段
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `restrictToWorkspace` | `restrict_to_workspace` | `bool` | `false` | 是否限制所有工具访问到工作目录 |
+| `mcpServers` | `mcp_servers` | `dict[str, object]` | `{}` | MCP 服务器配置（见下） |
+| `ssrfWhitelist` | `ssrf_whitelist` | `list[str]` | `[]` | SSRF 白名单 CIDR 范围，如 `["100.64.0.0/10"]`（用于 Tailscale） |
+
+### tools.mcpServers.{name} -- MCP 服务器配置
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `type` | `type` | `str?` | `null` | 连接类型：`stdio`、`sse`、`streamableHttp`（不填则自动检测） |
+| `command` | `command` | `str` | `""` | Stdio 模式：要运行的命令（如 `npx`） |
+| `args` | `args` | `list[str]` | `[]` | Stdio 模式：命令参数 |
+| `env` | `env` | `dict[str,str]` | `{}` | Stdio 模式：额外环境变量 |
+| `url` | `url` | `str` | `""` | HTTP/SSE 模式：端点 URL |
+| `headers` | `headers` | `dict[str,str]` | `{}` | HTTP/SSE 模式：自定义请求头 |
+| `toolTimeout` | `tool_timeout` | `int` | `30` | 工具调用超时（秒） |
+| `enabledTools` | `enabled_tools` | `list[str]` | `["*"]` | 仅注册这些工具。接受原始 MCP 名称或包裹的 `mcp_{server}_{tool}` 名称；`["*"]` = 全部；`[]` = 不注册 |
+
+---
+
+## gateway -- 网关配置
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `host` | `host` | `str` | `0.0.0.0` | 监听地址（`0.0.0.0` 允许局域网访问 WebUI） |
+| `port` | `port` | `int` | `18790` | 监听端口 |
+| `heartbeat` | `heartbeat` | `object` | (见下) | 心跳服务配置 |
+
+### gateway.heartbeat -- 心跳配置
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `enabled` | `enabled` | `bool` | `true` | 是否启用心跳 |
+| `intervalS` | `interval_s` | `int` | `1800` | 心跳间隔（秒），默认 30 分钟 |
+| `minIntervalS` | `min_interval_s` | `int` | `30` | 心跳最小间隔（冷却时间，秒） |
+| `keepRecentMessages` | `keep_recent_messages` | `int` | `8` | 保留的最近消息数 |
+
+---
+
+## logging -- 日志配置
+
+| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
+|-----------|------------|------|--------|------|
+| `enabled` | `enabled` | `bool` | `true` | 是否启用日志 |
+| `level` | `level` | `str` | `INFO` | 日志级别：`DEBUG`、`INFO`、`WARNING`、`ERROR`、`CRITICAL` |
+| `file` | `file` | `str?` | `logs/nanobot.jsonl` | 日志文件路径（相对数据目录） |
+| `console` | `console` | `bool` | `true` | 是否输出到控制台 |
+| `errorFile` | `error_file` | `str?` | `logs/error.log` | ERROR+ 级别错误日志路径（始终启用，用于调试） |
+
+---
+
+## 完整配置示例
+
+```jsonc
 {
-  "providers": {
-    "custom": {
-      "apiKey": "your-api-key",
-      "apiBase": "https://api.your-provider.com/v1"
+  "agents": {
+    "defaults": {
+      "workspace": "~/.nanobot/workspace",
+      "model": "claude-sonnet-4-20250514",
+      "provider": "anthropic",
+      "maxTokens": 30000,
+      "contextWindowTokens": 130000,
+      "temperature": 0.1,
+      "maxToolIterations": 2000,
+      "maxToolResultChars": 20000,
+      "providerRetryMode": "persistent",
+      "reasoningEffort": "high",
+      "timezone": "Asia/Shanghai",
+      "disabledSkills": [],
+      "compressTriggerTokens": 100000,
+      "historyTokenLimit": 50000,
+      "assessInterval": 12,
+      "extractor": {
+        "intervalH": 0.5,
+        "saveInterval": 30
+      },
+      "selfReview": {
+        "channel": null,
+        "to": null,
+        "sessionKey": null
+      }
     }
   },
-  "agents": {
-    "defaults": {
-      "model": "your-model-name"
-    }
-  }
-}
-```
-
-> For local servers that don't require authentication, set `apiKey` to `null`.
->
-> `custom` is the right choice for providers that expose an OpenAI-compatible **chat completions** API. It does **not** force third-party endpoints onto the OpenAI/Azure **Responses API**.
->
-> If your proxy or gateway is specifically Responses-API-compatible, use the `azure_openai` provider shape instead and point `apiBase` at that endpoint:
->
-> ```
-> {
->   "providers": {
->     "azure_openai": {
->       "apiKey": "your-api-key",
->       "apiBase": "https://api.your-provider.com",
->       "defaultModel": "your-model-name"
->     }
->   },
->   "agents": {
->     "defaults": {
->       "provider": "azure_openai",
->       "model": "your-model-name"
->     }
->   }
-> }
-> ```
->
-> In short: **chat-completions-compatible endpoint → `custom`**; **Responses-compatible endpoint → `azure_openai`**.
-
-</details>
-
-<details>
-<summary><b>Ollama (local)</b></summary>
-
-Run a local model with Ollama, then add to config:
-
-**1. Start Ollama** (example):
-```bash
-ollama run llama3.2
-```
-
-**2. Add to config** (partial — merge into `~/.nanobot/config.json`):
-```
-{
   "providers": {
+    "anthropic": {
+      "apiKey": "${ANTHROPIC_API_KEY}"
+    },
+    "deepseek": {
+      "apiKey": "${DEEPSEEK_API_KEY}"
+    },
+    "openrouter": {
+      "apiKey": "${OPENROUTER_API_KEY}"
+    },
     "ollama": {
-      "apiBase": "http://localhost:11434"
+      "apiBase": "http://localhost:11434/v1"
     }
   },
-  "agents": {
-    "defaults": {
-      "provider": "ollama",
-      "model": "llama3.2"
-    }
-  }
-}
-```
-
-> `provider: "auto"` also works when `providers.ollama.apiBase` is configured, but setting `"provider": "ollama"` is the clearest option.
-
-</details>
-
-<details>
-<summary><b>LM Studio (local)</b></summary>
-
-[LM Studio](https://lmstudio.ai/) provides a local OpenAI-compatible server for running LLMs. Download models through the LM Studio UI, then start the local server.
-
-**1. Start LM Studio server:**
-- Launch LM Studio
-- Go to the "Local Server" tab
-- Load a model (e.g., Llama, Mistral, Qwen)
-- Click "Start Server" (default port: 1234)
-
-**2. Add to config** (partial — merge into `~/.nanobot/config.json`):
-```
-{
-  "providers": {
-    "lm_studio": {
-      "apiKey": null,
-      "apiBase": "http://localhost:1234/v1"
-    }
-  },
-  "agents": {
-    "defaults": {
-      "provider": "lm_studio",
-      "model": "local-model"
-    }
-  }
-}
-```
-
-> **Note:** Set `apiKey` to `null` for LM Studio since it runs locally and doesn't require authentication. The model name should match what's shown in the LM Studio UI.
-> `provider: "auto"` also works when `providers.lm_studio.apiBase` is configured, but setting `"provider": "lm_studio"` is the clearest option.
-
-</details>
-
-<details>
-<summary><b>OpenVINO Model Server (local / OpenAI-compatible)</b></summary>
-
-Run LLMs locally on Intel GPUs using [OpenVINO Model Server](https://docs.openvino.ai/2026/model-server/ovms_docs_llm_quickstart.html). OVMS exposes an OpenAI-compatible API at `/v3`.
-
-> Requires Docker and an Intel GPU with driver access (`/dev/dri`).
-
-**1. Pull the model** (example):
-
-```bash
-mkdir -p ov/models && cd ov
-
-docker run -d \
-  --rm \
-  --user $(id -u):$(id -g) \
-  -v $(pwd)/models:/models \
-  openvino/model_server:latest-gpu \
-  --pull \
-  --model_name openai/gpt-oss-20b \
-  --model_repository_path /models \
-  --source_model OpenVINO/gpt-oss-20b-int4-ov \
-  --task text_generation \
-  --tool_parser gptoss \
-  --reasoning_parser gptoss \
-  --enable_prefix_caching true \
-  --target_device GPU
-```
-
-> This downloads the model weights. Wait for the container to finish before proceeding.
-
-**2. Start the server** (example):
-
-```bash
-docker run -d \
-  --rm \
-  --name ovms \
-  --user $(id -u):$(id -g) \
-  -p 8000:8000 \
-  -v $(pwd)/models:/models \
-  --device /dev/dri \
-  --group-add=$(stat -c "%g" /dev/dri/render* | head -n 1) \
-  openvino/model_server:latest-gpu \
-  --rest_port 8000 \
-  --model_name openai/gpt-oss-20b \
-  --model_repository_path /models \
-  --source_model OpenVINO/gpt-oss-20b-int4-ov \
-  --task text_generation \
-  --tool_parser gptoss \
-  --reasoning_parser gptoss \
-  --enable_prefix_caching true \
-  --target_device GPU
-```
-
-**3. Add to config** (partial — merge into `~/.nanobot/config.json`):
-
-```
-{
-  "providers": {
-    "ovms": {
-      "apiBase": "http://localhost:8000/v3"
-    }
-  },
-  "agents": {
-    "defaults": {
-      "provider": "ovms",
-      "model": "openai/gpt-oss-20b"
-    }
-  }
-}
-```
-
-> OVMS is a local server — no API key required. Supports tool calling (`--tool_parser gptoss`), reasoning (`--reasoning_parser gptoss`), and streaming.
-> See the [official OVMS docs](https://docs.openvino.ai/2026/model-server/ovms_docs_llm_quickstart.html) for more details.
-</details>
-
-<details>
-<summary><b>vLLM (local / OpenAI-compatible)</b></summary>
-
-Run your own model with vLLM or any OpenAI-compatible server, then add to config:
-
-**1. Start the server** (example):
-```bash
-vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000
-```
-
-**2. Add to config** (partial — merge into `~/.nanobot/config.json`):
-
-*Provider (set API key to null for local servers):*
-```
-{
-  "providers": {
-    "vllm": {
-      "apiKey": null,
-      "apiBase": "http://localhost:8000/v1"
-    }
-  }
-}
-```
-
-*Model:*
-```
-{
-  "agents": {
-    "defaults": {
-      "model": "meta-llama/Llama-3.1-8B-Instruct"
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><b>Adding a New Provider (Developer Guide)</b></summary>
-
-nanobot uses a **Provider Registry** (`nanobot/providers/registry.py`) as the single source of truth.
-Adding a new provider only takes **2 steps** — no if-elif chains to touch.
-
-**Step 1.** Add a `ProviderSpec` entry to `PROVIDERS` in `nanobot/providers/registry.py`:
-
-```python
-ProviderSpec(
-    name="myprovider",                   # config field name
-    keywords=("myprovider", "mymodel"),  # model-name keywords for auto-matching
-    env_key="MYPROVIDER_API_KEY",        # env var name
-    display_name="My Provider",          # shown in `nanobot status`
-    default_api_base="https://api.myprovider.com/v1",  # OpenAI-compatible endpoint
-)
-```
-
-**Step 2.** Add a field to `ProvidersConfig` in `nanobot/config/schema.py`:
-
-```python
-class ProvidersConfig(BaseModel):
-    ...
-    myprovider: ProviderConfig = ProviderConfig()
-```
-
-That's it! Environment variables, model routing, config matching, and `nanobot status` display will all work automatically.
-
-**Common `ProviderSpec` options:**
-
-| Field | Description | Example |
-|-------|-------------|---------|
-| `default_api_base` | OpenAI-compatible base URL | `"https://api.deepseek.com"` |
-| `env_extras` | Additional env vars to set | `(("ZHIPUAI_API_KEY", "{api_key}"),)` |
-| `model_overrides` | Per-model parameter overrides | `(("kimi-k2.5", {"temperature": 1.0}), ("kimi-k2.6", {"temperature": 1.0}),)` |
-| `is_gateway` | Can route any model (like OpenRouter) | `True` |
-| `detect_by_key_prefix` | Detect gateway by API key prefix | `"sk-or-"` |
-| `detect_by_base_keyword` | Detect gateway by API base URL | `"openrouter"` |
-| `strip_model_prefix` | Strip provider prefix before sending to gateway | `True` (for AiHubMix) |
-| `supports_max_completion_tokens` | Use `max_completion_tokens` instead of `max_tokens`; required for providers that reject both being set simultaneously (e.g. VolcEngine) | `True` |
-
-</details>
-
-## Channel Settings
-
-Global settings that apply to all channels. Configure under the `channels` section in `~/.nanobot/config.json`:
-
-```
-{
   "channels": {
     "sendProgress": true,
     "sendToolHints": false,
     "sendMaxRetries": 3,
     "transcriptionProvider": "groq",
-    "transcriptionLanguage": null,
-    "telegram": { ... }
-  }
-}
-```
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `sendProgress` | `true` | Stream agent's text progress to the channel |
-| `sendToolHints` | `false` | Stream tool-call hints (e.g. `read_file("…")`) |
-| `sendMaxRetries` | `3` | Max delivery attempts per outbound message, including the initial send (0-10 configured, minimum 1 actual attempt) |
-| `transcriptionProvider` | `"groq"` | Voice transcription backend: `"groq"` (free tier, default) or `"openai"`. API key is auto-resolved from the matching provider config. |
-| `transcriptionLanguage` | `null` | Optional ISO-639-1 language hint for audio transcription, e.g. `"en"`, `"ko"`, `"ja"`. |
-
-### Retry Behavior
-
-Retry is intentionally simple.
-
-When a channel `send()` raises, nanobot retries at the channel-manager layer. By default, `channels.sendMaxRetries` is `3`, and that count includes the initial send.
-
-- **Attempt 1**: Send immediately
-- **Attempt 2**: Retry after `1s`
-- **Attempt 3**: Retry after `2s`
-- **Higher retry budgets**: Backoff continues as `1s`, `2s`, `4s`, then stays capped at `4s`
-- **Transient failures**: Network hiccups and temporary API limits often recover on the next attempt
-- **Permanent failures**: Invalid tokens, revoked access, or banned channels will exhaust the retry budget and fail cleanly
-
-> [!NOTE]
-> This design is deliberate: channel implementations should raise on delivery failure, and the channel manager owns the shared retry policy.
->
-> Some channels may still apply small API-specific retries internally. For example, Telegram separately retries timeout and flood-control errors before surfacing a final failure to the manager.
->
-> If a channel is completely unreachable, nanobot cannot notify the user through that same channel. Watch logs for `Failed to send to {channel} after N attempts` to spot persistent delivery failures.
-
-## Web Search
-
-> [!TIP]
-> Use `proxy` in `tools.web` to route all web requests (search + fetch) through a proxy:
-> ```
-> { "tools": { "web": { "proxy": "http://127.0.0.1:7890" } } }
-> ```
-
-nanobot supports multiple web search providers. Configure in `~/.nanobot/config.json` under `tools.web.search`.
-
-By default, web tools are enabled and web search uses `duckduckgo`, so search works out of the box without an API key.
-
-If you want to disable all built-in web tools entirely, set `tools.web.enable` to `false`. This removes both `web_search` and `web_fetch` from the tool list sent to the LLM.
-
-If you need to allow trusted private ranges such as Tailscale / CGNAT addresses, you can explicitly exempt them from SSRF blocking with `tools.ssrfWhitelist`:
-
-```
-{
-  "tools": {
-    "ssrfWhitelist": ["100.64.0.0/10"]
-  }
-}
-```
-
-| Provider | Config fields | Env var fallback | Free |
-|----------|--------------|------------------|------|
-| `brave` | `apiKey` | `BRAVE_API_KEY` | No |
-| `tavily` | `apiKey` | `TAVILY_API_KEY` | No |
-| `jina` | `apiKey` | `JINA_API_KEY` | Free tier (10M tokens) |
-| `kagi` | `apiKey` | `KAGI_API_KEY` | No |
-| `searxng` | `baseUrl` | `SEARXNG_BASE_URL` | Yes (self-hosted) |
-| `duckduckgo` (default) | — | — | Yes |
-
-**Disable all built-in web tools:**
-```
-{
-  "tools": {
-    "web": {
-      "enable": false
-    }
-  }
-}
-```
-
-**Brave:**
-```
-{
-  "tools": {
-    "web": {
-      "search": {
-        "provider": "brave",
-        "apiKey": "BSA..."
-      }
-    }
-  }
-}
-```
-
-**Tavily:**
-```
-{
-  "tools": {
-    "web": {
-      "search": {
-        "provider": "tavily",
-        "apiKey": "tvly-..."
-      }
-    }
-  }
-}
-```
-
-**Jina** (free tier with 10M tokens):
-```
-{
-  "tools": {
-    "web": {
-      "search": {
-        "provider": "jina",
-        "apiKey": "jina_..."
-      }
-    }
-  }
-}
-```
-
-**Kagi:**
-```
-{
-  "tools": {
-    "web": {
-      "search": {
-        "provider": "kagi",
-        "apiKey": "your-kagi-api-key"
-      }
-    }
-  }
-}
-```
-
-**SearXNG** (self-hosted, no API key needed):
-```
-{
-  "tools": {
-    "web": {
-      "search": {
-        "provider": "searxng",
-        "baseUrl": "https://searx.example"
-      }
-    }
-  }
-}
-```
-
-**DuckDuckGo** (zero config):
-```
-{
-  "tools": {
-    "web": {
-      "search": {
-        "provider": "duckduckgo"
-      }
-    }
-  }
-}
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enable` | boolean | `true` | Enable or disable all built-in web tools (`web_search` + `web_fetch`) |
-| `proxy` | string or null | `null` | Proxy for all web requests, for example `http://127.0.0.1:7890` |
-
-### `tools.web.search`
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `provider` | string | `"duckduckgo"` | Search backend: `brave`, `tavily`, `jina`, `searxng`, `duckduckgo` |
-| `apiKey` | string | `""` | API key for Brave or Tavily |
-| `baseUrl` | string | `""` | Base URL for SearXNG |
-| `maxResults` | integer | `5` | Results per search (1–10) |
-
-## MCP (Model Context Protocol)
-
-> [!TIP]
-> The config format is compatible with Claude Desktop / Cursor. You can copy MCP server configs directly from any MCP server's README.
-
-nanobot supports [MCP](https://modelcontextprotocol.io/) — connect external tool servers and use them as native agent tools.
-
-Add MCP servers to your `config.json`:
-
-```
-{
-  "tools": {
-    "mcpServers": {
-      "filesystem": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
-      },
-      "my-remote-mcp": {
-        "url": "https://example.com/mcp/",
-        "headers": {
-          "Authorization": "Bearer xxxxx"
+    "feishu": {
+      "enabled": true,
+      "bots": [
+        {
+          "name": "my-bot",
+          "appId": "cli_xxxxxx",
+          "appSecret": "${FEISHU_APP_SECRET}",
+          "domain": "feishu",
+          "groupPolicy": "mention",
+          "streaming": true,
+          "renderMode": "card"
         }
-      }
+      ]
+    },
+    "dingtalk": {
+      "enabled": false,
+      "bots": [
+        {
+          "name": "dingtalk-bot",
+          "clientId": "",
+          "clientSecret": ""
+        }
+      ]
     }
-  }
-}
-```
-
-Two transport modes are supported:
-
-| Mode | Config | Example |
-|------|--------|---------|
-| **Stdio** | `command` + `args` | Local process via `npx` / `uvx` |
-| **HTTP** | `url` + `headers` (optional) | Remote endpoint (`https://mcp.example.com/sse`) |
-
-Use `toolTimeout` to override the default 30s per-call timeout for slow servers:
-
-```
-{
+  },
   "tools": {
+    "web": {
+      "enable": true,
+      "search": {
+        "provider": "duckduckgo",
+        "maxResults": 5,
+        "timeout": 30
+      },
+      "fetch": {
+        "useJinaReader": true
+      }
+    },
+    "exec": {
+      "enable": true,
+      "timeout": 60,
+      "sandbox": "",
+      "allowedEnvKeys": []
+    },
+    "my": {
+      "enable": true,
+      "allowSet": false
+    },
+    "restrictToWorkspace": false,
     "mcpServers": {
-      "my-slow-server": {
-        "url": "https://example.com/mcp/",
+      "playwright": {
+        "command": "npx",
+        "args": ["@anthropic-ai/mcp-playwright"],
         "toolTimeout": 120
       }
+    },
+    "ssrfWhitelist": []
+  },
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 18790,
+    "heartbeat": {
+      "enabled": true,
+      "intervalS": 1800,
+      "minIntervalS": 30,
+      "keepRecentMessages": 8
     }
+  },
+  "logging": {
+    "enabled": true,
+    "level": "INFO",
+    "file": "logs/nanobot.jsonl",
+    "console": true,
+    "errorFile": "logs/error.log"
   }
 }
 ```
 
-Use `enabledTools` to register only a subset of tools from an MCP server:
+---
 
+## 环境变量
+
+### 配置覆盖
+
+所有配置项均可通过同名环境变量覆盖，前缀为 `NANOBOT__`，嵌套层级用 `__` 分隔：
+
+```bash
+export NANOBOT__LOGGING__LEVEL=DEBUG
+export NANOBOT__AGENTS__DEFAULTS__MODEL=claude-sonnet-4-20250514
+export NANOBOT__PROVIDERS__ANTHROPIC__API_KEY=sk-ant-xxx
 ```
+
+### 配置文件中引用环境变量
+
+配置文件中可以使用 `${VAR_NAME}` 语法引用环境变量：
+
+```jsonc
 {
-  "tools": {
-    "mcpServers": {
-      "filesystem": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
-        "enabledTools": ["read_file", "mcp_filesystem_write_file"]
-      }
+  "providers": {
+    "deepseek": {
+      "apiKey": "${DEEPSEEK_API_KEY}"
     }
   }
 }
 ```
 
-`enabledTools` accepts either the raw MCP tool name (for example `read_file`) or the wrapped nanobot tool name (for example `mcp_filesystem_write_file`).
+如果引用的环境变量未设置，启动时会抛出 `ValueError`。
 
-- Omit `enabledTools`, or set it to `["*"]`, to register all tools.
-- Set `enabledTools` to `[]` to register no tools from that server.
-- Set `enabledTools` to a non-empty list of names to register only that subset.
+---
 
-MCP tools are automatically discovered and registered on startup. The LLM can use them alongside built-in tools — no extra configuration needed.
+## 配置迁移
 
+配置文件支持自动迁移（向下兼容）：
 
-
-
-## Security
-
-> [!TIP]
-> For production deployments, set `"restrictToWorkspace": true` and `"tools.exec.sandbox": "bwrap"` in your config to sandbox the agent.
-> In `v0.1.4.post3` and earlier, an empty `allowFrom` allowed all senders. Since `v0.1.4.post4`, empty `allowFrom` denies all access by default. To allow all senders, set `"allowFrom": ["*"]`.
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `tools.restrictToWorkspace` | `false` | When `true`, restricts **all** agent tools (shell, file read/write/edit, list) to the workspace directory. Prevents path traversal and out-of-scope access. |
-| `tools.exec.sandbox` | `""` | Sandbox backend for shell commands. Set to `"bwrap"` to wrap exec calls in a [bubblewrap](https://github.com/containers/bubblewrap) sandbox — the process can only see the workspace (read-write) and media directory (read-only); config files and API keys are hidden. Automatically enables `restrictToWorkspace` for file tools. **Linux only** — requires `bwrap` installed (`apt install bubblewrap`; pre-installed in the Docker image). Not available on macOS or Windows (bwrap depends on Linux kernel namespaces). |
-| `tools.exec.enable` | `true` | When `false`, the shell `exec` is not registered at all. Use this to completely disable shell command execution. |
-| `tools.exec.pathAppend` | `""` | Extra directories to append to `PATH` when running shell commands (e.g. `/usr/sbin` for `ufw`). |
-| `channels.*.allowFrom` | `[]` (deny all) | Whitelist of user IDs. Empty denies all; use `["*"]` to allow everyone. |
-
-**Docker security**: The official Docker image runs as a non-root user (`nanobot`, UID 1000) with bubblewrap pre-installed. When using `docker-compose.yml`, the container drops all Linux capabilities except `SYS_ADMIN` (required for bwrap's namespace isolation).
-
-
-## Auto Compact
-
-When a user is idle for longer than a configured threshold, nanobot **proactively** compresses the older part of the session context into a summary while keeping a recent legal suffix of live messages. This reduces token cost and first-token latency when the user returns — instead of re-processing a long stale context with an expired KV cache, the model receives a compact summary, the most recent live context, and fresh input.
-
-```
-{
-  "agents": {
-    "defaults": {
-      "idleCompactAfterMinutes": 15
-    }
-  }
-}
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `agents.defaults.idleCompactAfterMinutes` | `0` (disabled) | Minutes of idle time before auto-compaction starts. Set to `0` to disable. Recommended: `15` — close to a typical LLM KV cache expiry window, so stale sessions get compacted before the user returns. |
-
-`sessionTtlMinutes` remains accepted as a legacy alias for backward compatibility, but `idleCompactAfterMinutes` is the preferred config key going forward.
-
-How it works:
-1. **Idle detection**: On each idle tick (~1 s), checks all sessions for expiration.
-2. **Background compaction**: Idle sessions summarize the older live prefix via LLM and keep the most recent legal suffix (currently 8 messages).
-3. **Summary injection**: When the user returns, the summary is injected as runtime context (one-shot, not persisted) alongside the retained recent suffix.
-4. **Restart-safe resume**: The summary is also mirrored into session metadata so it can still be recovered after a process restart.
-
-> [!NOTE]
-> Mental model: "summarize older context, keep the freshest live turns, **and overwrite the session file with the compact form.**" It is not a full `session.clear()`, but it is a write — not a soft cursor move.
->
-> Concretely, auto compact rewrites `sessions/<key>.jsonl` in place: older messages (including their structured `tool_calls` / `tool_call_id` / `reasoning_content`) are replaced by just the retained recent suffix (currently 8 messages), while the archived prefix is preserved only as a plain-text summary appended to `memory/history.jsonl` (or a `[RAW] ...` flattened dump if LLM summarization fails). The original structured JSON of those turns is no longer recoverable from the session file.
->
-> This differs from the **token-driven soft consolidation** that fires when a prompt exceeds the context budget: that path only advances an internal `last_consolidated` cursor and leaves the session file untouched, so the raw tool-call trail stays on disk and can still be replayed or audited. If you rely on that trail for debugging or auditing, leave `idleCompactAfterMinutes` at the default `0` and let only the token-driven path run.
-
-## Timezone
-
-Time is context. Context should be precise.
-
-By default, nanobot uses `UTC` for runtime time context. If you want the agent to think in your local time, set `agents.defaults.timezone` to a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones):
-
-```
-{
-  "agents": {
-    "defaults": {
-      "timezone": "Asia/Shanghai"
-    }
-  }
-}
-```
-
-This affects runtime time strings shown to the model, such as runtime context and heartbeat prompts. It also becomes the default timezone for cron schedules when a cron expression omits `tz`, and for one-shot `at` times when the ISO datetime has no explicit offset.
-
-Common examples: `UTC`, `America/New_York`, `America/Los_Angeles`, `Europe/London`, `Europe/Berlin`, `Asia/Tokyo`, `Asia/Shanghai`, `Asia/Singapore`, `Australia/Sydney`.
-
-> Need another timezone? Browse the full [IANA Time Zone Database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
-
-
-
-## Disabled Skills
-
-nanobot ships with built-in skills, and your workspace can also define custom skills under `skills/`. If you want to hide specific skills from the agent, set `agents.defaults.disabledSkills` to a list of skill directory names:
-
-```
-{
-  "agents": {
-    "defaults": {
-      "disabledSkills": ["github", "weather"]
-    }
-  }
-}
-```
-
-Disabled skills are excluded from the main agent's skill summary, from always-on skill injection, and from subagent skill summaries. This is useful when some bundled skills are unnecessary for your deployment or should not be exposed to end users.
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `agents.defaults.disabledSkills` | `[]` | List of skill directory names to exclude from loading. Applies to both built-in skills and workspace skills. |
+1. **旧版 `tools.exec.restrictToWorkspace`**：自动迁移到 `tools.restrictToWorkspace`
+2. **旧版 `tools.myEnabled` / `tools.mySet`**：自动迁移到 `tools.my.enable` / `tools.my.allowSet`
+3. **旧版通道扁平格式**：自动迁移到多 Bot 格式。旧格式 `"feishu": { "enabled": true, "appId": "...", "appSecret": "..." }` 会自动转换为 `"feishu": { "enabled": true, "bots": [{ "name": "bot1", "appId": "...", "appSecret": "..." }] }`
