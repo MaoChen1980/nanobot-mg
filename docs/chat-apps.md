@@ -1,445 +1,94 @@
-# Chat Apps
+# Chat Apps — 聊天应用
 
-Connect nanobot to your favorite chat platform. Want to build your own? See the [Channel Plugin Guide](./channel-plugin-guide.md).
+NanoBot 的聊天应用功能提供了在对话中使用的斜杠命令（slash commands）系统。用户可以在聊天输入框中输入以 `/` 开头的命令来控制代理行为、查看状态、管理会话等。
 
-| Channel | What you need |
-|---------|---------------|
-| **Telegram** | Bot token from @BotFather |
-| **Discord** | Bot token + Message Content intent |
-| **WhatsApp** | QR code scan (`nanobot channels login whatsapp`) |
-| **WeChat (Weixin)** | QR code scan (`nanobot channels login weixin`) |
-| **Feishu** | App ID + App Secret |
-| **DingTalk** | App Key + App Secret |
-| **Slack** | Bot token + App-Level token |
-| **Email** | IMAP/SMTP credentials |
-| **QQ** | App ID + App Secret |
+## 命令路由机制
 
-<details>
-<summary><b>Telegram</b> (Recommended)</summary>
+代码位置：[router.py](file:///e:/claude/nanobot-mg/nanobot/command/router.py)
 
-**1. Create a bot**
-- Open Telegram, search `@BotFather`
-- Send `/newbot`, follow prompts
-- Copy the token
+命令路由由 `CommandRouter` 类实现。它采用纯字典驱动的四层分发机制：
 
-**2. Configure**
+### 四层匹配顺序
 
 ```
-{
-  "channels": {
-    "telegram": {
-      "enabled": true,
-      "token": "YOUR_BOT_TOKEN",
-      "allowFrom": ["YOUR_USER_ID"]
-    }
-  }
-}
+优先级 (priority) → 精确 (exact) → 前缀 (prefix) → 拦截器 (interceptors)
 ```
 
-> You can find your **User ID** in Telegram settings. It is shown as `@yourUserId`.
-> Copy this value **without the `@` symbol** and paste it into the config file.
+**1. 优先级层（priority）**
+- 在分发锁（dispatch lock）之前执行
+- 用于需要立即响应的命令（如 `/stop`、`/restart`）
+- 精确匹配，自动去除尾部标点
 
+**2. 精确层（exact）**
+- 在分发锁内执行
+- 精确匹配命令字符串，自动去除尾部标点
+- 例如 `/help`、`/status`、`/sub`
 
-**3. Run**
+**3. 前缀层（prefix）**
+- 最长前缀优先匹配
+- 用于带参数的命令（如 `/team `）
+- 匹配成功后，剩余部分存入 `ctx.args`
 
-```bash
-nanobot gateway
+**4. 拦截器层（interceptors）**
+- 兜底匹配
+- 按注册顺序依次执行，返回第一个非 `None` 的结果
+- 用于处理未知命令等场景
+
+### 尾部标点处理
+
+命令匹配时自动去除以下尾部标点：`,.;!?，。！？、`
+
+这意味着 `/help,`、`/help!`、`/clear。` 都能正确匹配。
+
+### CommandContext
+
+命令处理程序接收一个 `CommandContext` 对象，包含：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `msg` | `InboundMessage` | 原始入站消息 |
+| `session` | `Session \| None` | 当前会话 |
+| `key` | `str` | 会话键（如 `telegram:12345`） |
+| `raw` | `str` | 原始消息文本 |
+| `args` | `str` | 前缀匹配后提取的参数 |
+| `loop` | `Any` | AgentLoop 实例 |
+
+## 内置命令注册
+
+代码位置：[builtin.py](file:///e:/claude/nanobot-mg/nanobot/command/builtin.py)
+
+命令注册函数 `register_builtin_commands(router)` 将所有内置命令注册到路由器中：
+
+```python
+def register_builtin_commands(router: CommandRouter) -> None:
+    register_observe_commands(router)       # 观察类命令（/think, /tool, /debug）
+    router.priority("/stop", cmd_stop)      # 优先级命令
+    router.priority("/restart", cmd_restart)
+    router.priority("/status", cmd_status)
+    router.priority("/new", cmd_new)
+    router.priority("/clear", cmd_new)
+    router.priority("/reset", cmd_new)
+    router.exact("/sub", cmd_sub)
+    router.exact("/help", cmd_help)
+    router.intercept(cmd_unknown)           # 未知命令处理
 ```
 
-</details>
+观察类命令（`/think`、`/tool`、`/debug`）通过 `register_observe_commands(router)` 注册，位于 [nanobot/agent/commands/observe.py](file:///e:/claude/nanobot-mg/nanobot/agent/commands/observe.py)。
 
-<details>
-<details>
-<summary><b>Discord</b></summary>
+### 命令重定向
 
-**1. Create a bot**
-- Go to https://discord.com/developers/applications
-- Create an application → Bot → Add Bot
-- Copy the bot token
+- `/stop` 和 `/new` 在首次执行时会清除会话状态后会重新分发（re-dispatch）。重新分发时通过 `metadata` 中的 `_stop_redispatch` / `_new_redispatch` 标记检测到已执行过的清除操作，转而返回 `None`，让消息继续传递到 LLM 处理后续逻辑（如更新 `tree.json` 中的任务状态）。
 
-**2. Enable intents**
-- In the Bot settings, enable **MESSAGE CONTENT INTENT**
-- (Optional) Enable **SERVER MEMBERS INTENT** if you plan to use allow lists based on member data
+### 未知命令处理
 
-**3. Get your User ID**
-- Discord Settings → Advanced → enable **Developer Mode**
-- Right-click your avatar → **Copy User ID**
+所有未匹配的命令会被 `cmd_unknown` 拦截器捕获。如果文本以 `/` 开头（且不是 `//`），返回 "Unknown command" 提示。否则返回 `None`，让消息继续正常处理。
 
-**4. Configure**
+## 命令列表
 
-```
-{
-  "channels": {
-    "discord": {
-      "enabled": true,
-      "token": "YOUR_BOT_TOKEN",
-      "allowFrom": ["YOUR_USER_ID"],
-      "allowChannels": [],
-      "groupPolicy": "mention",
-      "streaming": true
-    }
-  }
-}
-```
+完整命令列表请参阅 [chat-commands.md](file:///e:/claude/nanobot-mg/docs/chat-commands.md)。
 
-> `groupPolicy` controls how the bot responds in group channels:
-> - `"mention"` (default) — Only respond when @mentioned
-> - `"open"` — Respond to all messages
-> DMs always respond when the sender is in `allowFrom`.
-> - If you set group policy to open create new threads as private threads and then @ the bot into it. Otherwise the thread itself and the channel in which you spawned it will spawn a bot session.
-> `allowChannels` restricts the bot to specific Discord channel IDs. Empty (default) means respond in every channel the bot can see. Example: `["1234567890", "0987654321"]`. The filter applies after `allowFrom`, so both must pass. Discord threads under an allowed parent channel are also allowed; for Forum channels, allowing the parent Forum channel allows all threads/posts in that forum.
-> `streaming` defaults to `true`. Disable it only if you explicitly want non-streaming replies.
+## 与聊天平台的集成
 
-**5. Invite the bot**
-- OAuth2 → URL Generator
-- Scopes: `bot`
-- Bot Permissions: `Send Messages`, `Read Message History`
-- Open the generated invite URL and add the bot to your server
+命令系统通过 `CommandRouter` 独立于具体聊天平台。消息在代理循环（AgentLoop）的消息处理流程中被路由到命令处理器，由 `InboundMessage` 的 `channel` 和 `chat_id` 字段确定响应目标。
 
-**6. Run**
-
-```bash
-nanobot gateway
-```
-
-</details>
-
-<details>
-<details>
-<summary><b>WhatsApp</b></summary>
-
-Requires **Node.js ≥18**.
-
-**1. Link device**
-
-```bash
-nanobot channels login whatsapp
-# Scan QR with WhatsApp → Settings → Linked Devices
-```
-
-**2. Configure**
-
-```
-{
-  "channels": {
-    "whatsapp": {
-      "enabled": true,
-      "allowFrom": ["+1234567890"]
-    }
-  }
-}
-```
-
-**3. Run** (two terminals)
-
-```bash
-# Terminal 1
-nanobot channels login whatsapp
-
-# Terminal 2
-nanobot gateway
-```
-
-> WhatsApp bridge updates are not applied automatically for existing installations.
-> After upgrading nanobot, rebuild the local bridge with:
-> `rm -rf ~/.nanobot/bridge && nanobot channels login whatsapp`
-
-</details>
-
-<details>
-<summary><b>Feishu</b></summary>
-
-Uses **WebSocket** long connection — no public IP required.
-
-**1. Create a Feishu bot**
-- Visit [Feishu Open Platform](https://open.feishu.cn/app)
-- Create a new app → Enable **Bot** capability
-- **Permissions**:
-  - `im:message` (send messages) and `im:message.p2p_msg:readonly` (receive messages)
-  - **Streaming replies** (default in nanobot): add **`cardkit:card:write`** (often labeled **Create and update cards** in the Feishu developer console). Required for CardKit entities and streamed assistant text. Older apps may not have it yet — open **Permission management**, enable the scope, then **publish** a new app version if the console requires it.
-  - If you **cannot** add `cardkit:card:write`, set `"streaming": false` under `channels.feishu` (see below). The bot still works; replies use normal interactive cards without token-by-token streaming.
-- **Events**: Add `im.message.receive_v1` (receive messages)
-  - Select **Long Connection** mode (requires running nanobot first to establish connection)
-- Get **App ID** and **App Secret** from "Credentials & Basic Info"
-- Publish the app
-
-**2. Configure**
-
-```
-{
-  "channels": {
-    "feishu": {
-      "enabled": true,
-      "appId": "cli_xxx",
-      "appSecret": "xxx",
-      "encryptKey": "",
-      "verificationToken": "",
-      "allowFrom": ["ou_YOUR_OPEN_ID"],
-      "groupPolicy": "mention",
-      "reactEmoji": "OnIt",
-      "doneEmoji": "DONE",
-      "toolHintPrefix": "🔧",
-      "streaming": true,
-      "domain": "feishu"
-    }
-  }
-}
-```
-
-> `streaming` defaults to `true`. Use `false` if your app does not have **`cardkit:card:write`** (see permissions above).
-> `encryptKey` and `verificationToken` are optional for Long Connection mode.
-> `allowFrom`: Add your open_id (find it in nanobot logs when you message the bot). Use `["*"]` to allow all users.
-> `groupPolicy`: `"mention"` (default — respond only when @mentioned), `"open"` (respond to all group messages). Private chats always respond.
-> `reactEmoji`: Emoji for "processing" status (default: `OnIt`). See [available emojis](https://open.larkoffice.com/document/server-docs/im-v1/message-reaction/emojis-introduce).
-> `doneEmoji`: Optional emoji for "completed" status (e.g., `DONE`, `OK`, `HEART`). When set, bot adds this reaction after removing `reactEmoji`.
-> `toolHintPrefix`: Prefix for inline tool hints in streaming cards (default: `🔧`).
-> `domain`: `"feishu"` (default) for China (open.feishu.cn), `"lark"` for international Lark (open.larksuite.com).
-
-**3. Run**
-
-```bash
-nanobot gateway
-```
-
-> [!TIP]
-> Feishu uses WebSocket to receive messages — no webhook or public IP needed!
-
-</details>
-
-<details>
-<summary><b>QQ (QQ单聊)</b></summary>
-
-Uses **botpy SDK** with WebSocket — no public IP required. Currently supports **private messages only**.
-
-**1. Register & create bot**
-- Visit [QQ Open Platform](https://q.qq.com) → Register as a developer (personal or enterprise)
-- Create a new bot application
-- Go to **开发设置 (Developer Settings)** → copy **AppID** and **AppSecret**
-
-**2. Set up sandbox for testing**
-- In the bot management console, find **沙箱配置 (Sandbox Config)**
-- Under **在消息列表配置**, click **添加成员** and add your own QQ number
-- Once added, scan the bot's QR code with mobile QQ → open the bot profile → tap "发消息" to start chatting
-
-**3. Configure**
-
-> - `allowFrom`: Add your openid (find it in nanobot logs when you message the bot). Use `["*"]` for public access.
-> - `msgFormat`: Optional. Use `"plain"` (default) for maximum compatibility with legacy QQ clients, or `"markdown"` for richer formatting on newer clients.
-> - For production: submit a review in the bot console and publish. See [QQ Bot Docs](https://bot.q.qq.com/wiki/) for the full publishing flow.
-
-```
-{
-  "channels": {
-    "qq": {
-      "enabled": true,
-      "appId": "YOUR_APP_ID",
-      "secret": "YOUR_APP_SECRET",
-      "allowFrom": ["YOUR_OPENID"],
-      "msgFormat": "plain"
-    }
-  }
-}
-```
-
-**4. Run**
-
-```bash
-nanobot gateway
-```
-
-Now send a message to the bot from QQ — it should respond!
-
-</details>
-
-<details>
-<summary><b>DingTalk (钉钉)</b></summary>
-
-Uses **Stream Mode** — no public IP required.
-
-**1. Create a DingTalk bot**
-- Visit [DingTalk Open Platform](https://open-dev.dingtalk.com/)
-- Create a new app -> Add **Robot** capability
-- **Configuration**:
-  - Toggle **Stream Mode** ON
-- **Permissions**: Add necessary permissions for sending messages
-- Get **AppKey** (Client ID) and **AppSecret** (Client Secret) from "Credentials"
-- Publish the app
-
-**2. Configure**
-
-```
-{
-  "channels": {
-    "dingtalk": {
-      "enabled": true,
-      "clientId": "YOUR_APP_KEY",
-      "clientSecret": "YOUR_APP_SECRET",
-      "allowFrom": ["YOUR_STAFF_ID"]
-    }
-  }
-}
-```
-
-> `allowFrom`: Add your staff ID. Use `["*"]` to allow all users.
-
-**3. Run**
-
-```bash
-nanobot gateway
-```
-
-</details>
-
-<details>
-<summary><b>Slack</b></summary>
-
-Uses **Socket Mode** — no public URL required.
-
-**1. Create a Slack app**
-- Go to [Slack API](https://api.slack.com/apps) → **Create New App** → "From scratch"
-- Pick a name and select your workspace
-
-**2. Configure the app**
-- **Socket Mode**: Toggle ON → Generate an **App-Level Token** with `connections:write` scope → copy it (`xapp-...`)
-- **OAuth & Permissions**: Add bot scopes: `chat:write`, `reactions:write`, `app_mentions:read`, `files:read`, `files:write`, `channels:history`, `groups:history`, `im:history`, `mpim:history`
-- **Event Subscriptions**: Toggle ON → Subscribe to bot events: `message.im`, `message.channels`, `app_mention` → Save Changes
-- **App Home**: Scroll to **Show Tabs** → Enable **Messages Tab** → Check **"Allow users to send Slash commands and messages from the messages tab"**
-- **Install App**: Click **Install to Workspace** → Authorize → copy the **Bot Token** (`xoxb-...`)
-
-> `files:read` is required to read files users send to nanobot. `files:write` is required for nanobot to send images, videos, and other file uploads. If you add either scope later, reinstall the Slack app to the workspace and restart nanobot so it uses the updated bot token.
-
-**3. Configure nanobot**
-
-```
-{
-  "channels": {
-    "slack": {
-      "enabled": true,
-      "botToken": "xoxb-...",
-      "appToken": "xapp-...",
-      "allowFrom": ["YOUR_SLACK_USER_ID"],
-      "groupPolicy": "mention"
-    }
-  }
-}
-```
-
-**4. Run**
-
-```bash
-nanobot gateway
-```
-
-DM the bot directly or @mention it in a channel — it should respond!
-
-> [!TIP]
-> - `groupPolicy`: `"mention"` (default — respond only when @mentioned), `"open"` (respond to all channel messages), or `"allowlist"` (restrict to specific channels).
-> - DM policy defaults to open. Set `"dm": {"enabled": false}` to disable DMs.
-
-</details>
-
-<details>
-<summary><b>Email</b></summary>
-
-Give nanobot its own email account. It polls **IMAP** for incoming mail and replies via **SMTP** — like a personal email assistant.
-
-**1. Get credentials (Gmail example)**
-- Create a dedicated Gmail account for your bot (e.g. `my-nanobot@gmail.com`)
-- Enable 2-Step Verification → Create an [App Password](https://myaccount.google.com/apppasswords)
-- Use this app password for both IMAP and SMTP
-
-**2. Configure**
-
-> - `consentGranted` must be `true` to allow mailbox access. This is a safety gate — set `false` to fully disable.
-> - `allowFrom`: Add your email address. Use `["*"]` to accept emails from anyone.
-> - `smtpUseTls` and `smtpUseSsl` default to `true` / `false` respectively, which is correct for Gmail (port 587 + STARTTLS). No need to set them explicitly.
-> - Set `"autoReplyEnabled": false` if you only want to read/analyze emails without sending automatic replies.
-> - `allowedAttachmentTypes`: Save inbound attachments matching these MIME types — `["*"]` for all, e.g. `["application/pdf", "image/*"]` (default `[]` = disabled).
-> - `maxAttachmentSize`: Max size per attachment in bytes (default `2000000` / 2MB).
-> - `maxAttachmentsPerEmail`: Max attachments to save per email (default `5`).
-
-```
-{
-  "channels": {
-    "email": {
-      "enabled": true,
-      "consentGranted": true,
-      "imapHost": "imap.gmail.com",
-      "imapPort": 993,
-      "imapUsername": "my-nanobot@gmail.com",
-      "imapPassword": "your-app-password",
-      "smtpHost": "smtp.gmail.com",
-      "smtpPort": 587,
-      "smtpUsername": "my-nanobot@gmail.com",
-      "smtpPassword": "your-app-password",
-      "fromAddress": "my-nanobot@gmail.com",
-      "allowFrom": ["your-real-email@gmail.com"],
-      "allowedAttachmentTypes": ["application/pdf", "image/*"]
-    }
-  }
-}
-```
-
-
-**3. Run**
-
-```bash
-nanobot gateway
-```
-
-</details>
-
-<details>
-<summary><b>WeChat (微信 / Weixin)</b></summary>
-
-Uses **HTTP long-poll** with QR-code login via the ilinkai personal WeChat API. No local WeChat desktop client is required.
-
-**1. Install with WeChat support**
-
-```bash
-pip install "nanobot-ai[weixin]"
-```
-
-**2. Configure**
-
-```
-{
-  "channels": {
-    "weixin": {
-      "enabled": true,
-      "allowFrom": ["YOUR_WECHAT_USER_ID"]
-    }
-  }
-}
-```
-
-> - `allowFrom`: Add the sender ID you see in nanobot logs for your WeChat account. Use `["*"]` to allow all users.
-> - `token`: Optional. If omitted, log in interactively and nanobot will save the token for you.
-> - `routeTag`: Optional. When your upstream Weixin deployment requires request routing, nanobot will send it as the `SKRouteTag` header.
-> - `stateDir`: Optional. Defaults to nanobot's runtime directory for Weixin state.
-> - `pollTimeout`: Optional long-poll timeout in seconds.
-
-**3. Login**
-
-```bash
-nanobot channels login weixin
-```
-
-Use `--force` to re-authenticate and ignore any saved token:
-
-```bash
-nanobot channels login weixin --force
-```
-
-**4. Run**
-
-```bash
-nanobot gateway
-```
-
-</details>
-
-<details>
-
-
-<details>
+命令处理器返回 `OutboundMessage`，其中包含目标频道（channel）、聊天 ID（chat_id）和响应内容，由消息总线（bus）负责发送到对应平台。

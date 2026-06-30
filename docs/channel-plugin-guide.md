@@ -1,441 +1,434 @@
-# Channel Plugin Guide
+# 消息通道插件开发指南
 
-Build a custom nanobot channel in three steps: subclass, package, install.
+NanoBot 的消息通道（Channel）采用独立进程 + TCP 连接的架构。
 
-> **Note:** We recommend developing channel plugins against a source checkout of nanobot (`pip install -e .`) rather than a PyPI release, so you always have access to the latest base-channel features and APIs.
+## 内置通道列表
 
-## How It Works
+NanoBot 内置以下消息通道，位于 [nanobot/proxy/channels/](../nanobot/proxy/channels/)：
 
-nanobot discovers channel plugins via Python [entry points](https://packaging.python.org/en/latest/specifications/entry-points/). When `nanobot gateway` starts, it scans:
+| 通道 | 文件 | 说明 |
+|------|------|------|
+| **飞书** | [feishu.py](../nanobot/proxy/channels/feishu.py) | 连接飞书 WebSocket 服务，支持消息和事件 |
+| **钉钉** | [dingtalk.py](../nanobot/proxy/channels/dingtalk.py) | 基于钉钉 SDK，支持消息收发和事件处理 |
+| **Telegram** | [telegram.py](../nanobot/proxy/channels/telegram.py) | 基于 python-telegram-bot，支持消息、命令、媒体 |
+| **Discord** | [discord.py](../nanobot/proxy/channels/discord.py) | 基于 discord.py，支持消息和 slash 命令 |
+| **Slack** | [slack.py](../nanobot/proxy/channels/slack.py) | 基于 Slack Socket Mode，实时消息 |
+| **WhatsApp** | [whatsapp.py](../nanobot/proxy/channels/whatsapp.py) | 基于 neonize，支持消息和媒体 |
+| **个人微信** | [weixin.py](../nanobot/proxy/channels/weixin.py) | 通过 HTTP API 接入，无需客户端登录 |
+| **QQ** | [qq.py](../nanobot/proxy/channels/qq.py) | 基于 Tencent Botpy SDK，支持频道和私聊 |
+| **电子邮件** | [email.py](../nanobot/proxy/channels/email.py) | IMAP 收信 + SMTP 发信，支持纯文本和 HTML |
 
-1. Built-in channels in `nanobot/channels/`
-2. External packages registered under the `nanobot.channels` entry point group
+各通道的配置方式见 [配置参考](configuration.md) 的 channels 一节。
 
-If a matching config section has `"enabled": true`, the channel is instantiated and started.
+---
 
-## Quick Start
+## 架构
 
-We'll build a minimal webhook channel that receives messages via HTTP POST and sends replies back.
-
-### Project Structure
-
-```text
-nanobot-channel-webhook/
-├── nanobot_channel_webhook/
-│   ├── __init__.py          # re-export WebhookChannel
-│   └── channel.py           # channel implementation
-└── pyproject.toml
+```
+┌─────────────────────────────────────┐
+│             Hub (Gateway)            │
+│  HubTCPServer + ProxyManager        │
+│  TCP 端口监听                       │
+└──────────┬──────────────────────────┘
+           │ TCP JSON Lines
+           │
+┌──────────▼──────────────────────────┐
+│      Proxy 进程 (独立子进程)          │
+│  ┌──────────────────────────────┐   │
+│  │ BaseProxyChannel（基类）      │   │
+│  │ ├─ TCP 连接管理               │   │
+│  │ ├─ 消息去重                   │   │
+│  │ ├─ 父进程监控                 │   │
+│  │ └─ 配置热重载                 │   │
+│  │                              │   │
+│  │ ┌──────────────────────────┐ │   │
+│  │ │ 具体通道实现              │ │   │
+│  │ │ (Feishu/Telegram/QQ 等)   │ │   │
+│  │ └──────────────────────────┘ │   │
+│  └──────────────────────────────┘   │
+└─────────────────────────────────────┘
 ```
 
-### 1. Create Your Channel
+---
+
+## BaseProxyChannel 基类
+
+位于 [nanobot/proxy/channels/base.py](../nanobot/proxy/channels/base.py)。
+
+### 必须实现的类属性
 
 ```python
-# nanobot_channel_webhook/__init__.py
-from nanobot_channel_webhook.channel import WebhookChannel
-
-__all__ = ["WebhookChannel"]
+class MyChannel(BaseProxyChannel):
+    CHANNEL_NAME = "MyChannel"          # 人类可读名称
+    REQUIRED_CONFIG_FIELDS = ["api_key", "secret"]  # 必需的配置字段
 ```
+
+### 必须实现的方法
 
 ```python
-# nanobot_channel_webhook/channel.py
-import asyncio
-from typing import Any
+def start(self) -> None:
+    """进入通道自身的消息监听循环。
+    
+    阻塞方式运行，通常包含一个 while True 循环来轮询或监听消息。
+    收到消息后通过 self.send_to_hub() 转发给 Hub。
+    """
 
-from aiohttp import web
-from loguru import logger
-from pydantic import Field
-
-from nanobot.channels.base import BaseChannel
-from nanobot.bus.events import OutboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import Base
-
-
-class WebhookConfig(Base):
-    """Webhook channel configuration."""
-    enabled: bool = False
-    port: int = 9000
-    allow_from: list[str] = Field(default_factory=list)
-
-
-class WebhookChannel(BaseChannel):
-    name = "webhook"
-    display_name = "Webhook"
-
-    def __init__(self, config: Any, bus: MessageBus):
-        if isinstance(config, dict):
-            config = WebhookConfig(**config)
-        super().__init__(config, bus)
-
-    @classmethod
-    def default_config(cls) -> dict[str, Any]:
-        return WebhookConfig().model_dump(by_alias=True)
-
-    async def start(self) -> None:
-        """Start an HTTP server that listens for incoming messages.
-
-        IMPORTANT: start() must block forever (or until stop() is called).
-        If it returns, the channel is considered dead.
-        """
-        self._running = True
-        port = self.config.port
-
-        app = web.Application()
-        app.router.add_post("/message", self._on_request)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "0.0.0.0", port)
-        await site.start()
-        logger.info("Webhook listening on :{}", port)
-
-        # Block until stopped
-        while self._running:
-            await asyncio.sleep(1)
-
-        await runner.cleanup()
-
-    async def stop(self) -> None:
-        self._running = False
-
-    async def send(self, msg: OutboundMessage) -> None:
-        """Deliver an outbound message.
-
-        msg.content  — markdown text (convert to platform format as needed)
-        msg.media    — list of local file paths to attach
-        msg.chat_id  — the recipient (same chat_id you passed to _handle_message)
-        msg.metadata — may contain "_progress": True for streaming chunks
-        """
-        logger.info("[webhook] -> {}: {}", msg.chat_id, msg.content[:80])
-        # In a real plugin: POST to a callback URL, send via SDK, etc.
-
-    async def _on_request(self, request: web.Request) -> web.Response:
-        """Handle an incoming HTTP POST."""
-        body = await request.json()
-        sender = body.get("sender", "unknown")
-        chat_id = body.get("chat_id", sender)
-        text = body.get("text", "")
-        media = body.get("media", [])       # list of URLs
-
-        # This is the key call: validates allowFrom, then puts the
-        # message onto the bus for the agent to process.
-        await self._handle_message(
-            sender_id=sender,
-            chat_id=chat_id,
-            content=text,
-            media=media,
-        )
-
-        return web.json_response({"ok": True})
+def send_reply(self, chat_id: str, reply_to: str, content: str) -> None:
+    """发送文本回复到通道。
+    
+    当 Hub 返回回复时，通过 FIFO 队列调用此方法。
+    chat_id: 聊天/群组 ID
+    reply_to: 原始消息 ID（用于回复线程）
+    content: 要发送的文本
+    """
 ```
 
-### 2. Register the Entry Point
+### 可选重写的方法
 
-```toml
-# pyproject.toml
-[project]
-name = "nanobot-channel-webhook"
-version = "0.1.0"
-dependencies = ["nanobot-ai", "aiohttp"]
+```python
+async def _handle_deliver(self, data: dict[str, Any]) -> None:
+    """处理 Hub 推送的消息。
+    
+    默认实现记录日志。重写此方法来处理进度更新、
+    工具事件推送等。data 包含:
+    - chat_id: 目标聊天 ID
+    - content: 推送内容（可能是进度、工具事件或最终回复）
+    - media: 媒体文件列表
+    """
 
-[project.entry-points."nanobot.channels"]
-webhook = "nanobot_channel_webhook:WebhookChannel"
+def _process_send(self, item: dict) -> None:
+    """处理 FIFO 发送队列中的项目。
+    
+    默认抛出 NotImplementedError。重写以实现具体的发送逻辑。
+    运行在发送工作线程上。
+    """
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["nanobot_channel_webhook"]
+async def _send_startup_notification(self) -> None:
+    """发送启动通知到最近活跃的聊天。
+    
+    默认不做任何操作（base stub）。重写以在启动时通知用户。
+    """
 ```
 
-The key (`webhook`) becomes the config section name. The value points to your `BaseChannel` subclass.
+### 基类提供的功能
 
-### 3. Install & Configure
+| 方法 | 说明 |
+|------|------|
+| `connect_to_hub()` | 连接到 Hub TCP 服务器并注册 |
+| `send_to_hub(msg_data)` | 向 Hub 转发消息（线程安全） |
+| `async_send_to_hub(msg_data)` | 异步版 send_to_hub |
+| `check_duplicate(msg_id, ttl=300)` | 消息去重检查 |
+| `build_message(sender_id, chat_id, content, ...)` | 构建标准消息字典 |
+| `validate_config(config)` | 验证配置是否包含必需字段 |
+| `run_main()` | 标准入口点 |
+| `_save_media_bytes(filename, data)` | 保存媒体文件到工作区 |
+| `_scan_media_paths(content)` | 扫描内容中的媒体文件引用 |
 
-```bash
-pip install -e .
-nanobot plugins list      # verify "Webhook" shows as "plugin"
-nanobot onboard           # auto-adds default config for detected plugins
+---
+
+## Hub 连接协议（TCP JSON Lines）
+
+### 注册
+
+```
+Proxy → Hub:
+{"type":"register", "channel":"mychannel", "bot":"nanobot", "pid":12345}
+
+Hub → Proxy:
+{"success":true}
 ```
 
-Edit `~/.nanobot/config.json`:
+### 消息发送
 
 ```
+Proxy → Hub:
 {
-  "channels": {
-    "webhook": {
-      "enabled": true,
-      "port": 9000,
-      "allowFrom": ["*"]
-    }
-  }
+  "type": "message",
+  "channel": "mychannel",
+  "bot": "nanobot",
+  "sender_id": "user_001",
+  "chat_id": "chat_001",
+  "content": "用户消息内容",
+  "message_id": "msg_001",
+  "media": ["/path/to/file.jpg"],
+  "timestamp": "2026-06-30T12:00:00Z"
 }
 ```
 
-### 4. Run & Test
+### 回复接收
 
-```bash
-nanobot gateway
+Hub 通过 `type: "deliver"` 推送消息回代理，包括进度更新和最终回复：
+
+```
+Hub → Proxy:
+{
+  "type": "deliver",
+  "chat_id": "chat_001",
+  "content": "回复内容",
+  "success": true,
+  "reply_to": "msg_001",
+  "media": [],
+  "buttons": [["按钮1", "按钮2"]]
+}
 ```
 
-In another terminal:
+### ProxyMessage 协议
 
-```bash
-curl -X POST http://localhost:9000/message \
-  -H "Content-Type: application/json" \
-  -d '{"sender": "user1", "chat_id": "user1", "text": "Hello!"}'
-```
-
-The agent receives the message and processes it. Replies arrive in your `send()` method.
-
-## BaseChannel API
-
-### Required (abstract)
-
-| Method | Description |
-|--------|-------------|
-| `async start()` | **Must block forever.** Connect to platform, listen for messages, call `_handle_message()` on each. If this returns, the channel is dead. |
-| `async stop()` | Set `self._running = False` and clean up. Called when gateway shuts down. |
-| `async send(msg: OutboundMessage)` | Deliver an outbound message to the platform. |
-
-### Interactive Login
-
-If your channel requires interactive authentication (e.g. QR code scan), override `login(force=False)`:
-
-```python
-async def login(self, force: bool = False) -> bool:
-    """
-    Perform channel-specific interactive login.
-
-    Args:
-        force: If True, ignore existing credentials and re-authenticate.
-
-    Returns True if already authenticated or login succeeds.
-    """
-    # For QR-code-based login:
-    # 1. If force, clear saved credentials
-    # 2. Check if already authenticated (load from disk/state)
-    # 3. If not, show QR code and poll for confirmation
-    # 4. Save token on success
-```
-
-Channels that don't need interactive login (e.g. Telegram with bot token, Discord with bot token) inherit the default `login()` which just returns `True`.
-
-Users trigger interactive login via:
-```bash
-nanobot channels login <channel_name>
-nanobot channels login <channel_name> --force  # re-authenticate
-```
-
-### Provided by Base
-
-| Method / Property | Description |
-|-------------------|-------------|
-| `_handle_message(sender_id, chat_id, content, media?, metadata?, session_key?)` | **Call this when you receive a message.** Checks `is_allowed()`, then publishes to the bus. Automatically sets `_wants_stream` if `supports_streaming` is true. |
-| `is_allowed(sender_id)` | Checks against `config.allow_from`; `"*"` allows all, `[]` denies all. |
-| `default_config()` (classmethod) | Returns default config dict for `nanobot onboard`. Override to declare your fields. |
-| `transcribe_audio(file_path)` | Transcribes audio via Groq Whisper (if configured). |
-| `supports_streaming` (property) | `True` when config has `"streaming": true` **and** subclass overrides `send_delta()`. |
-| `is_running` | Returns `self._running`. |
-| `login(force=False)` | Perform interactive login (e.g. QR code scan). Returns `True` if already authenticated or login succeeds. Override in subclasses that support interactive login. |
-
-### Optional (streaming)
-
-| Method | Description |
-|--------|-------------|
-| `async send_delta(chat_id, delta, metadata?)` | Override to receive streaming chunks. See [Streaming Support](#streaming-support) for details. |
-
-### Message Types
+位于 [nanobot/proxy/protocol.py](../nanobot/proxy/protocol.py)：
 
 ```python
 @dataclass
-class OutboundMessage:
-    channel: str        # your channel name
-    chat_id: str        # recipient (same value you passed to _handle_message)
-    content: str        # markdown text — convert to platform format as needed
-    media: list[str]    # local file paths to attach (images, audio, docs)
-    metadata: dict      # may contain: "_progress" (bool) for streaming chunks,
-                        #              "message_id" for reply threading
+class ProxyMessage:
+    channel: str          # 通道名
+    bot: str              # Bot 名
+    sender_id: str        # 发送者 ID
+    chat_id: str          # 聊天 ID
+    content: str          # 消息内容
+    message_id: str       # 平台消息 ID
+    media: list[str]      # 媒体文件路径列表
+    timestamp: str        # ISO 格式时间戳
+    metadata: dict        # 扩展元数据
+
+@dataclass
+class HubResponse:
+    success: bool
+    reply_to: str         # 回复的目标消息 ID
+    content: str          # 回复内容
+    media: list[str]
+    metadata: dict
+    error: str
+    buttons: list[list[str]]
 ```
 
-## Streaming Support
+---
 
-Channels can opt into real-time streaming — the agent sends content token-by-token instead of one final message. This is entirely optional; channels work fine without it.
+## 通道注册与发现
 
-### How It Works
+NanoBot 使用 `pkgutil.iter_modules` 自动发现 `nanobot.proxy.channels` 包下的所有模块。
 
-When **both** conditions are met, the agent streams content through your channel:
-
-1. Config has `"streaming": true`
-2. Your subclass overrides `send_delta()`
-
-If either is missing, the agent falls back to the normal one-shot `send()` path.
-
-### Implementing `send_delta`
-
-Override `send_delta` to handle two types of calls:
+位于 [nanobot/proxy/registry.py](../nanobot/proxy/registry.py)：
 
 ```python
-async def send_delta(self, chat_id: str, delta: str, metadata: dict[str, Any] | None = None) -> None:
-    meta = metadata or {}
+def discover_channel_names() -> list[str]:
+    """扫描 nanobot.proxy.channels 包，返回所有模块名"""
+    import nanobot.proxy.channels as pkg
+    return [
+        name
+        for _, name, ispkg in pkgutil.iter_modules(pkg.__path__)
+        if name not in _INTERNAL and not ispkg
+    ]
 
-    if meta.get("_stream_end"):
-        # Streaming finished — do final formatting, cleanup, etc.
-        return
+def get_channel_info(name: str) -> dict | None:
+    """加载通道模块，提取显示名和配置类"""
 
-    # Regular delta — append text, update the message on screen
-    # delta contains a small chunk of text (a few tokens)
+def discover_all() -> dict[str, dict]:
+    """返回 {通道名: info_dict} 的所有通道"""
 ```
 
-**Metadata flags:**
+### 通道模块的自动发现规则
 
-| Flag | Meaning |
-|------|---------|
-| `_stream_delta: True` | A content chunk (delta contains the new text) |
-| `_stream_end: True` | Streaming finished (delta is empty) |
+1. 模块必须位于 `nanobot.proxy.channels` 包内
+2. 模块名不能是内部模块（`__init__`）
+3. 模块必须包含一个名为 `{Name}ProxyChannel` 的类（首字母大写）
+4. 该类必须继承 `BaseProxyChannel`
 
-### Example: Webhook with Streaming
+---
+
+## 创建自定义通道的完整步骤
+
+### 1. 创建通道文件
+
+在 `nanobot/proxy/channels/` 下创建新文件，如 `my_channel.py`：
 
 ```python
-class WebhookChannel(BaseChannel):
-    name = "webhook"
-    display_name = "Webhook"
+"""Custom message channel for MyPlatform."""
 
-    def __init__(self, config: Any, bus: MessageBus):
-        if isinstance(config, dict):
-            config = WebhookConfig(**config)
-        super().__init__(config, bus)
-        self._buffers: dict[str, str] = {}
+from __future__ import annotations
 
-    async def send_delta(self, chat_id: str, delta: str, metadata: dict[str, Any] | None = None) -> None:
-        meta = metadata or {}
-        if meta.get("_stream_end"):
-            text = self._buffers.pop(chat_id, "")
-            # Final delivery — format and send the complete message
-            await self._deliver(chat_id, text, final=True)
-            return
+from nanobot.proxy.channels.base import BaseProxyChannel
 
-        self._buffers.setdefault(chat_id, "")
-        self._buffers[chat_id] += delta
-        # Incremental update — push partial text to the client
-        await self._deliver(chat_id, self._buffers[chat_id], final=False)
 
-    async def send(self, msg: OutboundMessage) -> None:
-        # Non-streaming path — unchanged
-        await self._deliver(msg.chat_id, msg.content, final=True)
+class MyChannelProxyChannel(BaseProxyChannel):
+    """MyPlatform message channel.
+    
+    类命名规则：模块名首字母大写 + "ProxyChannel"
+    """
+
+    CHANNEL_NAME = "MyChannel"
+    REQUIRED_CONFIG_FIELDS = ["api_key"]
+
+    def __init__(self, config, hub_tcp_host, hub_tcp_port, channel, bot):
+        super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
+        # 初始化通道特有的客户端
+        self._client = None
+
+    def start(self) -> None:
+        """进入消息监听循环，阻塞运行。"""
+        # 连接平台 API
+        self._client = connect_to_platform(self.config["api_key"])
+        
+        # 通知 Hub 通道已就绪
+        self.notify_ready()
+        
+        # 消息轮询循环
+        while True:
+            messages = self._client.poll_messages()
+            for msg in messages:
+                # 去重检查
+                if self.check_duplicate(msg.id):
+                    continue
+                
+                # 构建并发送
+                data = self.build_message(
+                    sender_id=msg.sender_id,
+                    chat_id=msg.chat_id,
+                    content=msg.text,
+                    message_id=msg.id,
+                    media=msg.media_files,
+                )
+                self.send_to_hub(data)
+            
+            time.sleep(1)
+
+    def send_reply(self, chat_id: str, reply_to: str, content: str) -> None:
+        """发送文本回复。"""
+        self._client.send_message(chat_id, content, reply_to=reply_to)
+
+    def _process_send(self, item: dict) -> None:
+        """处理 FIFO 发送队列（用于媒体消息等复杂发送）。"""
+        chat_id = item["chat_id"]
+        content = item.get("content", "")
+        media_paths = item.get("media", [])
+        # 发送包含媒体的消息
+        self._client.send_with_media(chat_id, content, media_paths)
 ```
 
-### Config
+### 2. 注册到 __init__.py
 
-Enable streaming per channel:
+编辑 [nanobot/proxy/channels/__init__.py](../nanobot/proxy/channels/__init__.py)：
 
+```python
+_CHANNEL_MODULES: dict[str, str] = {
+    # ... 现有通道 ...
+    "MyChannelProxyChannel": "nanobot.proxy.channels.my_channel",
+}
+
+__all__ = list(_CHANNEL_MODULES.keys())
 ```
+
+### 3. 配置 pyproject.toml
+
+添加入口点（entry point）以便通过命令行启动：
+
+```toml
+[project.scripts]
+nanobot-my-channel = "nanobot.proxy.channels.my_channel:MyChannelProxyChannel.run_main"
+```
+
+或直接在 `pyproject.toml` 中注册为 NanoBot 插件：
+
+```toml
+[project.entry-points."nanobot.channels"]
+my_channel = "nanobot.proxy.channels.my_channel"
+```
+
+### 4. 配置 config.json
+
+```json
 {
   "channels": {
-    "webhook": {
+    "my_channel": {
       "enabled": true,
-      "streaming": true,
-      "allowFrom": ["*"]
+      "api_key": "your-api-key",
+      "max_message_age": 300
     }
   }
 }
 ```
 
-When `streaming` is `false` (default) or omitted, only `send()` is called — no streaming overhead.
+---
 
-### BaseChannel Streaming API
-
-| Method / Property | Description |
-|-------------------|-------------|
-| `async send_delta(chat_id, delta, metadata?)` | Override to handle streaming chunks. No-op by default. |
-| `supports_streaming` (property) | Returns `True` when config has `streaming: true` **and** subclass overrides `send_delta`. |
-
-## Config
-
-### Why Pydantic model is required
-
-`BaseChannel.is_allowed()` reads the permission list via `getattr(self.config, "allow_from", [])`. This works for Pydantic models where `allow_from` is a real Python attribute, but **fails silently for plain `dict`** — `dict` has no `allow_from` attribute, so `getattr` always returns the default `[]`, causing all messages to be denied.
-
-Built-in channels use Pydantic config models (subclassing `Base` from `nanobot.config.schema`). Plugin channels **must do the same**.
-
-### Pattern
-
-1. Define a Pydantic model inheriting from `nanobot.config.schema.Base`:
+## 完整示例：基于 WebSocket 的通道
 
 ```python
-from pydantic import Field
-from nanobot.config.schema import Base
+"""WebSocket channel example."""
 
-class WebhookConfig(Base):
-    """Webhook channel configuration."""
-    enabled: bool = False
-    port: int = 9000
-    allow_from: list[str] = Field(default_factory=list)
+from __future__ import annotations
+import asyncio
+import json
+import time
+from nanobot.proxy.channels.base import BaseProxyChannel
+
+
+class WebsocketProxyChannel(BaseProxyChannel):
+    """WebSocket-based message channel."""
+
+    CHANNEL_NAME = "WebSocket"
+    REQUIRED_CONFIG_FIELDS = ["ws_url"]
+
+    def __init__(self, config, hub_tcp_host, hub_tcp_port, channel, bot):
+        super().__init__(config, hub_tcp_host, hub_tcp_port, channel, bot)
+        self._ws_url = config["ws_url"]
+        self._ws = None
+
+    def start(self) -> None:
+        """使用 asyncio 事件循环监听 WebSocket 消息。"""
+        asyncio.run(self._run())
+
+    async def _run(self):
+        import aiohttp
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(self._ws_url) as ws:
+                self._ws = ws
+                self.notify_ready()
+                
+                async for msg in ws:
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        data = json.loads(msg.data)
+                        msg_data = self.build_message(
+                            sender_id=data["from"],
+                            chat_id=data["room"],
+                            content=data["text"],
+                            message_id=data.get("id", ""),
+                        )
+                        self.send_to_hub(msg_data)
+
+    async def _handle_deliver(self, data: dict) -> None:
+        """处理 Hub 的推送，包括进度更新和最终回复。"""
+        chat_id = data.get("chat_id", "")
+        content = data.get("content", "")
+        if self._ws and content:
+            await self._ws.send_json({
+                "type": "reply",
+                "to": chat_id,
+                "content": content,
+            })
+
+    def send_reply(self, chat_id, reply_to, content):
+        """通过 FIFO 队列发送文本回复。"""
+        self._enqueue_send({
+            "chat_id": chat_id,
+            "content": content,
+        })
+
+    def _process_send(self, item: dict):
+        """在工作线程上处理发送。"""
+        import asyncio
+        asyncio.run_coroutine_threadsafe(
+            self._ws.send_json(item),
+            self._conn_loop,
+        ).result()
 ```
 
-`Base` is configured with `alias_generator=to_camel` and `populate_by_name=True`, so JSON keys like `"allowFrom"` and `"allow_from"` are both accepted.
+---
 
-2. Convert `dict` → model in `__init__`:
+## 最佳实践
 
-```python
-from typing import Any
-from nanobot.bus.queue import MessageBus
-
-class WebhookChannel(BaseChannel):
-    def __init__(self, config: Any, bus: MessageBus):
-        if isinstance(config, dict):
-            config = WebhookConfig(**config)
-        super().__init__(config, bus)
-```
-
-3. Access config as attributes (not `.get()`):
-
-```python
-async def start(self) -> None:
-    port = self.config.port
-    token = self.config.token
-```
-
-`allowFrom` is handled automatically by `_handle_message()` — you don't need to check it yourself.
-
-Override `default_config()` so `nanobot onboard` auto-populates `config.json`:
-
-```python
-@classmethod
-def default_config(cls) -> dict[str, Any]:
-    return WebhookConfig().model_dump(by_alias=True)
-```
-
-> **Note:** `default_config()` returns a plain `dict` (not a Pydantic model) because it's used to serialize into `config.json`. The recommended way is to instantiate your config model and call `model_dump(by_alias=True)` — this automatically uses camelCase keys (`allowFrom`) and keeps defaults in a single source of truth.
-
-If not overridden, the base class returns `{"enabled": false}`.
-
-## Naming Convention
-
-| What | Format | Example |
-|------|--------|---------|
-| PyPI package | `nanobot-channel-{name}` | `nanobot-channel-webhook` |
-| Entry point key | `{name}` | `webhook` |
-| Config section | `channels.{name}` | `channels.webhook` |
-| Python package | `nanobot_channel_{name}` | `nanobot_channel_webhook` |
-
-## Local Development
-
-```bash
-git clone https://github.com/you/nanobot-channel-webhook
-cd nanobot-channel-webhook
-pip install -e .
-nanobot plugins list    # should show "Webhook" as "plugin"
-nanobot gateway         # test end-to-end
-```
-
-## Verify
-
-```bash
-$ nanobot plugins list
-
-  Name       Source    Enabled
-  telegram   builtin  yes
-  discord    builtin  no
-  webhook    plugin   yes
-```
+1. **消息去重**：始终使用 `check_duplicate(msg_id)` 防止重复处理
+2. **媒体文件保存**：使用 `_save_media_bytes()` 保存上传文件到工作区
+3. **配置验证**：在 `REQUIRED_CONFIG_FIELDS` 中声明必需字段
+4. **启动通知**：准备好后调用 `notify_ready()` 通知用户
+5. **线程安全**：`send_to_hub()` 是线程安全的，可在任意线程调用
+6. **FIFO 队列**：使用 `_enqueue_send()` 和 `_process_send()` 确保消息发送顺序
+7. **错误处理**：捕获平台 API 异常，记录日志，避免进程崩溃
