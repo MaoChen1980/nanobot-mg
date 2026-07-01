@@ -32,7 +32,7 @@
 | JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
 |-----------|------------|------|--------|------|
 | `workspace` | `workspace` | `str` | `~/.nanobot/workspace` | Agent 工作目录 |
-| `model` | `model` | `str` | `minimax/MiniMax-M2.7` | 默认使用的模型名称 |
+| `model` | `model` | `str` | `minimax/MiniMax-M3` | 默认使用的模型名称 |
 | `provider` | `provider` | `str` | `auto` | Provider 名称（如 `anthropic`、`openrouter`）或 `auto` 自动检测 |
 | `maxTokens` | `max_tokens` | `int` | `30000` | 每次请求的最大生成 token 数 |
 | `contextWindowTokens` | `context_window_tokens` | `int` | `130000` | 上下文窗口大小（token 数） |

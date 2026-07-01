@@ -835,7 +835,7 @@ Error: Gateway crashed unexpectedly
 | `logging.level` | `"INFO"` | 日志级别 |
 | `logging.file` | `"nanobot.jsonl"` | JSONL 日志文件名 |
 | `logging.error_file` | `"error.log"` | 错误日志文件名 |
-| `agents.defaults.model` | `"minimax/MiniMax-M2.7"` | LLM 模型 |
+| `agents.defaults.model` | `"minimax/MiniMax-M3"` | LLM 模型 |
 | `agents.defaults.history_token_limit` | `50000` | 历史 token 上限 |
 | `agents.defaults.context_window_tokens` | `130000` | 上下文窗口 |
 | `agents.defaults.max_tool_iterations` | `2000` | 最大工具迭代次数 |

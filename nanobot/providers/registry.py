@@ -221,12 +221,14 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         supports_prompt_caching=True,
     ),
     # OpenAI: SDK default base URL (no override needed)
+    # Automatic prompt caching for GPT-4o and newer models.
     ProviderSpec(
         name="openai",
         keywords=("openai", "gpt"),
         env_key="OPENAI_API_KEY",
         display_name="OpenAI",
         backend="openai_compat",
+        supports_prompt_caching=True,
         supports_max_completion_tokens=True,
     ),
     # OpenAI Codex: OAuth-based, dedicated provider
@@ -253,6 +255,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         supports_max_completion_tokens=True,
     ),
     # DeepSeek: OpenAI-compatible at api.deepseek.com
+    # Prompt caching available — returns prompt_cache_hit_tokens in usage.
     ProviderSpec(
         name="deepseek",
         keywords=("deepseek",),
@@ -262,6 +265,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_api_base="https://api.deepseek.com",
         thinking_style="thinking_type",
         default_reasoning_effort="high",
+        supports_prompt_caching=True,
     ),
     # Gemini: Google's OpenAI-compatible endpoint
     ProviderSpec(
@@ -343,6 +347,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         strip_model_prefix=True,
     ),
     # MiniMax: OpenAI-compatible API
+    # Passive (automatic) prompt caching — no explicit markers needed
     ProviderSpec(
         name="minimax",
         keywords=("minimax",),
@@ -351,9 +356,10 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.minimax.io/v1",
         thinking_style="reasoning_split",
+        supports_prompt_caching=True,
         stream_idle_timeout=90,
     ),
-    # MiniMax Anthropic-compatible endpoint: supports thinking mode
+    # MiniMax Anthropic-compatible endpoint: explicit cache_control support
     ProviderSpec(
         name="minimax_anthropic",
         keywords=("minimax_anthropic",),
@@ -361,6 +367,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         display_name="MiniMax (Anthropic)",
         backend="anthropic",
         default_api_base="https://api.minimax.io/anthropic",
+        supports_prompt_caching=True,
         stream_idle_timeout=90,
     ),
     # MiniMax-cn OpenAI-compatible API
@@ -372,9 +379,10 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.minimaxi.com/v1",
         thinking_style="reasoning_split",
+        supports_prompt_caching=True,
         stream_idle_timeout=90,
     ),
-    # MiniMax-cn Anthropic-compatible endpoint: supports thinking mode
+    # MiniMax-cn Anthropic-compatible endpoint: explicit cache_control support
     ProviderSpec(
         name="minimax_anthropic_cn",
         keywords=("minimax_anthropic_cn",),
@@ -382,6 +390,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         display_name="MiniMax CN (Anthropic)",
         backend="anthropic",
         default_api_base="https://api.minimaxi.com/anthropic",
+        supports_prompt_caching=True,
         stream_idle_timeout=90,
     ),
     # Mistral AI: OpenAI-compatible API
