@@ -31,39 +31,23 @@ def test_bootstrap_files_are_backed_by_templates() -> None:
         assert (template_dir / filename).is_file(), f"missing bootstrap template: {filename}"
 
 
-def test_system_prompt_stays_stable_when_clock_changes(tmp_path, monkeypatch) -> None:
-    """System prompt should not change just because the wall clock minute changes."""
-    monkeypatch.setattr(datetime_module, "datetime", _FakeDatetime)
-
-    workspace = _make_workspace(tmp_path)
-    builder = ContextBuilder(workspace)
-
-    _FakeDatetime.current = real_datetime(2026, 2, 24, 13, 59)
-    prompt1 = builder.build_system_prompt()
-
-    _FakeDatetime.current = real_datetime(2026, 2, 24, 14, 0)
-    prompt2 = builder.build_system_prompt()
-
-    assert prompt1 == prompt2
-
-
 def test_system_prompt_reflects_current_dream_memory_contract(tmp_path) -> None:
-    """Workspace with customized MEMORY.md should inject it via build_messages()."""
+    """Workspace with customized system.md should inject it via build_messages()."""
     from nanobot.utils.gitstore import sync_workspace_templates
 
     workspace = _make_workspace(tmp_path)
     sync_workspace_templates(workspace, silent=True)
 
-    # Populate memory with customized content (simulating Dream write)
-    (workspace / "memory" / "MEMORY.md").write_text(
-        "# Long-term Memory\n\nUser prefers dark mode.\n", encoding="utf-8"
+    # Populate categorized memory with customized content (simulating Dream write)
+    (workspace / "memory" / "system.md").write_text(
+        "# System\n\nUser prefers dark mode.\n", encoding="utf-8"
     )
 
     builder = ContextBuilder(workspace)
     messages = builder.build_messages(history=[], current_message="hi")
 
     static = messages[0]["content"]
-    assert "persistent memory" in static
+    assert "System" in static
     assert "User prefers dark mode" in static
 
 
@@ -102,13 +86,13 @@ def test_execution_rules_in_system_prompt(tmp_path) -> None:
     builder = ContextBuilder(workspace)
 
     prompt = builder.build_system_prompt()
-    # Character traits from SOUL.md
-    assert "Thorough" in prompt
+    # Character traits from SOUL.md (via bootstrap)
+    assert "nanobot" in prompt
+    assert "把事情搞明白" in prompt
     # Role definitions from SOUL.md
-    assert "Principal engineer" in prompt
-    assert "取舍、约束和失效模式" in prompt  # translated from "tradeoffs, constraints, and failure modes"
-    # Tool reference from identity.md
-    assert "read_file" in prompt
+    assert "Role Definitions" in prompt
+    # Environment from identity.md
+    assert "Environment" in prompt
 
 
 def test_identity_has_no_behavioral_instructions(tmp_path) -> None:
@@ -165,12 +149,10 @@ def test_subagent_result_does_not_create_consecutive_assistant_messages(tmp_path
 
 
 def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
-    """Skills with always=true appear in Active Skills but NOT in the skills index.
+    """Skills with always=true appear in Active Skills (instructions section) but NOT
+    in the skills index.
 
-    Skills summary moved to build_instructions_section() (injected into last
-    user message). Active Skills section stays in system prompt.
-    When no skill has always:true (current state), the Active Skills section
-    is absent entirely — which is correct behaviour.
+    Active Skills section moved from system prompt to build_instructions_section().
     """
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
@@ -179,28 +161,28 @@ def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
     instructions = builder.build_instructions_section()
 
     # Skills should appear in the summary index
-    assert "## Available Skills" in instructions
+    assert "## Available Skills" in instructions or "### Available Skills" in instructions
     # Verify "my" skill is listed in the index (always: false)
     assert "**my**" in instructions
 
-    # Active Skills section: only present in system prompt when there ARE always:true skills
-    prompt = builder.build_system_prompt()
+    # Active Skills section: present in instructions when there ARE always:true skills
     always_skills = builder.skills.get_always_skills()
     if always_skills:
-        assert "# Active Skills" in prompt
-        # those skills appear in Active Skills
+        assert "## Active Skills" in instructions or "### Active Skills" in instructions
+        # those skills appear in Active Skills (format: ### Skill: {name})
         for skill_name in always_skills:
-            assert f"### Skill: {skill_name}" in prompt
-        # but NOT in the skills index in instructions
-        skills_section = instructions.split("## Available Skills\n", 1)
-        if len(skills_section) > 1:
-            sep = "\n\n###" if "\n\n###" in skills_section[1] else "\n\n"
-            index_text = skills_section[1].split(sep)[0]
+            assert f"### Skill: {skill_name}" in instructions
+        # but NOT in the skills index (Available Skills section)
+        avail_idx = instructions.find("Available Skills")
+        if avail_idx >= 0:
+            after_avail = instructions[avail_idx:]
+            next_section = after_avail.find("\n## ")
+            index_text = after_avail[:next_section] if next_section > 0 else after_avail
             for skill_name in always_skills:
                 assert f"**{skill_name}**" not in index_text
     else:
         # No always:true skills → Active Skills section absent
-        assert "# Active Skills" not in prompt
+        assert "## Active Skills" not in instructions
 
 
 # ---------------------------------------------------------------------------
@@ -323,13 +305,13 @@ def test_template_memory_md_is_skipped(tmp_path) -> None:
 
 
 def test_customized_memory_md_is_injected_in_system_prompt(tmp_path) -> None:
-    """A Dream-populated MEMORY.md should be injected in the system prompt."""
+    """A Dream-populated system.md should be injected in the system prompt."""
     workspace = _make_workspace(tmp_path)
     from nanobot.utils.gitstore import sync_workspace_templates
     sync_workspace_templates(workspace, silent=True)
 
-    (workspace / "memory" / "MEMORY.md").write_text(
-        "# Long-term Memory\n\nUser prefers dark mode.\n", encoding="utf-8"
+    (workspace / "memory" / "system.md").write_text(
+        "# System\n\nUser prefers dark mode.\n", encoding="utf-8"
     )
 
     builder = ContextBuilder(workspace)

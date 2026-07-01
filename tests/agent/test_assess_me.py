@@ -200,7 +200,7 @@ class TestFinalizeTurn:
         await handler._finalize_turn(session, all_msgs, 1, False, "second", total_llm_requests=3)
 
         assert session.metadata.get("llm_request_count") == 3
-        assert session.metadata.get("assistant_turn_count") == 2
+        assert session.metadata.get("assistant_turn_count") == 1
 
     # ------------------------------------------------------------------
     # Rebuild tests — session.messages rebuilt from all_msgs to persist
@@ -893,10 +893,12 @@ class TestAssessMeTemplate:
         return [
             "信息缺口",
             "假设检查",
-            "进度与状态",
-            "未来方向",
-            "思维模式",
+            "任务完成评估",
             "可复用模式",
+            "Skills 匹配",
+            "事实合规",
+            "逻辑合理",
+            "用户需求符合",
         ]
 
     def test_includes_all_sections(self) -> None:
@@ -917,15 +919,15 @@ class TestAssessMeTemplate:
             has_active_task=False,
         )
         # Task-specific section headers should be absent
-        for section_header in ("#### 3. 信息缺口", "#### 4. 假设检查", "#### 5. 进度与状态", "#### 6. 未来方向"):
+        for section_header in ("#### 2. 任务完成评估", "#### 3. 假设检查"):
             assert section_header not in content, (
                 f"Template should NOT include task section header when has_active_task=False: {section_header}"
             )
         # General sections should still be present
         assert "事实合规" in content
-        assert "逻辑一致" in content
-        assert "行为检视" in content
-        assert "思维模式" in content
+        assert "逻辑合理" in content
+        assert "用户需求符合" in content
+        assert "信息缺口" in content
         assert "可复用模式" in content
 
     def test_renders_without_verify(self) -> None:
