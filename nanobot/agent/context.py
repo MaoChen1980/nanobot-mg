@@ -261,6 +261,10 @@ class ContextBuilder:
         loading the static tool_usage.md template — one-source-of-truth
         from tool class instructions.
         """
+        # Clean up stale session-scoped task files from dead sessions
+        # (CURRENT_*.md, tree_*.json older than 7 days for other sessions).
+        self._cleanup_stale_session_files(session_key)
+
         sections: list[str] = []
 
         # Core golden rule — most prominent position, before everything else.
@@ -577,6 +581,29 @@ class ContextBuilder:
     @staticmethod
     def _get_children(items: list[dict], parent_id: str) -> list[dict]:
         return [it for it in items if it.get("parent") == parent_id]
+
+    def _cleanup_stale_session_files(self, session_key: str | None = None) -> None:
+        """Delete session-scoped task files (CURRENT_*.md, tree_*.json) older than 7 days.
+
+        Only targets files from OTHER sessions — the current session's files
+        are preserved. Runs at the start of each instructions build.
+        """
+        tasks_dir = self.workspace / "tasks"
+        if not tasks_dir.exists():
+            return
+        cutoff = time.time() - 7 * 86400  # 7 days
+        current_suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        for pattern in ("CURRENT_*.md", "tree_*.json"):
+            for path in tasks_dir.glob(pattern):
+                # Skip the current session's own files
+                if current_suffix and current_suffix in path.stem:
+                    continue
+                try:
+                    if path.stat().st_mtime < cutoff:
+                        path.unlink()
+                        logger.debug("Cleaned up stale session file: {}", path.name)
+                except OSError:
+                    pass
 
     def _build_task_tree_section(self, session_key: str | None = None) -> str:
         """Read tasks/tree*.json from the workspace and render as a tree.

@@ -43,7 +43,15 @@ Action：立即执行归档——
 3. 从 `{{ tree_path }}` 的 items 中移除这些子节点
 4. 根节点保留在 items 中，status 保持 completed
 
+**归档完成 → 清理会话文件（trigger-action）：**
+Trigger：根节点（parent 为 null）的 status 改为 `completed`，且归档完成
+Action：删除 `{{ current_path }}` — 会话上下文文件，任务已完成不再需要
+
 **规则：**
 - 不要仅仅因为子节点完成了就认为父节点完成了——验证 criteria
 - failed/paused 是过程产物，保留供后续参考
 - 检查根任务时，不被 failed/paused 干扰——只要根 criteria 满足就可归档
+
+**过期清理：**
+Trigger：每次加载 `{{ tree_path }}` 且当前会话的任务树为空（无 active 任务）
+Action：用 glob 扫描 `tasks/CURRENT_*.md` 和 `tasks/tree_*.json`，删除修改时间超过 7 天的文件
