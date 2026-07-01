@@ -53,5 +53,6 @@ Action：删除 `{{ current_path }}` — 会话上下文文件，任务已完成
 - 检查根任务时，不被 failed/paused 干扰——只要根 criteria 满足就可归档
 
 **过期清理：**
-Trigger：每次加载 `{{ tree_path }}` 且当前会话的任务树为空（无 active 任务）
+系统有自动清理（7 天过期），但作为补充：
+Trigger：每次加载 `{{ tree_path }}` 时，如果 items 为空或所有 item 均为 completed/failed/paused 状态（无 active 任务）
 Action：用 glob 扫描 `tasks/CURRENT_*.md` 和 `tasks/tree_*.json`，删除修改时间超过 7 天的文件

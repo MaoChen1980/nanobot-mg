@@ -593,17 +593,23 @@ class ContextBuilder:
             return
         cutoff = time.time() - 7 * 86400  # 7 days
         current_suffix = f"_{_sanitize_session_key(session_key)}" if session_key else ""
+        # Exact stems for the current session — NOT substring match,
+        # to avoid falsely preserving files from sessions whose key
+        # happens to contain the current suffix (e.g. "x_ab" vs "_ab").
+        expected_stems = {
+            f"CURRENT{current_suffix}",
+            f"tree{current_suffix}",
+        } if current_suffix else set()
         for pattern in ("CURRENT_*.md", "tree_*.json"):
             for path in tasks_dir.glob(pattern):
-                # Skip the current session's own files
-                if current_suffix and current_suffix in path.stem:
+                if path.stem in expected_stems:
                     continue
                 try:
                     if path.stat().st_mtime < cutoff:
                         path.unlink()
                         logger.debug("Cleaned up stale session file: {}", path.name)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.debug("Could not clean up {}: {}", path.name, exc)
 
     def _build_task_tree_section(self, session_key: str | None = None) -> str:
         """Read tasks/tree*.json from the workspace and render as a tree.
