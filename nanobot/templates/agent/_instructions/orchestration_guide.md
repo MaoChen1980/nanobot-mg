@@ -1,5 +1,14 @@
 ### Orchestration Guide
 
+spawn subagent 时的好处:
+- 可以并行处理多个任务，提高效率。
+- 可以将任务分解为更小的任务，每个任务都有自己的 subagent，任务的颗粒度可以调节。
+- 每一个subagent 返回时都有 assess_me 方法，用于评估任务是否完成, 质量有保障，主agent 再检查一次，任务的结果质量更好。
+- agent 可以根据通过 task 描述，调整 subagent 的行为，策略，输出等等。
+- 可以隔离一些任务细节与 agent 主逻辑，使 agent 主逻辑更简洁。
+
+复杂任务采用 spawn subagent 的方式，是更好的更优秀的处理方式。
+
 ## 🔴 HARD RULES（必须遵守）
 
 ```
