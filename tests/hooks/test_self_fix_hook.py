@@ -7,7 +7,8 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
-from nanobot.hooks.self_fix_hook import SelfFixHook, _read_resolved_ids
+from nanobot.hooks.self_fix_hook import SelfFixHook
+from nanobot.hooks._utils import read_resolved_ids as _read_resolved_ids
 
 
 class FakeContext:
@@ -29,27 +30,27 @@ def hook(tmp_path):
 class TestReadResolvedIds:
     def test_missing_file_returns_empty(self, tmp_path):
         path = tmp_path / "nonexistent.jsonl"
-        with patch("nanobot.hooks.self_fix_hook.RESOLVED_FILE", path):
+        with patch("nanobot.hooks._utils.RESOLVED_FILE", path):
             assert _read_resolved_ids() == set()
 
     def test_reads_ids_from_jsonl(self, tmp_path):
         path = tmp_path / "resolved.jsonl"
         path.write_text("abc\n123\ndef\n", encoding="utf-8")
-        with patch("nanobot.hooks.self_fix_hook.RESOLVED_FILE", path):
+        with patch("nanobot.hooks._utils.RESOLVED_FILE", path):
             assert _read_resolved_ids() == {"abc", "123", "def"}
 
     def test_oserror_returns_empty(self, tmp_path):
         mock_file = MagicMock()
         mock_file.exists.return_value = True
         mock_file.read_text.side_effect = OSError()
-        with patch("nanobot.hooks.self_fix_hook.RESOLVED_FILE", mock_file):
+        with patch("nanobot.hooks._utils.RESOLVED_FILE", mock_file):
             assert _read_resolved_ids() == set()
 
     def test_max_ids_caps(self, tmp_path):
         path = tmp_path / "resolved.jsonl"
         ids = "\n".join([f"id{i:04d}" for i in range(50)])
         path.write_text(ids + "\n", encoding="utf-8")
-        with patch("nanobot.hooks.self_fix_hook.RESOLVED_FILE", path):
+        with patch("nanobot.hooks._utils.RESOLVED_FILE", path):
             result = _read_resolved_ids(max_ids=10)
         assert len(result) == 10
 
@@ -78,7 +79,7 @@ class TestBuildFindingInsight:
 
         with (
             patch("nanobot.hooks.self_fix_hook.FINDINGS_FILE", findings_file),
-            patch("nanobot.hooks.self_fix_hook.RESOLVED_FILE", resolved_file),
+            patch("nanobot.hooks._utils.RESOLVED_FILE", resolved_file),
         ):
             result = hook._build_finding_insight()
 

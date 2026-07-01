@@ -21,6 +21,7 @@ from typing import Any
 from loguru import logger
 from nanobot.agent.hook import AgentHook, AgentHookContext, AgentRunHookContext
 from nanobot.agent.llm_context import chat_stream_with_retry
+from nanobot.hooks._utils import read_resolved_ids
 
 
 # --- Reflection prompt -------------------------------------------------------
@@ -82,10 +83,6 @@ REFLECTION_USER_TEMPLATE = """\
 
 _HOOKS_DIR = Path(__file__).resolve().parent
 _HOOK_FILES = ["self_log_hook.py", "self_detect_hook.py"]
-
-
-RESOLVED_FILE = Path.home() / ".nanobot" / "self_improve" / "resolved_findings.jsonl"
-
 
 def _fmt_args(args: dict) -> str:
     """Compact argument preview for reflection LLM.
@@ -208,27 +205,6 @@ def _write_user_corrections(signal_records: list[dict]) -> None:
     except OSError:
         logger.debug("SelfDetectHook: failed to write user_corrections.jsonl")
 
-
-def _read_resolved_ids() -> set[str]:
-    """Read resolved finding IDs from JSONL file (one ID per line).
-
-    Reads ALL lines — no truncation. resolved_findings.jsonl grows slowly
-    (one ID per resolved finding) and bounded set prevents unbounded memory.
-    Truncation to 200 was causing old resolved IDs to be forgotten, making
-    resolved findings re-appear as new.
-    """
-    if not RESOLVED_FILE.exists():
-        return set()
-    ids: set[str] = set()
-    try:
-        lines = RESOLVED_FILE.read_text(encoding="utf-8").strip().splitlines()
-        for line in lines:
-            line = line.strip()
-            if line:
-                ids.add(line)
-    except OSError:
-        pass
-    return ids
 
 
 def _read_hook_sources() -> str:
@@ -757,7 +733,7 @@ class SelfDetectHook(AgentHook):
             pass
 
         # Read existing resolved IDs to carry forward
-        resolved_ids = _read_resolved_ids()
+        resolved_ids = read_resolved_ids()
 
         payload = {
             "saved_at": time_str,
