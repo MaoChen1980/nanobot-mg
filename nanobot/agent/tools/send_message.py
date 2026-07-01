@@ -1,4 +1,4 @@
-"""SendMessageTool — bidirectional Subagent ↔ Orchestrator messaging."""
+"""SendMessageTool — Orchestrator → Subagent messaging."""
 
 from __future__ import annotations
 
@@ -13,36 +13,21 @@ if TYPE_CHECKING:
 
 @tool_parameters(
     build_parameters_schema(
-        recipient=p("string", "Who to send to: 'main' (subagent→orchestrator) or 'subagent:<label>' (orchestrator→subagent)"),
+        recipient=p("string", "Subagent to send to: 'subagent:<label>'. Use list_subagents to get labels."),
         message=p("string", "The message content"),
-        priority=p("string", "Priority: info, suggestion, or blocker (only for recipient='main')",
-            enum=["info", "suggestion", "blocker"],
-        ),
         required=["recipient", "message"],
     )
 )
 class SendMessageTool(Tool):
-    """Bidirectional messaging between Orchestrator and Subagents.
+    """Orchestrator → Subagent messaging — send instructions to a running subagent."""
 
-    When called by a Subagent (subagent), sends to the Orchestrator ('main').
-    When called by the Orchestrator (main agent), sends to a Subagent ('subagent:<label>').
-    """
-
-    def __init__(
-        self,
-        manager: SubagentManager,
-        subagent_id: str | None = None,
-        subagent_label: str | None = None,
-    ) -> None:
+    def __init__(self, manager: SubagentManager) -> None:
         self._manager = manager
-        self._subagent_id = subagent_id
-        self._subagent_label = subagent_label
+
     instruction = (
-        "Send a message between Orchestrator and Subagents (bidirectional, non-blocking). "
-        "Subagent→Orchestrator: recipient='main'. "
-        "Orchestrator→Subagent: recipient='subagent:<label>'. "
-        "Use list_subagents to get recipient names. "
-        "Fire-and-forget — execution continues immediately on both sides."
+        "Send a message to a running Subagent (non-blocking, fire-and-forget). "
+        "Use list_subagents to get recipient labels. "
+        "The subagent receives the message in its next iteration."
     )
 
     name = "send_message"
@@ -50,39 +35,20 @@ class SendMessageTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Send a message to the Orchestrator or a Subagent (non-blocking). "
-            "Subagent→Orchestrator: recipient='main'. "
-            "Orchestrator→Subagent: recipient='subagent:<label>'. "
-            "Priority (Subagent→Orchestrator only): info, suggestion, blocker."
+            "Send a message to a running Subagent (non-blocking, fire-and-forget). "
+            "The subagent receives the message and continues executing. "
+            "recipient='subagent:<label>' — use list_subagents to get labels."
         )
 
     async def execute(
         self,
         recipient: str,
         message: str,
-        priority: str = "info",
         **kwargs: Any,
     ) -> str:
-        # Subagent → Orchestrator
-        if recipient == "main":
-            if self._subagent_id is None or self._subagent_label is None:
-                return "Error: send_message from 'main' is only available to Subagents."
-            if priority not in ("info", "suggestion", "blocker"):
-                priority = "info"
-            return await self._manager.notify_orchestrator(
-                message=message,
-                subagent_id=self._subagent_id,
-                subagent_label=self._subagent_label,
-                priority=priority,
-            )
-
-        # Orchestrator → Subagent
-        if recipient.startswith("subagent:"):
-            if self._subagent_id is not None:
-                return "Error: Subagents can only send to 'main'."
-            label = recipient[len("subagent:"):]
-            if not label:
-                return "Error: empty Subagent label. Use 'subagent:<label>'."
-            return self._manager.send_to_subagent(subagent_label=label, content=message)
-
-        return f"Error: unknown recipient '{recipient}'. Use 'main' or 'subagent:<label>'."
+        if not recipient.startswith("subagent:"):
+            return f"Error: unknown recipient '{recipient}'. Use 'subagent:<label>'."
+        label = recipient[len("subagent:"):]
+        if not label:
+            return "Error: empty Subagent label. Use 'subagent:<label>'."
+        return self._manager.send_to_subagent(subagent_label=label, content=message)

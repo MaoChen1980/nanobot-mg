@@ -182,7 +182,7 @@ action:
      - ❌ "读取 README.md" → 太小，Orchestrator 自己做
      - ✅ "对比 tools/ 下所有工具的命名和参数模式，输出不一致列表" → 合适
      - ❌ "重构整个 tools/ 目录" → 太大
-  3. 每个小 spawn 的结果都用 `send_message` 或 team_board 收，Orchestrator 自己综合
+  3. 每个小 spawn 的结果会自动回到对话中（final response + notify_orchestrator 消息），Orchestrator 自己综合
 - **杀手词检测**：如果 task 描述用了"全部"/"所有"/"整个"/"analyse all"/"entire"/"comprehensive" → **任务太大，先定位再拆**
 - `max_iterations` 让 LLM 按任务复杂度自己判断合适的值
 

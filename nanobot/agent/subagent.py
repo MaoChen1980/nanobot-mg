@@ -220,13 +220,10 @@ class SubagentManager:
 
                 # Register team communication tools
                 from nanobot.agent.tools.notify_orchestrator import NotifyOrchestratorTool
-                from nanobot.agent.tools.send_message import SendMessageTool
                 tools.register(NotifyOrchestratorTool(
                     manager=self, subagent_id=task_id, subagent_label=label,
                 ))
-                tools.register(SendMessageTool(
-                    manager=self, subagent_id=task_id, subagent_label=label,
-                ))
+                # Note: SendMessageTool (main→subagent) is not registered here — it's main-agent only.
                 system_prompt = build_subagent_prompt(
                     self.workspace,
                     self.disabled_skills,

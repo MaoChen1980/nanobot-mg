@@ -47,7 +47,7 @@
 **通信控制：**
 - spawn（fire-and-forget，结果自动返回）
 - check_subagent(task_id) — 仅用于确认是否存活，不要轮询
-- send_message(recipient, message) — 发给 subagent / 从 subagent 发回
+- send_message(recipient, message) — 发给 subagent（只支持 `recipient='subagent:<label>'`，subagent→main 用 notify_orchestrator）
 - cancel_subagent(label) — 取消运行中的 subagent
 - list_subagents — 查看所有运行中的 subagent
 
