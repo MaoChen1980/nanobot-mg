@@ -215,8 +215,11 @@ class SelfEvolutionEngine:
                 continue
             try:
                 text = full_path.read_text(encoding="utf-8")
-                if len(text) > 3000:
-                    text = text[:3000] + "\n\n... (truncated)"
+                # Hook files are 8-15K chars; keep full content so the subagent
+                # can spot self_bug findings (line-level patterns, dead imports,
+                # TODO markers). Hard cap matches the codebase section budget.
+                if len(text) > 15000:
+                    text = text[:15000] + "\n\n... (truncated)"
                 sections.append(f"### nanobot/{rel_path}\n\n{text}")
             except OSError:
                 continue
