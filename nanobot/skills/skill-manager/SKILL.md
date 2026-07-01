@@ -74,13 +74,29 @@ category: agent
 既然你使用标准文件工具来管理 skills，以下是各操作的具体方法：
 
 ### Create a skill
-1. **检查重复**：用 `memory_search` 语义检索已有 skill，query 用 candidate 的核心功能描述，`k=6`。对召回结果逐一 `read_file` 读 SKILL.md 全文，判断是否功能重复。如有覆盖则跳过或合并。
-2. **检查 trigger**：确认有明确的触发信号（用户关键词、消息类型、工具返回、cron 周期）。没有外部 trigger 的 skill 不应创建。
-3. **创建目录**：`mkdir -p $WORKSPACE/skills/<name>/`
-4. **写入 SKILL.md** 使用 `write_file(path="$WORKSPACE/skills/<name>/SKILL.md", content="...")`。必须包含 `## When to Use`、`## Steps`、`## Verification` 三个章节。末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
-5. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('$WORKSPACE')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description。
-6. **验证**：`exec(python {baseDir}/scripts/quick_validate.py $WORKSPACE/skills/<name>)`
-7. 修复任何验证错误
+
+**核心原则：更新优先于创建，合并优先于新建。** 在创建任何新 skill 之前，必须先执行语义查重——新建永远是最后选项。
+
+1. **语义查重**：用 `memory_search` 语义检索已有 skill，query 用 candidate 的核心功能描述，`k=6`。对召回结果逐一 `read_file` 读 SKILL.md 全文，判断候选与已有 skill 之间是什么关系。
+
+2. **有结果（重叠/覆盖）？** 明确两者关系后决策：
+   - **candidate 是已有 skill 的子集**（如"数据获取"只是"股市决策"的一步）→ **不要创建新 skill。** 检查已有 skill 的相关步骤是否已覆盖、描述是否已涵盖此场景。未覆盖则更新已有 skill，已覆盖则跳过。
+   - **已有 skill 是 candidate 的子集**（已有"数据获取"和"数据校准"，candidate 是整合的"股市决策"）→ 考虑是否将多个小 skill **合并**成一个更大的 skill。合并后原小 skill 可删除或重定向。
+   - **功能等价或大部分重叠** → 走 **Compare and merge** 流程，保留更优的那个或将两者合并。
+   - **已有 skill 已完整覆盖** → 仍检查 candidate 是否有更新的信息、更好的步骤、更清晰的描述。如有 → 更新已有 skill。如无 → **跳过。**
+
+3. **memory_search 无结果（不重叠）？**
+   - 检查 candidate 是否能**合并到**某个功能相近的已有 skill 中（不仅仅是语义相似，而是看功能覆盖度是否有交集）
+   - candidate 的核心功能已被某个已有 skill 部分覆盖，或两者解决的是同一类问题 → 走 **Compare and merge** 流程，将 candidate 的内容合并到已有 skill 中
+   - 功能确实全新 → 走下方完整创建流程
+
+4. **完整创建流程**（仅当上述步骤都确认需要新建时才执行）：
+   1. **检查 trigger**：确认有明确的触发信号（用户关键词、消息类型、工具返回、cron 周期）。没有外部 trigger 的 skill 不应创建。
+   2. **创建目录**：`mkdir -p $WORKSPACE/skills/<name>/`
+   3. **写入 SKILL.md** 使用 `write_file(path="$WORKSPACE/skills/<name>/SKILL.md", content="...")`。必须包含 `## When to Use`、`## Steps`、`## Verification` 三个章节。末尾包含自我优化脚注（见 [自我优化脚注](#self-optimization-footer)）。
+   4. **验证触发条件（最终确认）**：从 SKILL.md frontmatter 中读取 skill 的 description，然后检查它是否正确出现在 skills 索引中：`exec(python -c "from nanobot.agent.skills import SkillsLoader; from pathlib import Path; print(SkillsLoader(Path('$WORKSPACE')).build_skills_summary())")`。确认 description 足够具体，使得匹配的任务到来时你会加载此 skill。如果不是，立即编辑 description。
+   5. **验证**：`exec(python {baseDir}/scripts/quick_validate.py $WORKSPACE/skills/<name>)`
+   6. 修复任何验证错误
 
 ### Patch a skill (targeted fix)
 当 skill 的指令有误时：
