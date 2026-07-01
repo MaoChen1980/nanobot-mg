@@ -201,7 +201,17 @@ class MessageTool(Tool):
 
         if self._defer_mode:
             self._deferred.append(msg)
-            return "```queued\n[Message queued for delivery — pending quality assessment]\n```"
+            return (
+                "```queued\n"
+                "[Message QUEUED for end-of-loop delivery — NOT yet sent to the user. "
+                "The framework runs a quality assessment (assess_me) at the end of this turn. "
+                "If the assessment approves, all queued messages are flushed to the user channel. "
+                "If the assessment requests revision, the queued message is DISCARDED (not delivered). "
+                "To deliver a revised version, call message() again with the updated content — "
+                "the new message will replace this queued one in the assessment queue. "
+                "Do NOT call message() repeatedly with the same content expecting different results.]"
+                "\n```"
+            )
 
         try:
             await self._send_callback(msg)
