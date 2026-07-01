@@ -28,7 +28,6 @@
 Avoid: 单个模糊词（`memory`、`rules`、`thing`）返回噪音。避免完整句子（填充词稀释 embedding）。
 
 **memory_search notes:**
-- 相关性 > 0.5 时，结果包含相关 memory 文件的交叉引用链接
 - FAISS + 关键词混合策略，召回率优于纯向量搜索
 - 新的 memory 内容在下一次 extractor 周期后生效（最长 2 小时延迟）
 - 在 memory 中查找精确的已知术语时，改用 `grep`

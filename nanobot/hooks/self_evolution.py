@@ -36,7 +36,6 @@ _TEMPLATE_FILES = [
     "_instructions/task_tree.md",
     "_instructions/output_rules.md",
     "_instructions/skill_refinement.md",
-    "_instructions/meta_learning.md",
 ]
 
 # Key hook files to include
