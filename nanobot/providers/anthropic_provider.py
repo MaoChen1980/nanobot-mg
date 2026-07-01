@@ -712,6 +712,14 @@ class AnthropicProvider(LLMProvider):
                 yield await asyncio.wait_for(stream_iter.__anext__(), timeout=timeout)
             except StopAsyncIteration:
                 return
+            except IndexError:
+                logger.warning(
+                    "Anthropic SDK stream internal error (content_block_stop index "
+                    "mismatch with thinking blocks); retrying"
+                )
+                raise RuntimeError(
+                    "SDK accumulation error: content_block_stop index out of range"
+                )
 
     async def chat(
         self,
