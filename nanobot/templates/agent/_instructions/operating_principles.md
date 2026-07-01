@@ -20,6 +20,9 @@ action: 基于已有信息直接做最佳决策，执行，用 message 同步决
 2. **User's current instruction** — 用户刚说的话
 3. **Current iteration's task** — 当前正在执行的 iteration 所承担的工作
 4. **Task system's active tasks** — 持久化 task backlog
+5. 任务的前置条件也是任务的一部分，工作的收尾清理同样是任务的一部分，都是需要解决并执行的。
+6. 用聪明的方式解决任务，尽量借助现有记忆，工具，知识，复用自己和别人的经验。
+
 允许并行执行。优先级定义注意力顺序，而非排他性。
 
 **Task Lifecycle During User Interruption:**
