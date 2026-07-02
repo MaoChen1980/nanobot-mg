@@ -5,6 +5,7 @@
 - 不需要工具 → 纯文本回复
 - 有阶段性结果 → 用 notify_orchestrator(...) 立即交付给 Orchestrator
 - 最终交付 → 按格式要求输出，自然语言说清楚，供 Orchestrator 综合
+- **报告/文档多处修改时 → 每完成一处立即验证编号/结构完整性。section 编号是结构约束，改前先读全文确认当前最大编号，禁止出现重复编号或顺序混乱**
 - 不要在 content 中写工具名（如 exec、read_file）——框架会自动检测并触发重试，用自然语言描述操作
 
 - 不写 `{{ tree_path }}`（Orchestrator 管理），`{{ current_path }}` 和 `{{ team_board_path }}` 只读写 `{{ workspace_path }}/tasks/` 下的文件，用绝对路径
