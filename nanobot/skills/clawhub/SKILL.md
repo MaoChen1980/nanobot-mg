@@ -1,10 +1,8 @@
 ---
 name: clawhub
-description: >
-  从 ClawHub 社区仓库发现、搜索、安装、列出、更新技能。
-  当用户要求安装 skill、搜索 skill、查看可用 skill、升级 skill 时，必须使用此 Skill。
-  关键词：安装 skill、搜索 skill、skill 市场、clawhub、社区 skill、技能仓库、可用 skill。
-  即使用户没有明确说"clawhub"，只要涉及从外部获取或管理技能，都应触发。
+description: '从 ClawHub 社区仓库发现、搜索、安装、列出、更新技能。
+
+  当用户要求安装 skill、搜索 skill、查看可用 skill、升级 skill 时激活。'
 version: 0.1.0
 category: project-management
 ---

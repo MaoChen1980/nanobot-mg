@@ -1,10 +1,8 @@
 ---
 name: xlsx
-description: >
-  电子表格创建、编辑、分析：公式、格式、数据处理、可视化。
-  当用户要求操作 .xlsx / .xlsm / .csv / .tsv 文件，包括创建、读取、修改、分析数据、计算公式时，必须使用此 Skill。
-  关键词：excel、xlsx、csv、电子表格、公式、数据透视、图表、单元格、sheet。
-  即使用户没有明确说"用 python 处理 excel"，只要涉及表格数据处理和格式化，都应触发。
+description: '电子表格创建、编辑、分析：公式、格式、数据处理、可视化。
+
+  当用户要求操作 .xlsx / .xlsm / .csv / .tsv 文件，包括创建、读取、修改、分析数据、计算公式时激活。'
 license: Proprietary. LICENSE.txt has complete terms
 official: true
 category: domain-specific

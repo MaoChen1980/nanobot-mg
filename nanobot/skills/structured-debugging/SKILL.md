@@ -1,11 +1,8 @@
 ---
 name: structured-debugging
-description: >
-  假设驱动的结构化调试方法论，解决非平凡 Bug、不稳定测试、复杂系统追踪。
-  当用户说"debug"、"为什么不对"、"报错了"、"运行结果不符合预期"、
-  或第一轮修复无效、行为看起来"不可能"时，必须使用此 Skill。
-  关键词：debug、调试、排查、stack trace、断点、log、trace、hypothesis。
-  即使用户没有明确说"用调试方法"，只要涉及定位和修复代码缺陷，都应触发。
+description: '假设驱动的结构化调试方法论，解决非平凡 Bug、不稳定测试、复杂系统追踪。
+
+  当用户说"debug"、"为什么不对"、"报错了"、"运行结果不符合预期"、 或第一轮修复无效、行为看起来"不可能"时激活。'
 category: code-analysis
 ---
 

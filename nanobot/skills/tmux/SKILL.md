@@ -1,10 +1,8 @@
 ---
 name: tmux
-description: >
-  管理交互式终端会话，支持 SSH、REPL、密码输入等需要持久终端的场景。
-  当用户需要 SSH 连接、运行交互式程序、输入密码、启动 REPL、或要求"在后台运行"时，必须使用此 Skill。
-  关键词：SSH、终端、交互、密码、REPL、tmux、session、持久运行、后台。
-  即使用户没有明确说"开一个 tmux"，只要涉及需要持续运行的命令行操作，都应触发。
+description: '管理交互式终端会话，支持 SSH、REPL、密码输入等需要持久终端的场景。
+
+  当用户需要 SSH 连接、运行交互式程序、输入密码、启动 REPL、或要求"在后台运行"时激活。'
 version: 0.1.0
 category: domain-specific
 ---

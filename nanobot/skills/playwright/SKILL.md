@@ -1,10 +1,8 @@
 ---
-name: "playwright"
-description: >
-  浏览器自动化：导航、填表、截图、数据抓取、UI 流程调试。
-  当用户要求自动化浏览器操作、截取网页截图、抓取动态渲染数据、填写表单、或调试前端 UI 流程时，必须使用此 Skill。
-  关键词：playwright、浏览器、截图、自动化、爬虫、headless、表单填写、页面交互。
-  即使用户没有明确说"playwright"，只要涉及通过真实浏览器获取数据或操作页面，都应触发。
+name: playwright
+description: '浏览器自动化：导航、填表、截图、数据抓取、UI 流程调试。
+
+  当用户要求自动化浏览器操作、截取网页截图、抓取动态渲染数据、填写表单、或调试前端 UI 流程时激活。'
 official: true
 category: domain-specific
 ---

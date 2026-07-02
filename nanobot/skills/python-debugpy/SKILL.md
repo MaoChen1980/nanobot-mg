@@ -1,18 +1,28 @@
 ---
 name: python-debugpy
-description: >
-  Python 调试：pdb REPL + debugpy 远程调试 (DAP 协议)。
-  当用户需要调试 Python 代码、设置断点、单步执行、检查变量、或进行 post-mortem 分析时，必须使用此 Skill。
-  关键词：pdb、debugpy、断点、Python 调试、单步执行、DAP、post-mortem。
-  即使用户没有明确说"用 debugpy"，只要涉及 Python 代码的交互式调试，都应触发。
+description: 'Python 调试：pdb REPL + debugpy 远程调试 (DAP 协议)。
+
+  当用户需要调试 Python 代码、设置断点、单步执行、检查变量、或进行 post-mortem 分析时激活。'
 version: 1.0.0
 author: Hermes Agent
 license: MIT
-platforms: [linux, macos]
+platforms:
+- linux
+- macos
 metadata:
   hermes:
-    tags: [debugging, python, pdb, debugpy, breakpoints, dap, post-mortem]
-    related_skills: [systematic-debugging, node-inspect-debugger, debugging-hermes-tui-commands]
+    tags:
+    - debugging
+    - python
+    - pdb
+    - debugpy
+    - breakpoints
+    - dap
+    - post-mortem
+    related_skills:
+    - systematic-debugging
+    - node-inspect-debugger
+    - debugging-hermes-tui-commands
 category: coding
 ---
 

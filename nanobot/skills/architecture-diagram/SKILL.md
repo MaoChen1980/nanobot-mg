@@ -1,19 +1,29 @@
 ---
 name: architecture-diagram
-description: >
-  深色主题 SVG 架构图/云架构图/基础设施图，输出独立 HTML。
-  当用户要求画软件架构图、云基础设施拓扑、系统部署图或技术架构展示时，必须使用此 Skill。
-  关键词：架构图、SVG、HTML、云架构、基础设施、拓扑图、系统设计图、深色主题。
-  即使用户没有明确说"architecture diagram"，只要涉及技术架构的可视化表达，都应触发。
+description: '深色主题 SVG 架构图/云架构图/基础设施图，输出独立 HTML。
+
+  当用户要求画软件架构图、云基础设施拓扑、系统部署图或技术架构展示时激活。'
 version: 1.0.0
 author: Cocoon AI (hello@cocoon-ai.com), ported by Hermes Agent
 license: MIT
 dependencies: []
-platforms: [linux, macos, windows]
+platforms:
+- linux
+- macos
+- windows
 metadata:
   hermes:
-    tags: [architecture, diagrams, SVG, HTML, visualization, infrastructure, cloud]
-    related_skills: [concept-diagrams, excalidraw]
+    tags:
+    - architecture
+    - diagrams
+    - SVG
+    - HTML
+    - visualization
+    - infrastructure
+    - cloud
+    related_skills:
+    - concept-diagrams
+    - excalidraw
 category: design
 ---
 

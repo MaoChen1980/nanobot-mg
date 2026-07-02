@@ -1,10 +1,8 @@
 ---
 name: my
-description: >
-  检查 agent 自身状态：能力、模型、上下文窗口、迭代限制、运行时配置。
-  当用户问"你是谁"、"你有什么能力"、"你的配置"时，或行为异常需要自检时，必须使用此 Skill。
-  关键词：你是谁、能力、配置、自检、状态检查、model、context window、iteration limit、运行时。
-  即使用户没有明确说"自检"，只要涉及 agent 自身状态和能力的问题，都应触发。
+description: '检查 agent 自身状态：能力、模型、上下文窗口、迭代限制、运行时配置。
+
+  当用户问"你是谁"、"你有什么能力"、"你的配置"时，或行为异常需要自检时激活。'
 version: 0.1.0
 category: domain-specific
 ---

@@ -1,18 +1,27 @@
 ---
 name: systematic-debugging
-description: >
-  四阶段根因调试法：先理解再修复，替代随机试错。
-  当用户报告 Bug、运行结果异常、测试失败、或说"排查问题"、"root cause"时，必须使用此 Skill。
-  关键词：根因、root cause、调试方法、问题定位、bug 分析、investigation、troubleshooting。
-  即使用户没有明确说"系统化调试"，只要涉及需要深入调查的问题，都应触发。
+description: '四阶段根因调试法：先理解再修复，替代随机试错。
+
+  当用户报告 Bug、运行结果异常、测试失败、或说"排查问题"、"root cause"时激活。'
 version: 1.1.0
 author: Hermes Agent (adapted from obra/superpowers)
 license: MIT
-platforms: [linux, macos, windows]
+platforms:
+- linux
+- macos
+- windows
 metadata:
   hermes:
-    tags: [debugging, troubleshooting, problem-solving, root-cause, investigation]
-    related_skills: [test-driven-development, plan, subagent-driven-development]
+    tags:
+    - debugging
+    - troubleshooting
+    - problem-solving
+    - root-cause
+    - investigation
+    related_skills:
+    - test-driven-development
+    - plan
+    - subagent-driven-development
 category: code-analysis
 ---
 

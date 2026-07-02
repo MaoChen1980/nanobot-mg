@@ -1,10 +1,8 @@
 ---
 name: delegate
-description: >
-  任务委派：将编码、调研、验证等工作拆分子任务并行执行。
-  当任务可以拆分为父级推理 + 子 Agent 专注执行、需要并行处理多路工作、或复杂任务需要分工时，必须使用此 Skill。
-  关键词：委派、子任务、并行、sub-agent、spawn、分工、delegate、并行执行。
-  即使用户没有明确说"delegate"，只要任务复杂且可拆分为并行子任务，都应触发。
+description: '任务委派：将编码、调研、验证等工作拆分子任务并行执行。
+
+  当任务可以拆分为父级推理 + 子 Agent 专注执行、需要并行处理多路工作、或复杂任务需要分工时激活。'
 metadata:
   short-description: Delegate focused work to sub-agents
 category: project-management

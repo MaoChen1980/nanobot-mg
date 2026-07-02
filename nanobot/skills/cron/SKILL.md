@@ -1,10 +1,8 @@
 ---
 name: cron
-description: >
-  管理定时任务和提醒。
-  当用户要求设置提醒、定时任务、周期通知、一次性通知、或说"每隔 X 分钟/小时/天"时，必须使用此 Skill。
-  关键词：提醒、定时、每天、每隔、cron、schedule、remind、通知、延期。
-  即使用户没有明确说"设置 cron"，只要涉及未来某个时间执行操作，都应触发。
+description: '管理定时任务和提醒。
+
+  当用户要求设置提醒、定时任务、周期通知、一次性通知、或说"每隔 X 分钟/小时/天"时激活。'
 version: 0.1.0
 category: project-management
 ---

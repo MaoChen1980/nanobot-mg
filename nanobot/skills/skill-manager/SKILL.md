@@ -1,15 +1,10 @@
 ---
 name: skill-manager
-description: >
-  管理技能库的增删改查，是技能自我进化的核心工具。
-  当以下情况发生时，必须使用此 Skill：
-  - 刚执行完一个 skill，发现步骤有误或 Verification 不通过
-  - 完成了一个复杂任务，发现了可复用的工作流或模式
-  - 用户说"把这个做成 skill"、"更新这个 skill"、"删掉这个 skill"
-  - MEMORY.md 中有 pending_skills 未处理
-  - 发现某个 skill 的描述或步骤已过时
-  关键词：创建 skill、更新 skill、修复 skill、删除 skill、skill 不对、skill 过时、模式复用、提炼 skill、pending_skills、自我进化。
-  即使用户没有明确要求"管理 skill"，在执行完任何 skill 后发现可改进之处时，都应主动触发。
+description: '管理技能库的增删改查，是技能自我进化的核心工具。
+
+  当以下情况发生时激活：刚执行完一个 skill 发现步骤有误、完成复杂任务后发现可复用模式、
+  用户要求创建/更新/删除 skill、MEMORY.md 中有 pending_skills 未处理、
+  或发现 skill 描述或步骤过时。'
 version: 0.1.0
 category: agent
 ---

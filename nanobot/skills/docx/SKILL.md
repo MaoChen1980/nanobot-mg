@@ -1,10 +1,8 @@
 ---
 name: docx
-description: >
-  Word 文档创建、编辑、分析：修订、批注、格式保留、文本提取。
-  当用户要求创建/修改 .docx 文件、跟踪修订、添加评论、或提取文档内容时，必须使用此 Skill。
-  关键词：Word、docx、文档编辑、修订、批注、文本提取、格式保留。
-  即使用户没有明确说"docx"，只要涉及创建或编辑 Word 文档，都应触发。
+description: 'Word 文档创建、编辑、分析：修订、批注、格式保留、文本提取。
+
+  当用户要求创建/修改 .docx 文件、跟踪修订、添加评论、或提取文档内容时激活。'
 license: Proprietary. LICENSE.txt has complete terms
 official: true
 category: domain-specific

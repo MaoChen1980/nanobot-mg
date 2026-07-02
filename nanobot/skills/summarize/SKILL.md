@@ -1,10 +1,8 @@
 ---
 name: summarize
-description: >
-  总结 URL、网页、本地文件、YouTube 视频的内容，提取关键点。
-  当用户要求总结一个链接、网页、文件，或说"这个链接是什么"、"TLDR"时，必须使用此 Skill。
-  关键词：总结、摘要、概括、TLDR、summarize、extract key points。
-  即使用户没有明确说"给我总结"，只要提供了外部内容源并要求提取信息，都应触发。
+description: '总结 URL、网页、本地文件、YouTube 视频的内容，提取关键点。
+
+  当用户要求总结一个链接、网页、文件，或说"这个链接是什么"、"TLDR"时激活。'
 version: 0.1.0
 category: domain-specific
 ---

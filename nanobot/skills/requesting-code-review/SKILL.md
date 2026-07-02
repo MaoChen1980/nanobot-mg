@@ -1,13 +1,13 @@
 ---
 name: requesting-code-review
-description: >
-  提交前代码审查：安全扫描、质量门禁、自动修复。
-  当用户说"commit"、"push"、"ship"、"done"、"verify"、"review before merge"、
-  或完成 2 个以上文件修改后准备提交时，必须使用此 Skill。
-  关键词：commit 前审查、pre-commit、安全扫描、质量检查、自动修复、提交验证。
-  即使用户没有明确说"代码审查"，只要涉及准备提交前的安全检查和质量把关，都应触发。
+description: '提交前代码审查：安全扫描、质量门禁、自动修复。
+
+  当用户说"commit"、"push"、"ship"、"done"、"verify"、"review before merge"、 或完成 2 个以上文件修改后准备提交时激活。'
 version: 2.0.0
-platforms: [linux, macos, windows]
+platforms:
+- linux
+- macos
+- windows
 category: code-review
 ---
 

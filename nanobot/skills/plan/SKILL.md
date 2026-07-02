@@ -1,12 +1,13 @@
 ---
 name: plan
-description: >
-  规划模式：编写可执行的 Markdown 计划到 tasks/ 目录，不执行代码。
-  当用户说"先出方案"、"写个计划"、"plan it"、"规划一下"、或要求制定实施步骤时，必须使用此 Skill。
-  关键词：计划、规划、plan、方案、实施步骤、tasks、先规划。
-  即使用户没有明确说"plan mode"，只要用户要求先出方案再执行，都应触发。
+description: '规划模式：编写可执行的 Markdown 计划到 tasks/ 目录，不执行代码。
+
+  当用户说"先出方案"、"写个计划"、"plan it"、"规划一下"、或要求制定实施步骤时激活。'
 version: 2.0.0
-platforms: [linux, macos, windows]
+platforms:
+- linux
+- macos
+- windows
 category: project-management
 ---
 

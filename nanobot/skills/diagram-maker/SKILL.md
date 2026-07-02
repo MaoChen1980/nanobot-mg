@@ -1,11 +1,11 @@
 ---
 name: diagram-maker
-description: >
-  创建图表/图示：SVG/HTML 或 Excalidraw，支持概念图、架构图、流程图、白板。
-  当用户要求画图、画架构图、画流程图、画概念图、或用白板方式草图时，必须使用此 Skill。
-  关键词：图表、流程图、架构图、SVG、Excalidraw、概念图、系统图、拓扑图。
-  即使用户没有明确说"diagram maker"，只要涉及用图形方式表达概念或结构，都应触发。
-metadata: { "openclaw": { "emoji": "🧭" } }
+description: '创建图表/图示：SVG/HTML 或 Excalidraw，支持概念图、架构图、流程图、白板。
+
+  当用户要求画图、画架构图、画流程图、画概念图、或用白板方式草图时激活。'
+metadata:
+  openclaw:
+    emoji: 🧭
 category: design
 ---
 

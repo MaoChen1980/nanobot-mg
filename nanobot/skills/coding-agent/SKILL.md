@@ -1,39 +1,32 @@
 ---
 name: coding-agent
-description: >
-  后台编码代理：将编码工作委派给 Codex/Claude Code/OpenCode/Pi 后台执行。
-  当需要大量编码、复杂实现、或长时间运行的后台编码任务，而非简单编辑或只读查询时，必须使用此 Skill。
-  关键词：编码代理、后台编码、Codex、Claude Code、OpenCode、Pi、background worker。
-  即使用户没有明确说"用代理"，只要涉及大规模后台编码任务需要委派执行，都应触发。
+description: '后台编码代理：将编码工作委派给 Codex/Claude Code/OpenCode/Pi 后台执行。
+
+  当需要大量编码、复杂实现、或长时间运行的后台编码任务，而非简单编辑或只读查询时激活。'
 metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "🧩",
-        "requires":
-          {
-            "anyBins": ["claude", "codex", "opencode", "pi"],
-            "config": ["skills.entries.coding-agent.enabled"],
-          },
-        "install":
-          [
-            {
-              "id": "node-claude",
-              "kind": "node",
-              "package": "@anthropic-ai/claude-code",
-              "bins": ["claude"],
-              "label": "Install Claude Code CLI (npm)",
-            },
-            {
-              "id": "node-codex",
-              "kind": "node",
-              "package": "@openai/codex",
-              "bins": ["codex"],
-              "label": "Install Codex CLI (npm)",
-            },
-          ],
-      },
-  }
+  openclaw:
+    emoji: 🧩
+    requires:
+      anyBins:
+      - claude
+      - codex
+      - opencode
+      - pi
+      config:
+      - skills.entries.coding-agent.enabled
+    install:
+    - id: node-claude
+      kind: node
+      package: '@anthropic-ai/claude-code'
+      bins:
+      - claude
+      label: Install Claude Code CLI (npm)
+    - id: node-codex
+      kind: node
+      package: '@openai/codex'
+      bins:
+      - codex
+      label: Install Codex CLI (npm)
 category: coding
 ---
 

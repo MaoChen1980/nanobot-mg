@@ -38,11 +38,16 @@
 
 ## 决策指引
 
+**先做粒度门控** — candidate 是场景级别还是操作级别？
+- 场景级别（覆盖完整用例，可能包含多个子操作）→ 走下方决策
+- 操作级别（只有一个步骤，如"添加日志"、"启动模拟器"）→ **不要新建 skill**。用 memory_search 查找它所属的场景 skill，合并到该 skill 的 Steps 中。找不到所属场景 → 跳过，下次 consolidate 时处理。
+
 | 信号 | 动作 |
 |------|------|
-| 新场景，memory_search 无相关结果 | 新建 |
+| 新场景，memory_search 无相关结果 | 新建（name 要用场景级别，不要用操作级别） |
+| candidate 是已有 skill 的子功能（范围窄于已有 skill） | 不新建，合并到已有 skill 的 Steps 中新增 `### 子功能名` 节，更新 description 覆盖新增触发场景 |
 | 功能覆盖但新 candidate 更准确完整 | 替换 |
-| 功能互补 | 合并（合并后的 name/description 要覆盖各 skill 原有触发场景） |
+| 功能互补 | 合并（合并后 name/description 要覆盖各 skill 原有触发场景） |
 | 已有 skill 已完整覆盖，新 candidate 无增量 | 跳过 |
 | candidate 描述太模糊，无法形成可靠 skill | 跳过（留在 pending 下次再处理） |
 
@@ -54,10 +59,8 @@ SKILL.md 使用标准格式，参考已有 skill 的结构：
 ---
 name: kebab-case-name
 description: >
-  [功能概述]。
-  当用户[场景1]、[场景2]时，必须使用此 Skill。
-  关键词：[关键词]。
-  即使用户没有明确说'[术语]'，只要涉及[概念]，都应触发。
+  [场景入口 — 说明范围，不要重复 name]。
+  当用户[场景1]、[场景2]时激活。
 ---
 
 ## When to Use

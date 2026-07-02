@@ -1,10 +1,8 @@
 ---
 name: canvas-design
-description: >
-  视觉艺术设计：创建 .png / .pdf 格式的海报、艺术画、静态视觉作品。
-  当用户要求设计海报、艺术画、视觉作品、或"画一幅图"、"帮我设计"时，必须使用此 Skill。
-  关键词：设计、海报、艺术画、视觉设计、canvas、png、pdf、美学设计。
-  即使用户没有明确说"canvas"，只要涉及从零创建视觉艺术输出，都应触发。
+description: '视觉艺术设计：创建 .png / .pdf 格式的海报、艺术画、静态视觉作品。
+
+  当用户要求设计海报、艺术画、视觉作品、或"画一幅图"、"帮我设计"时激活。'
 license: Complete terms in LICENSE.txt
 official: true
 category: design
