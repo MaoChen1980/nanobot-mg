@@ -43,38 +43,46 @@ class _FakeContext:
 # ---------------------------------------------------------------------------
 
 class TestSelfLogHookDetectDiscomfort:
-    """Tests for discomfort signal detection in tool results."""
+    """Tests for discomfort signal detection in tool results.
+
+    Updated semantics: discomfort requires an actual failure status, not just
+    a substring match. This avoids false positives from successful messages
+    that happen to mention error / permission / timeout keywords.
+    """
 
     def _detect(self, result: dict) -> str | None:
         hook = SelfLogHook()
         return hook._detect_discomfort(result)
 
     def test_error_signal(self):
-        assert self._detect({"error": "Connection timeout"}) == "error"
+        assert self._detect({"status": "fail", "error": "Connection timeout"}) == "error"
 
     def test_failed_signal(self):
         # "error" pattern matches first in DISCOMFORT_PATTERNS order
-        assert self._detect({"error": "Request failed"}) == "error"
+        assert self._detect({"status": "fail", "error": "Request failed"}) == "error"
 
     def test_not_found_signal(self):
-        assert self._detect({"result": "not found"}) == "not found"
+        assert self._detect({"status": "fail", "result": "not found"}) == "not found"
 
     def test_permission_denied_signal(self):
-        assert self._detect({"result": "permission denied"}) == "permission denied"
+        assert self._detect({"status": "fail", "result": "permission denied"}) == "permission denied"
 
     def test_timeout_signal(self):
-        assert self._detect({"result": "timeout"}) == "timeout"
+        assert self._detect({"status": "fail", "result": "timeout"}) == "timeout"
 
     def test_no_signal(self):
-        assert self._detect({"result": "file updated successfully"}) is None
-        assert self._detect({"result": "ok"}) is None
+        # Successful results are not discomfort even with error-like keywords
+        assert self._detect({"status": "ok", "result": "file updated successfully"}) is None
+        assert self._detect({"status": "ok", "result": "ok"}) is None
+        assert self._detect({"status": "ok", "result": "no errors found"}) is None
 
     def test_error_result_true(self):
         hook = SelfLogHook()
-        assert hook._is_error_result({"error": "something failed"})
-        assert hook._is_error_result({"error": "ERROR: connection refused"})
-        assert not hook._is_error_result({"result": "ok"})
-        assert not hook._is_error_result({"result": "file not found"})  # no "error" in str(result)
+        assert hook._is_error_result({"status": "fail", "error": "something failed"})
+        assert hook._is_error_result({"status": "error", "error": "connection refused"})
+        assert not hook._is_error_result({"status": "ok", "result": "ok"})
+        # No status, no error field → not an error
+        assert not hook._is_error_result({"result": "file not found"})
 
     def test_empty_result_true(self):
         # Pass raw string/None to _is_empty_result (as the hook receives from context)
@@ -85,8 +93,8 @@ class TestSelfLogHookDetectDiscomfort:
         assert hook._is_empty_result("{}")
         assert hook._is_empty_result("null")
         assert not hook._is_empty_result("something")
-        # str(dict) produces "{'key': ''}" — NOT a plain empty string
-        assert not hook._is_empty_result({"result": ""})
+        # Dict with empty result field counts as empty
+        assert hook._is_empty_result({"result": ""})
 
 
 class TestSelfLogHookCapture:
@@ -106,24 +114,33 @@ class TestSelfLogHookCapture:
         return json.loads(lines[-1])
 
     def test_captures_error_count(self):
-        entry = self._capture([{"error": "failed"}, {"result": "ok"}])
+        entry = self._capture([{"status": "fail", "error": "failed"}, {"status": "ok", "result": "ok"}])
         assert entry["error_count"] == 1
 
     def test_captures_discomfort_signals(self):
-        # "error" matches first for both entries (DISCOMFORT_PATTERNS order)
-        entry = self._capture([{"error": "failed"}, {"error": "timeout"}])
-        assert any(d["pattern"] == "error" for d in entry["discomfort_signals"])
-        # Both results match "error" pattern (DISCOMFORT_PATTERNS order)
+        # Only failures count now
+        entry = self._capture([
+            {"status": "fail", "error": "failed"},
+            {"status": "fail", "result": "timeout"},
+        ])
         assert entry["discomfort_signals"] == [
             {"pattern": "error", "tool": ""},
-            {"pattern": "error", "tool": ""},
+            {"pattern": "timeout", "tool": ""},
         ]
 
+    def test_no_discomfort_for_successful_results(self):
+        # Successful messages mentioning error keywords do NOT count
+        entry = self._capture([
+            {"status": "ok", "result": "0 errors found"},
+            {"status": "ok", "result": "completed within timeout"},
+        ])
+        assert entry["discomfort_signals"] == []
+        assert entry["error_count"] == 0
+
     def test_captures_empty_result_count(self):
-        # Pass raw empty string/None (how the hook receives tool results from context)
+        # {"result": ""} → empty (handled by dict branch)
         entry = self._capture([{"result": ""}, {"result": "ok"}])
-        # {"result": ""} → str(dict) = "{'result': ''}" → NOT empty, so count = 0
-        assert entry["empty_result_count"] == 0
+        assert entry["empty_result_count"] == 1
 
     def test_captures_tool_count(self):
         # Use a simple dataclass-like object that has a .name attribute (matching tool call API)

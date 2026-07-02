@@ -91,7 +91,7 @@ class TestCapture:
         tc.name = "read_file"
         ctx = FakeContext(
             tool_calls=[tc],
-            tool_results=["Error: file not found"],
+            tool_results=[{"status": "fail", "result": "Error: file not found", "error": "missing"}],
             tool_events=[],
             usage={},
             iteration=1,
@@ -105,7 +105,10 @@ class TestCapture:
 class TestPredicates:
     def test_is_error_result(self):
         hook = SelfLogHook()
-        assert hook._is_error_result("Error: connection failed")
+        # Structured fail status counts as error
+        assert hook._is_error_result({"status": "fail", "error": "boom"})
+        # Non-string passed (legacy code path) — must NOT match on substring
+        assert not hook._is_error_result("Error: connection failed")
         assert not hook._is_error_result("success")
 
     def test_is_empty_result(self):
@@ -115,13 +118,20 @@ class TestPredicates:
         assert hook._is_empty_result("None")
         assert hook._is_empty_result("[]")
         assert not hook._is_empty_result("data")
+        # Structured: empty result field counts as empty
+        assert hook._is_empty_result({"status": "ok", "result": ""})
 
     def test_detect_discomfort(self):
         hook = SelfLogHook()
-        assert hook._detect_discomfort("not found")
-        assert hook._detect_discomfort("permission denied")
-        assert hook._detect_discomfort("timeout")
-        assert hook._detect_discomfort("") is None
+        # Only actual failures count now
+        assert hook._detect_discomfort({"status": "fail", "result": "not found"})
+        assert hook._detect_discomfort({"status": "fail", "result": "permission denied"})
+        assert hook._detect_discomfort({"status": "fail", "result": "timeout"})
+        # Successful messages mentioning error keywords are NOT discomfort
+        assert hook._detect_discomfort({"status": "ok", "result": "0 errors found"}) is None
+        assert hook._detect_discomfort({"status": "ok", "result": "completed within timeout"}) is None
+        # Plain strings (legacy path) no longer auto-detect
+        assert hook._detect_discomfort("not found") is None
 
 
 @pytest.mark.asyncio

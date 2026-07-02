@@ -139,31 +139,60 @@ class SelfLogHook(AgentHook):
         self._append_log(entry)
 
     def _is_error_result(self, result: object) -> bool:
-        """Check if a tool result looks like an error (substring, high-recall for counting)."""
+        """Check if a tool result is an actual error (not a successful message mentioning error).
+
+        Only returns True when the structured ``status`` field is "fail" or "error".
+        Substring matching on result text is unreliable — it matches "no errors found"
+        and other benign messages.
+        """
         if result is None:
             return False
-        s = str(result).lower()
-        return any(p in s for p in ("error", "exception", "failed", "timeout", "denied"))
+        if isinstance(result, dict):
+            status = result.get("status")
+            if status in ("fail", "error"):
+                return True
+            error_field = result.get("error")
+            if error_field and error_field is not None and str(error_field).strip():
+                return True
+            return False
+        return False
 
     def _is_empty_result(self, result: object) -> bool:
         """Check if a tool result is empty or null."""
         if result is None:
             return True
         if isinstance(result, dict):
-            return not any(v is not None for v in result.values())
+            if not any(v is not None for v in result.values()):
+                return True
+            res = result.get("result")
+            if res is not None:
+                s = str(res).strip()
+                return s in ("", "None", "[]", "{}", "null")
+            return False
         s = str(result).strip()
         return s in ("", "None", "[]", "{}", "null")
 
     def _detect_discomfort(self, result: object) -> str | None:
-        """Detect discomfort patterns in tool results.
+        """Detect a discomfort signal — only on actual failures.
 
-        Returns the pattern name (str) if found, or None if no discomfort signal.
-        The return type is deliberately str | None (not bool) so callers can
-        distinguish "matched pattern X" from "no match" for debugging.
+        Renamed semantics: only count when ``status`` indicates a real failure.
+        Successful messages that happen to mention "error" / "permission" / etc.
+        (e.g. grep output of "no error found") are NOT discomfort.
+
+        Plain string inputs without status info are skipped (cannot confirm
+        failure), to avoid double-counting with substring patterns.
         """
         if result is None:
             return None
-        s = str(result) if isinstance(result, str) else str(result)
+        if isinstance(result, dict):
+            status = result.get("status")
+            if status not in ("fail", "error"):
+                return None
+        else:
+            # Non-dict inputs (e.g. legacy plain strings) lack failure status.
+            # Treat as non-failure to keep semantics aligned with structured path.
+            return None
+        s = str(result)
         for name, pattern in self.DISCOMFORT_PATTERNS:
             if pattern.search(s):
                 return name
