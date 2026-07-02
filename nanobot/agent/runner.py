@@ -1469,9 +1469,14 @@ def _replace_message_tool_result_with_feedback(messages: list[dict]) -> None:
 
     result = (
         "```message_quality_check\n"
-        "Content needs revision before delivery. "
-        "Please revise and send again via the message tool.\n\n"
-        f"{feedback}\n"
+        "The message you sent was QUEUED, not delivered. The framework's end-of-loop "
+        "quality assessment requested revision.\n\n"
+        "What happens next:\n"
+        "- The queued message is DISCARDED (not delivered to the user).\n"
+        "- If you want the user to see a revised version, call message() again with "
+        "the updated content — that new call enters the same queue/assess cycle.\n"
+        "- If you do NOT call message() again, the user receives nothing from this turn.\n\n"
+        f"Assessment feedback:\n{feedback}\n"
         "```"
     )
 
