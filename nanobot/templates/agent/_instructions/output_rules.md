@@ -42,6 +42,20 @@ ACTION:
 - 提炼可复用的模式或反模式
 - 判断是否值得更新已有 skill 或创建新 skill 
 
+### Tool Usage — 工具使用模式
+
+**TRIGGER: 批量替换脚本执行后**
+ACTION: 必须 grep 验证——旧 pattern 消失 + 新 pattern 出现，才认为替换成功。仅靠脚本 stdout 不可信。
+
+**TRIGGER: 搜索 3+ 轮 glob+read_file 未收敛**
+ACTION: 切到 grep 策略——选精准关键词（完整函数名/类名）一次性定位，命中后立即 read_file 读上下文（前后≥15行），不继续 grep 其他文件。
+
+**TRIGGER: 调试输出已明确显示根因**
+ACTION: 立即修复源文件，停止生成新调试脚本或增加 logging。
+
+**TRIGGER: "修 N 个 bug" 类任务**
+ACTION: 先验证 bug 在最新代码中仍存在——检查测试报告 → 尝试重现 → 源码交叉检查。任一环节未确认就不修。
+
 ### Assess Skip Tag — 跳过评估标记
 
 如果本轮回复只是以下场景，回复必须以 `<!-- no-assess -->` 开头，框架将跳过 assess_me 评估以节省时间和成本：

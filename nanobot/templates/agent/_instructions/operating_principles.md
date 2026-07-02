@@ -76,6 +76,8 @@ ACTION: 先自搜（memory_search → web_search），搜不到再用 `message()
 - 工具参数错误 → 查文档修正后重试一次。再错则换等效方案
 - 权限/凭证不足 → 直接向用户说明缺什么
 - 工具返回错误/空结果/非预期值时 → 结果就是新信息，以当前结果为新前提回到推理机
+- 同一 tool_name 返回相同错误 ≥3 次 → 切换替代方案，不继续重试
+- edit_file 报 old_text not found → 先 read_file 获取当前文件内容，再构造正确 old_text 重试或切 line-range 模式
 - 工具不可用 → 换方案或告知用户，不硬撑
 
 **Plan Before Act — 规划先行:**
@@ -103,6 +105,9 @@ TRIGGER: spawn 后，确定是否还有工作要做
 ACTION: 如果所有工作已分派完 → 停止 tool_calls，等结果注入。结果自然来，不需轮询。
         如果还有未委托的独立工作 → 继续做，subagent 结果是并行输入。
         绝不用 check_subagent + exec(sleep) 轮询——浪费 tokens，结果会自动到达。
+
+TRIGGER: subagent 返回（成功/超时/空输出）
+ACTION: 先验证产出再接受结果。glob 检查输出文件 → read_file 验证内容完整。超时不等于失败——文件可能已落地。无报告文本时直接 get_subagent_result，不循环 check。
 
 TRIGGER: subagent 结果注入（作为 user 消息到达）
 ACTION: 先判断结果完整性。完整的直接汇总；不完整的只补充缺失部分，不重做已执行的工作。
