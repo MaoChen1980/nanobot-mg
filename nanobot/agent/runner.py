@@ -13,8 +13,6 @@ from typing import Any, Callable
 from loguru import logger
 
 from nanobot.agent.assess_me import (
-    _ASSESSMENT_PREFIX,
-    _ASSESSMENT_SUFFIX,
     build_assessment_message,
     is_assessment_message,
 )
@@ -1144,22 +1142,13 @@ class AgentRunner:
                         "needs revision" if assess_result.needs_revision else "injected context",
                         iteration, spec.session_key or "default",
                     )
-                    # Pop the last text-only assistant message — the LLM produced
-                    # this response without seeing the assess injection, so it must
-                    # not see its own unsent answer in the next iteration or it
-                    # will conclude it already delivered the response.
-                    for i in range(len(messages) - 1, -1, -1):
-                        if messages[i].get("role") == "assistant" and not messages[i].get("tool_calls"):
-                            messages.pop(i)
-                            break
                     had_injections = True
-                    # If there are deferred message tool sends, replace all
-                    # placeholder tool results with assess feedback so the LLM
-                    # sees what was wrong and can revise.
-                    if _has_deferred_message(spec):
-                        _replace_message_tool_result_with_feedback(messages)
+                    # Clear the deferred message queue — the assess_me callback
+                    # already injected feedback into messages. The LLM decides
+                    # what to correct: revise the output, adjust task state, or
+                    # continue working. No context surgery needed.
                     _clear_msg_deferred(spec)
-                    _end_assess_ran = False  # re-evaluate corrected content next iteration
+                    _end_assess_ran = False
                     continue
 
             # Before breaking: check for pending subagents. If any are still
@@ -1435,60 +1424,6 @@ def _clear_msg_deferred(spec) -> None:
     mt = spec.tools.get("message")
     if mt is not None and hasattr(mt, "clear_deferred"):
         mt.clear_deferred()
-
-
-def _has_deferred_message(spec) -> bool:
-    """Check if there are pending deferred message tool sends."""
-    mt = spec.tools.get("message")
-    if mt is not None and hasattr(mt, "has_deferred"):
-        return mt.has_deferred
-    return False
-
-
-def _replace_message_tool_result_with_feedback(messages: list[dict]) -> None:
-    """Replace the last message tool's placeholder result with assess feedback.
-
-    Extracts the first assess_me injection's content (between [assess]...[/assess])
-    and sets it as the message tool's result, so the LLM sees targeted feedback
-    and can revise the message content.
-    """
-    feedback = None
-    for msg in messages:
-        if is_assessment_message(msg):
-            content = msg.get("content", "")
-            # is_assessment_message already confirmed startswith(_ASSESSMENT_PREFIX)
-            end = content.find("[/assess]")
-            if end != -1:
-                text = content[len(_ASSESSMENT_PREFIX):end].strip()
-                if text:
-                    feedback = text
-                    break
-
-    if not feedback:
-        feedback = "Your message needs revision. Please revise and resend via the message tool."
-
-    result = (
-        "```message_quality_check\n"
-        "The message you sent was QUEUED, not delivered. The framework's end-of-loop "
-        "quality assessment requested revision.\n\n"
-        "What happens next:\n"
-        "- The queued message is DISCARDED (not delivered to the user).\n"
-        "- If you want the user to see a revised version, call message() again with "
-        "the updated content — that new call enters the same queue/assess cycle.\n"
-        "- If you do NOT call message() again, the user receives nothing from this turn.\n\n"
-        f"Assessment feedback:\n{feedback}\n"
-        "```"
-    )
-
-    replaced = 0
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].get("role") == "tool" and messages[i].get("name") == "message":
-            messages[i]["content"] = result
-            replaced += 1
-    if replaced:
-        logger.info("Replaced {} message tool result(s) with assess feedback", replaced)
-    else:
-        logger.warning("No message tool result found to replace with assess feedback")
 
 
 async def _flush_msg_deferred(spec, stop_reason: str) -> None:
