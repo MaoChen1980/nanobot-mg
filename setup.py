@@ -33,7 +33,7 @@ def _is_pep668(text):
 def _install(mirror):
     """pip install nanobot-mg 到当前 Python 环境。"""
     root = Path(__file__).resolve().parent
-    cmd = [sys.executable, "-m", "pip", "install", "-e", str(root)]
+    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "-e", str(root)]
     if mirror:
         cmd += ["-i", mirror]
     result = subprocess.run(cmd, capture_output=True, text=True)
