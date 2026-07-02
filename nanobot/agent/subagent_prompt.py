@@ -50,13 +50,7 @@ def build_subagent_prompt(
             parts.append(section)
 
     # 2. Skills
-    always_skills = ctx.skills.get_always_skills()
-    if always_skills:
-        always_content = ctx.skills.format_skills_for_context(always_skills)
-        if always_content:
-            parts.append(f"# Active Skills\n\n{always_content}")
-
-    skills_summary = ctx.skills.build_skills_summary(exclude=set(always_skills))
+    skills_summary = ctx.skills.build_skills_summary()
     if skills_summary:
         parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 

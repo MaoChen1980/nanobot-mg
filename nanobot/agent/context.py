@@ -364,20 +364,8 @@ class ContextBuilder:
                     sec = sec.replace(old_board, f"{self._workspace_path_str}/{team_board_rel}")
                 sections[i] = sec
 
-        # Always-skills — full content, always injected near generation point
-        always_skills_names = self.skills.get_always_skills()
-        if always_skills_names:
-            always_content = self.skills.format_skills_for_context(always_skills_names)
-            if always_content:
-                sections.append(
-                    "## Active Skills\n\n"
-                    f"{always_content}\n\n"
-                    "> **Always 调优**：根据当前的工作场景，如果某个 skill 值得常驻或不再需要常驻，"
-                    "直接用 edit_file 修改其 SKILL.md frontmatter 的 `always` 字段，下次会自动注入或移除。"
-                )
-
-        # Available skills summary — dynamically built, excludes always-skills
-        skills_summary = self.skills.build_skills_summary(exclude=set(always_skills_names))
+        # Available skills summary — includes all skills (always-skills no longer auto-injected)
+        skills_summary = self.skills.build_skills_summary()
         if skills_summary:
             sections.append(
                 "### Available Skills\n\n"
