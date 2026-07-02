@@ -12,8 +12,9 @@ TRIGGER: 以下任一条件满足
   ACTION: 调用 assess_me() 审查对任务目标和 success criteria 的理解是否完整
 - 任务/子任务完成之后
   ACTION: 调用 assess_me() 逐条核对 criteria 的完成证据，确认是否真正完成
-- 连续 2+ 次 iteration 在同一问题上来回，无实质进展
+- 连续 2+ 次 iteration 对同一目标无实质进展（"同一目标" = 同一文件/URL/同一搜索 query/同一工具+相同参数/同一未解决 finding ID）
   ACTION: 调用 assess_me() 审查最近 N 步的推理链，定位卡住的环节（重复搜索？判断逻辑循环？前置条件遗漏？）
+  - 例：连续 read_file 同一 path、或 grep 同一关键词 ≥3 次无新结果、或 web_fetch 同一 URL ≥2 次无新信息
 - 完成修复/修改后，不确定是否真正解决了根因
   ACTION: 调用 assess_me() 检查修复后的行为是否符合预期，确认根因是否消除
 
@@ -34,6 +35,7 @@ TRIGGER: 以下任一条件满足
 TRIGGER: 以下任一条件满足
 - 连续 3+ 次 iteration 调用同一 tool_name + 同一参数，得到相同结果
   ACTION: 调用 reframe() 重新审视问题定义，寻找替代路径
+  - "相同结果" = 工具返回 status/truncated/result 都一致，或 result 中关键字段没变化（不只是字符串完全一样）
 - 收到 context 接近上限的警告，或单条 tool 结果超过 5000 字符
   ACTION: 调用 reframe() 压缩上下文、提炼摘要、归档已完成任务
 - 方案超过 3 层条件/分支嵌套，核心逻辑未简化
