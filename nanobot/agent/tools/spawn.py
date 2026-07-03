@@ -111,7 +111,11 @@ class SpawnTool(Tool):
         "1) STOP tool_calls in this response (results arrive async as user messages). "
         "2) While subagents run → continue your own independent work: discover, prepare, do other spawns. "
         "3) When subagent result arrives → integrate, then continue to the next step of your workflow. "
-        "   Spawn may happen multiple times across a workflow — each is just one phase."
+        "   Spawn may happen multiple times across a workflow — each is just one phase.\n\n"
+        "**Task self-check**: Subagent enters with zero shared context. "
+        "Before spawn, review your task: is every reference (paths, conventions, background) "
+        "explicitly included? If you had to read it in the current conversation, "
+        "the subagent won't see it unless you put it in task or context."
     )
 
     name = "spawn"

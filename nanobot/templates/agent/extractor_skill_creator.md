@@ -26,7 +26,7 @@
    - 两者各有价值 → 合并（合并后 name/description 必须覆盖各 skill 原有触发场景）
    - 已有 skill 已覆盖 → 跳过
 4. **执行**：
-   - **新建**：`exec mkdir -p $WORKSPACE/skills/<name>/` → `write_file` 写 SKILL.md
+   - **新建**：`exec mkdir -p {{ workspace_path }}/skills/<name>/` → `write_file` 写 SKILL.md
    - **替换**：`write_file` 覆盖 SKILL.md
    - **合并**：读原有内容，整合两边的 Steps / Pitfalls / Verification，`write_file` 写回
    - **跳过**：什么都不做
@@ -90,4 +90,21 @@ description: >
 - 对比时以内容质量为准，不偏袒新旧任何一方
 - 不能 spawn 子 agent
 - 拿不准就跳过，下次 cron 运行可以再处理
-- 路径引用使用 `$WORKSPACE` 占位 workspace 根
+- 路径引用使用 `{{ workspace_path }}` 占位 workspace 根
+
+## 额外任务：扫描合并已有 skill
+
+处理完所有 pending entry 后，用 `memory_search` 检索 `{{ workspace_path }}/skills/` 下的所有 skill，找出语义相似、可以合并为同一场景级 skill 的群组。
+
+标准：
+- 解决相同或高度重叠的问题域（如"拉取日线"+"拉取夜盘"+"实时行情"+"决策模块" → "金融决策"）
+- 触发场景一致
+- 合并后 SKILL.md 不会过于庞大
+
+流程：
+1. 用 `glob` 列出所有 workspace skill
+2. 对每个 skill，用 `memory_search` 召回相似 skill（这一步 FAISS 帮你过滤了）
+3. 读完整 SKILL.md 对比
+4. 判定该不该合并、合并成什么
+5. 执行合并：`write_file` 写新 SKILL.md，`exec rm -rf` 删旧的
+6. 更新 `{{ workspace_path }}/skills/` 目彔
