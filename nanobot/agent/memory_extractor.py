@@ -985,6 +985,7 @@ class MemoryExtractor:
         pending_text = "\n".join(e["content"] for e in self._pending_skill_entries)
 
         # Snapshot skills dir before, to detect changes after
+        skills_dir = self.store.workspace / "skills"
         dir_before: set[str] = set()
         if skills_dir.is_dir():
             for child in skills_dir.iterdir():
