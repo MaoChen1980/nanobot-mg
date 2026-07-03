@@ -930,19 +930,25 @@ class AgentRunner:
                     try:
                         results = await asyncio.to_thread(spec.keyword_search_callback, _kw_query)
                         if results:
+                            _MAX_MEMORY_CHARS = 8000
                             mem_parts = ["", "### 自动检索的相关记忆（根据关键字自动检索）", ""]
+                            remaining = len(results)
                             for r in results:
+                                remaining -= 1
                                 source = r.get("source", "unknown")
                                 heading = r.get("heading", "")
                                 text = r.get("text", "")
-                                text_snippet = text[:500] + "..." if len(text) > 500 else text
+                                text_snippet = text[:1000] + "..." if len(text) > 1000 else text
                                 mem_parts.append(f"> **{source}**")
                                 if heading:
                                     mem_parts.append(f"> *{heading}*")
                                 mem_parts.append(f"> {text_snippet}")
                                 mem_parts.append("")
+                                if sum(len(p) for p in mem_parts) >= _MAX_MEMORY_CHARS and remaining > 0:
+                                    mem_parts.append(f"> *...还有 {remaining} 条相关记忆未显示*")
+                                    break
                             _pending_memory = "\n".join(mem_parts)
-                            logger.info("Stored memory from keywords ({} results): {}", len(results), _kw_query)
+                            logger.info("Stored memory from keywords ({} results, {} chars): {}", len(results), len(_pending_memory), _kw_query)
                         else:
                             logger.debug("No memory results for keywords: {}", _kw_query)
                     except Exception as exc:
