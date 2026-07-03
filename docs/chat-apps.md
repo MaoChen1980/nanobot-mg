@@ -4,7 +4,6 @@ NanoBot 的聊天应用功能提供了在对话中使用的斜杠命令（slash 
 
 ## 命令路由机制
 
-代码位置：[router.py](file:///e:/claude/nanobot-mg/nanobot/command/router.py)
 
 命令路由由 `CommandRouter` 类实现。它采用纯字典驱动的四层分发机制：
 

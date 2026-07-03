@@ -1,7 +1,6 @@
 # Project Card: nanobot-mg
 
 Last scanned: 2026-06-28T00:22:42+0800
-Project root: `E:\claude\nanobot-mg`
 
 ## Overview
 
@@ -22,7 +21,7 @@ Project root: `E:\claude\nanobot-mg`
 
 ## Directory Structure
 
-E:\claude\nanobot-mg/
+nanobot-mg/
   docs/
     ideas/
       session-reset-after-task.md (1KB)

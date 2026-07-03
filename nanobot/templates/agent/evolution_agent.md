@@ -68,8 +68,8 @@
 
 | 类型 | 模板变量 | 当前 session 的实际值 | 用途 |
 |---|---|---|---|
-| 项目根（被分析的代码） | `{{ project_root }}` | `E:/claude/nanobot-mg` | 框架代码、模板、hooks |
-| 用户工作区（自我进化载体） | `{{ workspace_path }}` | `C:/Users/savyc/.nanobot/workspace` | 记忆、tasks、skills、self-进化 changelog |
+| 项目根（被分析的代码） | `{{ project_root }}` |  框架代码、模板、hooks |
+| 用户工作区（自我进化载体） | `{{ workspace_path }}` | 记忆、tasks、skills、self-进化 changelog |
 
 **绝对禁止**：
 - 凭空猜测或编造路径（`E:/Users/...`、`C:/some/random/path/...`）。路径不存在 = `glob` 验证。

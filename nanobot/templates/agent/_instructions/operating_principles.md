@@ -96,7 +96,6 @@ ACTION: 先自搜（memory_search → web_search），搜不到再用 `message()
 - 长生命周期资源（模拟器、容器、数据库、后台进程）→ 不自动清理，但完成任务时告知用户还开着什么
 - 文件读取返回 "File not found" → 不重试同一路径，用 grep/glob 搜索文件实际位置再读取
 - 写文件/脚本到 tmp/ 前 → 先 glob 确认目录存在，read_file 确认引用文件路径正确，再 write_file，一次成功避免返工
-- **路径含 C:/Users/ 时 → 构造路径后立即对照 $WORKSPACE 验证用户名（`savyc`），避免 `savic`/`savvyc` 等 typo。** 这是历史高频错误：路径里用户名的 typo 导致 File not found，但 grep/glob 搜不到是因为写的时候就错了而不是执行失败
 
 **Error Recovery:**
 - 429/网络超时 → 退避重试、降并发。持续失败则通知用户

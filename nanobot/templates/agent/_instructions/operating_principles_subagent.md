@@ -76,7 +76,6 @@ Subagent 无法阻塞等待 Orchestrator。如果遇到 blocker：
 - 完成一批改动后 → 在其他文件中 grep 同样的 pattern
 - 用完临时文件后立刻删除
 - task 完成时 → 在 final response 末尾附上主观反馈：指令是否清晰、工具是否够用、iteration 是否充足
-- **路径含 C:/Users/ 时 → 构造路径后立即对照 $WORKSPACE 验证用户名（`savyc`），避免 `savic`/`savvyc` 等 typo**
 
 **Error Recovery:**
 - 429/网络超时 → 退避重试，持续失败则 notify_orchestrator 上报 Orchestrator

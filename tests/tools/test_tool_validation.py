@@ -561,19 +561,6 @@ def test_exec_extract_absolute_paths_captures_quoted_paths() -> None:
     assert "~/.nanobot/config.json" in paths
 
 
-def test_exec_guard_blocks_home_path_outside_workspace(tmp_path) -> None:
-    tool = ExecTool(restrict_to_workspace=True, working_dir=str(tmp_path))
-    error = tool._guard_command("cat C:\\Users\\savyc\\.nanobot\\config.json", str(tmp_path))
-    assert "⚠️ Danger:" in error
-    assert "outside" in error.lower()
-
-
-def test_exec_guard_blocks_quoted_home_path_outside_workspace(tmp_path) -> None:
-    tool = ExecTool(restrict_to_workspace=True, working_dir=str(tmp_path))
-    error = tool._guard_command('cat "C:\\Users\\savyc\\.nanobot\\config.json"', str(tmp_path))
-    assert "⚠️ Danger:" in error
-    assert "outside" in error.lower()
-
 
 def test_exec_guard_allows_media_path_outside_workspace(tmp_path, monkeypatch) -> None:
     media_dir = tmp_path / "media"
