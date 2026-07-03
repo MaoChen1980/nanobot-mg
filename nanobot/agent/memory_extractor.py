@@ -179,8 +179,6 @@ class MemoryExtractor:
 
         if await self._materialize_tool_scripts():
             changed = True
-        if await self._materialize_skills():
-            changed = True
         if await self._consolidate_memory():
             changed = True
             current_state = self._snapshot_memory_dir(self.store.memory_dir)
@@ -194,8 +192,15 @@ class MemoryExtractor:
             self._generate_memory_index()
             self._add_backlinks()
             await self._rebuild_indexes()
+
+        # ── Step 4: materialize pending skills (create/update/merge via sub-agent) ──
+        if await self._materialize_skills():
+            await self._rebuild_indexes()
             if self.store.git.is_initialized():
-                self.store.git.auto_commit("memory: extract and cleanup")
+                self.store.git.auto_commit("memory: skill materialization")
+
+        if changed and self.store.git.is_initialized():
+            self.store.git.auto_commit("memory: extract and cleanup")
 
         # ── Done: move processed .pt files ──
         self._move_processed(processed)
@@ -1045,40 +1050,17 @@ class MemoryExtractor:
     # ------------------------------------------------------------------
 
     async def _materialize_skills(self) -> bool:
-        """Convert pending skill entries (in memory) to real skills via sub-agent.
+        """Convert pending skill entries to real skills via sub-agent.
 
-        Reads from ``self._pending_skill_entries`` — populated by both the LLM
-        analysis path (``_write_cleanup_and_rebuild``) and the tool/script path
-        (``_materialize_tool_scripts``). No disk file is involved.
-
-        Spawns a sub-agent with file tools to read existing skills and decide
-        create/update/merge/skip. Returns True if any changes were made.
+        Reads from ``self._pending_skill_entries`` (populated by
+        ``_write_cleanup_and_rebuild`` and ``_materialize_tool_scripts``),
+        then spawns a sub-agent with file tools to decide
+        create/update/merge/skip.
         """
         if not self._pending_skill_entries:
             return False
 
         pending_text = "\n".join(e["content"] for e in self._pending_skill_entries)
-
-        # Cheap gate: if all named skills already have a directory, skip the LLM call.
-        skills_dir = self.store.workspace / "skills"
-        existing_skill_dirs: set[str] = set()
-        if skills_dir.is_dir():
-            for child in skills_dir.iterdir():
-                if child.is_dir():
-                    existing_skill_dirs.add(child.name.lower())
-
-        pending_names = {
-            m.group(1).lower()
-            for entry in self._pending_skill_entries
-            if (m := re.search(r"^\*\*([^*]+)\*\*:", entry["content"]))
-        }
-        if pending_names and pending_names.issubset(existing_skill_dirs):
-            logger.info(
-                "MemoryExtractor: all {} pending skill(s) already exist, skipping sub-agent",
-                len(pending_names),
-            )
-            self._pending_skill_entries = []
-            return False
 
         # Snapshot skills dir before, to detect changes after
         dir_before: set[str] = set()
@@ -1143,8 +1125,8 @@ class MemoryExtractor:
             ],
             tools=tools,
             model=model,
-            max_iterations=50,
-            max_tool_result_chars=10000,
+            max_iterations=150,
+            max_tool_result_chars=30000,
         )
 
         runner = AgentRunner(provider)

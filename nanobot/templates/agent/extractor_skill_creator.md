@@ -89,6 +89,5 @@ description: >
 - 只创建可复用的模式，不要为一次性问题创建 skill
 - 对比时以内容质量为准，不偏袒新旧任何一方
 - 不能 spawn 子 agent
-- 最多 30 次迭代，保持高效
 - 拿不准就跳过，下次 cron 运行可以再处理
 - 路径引用使用 `$WORKSPACE` 占位 workspace 根
