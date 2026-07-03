@@ -819,6 +819,7 @@ class AgentLoop:
             subagent_running_callback=(
                 lambda sk=session.key: self.subagents.get_running_count_by_session(sk)
             ) if session else None,
+            keyword_search_callback=self.context.memory.vector_index.search,
         ))
         _runner_elapsed = time.time() - _t0
         if _runner_elapsed > 15:

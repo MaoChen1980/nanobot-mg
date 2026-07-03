@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from dataclasses import field
 from datetime import datetime, timezone
@@ -128,6 +129,9 @@ class AgentRunSpec:
     # Subagent lifecycle: callback returns active subagent count for the current session
     subagent_running_callback: Callable[[], int] | None = None
     subagent_wait_timeout: int = 600  # max seconds to wait for subagents before forcing break
+    # Keyword-based automatic memory search: called when LLM outputs <!-- kw: ... --> tag.
+    # Receives the keyword string, returns list of memory search result dicts.
+    keyword_search_callback: Callable[[str], list[dict]] | None = None
 
 
 @dataclass(slots=True)
@@ -496,6 +500,7 @@ class AgentRunner:
         _end_assess_ran = False
         _tool_loop_state = _ToolLoopState()
         _correction_handled = False  # once-per-run guard for user correction detection
+        _pending_memory: str | None = None  # memory text to inject into next iteration's instructions
 
         _current_messages_for_subagent.set(messages)
 
@@ -627,11 +632,33 @@ class AgentRunner:
                 else:
                     messages_for_model.insert(1, instr)
 
+            # Inject pending memory into instructions block
+            if _pending_memory and len(messages_for_model) > 1:
+                _instr_msg = messages_for_model[1]
+                if (_instr_msg.get("role") == "user"
+                        and isinstance(_instr_msg.get("content"), str)
+                        and _instr_msg["content"].startswith("## Instructions")):
+                    _instr_msg["content"] += "\n\n" + _pending_memory
+                    _pending_memory = None
+
             logger.info("RUN_DBG: request_model start (iter={}, msgs={})", iteration, len(messages_for_model))
             response, compress_event = await request_model(spec, messages_for_model, hook, context)
             _llm_request_count += 1
             logger.info("RUN_DBG: request_model done (iter={}, finish={}, tools={})",
                         iteration, response.finish_reason, len(response.tool_calls))
+
+            # --- Extract memory keywords from LLM response ---
+            _kw_query: str | None = None
+            if response.content and response.should_execute_tools:
+                _kw_match = re.search(r'<!--\s*kw:\s*(.+?)\s*-->', response.content, flags=re.DOTALL)
+                if _kw_match:
+                    _kw_query = _kw_match.group(1).strip()
+                    if not _kw_query:
+                        _kw_query = None
+                    else:
+                        logger.debug("Extracted memory keywords: {}", _kw_query)
+            # ---------------------------------------------------
+
             # If MessagePipe compressed due to overflow, sync the compressed
             # messages back so the next iteration doesn't re-grow from old history.
             # Note: compress_event reflects the post-hook messages_for_model state.
@@ -897,6 +924,30 @@ class AgentRunner:
                                 messages.pop(i)
                         messages.append(build_assessment_message(assess_text))
                         had_injections = True
+
+                # --- Store memory from keyword tag for next iteration ---
+                if _kw_query and spec.keyword_search_callback:
+                    try:
+                        results = await asyncio.to_thread(spec.keyword_search_callback, _kw_query)
+                        if results:
+                            mem_parts = ["", "### 自动检索的相关记忆（根据关键字自动检索）", ""]
+                            for r in results:
+                                source = r.get("source", "unknown")
+                                heading = r.get("heading", "")
+                                text = r.get("text", "")
+                                text_snippet = text[:500] + "..." if len(text) > 500 else text
+                                mem_parts.append(f"> **{source}**")
+                                if heading:
+                                    mem_parts.append(f"> *{heading}*")
+                                mem_parts.append(f"> {text_snippet}")
+                                mem_parts.append("")
+                            _pending_memory = "\n".join(mem_parts)
+                            logger.info("Stored memory from keywords ({} results): {}", len(results), _kw_query)
+                        else:
+                            logger.debug("No memory results for keywords: {}", _kw_query)
+                    except Exception as exc:
+                        logger.warning("Keyword memory search failed: {}", exc)
+                # ------------------------------------------------
 
                 continue
 

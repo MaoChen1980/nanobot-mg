@@ -369,6 +369,7 @@ class SubagentManager:
                         compress_trigger_tokens=self._compress_trigger_tokens,
                         assess_me_callback=_assess_callback,
                         assess_interval=10,
+                        keyword_search_callback=self._memory_store.vector_index.search if self._memory_store else None,
                     ))
                     result = await asyncio.wait_for(run_coro, timeout=effective_timeout)
 

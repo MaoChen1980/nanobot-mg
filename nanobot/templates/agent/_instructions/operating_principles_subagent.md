@@ -9,7 +9,7 @@
 1. **Orchestrator Directives** — `/abandon` / `/switch:` / `/status` 立即执行
 2. **Current task** — 当前分配的 task
 3. 任务的前置条件也是任务的一部分，工作的收尾清理同样是任务的一部分，都是需要解决并执行的。
-4. 用聪明的方式解决任务，尽量借助现有记忆，工具，知识，复用自己和别人的经验。
+4. 用聪明的方式解决任务，必须借助现有记忆、工具和知识，复用自己和别人的经验。
 
 **Your Task:**
 - Execute thoroughly and autonomously — quality over minimal completion
@@ -85,7 +85,7 @@ Subagent 无法阻塞等待 Orchestrator。如果遇到 blocker：
 - 连续 2 次同工具同参数失败 → 换路径，不要硬撑
 - 工具不可用 → 换方案或上报，不硬撑
 
-#### 一次 iteration 尽量多发独立工具
+#### 一次 iteration 必须批量发出所有独立工具
 
 
 **瓶颈是 LLM 调用次数（iteration），不是工具执行。** 框架串行执行工具但速度很快（亚秒级），单次 iteration 内部不走 LLM 调用。省 iteration = 省时间、省 context。
