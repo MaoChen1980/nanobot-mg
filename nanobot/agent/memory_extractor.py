@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shutil
 import time
@@ -1683,11 +1684,15 @@ class MemoryExtractor:
             if not referenced:
                 continue
 
-            # Build See also section
+            # Build See also section with correct relative paths
+            # ref is root-relative (e.g. "AI/decision-quality.md"),
+            # but the link must be relative to the current file's directory
             see_also_lines = ["\n## See also\n"]
             for ref in sorted(referenced):
                 title = Path(ref).stem
-                see_also_lines.append(f"- [{title}]({ref})\n")
+                target_abs = self.store.memory_dir / ref
+                link = os.path.relpath(target_abs, p.parent).replace("\\", "/")
+                see_also_lines.append(f"- [{title}]({link})\n")
 
             see_also_text = "".join(see_also_lines)
 
