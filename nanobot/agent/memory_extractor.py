@@ -188,10 +188,11 @@ class MemoryExtractor:
                 if rel_path not in self._last_modified_files:
                     self._last_modified_files.append(rel_path)
         if changed:
-            await self._cleanup_check(modified_files=self._last_modified_files)
+            await self._cleanup_check()
 
         if changed:
             self._generate_memory_index()
+            self._add_backlinks()
             await self._rebuild_indexes()
             if self.store.git.is_initialized():
                 self.store.git.auto_commit("memory: extract and cleanup")
@@ -1635,7 +1636,7 @@ class MemoryExtractor:
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
             try:
-                rel = str(p.relative_to(self.store.memory_dir))
+                rel = p.relative_to(self.store.memory_dir).as_posix()
                 text = p.read_text(encoding="utf-8")
             except OSError:
                 continue
@@ -1680,7 +1681,7 @@ class MemoryExtractor:
             if ".vector_index" in p.parts or p.name in exclude_names:
                 continue
             try:
-                rel = str(p.relative_to(self.store.memory_dir))
+                rel = p.relative_to(self.store.memory_dir).as_posix()
                 text = p.read_text(encoding="utf-8")
             except OSError:
                 continue
@@ -1952,31 +1953,19 @@ class MemoryExtractor:
     # Cleanup check
     # ------------------------------------------------------------------
 
-    async def _cleanup_check(self, modified_files: list[str] | None = None) -> None:
-        """Step 2b: LLM check SOUL.md/USER.md (and optionally modified topic files)
-        for contradictions, duplicates, stale content."""
+    async def _cleanup_check(self) -> None:
+        """LLM check SOUL.md/USER.md for contradictions, duplicates, stale content."""
         ws_path = self.store.workspace.expanduser().resolve().as_posix()
         soul_content = self.store.read_soul()
         user_content = self.store.read_user()
 
-        # Build user message from SOUL/USER and any modified topic files
-        content_parts: list[str] = []
-        content_parts.append(f"## SOUL.md\n{soul_content or '(empty)'}")
-        content_parts.append(f"## USER.md\n{user_content or '(empty)'}")
-
-        if modified_files:
-            for rel_path in modified_files:
-                if rel_path == "user.md":
-                    continue  # Already included as ## USER.md
-                full_path = self.store.memory_dir / rel_path
-                try:
-                    text = full_path.read_text(encoding="utf-8")
-                    content_parts.append(f"## {rel_path}\n{text}")
-                except OSError:
-                    continue
-
-        if not soul_content and not user_content and not modified_files:
+        if not soul_content and not user_content:
             return
+
+        content_parts = [
+            f"## SOUL.md\n{soul_content or '(empty)'}",
+            f"## USER.md\n{user_content or '(empty)'}",
+        ]
 
         try:
             response = await chat_stream_with_retry(
@@ -2024,12 +2013,6 @@ class MemoryExtractor:
                 file_path = self.store.soul_file
             elif file_name in ("USER.md", "user.md"):
                 file_path = self.store.user_file
-            elif modified_files:
-                matched = next((f for f in modified_files if f == file_name or f.endswith("/" + file_name)), None)
-                if matched:
-                    file_path = self.store.memory_dir / matched
-                else:
-                    continue
             else:
                 continue
 
