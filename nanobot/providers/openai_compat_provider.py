@@ -11,9 +11,7 @@ import os
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from ipaddress import ip_address
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
 
 import httpx
 import json_repair
@@ -182,38 +180,6 @@ def _uses_openrouter_attribution(spec: "ProviderSpec | None", api_base: str | No
 _RESPONSES_FAILURE_THRESHOLD = 3
 _RESPONSES_PROBE_INTERVAL_S = 300  # 5 minutes
 
-
-def _is_local_endpoint(
-    spec: "ProviderSpec | None",
-    api_base: str | None,
-) -> bool:
-    """Return True when the endpoint is a local or LAN model server.
-
-    Matches either the provider spec's ``is_local`` flag or common private-
-    network patterns in the base URL (localhost, 127.x, 192.168.x, 10.x,
-    172.16-31.x, Docker ``host.docker.internal``).
-    """
-    if spec and spec.is_local:
-        return True
-    if not api_base:
-        return False
-    raw = api_base.strip().lower()
-    parsed = urlparse(raw if "://" in raw else f"//{raw}")
-    try:
-        host = parsed.hostname
-    except ValueError:
-        return False
-    if host in {"localhost", "host.docker.internal"}:
-        return True
-    if not host:
-        return False
-    try:
-        addr = ip_address(host)
-    except ValueError:
-        return False
-    return addr.is_loopback or addr.is_private
-
-
 def _is_direct_openai_base(api_base: str | None) -> bool:
     """Return True for direct OpenAI endpoints, not generic OpenAI-compatible gateways."""
     if not api_base:
@@ -322,15 +288,12 @@ class OpenAICompatProvider(LLMProvider):
         if extra_headers:
             default_headers.update(extra_headers)
 
-        # Local model servers (Ollama, llama.cpp, vLLM) often close idle
-        # HTTP connections before the client-side keepalive expires.  When
-        # two LLM calls happen seconds apart (e.g. heartbeat _decide then
-        # process_direct), the second call may grab a now-dead pooled
-        # connection, causing a transient APIConnectionError on every first
-        # attempt.  Disabling keepalive for local endpoints avoids this by
-        # opening a fresh connection for each request, which is cheap on a
-        # LAN.  Cloud providers benefit from keepalive, so we leave the
-        # default pool settings for them.
+        # Many LLM API servers (local and cloud) close idle HTTP connections
+        # before the client-side keepalive expires.  When two LLM calls happen
+        # seconds apart, the second call may grab a now-dead pooled connection,
+        # causing a transient error.  Disabling keepalive avoids this by
+        # opening a fresh connection for each request.  The overhead of a TCP
+        # handshake is negligible compared to LLM response times.
         timeout_s = _openai_compat_timeout_s()
         # Set httpx read timeout to the overall request timeout so httpx does
         # NOT preemptively raise ReadTimeout during long streaming gaps
@@ -338,12 +301,10 @@ class OpenAICompatProvider(LLMProvider):
         # per-chunk idle guard is asyncio.wait_for in chat_stream().
         idle_read_timeout_s = int(os.environ.get("NANOBOT_STREAM_IDLE_TIMEOUT_S", "30"))
         t = httpx.Timeout(timeout_s, read=timeout_s, pool=None)
-        http_client: httpx.AsyncClient | None = None
-        if _is_local_endpoint(spec, effective_base):
-            http_client = httpx.AsyncClient(
-                limits=httpx.Limits(keepalive_expiry=0),
-                timeout=t,
-            )
+        http_client = httpx.AsyncClient(
+            limits=httpx.Limits(keepalive_expiry=0),
+            timeout=t,
+        )
 
         self._client = AsyncOpenAI(
             api_key=api_key or "no-key",

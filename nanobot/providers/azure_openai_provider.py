@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import httpx
 from loguru import logger
 from openai import AsyncOpenAI
 
@@ -60,6 +61,9 @@ class AzureOpenAIProvider(LLMProvider):
             base_url=base_url,
             default_headers={"x-session-affinity": uuid.uuid4().hex},
             max_retries=0,
+            http_client=httpx.AsyncClient(
+                limits=httpx.Limits(max_keepalive_connections=0),
+            ),
         )
 
     # ------------------------------------------------------------------

@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+import httpx
 import json_repair
 from loguru import logger
 
@@ -75,6 +76,11 @@ class AnthropicProvider(LLMProvider):
             client_kw["default_headers"] = extra_headers
         # Keep retries centralized in LLMProvider._run_with_retry to avoid retry amplification.
         client_kw["max_retries"] = 0
+        # Disable HTTP connection reuse to avoid server-side keepalive drops
+        # (MiniMax proxy closes connection mid-stream when reuse count is high).
+        client_kw["http_client"] = httpx.AsyncClient(
+            limits=httpx.Limits(max_keepalive_connections=0),
+        )
         self._client = AsyncAnthropic(**client_kw)
 
     @classmethod
