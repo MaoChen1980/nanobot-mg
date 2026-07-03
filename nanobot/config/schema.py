@@ -154,13 +154,6 @@ class ExtractorConfig(Base):
         return f"every {hours}h"
 
 
-class SelfReviewConfig(Base):
-    """Delivery configuration for automated self-review cron jobs."""
-
-    channel: Optional[str] = Field(default=None)  # e.g. "proxy:feishu:feishu1"
-    to: Optional[str] = Field(default=None)       # e.g. chat/group ID
-    session_key: Optional[str] = Field(default=None)
-
 
 class AgentDefaults(Base):
     """Default agent configuration."""
@@ -189,7 +182,6 @@ class AgentDefaults(Base):
         ge=1024,
     )  # Target token count after compression
     extractor: ExtractorConfig = Field(default_factory=ExtractorConfig)
-    self_review: SelfReviewConfig = Field(default_factory=SelfReviewConfig)
     assess_interval: int = Field(default=12, ge=1)
 
 

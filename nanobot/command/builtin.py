@@ -129,8 +129,7 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage | None:
     lock = loop.get_session_lock(ctx.key)
     async with lock:
         session.clear()
-        loop.sessions.save(session)
-        loop.sessions.invalidate(session.key)
+        loop.sessions.delete_session(session.key)
 
     stopped = f"Stopped {cancelled} running task(s)." if cancelled else "No running tasks."
     return OutboundMessage(

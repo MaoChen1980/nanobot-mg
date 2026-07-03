@@ -41,7 +41,6 @@ NanoBot 在启动时自动注册以下系统任务，这些任务为 `system_eve
 |---------|------|----------|----------|
 | `extractor` | 记忆提取器，定期处理对话历史、提取记忆 | 每 0.5 小时 | `agents.defaults.extractor` |
 | `log_check` | 日志检查，定期扫描错误日志 | 每 2 小时 | — |
-| `daily-self-review` | 每日自我审视，分析性能数据与改进方向 | 每天 4:00 | `agents.defaults.self_review` |
 
 ### 记忆提取器 (Extractor)
 
@@ -57,21 +56,6 @@ agents:
 - 默认每 30 分钟执行一次
 - 可通过 `cron` 字段设置 cron 表达式覆盖基于间隔的调度
 - 时间戳基于 `agents.defaults.timezone` 指定的时区
-
-### 每日自我审视 (Self-Review)
-
-```yaml
-agents:
-  defaults:
-    self_review:
-      channel: "proxy:feishu:feishu1"   # 交付结果的频道
-      to: "chat_xxxx"                    # 交付目标的 ID
-      session_key: "..."                 # 会话 key
-```
-
-- 每天 UTC 时间 4:00 执行（对应北京时间 12:00）
-- 如果配置了 `channel` 和 `to`，审视结果会推送到指定频道
-- 未配置时仅记录到日志
 
 ### 时区设置
 

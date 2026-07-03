@@ -44,7 +44,7 @@ class AgentHookContext:
     error: str | None = None
     workspace: Path | None = None
     # Per-iteration aggregate
-    duration_sec: float = 0.0  # total tool call duration in this iteration (set by SelfLogHook)
+    duration_sec: float = 0.0
 
 
 class AgentHook:

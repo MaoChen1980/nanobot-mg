@@ -29,7 +29,6 @@ _SESSION_KEY_RE = re.compile(r"[^a-zA-Z0-9_.-]")
 _SANITIZE_MAX_LEN = 64
 
 _ANALYSIS_MAX_CHARS = 500_000  # Max chars of .pt content sent to analysis LLM
-_USER_FEEDBACK_FILE = Path.home() / ".nanobot" / "self_improve" / "user_corrections.jsonl"
 
 _TS_RE = re.compile(r"<!--ts:(\d+(?:\.\d+)?)-->")  # embedded timestamp in memory files
 
@@ -163,10 +162,7 @@ class MemoryExtractor:
                     failed_name = processing_path.name.replace(".pt.processing", ".pt")
                     processing_path.rename(self.failed_dir / failed_name)
 
-        # ── User feedback processing: aggregate corrections from SelfDetectHook ──
-        feedback_written = await self._process_user_feedback()
-
-        if not all_findings and not all_events and not feedback_written:
+        if not all_findings and not all_events:
             logger.info("MemoryExtractor: nothing to process")
             self._move_processed(processed)
             return False
@@ -176,7 +172,7 @@ class MemoryExtractor:
         wrote_events = await self._write_events(all_events)
 
         # ── Step 3: post-process ──
-        changed = wrote_findings or wrote_events or self._memory_dir_changed() or feedback_written
+        changed = wrote_findings or wrote_events or self._memory_dir_changed()
 
         if await self._materialize_tool_scripts():
             changed = True
@@ -215,81 +211,6 @@ class MemoryExtractor:
             processed_name = p.name.replace(".pt.processing", ".pt")
             p.replace(self.processed_dir / processed_name)
         logger.info("MemoryExtractor: moved {} file(s) to processed/", len(processing_paths))
-
-    async def _process_user_feedback(self) -> bool:
-        """Read user_corrections.jsonl and write aggregated feedback to memory.
-
-        SelfDetectHook writes correction/rejection signals to
-        ``user_corrections.jsonl``. This method aggregates them into a
-        structured markdown file in the memory directory, so ContextBuilder
-        can inject patterns into the system prompt.
-
-        Returns True if feedback was written.
-        """
-        if not _USER_FEEDBACK_FILE.exists():
-            return False
-        try:
-            lines = _USER_FEEDBACK_FILE.read_text(encoding="utf-8").strip().splitlines()
-        except OSError:
-            return False
-
-        entries: list[dict] = []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-        if not entries:
-            return False
-
-        # Aggregate by matched keyword — "user corrected about X"
-        from collections import Counter
-        keyword_counts: Counter = Counter(e.get("matched", "") for e in entries)
-        type_counts: Counter = Counter(e.get("type", "") for e in entries)
-        total = len(entries)
-
-        # Build structured summary
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        parts = [
-            "## User Corrections",
-            "",
-            f"Aggregated from {total} correction/rejection signal(s) @ {now}.",
-            "",
-        ]
-        if type_counts:
-            parts.append("### By Type")
-            for t, c in type_counts.most_common():
-                parts.append(f"- **{t}**: {c}")
-            parts.append("")
-        if keyword_counts:
-            parts.append("### Repeated Patterns (≥2)")
-            for kw, c in [(k, v) for k, v in keyword_counts.most_common() if v >= 2]:
-                parts.append(f"- \"{kw}\": {c}")
-            parts.append("")
-
-        # Additional detail: most recent 10 unique corrections
-        seen: set[str] = set()
-        detail_lines: list[str] = []
-        for e in reversed(entries):
-            ctx = e.get("context", "")
-            if ctx and ctx not in seen:
-                seen.add(ctx)
-                detail_lines.append(f"- [{e['type']}] \"{e['matched']}\" → {ctx}")
-            if len(detail_lines) >= 10:
-                break
-        if detail_lines:
-            parts.append("### Recent Details")
-            parts.extend(detail_lines)
-            parts.append("")
-
-        feedback_path = self.store.workspace / "framework" / "user_feedback.md"
-        feedback_path.parent.mkdir(parents=True, exist_ok=True)
-        feedback_path.write_text("\n".join(parts), encoding="utf-8")
-        logger.info("MemoryExtractor: wrote workspace/framework/user_feedback.md ({} signals)", total)
-        return True
 
     async def _analysis_llm(
         self, pt_content: dict

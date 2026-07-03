@@ -200,19 +200,3 @@ class TestRegisterLogCheckJob:
         assert job.schedule.kind == "every"
 
 
-# ---------------------------------------------------------------------------
-# _register_self_review_jobs
-# ---------------------------------------------------------------------------
-
-
-class TestRegisterSelfReviewJobs:
-    def test_registers_three_jobs(self):
-        app = _make_mocked_app()
-        with patch("nanobot.gateway.app.console.print"):
-            app._register_self_review_jobs()
-
-        assert app.cron.register_system_job.call_count == 3
-        ids = [call[0][0].id for call in app.cron.register_system_job.call_args_list]
-        assert "daily-self-review" in ids
-        assert "daily-tool-optimizer" in ids
-        assert "daily-evolution" in ids

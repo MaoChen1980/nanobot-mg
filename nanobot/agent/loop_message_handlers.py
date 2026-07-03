@@ -285,8 +285,15 @@ class UserMessageHandler:
         # 不剥离 assess_me/DRC — _append_turn_to_session/_finalize_turn 内部会过滤。
         # 预剥离会缩短 all_msgs 但 initial_msg_count 不变，导致索引错位。
 
+        # Track time from _run_agent_loop return to _build_outbound
+        _t_loop_return = time.time()
+        logger.debug("TIMING_DBG: _run_agent_loop returned")
+
         # Stage 8 (first): build outbound — send response to user ASAP
         _t1 = time.time()
+        _gap = _t1 - _t_loop_return
+        if _gap > 1:
+            logger.info("TIMING: _run_agent_loop return → _build_outbound gap={:.1f}s", _gap)
         result = self._build_outbound(msg, final_content, stop_reason, all_msgs, had_injections, on_stream)
         _t2 = time.time()
         if _t2 - _t1 > 0.5:

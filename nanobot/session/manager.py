@@ -150,6 +150,13 @@ class Session:
         """Clear all messages and reset session to initial state."""
         self.messages = []
         self.updated_at = datetime.now(timezone.utc)
+        # Clear compression artifacts that would otherwise leak across /clear
+        self.metadata.clear()
+        for attr in ("_last_summary", "_summary_injected"):
+            try:
+                delattr(self, attr)
+            except AttributeError:
+                pass
 
 
 class SessionManager:

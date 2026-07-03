@@ -142,7 +142,6 @@ class GatewayApplication:
             self._print_startup_status()
             self._register_extractor_job()
             self._register_log_check_job()
-            self._register_self_review_jobs()
         else:
             console.print(
                 "[yellow]Running in setup mode — configure an API key in the "
@@ -406,18 +405,6 @@ class GatewayApplication:
                     logger.exception("MemoryExtractor cron job failed")
                 return None
 
-            if job.name == "self-evolution":
-                from nanobot.hooks.self_evolution import SelfEvolutionEngine
-                try:
-                    engine = SelfEvolutionEngine(
-                        store=self.agent.context.memory,
-                        project_root=Path(__file__).resolve().parent.parent.parent,
-                    )
-                    await engine.run()
-                except Exception:
-                    logger.exception("SelfEvolution cron job failed")
-                return None
-
             if job.name == "log_check":
                 await self._monitor_log_errors(_deliver_to_channel)
                 return None
@@ -448,10 +435,6 @@ class GatewayApplication:
                     if job_deliver is None:
                         job_deliver = True
                     dry_run = not bool(job_deliver)
-                    # Self-evolution jobs need to execute real tools (edit/write)
-                    # even when no delivery channel is configured
-                    if dry_run and job.name in ("self-evolution", "daily-evolution", "daily-self-review"):
-                        dry_run = False
                 except Exception as e:
                     logger.warning("Failed to access job.payload.deliver: {}, job.payload={}", e, job.payload)
                     dry_run = False
@@ -616,147 +599,6 @@ class GatewayApplication:
             )
         )
         console.print("[green]✓[/green] Log check: every 2 hours")
-
-    def _register_self_review_jobs(self) -> None:
-        """Register automated self-review and evolution cron jobs."""
-        from nanobot.cron.types import CronJob, CronPayload, CronSchedule
-
-        cfg = self.config.agents.defaults.self_review
-        tz = self.config.agents.defaults.timezone
-        deliver = bool(cfg.channel)
-
-        jobs = [
-            CronJob(
-                id="daily-self-review",
-                name="daily-self-review",
-                schedule=CronSchedule(kind="cron", expr="0 4 * * *", tz=tz),
-                payload=CronPayload(
-                    deliver=deliver,
-                    channel=cfg.channel,
-                    to=cfg.to,
-                    session_key=cfg.session_key,
-                    message=(
-                        "每日自我审视 task\n\n"
-                        "1. 读 ~/.nanobot/self_improve/self_log.md 最新的 10 条记录，"
-                        "问自己：这周有什么别扭的地方是重复出现的？\n"
-                        "2. 读 ~/.nanobot/self_improve/session_metrics.json，"
-                        "看 token 使用量、错误率、工具调用模式有没有异常\n"
-                        "3. 如果发现可改进的地方，具体写一行到 "
-                        "~/.nanobot/self_improve/capacity_notes.md\n"
-                        "4. 把这次审视结论简短附在这条记录后面\n\n"
-                        "不要做太多，一个有价值的发现就够了。"
-                    ),
-                ),
-            ),
-            CronJob(
-                id="self-evolution",
-                name="self-evolution",
-                schedule=CronSchedule(kind="cron", expr="40 5 * * *", tz=tz),
-                payload=CronPayload(
-                    deliver=deliver,
-                    channel=cfg.channel,
-                    to=cfg.to,
-                    session_key=cfg.session_key,
-                    message="self-evolution",
-                ),
-            ),
-            CronJob(
-                id="daily-tool-optimizer",
-                name="daily-tool-optimizer",
-                schedule=CronSchedule(kind="cron", expr="0 5 * * *", tz=tz),
-                payload=CronPayload(
-                    deliver=deliver,
-                    channel=cfg.channel,
-                    to=cfg.to,
-                    session_key=cfg.session_key,
-                    message=(
-                        "分析最近工具使用情况: "
-                        "python workspace/skills/tool_optimizer/optimizer.py "
-                        "--mode all"
-                    ),
-                ),
-            ),
-            CronJob(
-                id="daily-evolution",
-                name="daily-evolution",
-                schedule=CronSchedule(kind="cron", expr="20 5 * * *", tz=tz),
-                payload=CronPayload(
-                    deliver=deliver,
-                    channel=cfg.channel,
-                    to=cfg.to,
-                    session_key=cfg.session_key,
-                    message=(
-                        "分析 ~/.nanobot/self_improve/self_log.md，总结近期经验教训，"
-                        "然后：\n"
-                        "1. 识别可以改进的地方\n"
-                        "2. 评估置信度 (>90% 再改)\n"
-                        "3. 有把握就自己改（edit_file/write_file）\n"
-                        "4. 验证改动：运行相关测试（python -m pytest 相关测试路径 --tb=short），"
-                        "检查是否有语法错误\n"
-                        "5. 如果验证失败，回退改动并记录失败原因\n"
-                        "6. 在 ~/.nanobot/self_improve/evolution_changelog.md 记录本次改动\n\n"
-                        "=== 处理 Self-Fix findings ===\n"
-                        "然后读 ~/.nanobot/self_improve/self_reflect_findings.json：\n"
-                        "1. 对每个 finding，判断是否适合提取为 RULES.md 条目\n"
-                        "   - behavior/correction 类 → 写为 trigger-action 规则\n"
-                        "   - self_bug 类 → 直接修代码，然后标记 resolved\n"
-                        "   - 临时性/一次性问题 → 跳过\n"
-                        "2. 提取到 ~/.nanobot/workspace/RULES.md（格式见原有条目）\n"
-                        "3. 处理完成后，把 finding ID 追加到 "
-                        "~/.nanobot/self_improve/resolved_findings.jsonl\n"
-                        "4. 也记录到 evolution_changelog.md\n\n"
-                        "不要只用说的，要真改。"
-                        "\n\n"
-                        "=== 方法论：改之前必先追踪数据流和控制流 ===\n"
-                        "不要看到问题就加东西。先问自己：这个改动对你的用户有什么实际价值？"
-                        "没有价值就不要做。\n"
-                        "\n"
-                        "然后画清楚：\n"
-                        "\n"
-                        "1. **数据流上下游**：\n"
-                        "   - 问题涉及的数据从哪里来？（上游源头）\n"
-                        "   - 数据经过哪些转换/传递环节？（中间路径）\n"
-                        "   - 数据最终被谁消费？（下游消费者）\n"
-                        "   - 哪个环节最适合拦截/修正这个问题？\n"
-                        "\n"
-                        "2. **控制流上下游**：\n"
-                        "   - 触发路径是什么？谁调用谁？\n"
-                        "   - 发生问题时控制权在谁手上？\n"
-                        "   - 如果加一个组件，它被谁调用、它会调用谁？\n"
-                        "   - 这个调用链在故障场景下能走通吗？\n"
-                        "\n"
-                        "3. **定位最优解**：\n"
-                        "   - 基于以上分析，找到改动量最小、影响面最窄的方案\n"
-                        "   - 如果最优解是改已有的一个环节（而非加新组件），优先选这个\n"
-                        "   - 仅在现有链路的所有环节都不适合时，才考虑加新组件\n"
-                        "   - 新组件的上下游必须都落在已有链路内（闭环）\n"
-                        "   - 宁可少改不改，也不要引入逻辑上不闭环的设计\n"
-                        "\n"
-                        "把数据流和控制流的分析写下来再执行。\n\n"
-                        "=== 验证与记录（fail-safe）===\n"
-                        "改完必须验证：\n"
-                        "- 运行 `python -m pytest path/to/modified/files --tb=short -x` 或 "
-                        "`python -c \"import ast; ast.parse(open('path/to/modified.py').read())\"` "
-                        "检查语法\n"
-                        "- 验证通过 → 更新 evolution_changelog.md（追加记录），标记状态为 ✅\n"
-                        "- 验证失败 → 回退所有改动，在 evolution_changelog.md 追加记录，标记状态为 ❌ 并写明原因\n\n"
-                        "evolution_changelog.md 格式（追加行，不修改历史）：\n"
-                        "```\n"
-                        "## YYYY-MM-DD\n"
-                        "- file: path/to/modified.py | reason: 简短原因 | status: ✅|❌ | commit: (如果有)\n"
-                        "```"
-                    ),
-                ),
-            ),
-        ]
-
-        for job in jobs:
-            self.cron.register_system_job(job)
-
-        console.print(
-            "[green]✓[/green] Self-review: daily-self-review(04:00), "
-            "tool-optimizer(05:00), daily-evolution(05:20), self-evolution(05:40)"
-        )
 
     async def _monitor_log_errors(self, deliver_fn) -> None:
         """Check JSONL log for new ERROR/CRITICAL entries and alert active sessions."""

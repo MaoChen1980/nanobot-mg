@@ -499,10 +499,10 @@ class AgentRunner:
         _llm_request_count = 0
         _end_assess_ran = False
         _tool_loop_state = _ToolLoopState()
-        _correction_handled = False  # once-per-run guard for user correction detection
         _pending_memory: str | None = None  # memory text to inject into next iteration's instructions
 
         _current_messages_for_subagent.set(messages)
+        _run_t0 = time.monotonic()
 
         # Track overflow summary from latest compression event
         _overflow_summary: str | None = None
@@ -706,6 +706,8 @@ class AgentRunner:
                     if (count - self._last_assess_at) >= spec.assess_interval:
                         self._last_assess_at = count
                         await self._run_assess_callback(spec, messages)
+            _now = time.monotonic()
+            logger.info("RUN_Timing: post_llm={:.0f}ms", (_now - _run_t0) * 1000)
             raw_usage = usage_dict(response.usage)
             context.response = response
             context.usage = dict(raw_usage)
@@ -911,20 +913,6 @@ class AgentRunner:
                         await hook.after_iteration(context)
                         break
 
-                # User correction detection (lightweight, once per run)
-                if (not fatal_error
-                        and not _correction_handled
-                        and self._detect_user_corrections(messages)):
-                    _correction_handled = True
-                    logger.info("User correction detected, injecting assess_me (iter={})", iteration)
-                    assess_text = await _run_assess_me(messages)
-                    if assess_text:
-                        for i in range(len(messages) - 1, -1, -1):
-                            if is_assessment_message(messages[i]):
-                                messages.pop(i)
-                        messages.append(build_assessment_message(assess_text))
-                        had_injections = True
-
                 # --- Store memory from keyword tag for next iteration ---
                 if _kw_query and spec.keyword_search_callback:
                     try:
@@ -1058,6 +1046,8 @@ class AgentRunner:
             if should_continue:
                 await hook.after_iteration(context)
                 continue
+            _now = time.monotonic()
+            logger.info("RUN_Timing: post_stream_end={:.0f}ms", (_now - _run_t0) * 1000)
 
             if response.finish_reason == "error" and (is_blank_text(clean) or clean.startswith("Error")):
                 if response.error_kind == "timeout":
@@ -1244,6 +1234,8 @@ class AgentRunner:
                         _end_assess_ran = False
                         await hook.after_iteration(context)
                         continue
+            _now = time.monotonic()
+            logger.info("RUN_Timing: loop_break={:.0f}ms", (_now - _run_t0) * 1000)
             break
 
         else:
@@ -1271,6 +1263,8 @@ class AgentRunner:
         if mt is not None and hasattr(mt, "set_defer_mode"):
             mt.set_defer_mode(False)
 
+        _now = time.monotonic()
+        logger.info("RUN_Timing: return={:.0f}ms", (_now - _run_t0) * 1000)
         self._current_spec = None
         return AgentRunResult(
             final_content=final_content,
@@ -1440,30 +1434,6 @@ class AgentRunner:
             state.level = 3
             return "force_stop"
         return None
-
-    @staticmethod
-    def _detect_user_corrections(messages: list[dict]) -> bool:
-        """Quick check for user correction signals in latest messages.
-
-        Returns True if recent user message contains correction/rejection
-        patterns that warrant a self-assessment. Lightweight version of
-        what SelfDetectHook does in more detail.
-        """
-        _CORRECTION_PATTERNS = (
-            "不对", "不是", "错了", "不是这个", "不要", "别",
-            "wrong", "incorrect", "not what I", "you misunderstood",
-            "重新", "重来", "停",
-        )
-        for msg in reversed(messages[-20:]):
-            if msg.get("role") != "user":
-                continue
-            content = msg.get("content", "")
-            if not isinstance(content, str):
-                continue
-            for pat in _CORRECTION_PATTERNS:
-                if pat in content:
-                    return True
-        return False
 
     @staticmethod
     def _append_model_error_placeholder(messages: list[dict[str, Any]]) -> None:

@@ -202,7 +202,6 @@ class AgentLoop:
         self.project_root = project_root
         self._skill_creation_inflight: set[str] = set()
         self._extra_hooks: list[AgentHook] = hooks or []
-        self._extra_hooks.extend(self._discover_hooks())
 
         self._init_framework_dir(workspace)
         self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db,
@@ -824,6 +823,7 @@ class AgentLoop:
         _runner_elapsed = time.time() - _t0
         if _runner_elapsed > 15:
             logger.info("TIMING: runner.run took {:.1f}s", _runner_elapsed)
+        logger.info("RUN_Timing: runner_run={:.0f}ms", _runner_elapsed * 1000)
         if result.overflow_summary:
             session._last_summary = result.overflow_summary
             session.metadata.pop("_summary_injected_key", None)
@@ -848,7 +848,11 @@ class AgentLoop:
         elif result.stop_reason == "error":
             logger.warning("LLM returned error: {}", (result.final_content or "")[:200])
 
+        _t_post = time.time()
         await hook.after_turn()
+        _t_post_end = time.time()
+        if _t_post_end - _t_post > 0.5:
+            logger.info("TIMING: hook.after_turn took {:.1f}s", _t_post_end - _t_post)
         return (fc, result.tools_used, result.messages,
                 result.stop_reason, result.had_injections, result.initial_message_count,
                 result.total_llm_requests)
@@ -1518,74 +1522,6 @@ class AgentLoop:
             subagent_task_id=task_id,
         )
         return True
-
-    def _discover_hooks(self) -> list[AgentHook]:
-        """Scan framework hooks then workspace/hooks/ for custom hook classes."""
-        from pathlib import Path
-        discovered: list[AgentHook] = []
-
-        # 1. Framework hooks — loaded first so workspace hooks can override
-        framework_dir = Path(__file__).resolve().parent.parent / "hooks"
-        if framework_dir.is_dir():
-            for path in sorted(framework_dir.glob("*.py")):
-                self._try_load_hook(path, discovered)
-
-        # 2. Workspace hooks — loaded after, can override or extend
-        hooks_dir = self.workspace / "hooks"
-        if hooks_dir.is_dir():
-            for path in sorted(hooks_dir.glob("*.py")):
-                self._try_load_hook(path, discovered)
-
-        # 3. Wire the active provider into hooks that opt in via set_provider().
-        for hook in discovered:
-            inject = getattr(hook, "set_provider", None)
-            if callable(inject):
-                try:
-                    inject(self.provider, self.model)
-                except Exception as e:
-                    logger.warning(
-                        "Hook {} set_provider failed: {}",
-                        type(hook).__name__,
-                        e,
-                    )
-
-        # 4. Wire the workspace path into hooks that opt in via set_workspace().
-        for hook in discovered:
-            inject = getattr(hook, "set_workspace", None)
-            if callable(inject):
-                try:
-                    inject(self.workspace)
-                except Exception as e:
-                    logger.warning(
-                        "Hook {} set_workspace failed: {}",
-                        type(hook).__name__,
-                        e,
-                    )
-
-        return discovered
-
-    @staticmethod
-    def _try_load_hook(path: Path, discovered: list[AgentHook]) -> None:
-        import importlib.util
-        try:
-            spec = importlib.util.spec_from_file_location(path.stem, path)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
-                    if isinstance(attr, type) and issubclass(attr, AgentHook) and attr is not AgentHook:
-                        instance = attr()
-                        hook_classes: tuple[type[AgentHook], ...] | None = getattr(instance, "HOOK_CLASSES", None)
-                        if hook_classes:
-                            for cls in hook_classes:
-                                if isinstance(cls, type) and issubclass(cls, AgentHook):
-                                    discovered.append(cls())
-                        else:
-                            discovered.append(instance)
-                        logger.info("Loaded hook: {} from {}", attr_name, path.name)
-        except Exception as e:
-            logger.warning("Failed to load hook {}: {}", path.name, e)
 
     @staticmethod
     def _init_framework_dir(workspace: Path) -> None:

@@ -48,7 +48,6 @@
 | `historyTokenLimit` | `history_token_limit` | `int` | `50000` | 压缩后的目标 token 数（最小 1024） |
 | `assessInterval` | `assess_interval` | `int` | `12` | 自我评估间隔（轮次） |
 | `extractor` | `extractor` | `object` | (见下) | 记忆提取器配置 |
-| `selfReview` | `self_review` | `object` | (见下) | 自动自我审查配置 |
 
 ### agents.defaults.extractor -- MemoryExtractor 配置
 
@@ -59,13 +58,6 @@
 
 > 注意：`cron` 字段是遗留兼容字段（Cron 表达式），不在序列化输出中体现。
 
-### agents.defaults.selfReview -- 自我审查配置
-
-| JSON 字段 | Python 字段 | 类型 | 默认值 | 说明 |
-|-----------|------------|------|--------|------|
-| `channel` | `channel` | `str?` | `null` | 发送通道，如 `proxy:feishu:feishu1` |
-| `to` | `to` | `str?` | `null` | 接收方 ID（聊天/群组 ID） |
-| `sessionKey` | `session_key` | `str?` | `null` | 会话标识 |
 
 ---
 

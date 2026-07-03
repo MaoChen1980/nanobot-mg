@@ -119,8 +119,8 @@ async def test_message_tool_defer_mode_queues_and_explains_semantics() -> None:
     """When defer_mode is active, message() must NOT send and must return a
     placeholder that clearly tells the LLM the message is queued, NOT delivered.
 
-    Regression guard for: agent in cron_daily-self-review was confused by
-    'queued for delivery' status and didn't know whether the message was sent.
+    Regression guard for: cron agent was confused by 'queued for delivery' status
+    and didn't know whether the message was sent.
     """
     sent: list[OutboundMessage] = []
 

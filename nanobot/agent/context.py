@@ -682,32 +682,6 @@ class ContextBuilder:
             + self._shift_headings(content, offset=1)
         )
 
-    def _build_self_findings_section(self) -> str:
-        """Read workspace/framework/self_findings.md for system prompt injection (cached by mtime).
-
-        Written by SelfDetectHook after each detection cycle (~15 turns).
-        Renders at the end of system content via session_parts, alongside other
-        dynamic context like memory and task-tree.
-        """
-        path = self.workspace / "framework" / "self_findings.md"
-        content = self._cached_read_text(path)
-        if not content:
-            return ""
-        return content.strip()
-
-    def _build_user_feedback_section(self) -> str:
-        """Read workspace/framework/user_feedback.md for system prompt injection.
-
-        Written by MemoryExtractor._process_user_feedback() — aggregates
-        user correction/rejection signals detected by SelfDetectHook into
-        structured patterns the agent can learn from.
-        """
-        path = self.workspace / "framework" / "user_feedback.md"
-        content = self._cached_read_text(path)
-        if not content:
-            return ""
-        return content.strip()
-
     # -- vector-indexed memory -------------------------------------------------
 
     def _build_memory_section(self) -> str:
@@ -1071,18 +1045,6 @@ class ContextBuilder:
 
         # tree.json and CURRENT.md are injected via build_instructions_section()
         # (message index 1, close to generation point) as verification standards.
-
-        _t_log = time.time()
-        findings_block = self._build_self_findings_section()
-        _elapsed = (time.time() - _t_log) * 1000
-        if _elapsed > 50:
-            logger.info("build_messages: _build_self_findings_section took {:.0f}ms", _elapsed)
-        if findings_block:
-            session_parts.append(findings_block)
-
-        feedback_block = self._build_user_feedback_section()
-        if feedback_block:
-            session_parts.append(feedback_block)
 
         if session_parts:
             sys_static = sys_static + "\n\n" + "\n\n".join(session_parts)

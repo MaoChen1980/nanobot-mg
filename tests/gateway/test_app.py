@@ -562,7 +562,6 @@ class TestAsyncRun:
             patch.object(app, "_print_startup_status"),
             patch.object(app, "_register_extractor_job"),
             patch.object(app, "_register_log_check_job"),
-            patch.object(app, "_register_self_review_jobs"),
             patch.object(app, "_start_all") as start_all,
             patch.object(app, "_shutdown") as shutdown,
         ):

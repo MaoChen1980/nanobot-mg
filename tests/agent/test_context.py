@@ -48,61 +48,6 @@ def test_lessons_omitted_when_file_missing(tmp_path) -> None:
     assert "## Past Lessons" not in prompt
 
 
-# ---------------------------------------------------------------------------
-# Self-findings section (_build_self_findings_section)
-# ---------------------------------------------------------------------------
-
-
-def test_self_findings_returns_empty_when_no_file(tmp_path):
-    """No self_findings.md in framework dir -> returns empty string."""
-    builder = _make_builder(tmp_path)
-    result = builder._build_self_findings_section()
-    assert result == ""
-
-
-def test_self_findings_reads_content_when_file_exists(tmp_path):
-    """self_findings.md exists with content -> returns content."""
-    workspace = _make_workspace(tmp_path)
-    framework_dir = workspace / "framework"
-    framework_dir.mkdir(parents=True)
-    findings_file = framework_dir / "self_findings.md"
-    findings_file.write_text("## Self-Evolution Findings\n\n- test finding\n", encoding="utf-8")
-
-    builder = ContextBuilder(workspace)
-    result = builder._build_self_findings_section()
-    assert "Self-Evolution Findings" in result
-    assert "test finding" in result
-
-
-def test_self_findings_returns_empty_when_file_empty(tmp_path):
-    """Empty self_findings.md -> returns empty string."""
-    workspace = _make_workspace(tmp_path)
-    framework_dir = workspace / "framework"
-    framework_dir.mkdir(parents=True)
-    (framework_dir / "self_findings.md").write_text("   \n\n  ", encoding="utf-8")
-
-    builder = ContextBuilder(workspace)
-    result = builder._build_self_findings_section()
-    assert result == ""
-
-
-def test_self_findings_included_in_build_messages(tmp_path):
-    """self_findings.md content appears in build_messages output."""
-    workspace = _make_workspace(tmp_path)
-    framework_dir = workspace / "framework"
-    framework_dir.mkdir(parents=True)
-    (framework_dir / "self_findings.md").write_text(
-        "## Self-Evolution Findings\n\n### abc123 (self_bug)\n**Content**: test bug\n",
-        encoding="utf-8",
-    )
-
-    builder = ContextBuilder(workspace)
-    messages = builder.build_messages(history=[], current_message="hello")
-
-    system_content = messages[0]["content"]
-    assert "Self-Evolution Findings" in system_content
-    assert "abc123" in system_content
-    assert "self_bug" in system_content
 
 
 # ---------------------------------------------------------------------------

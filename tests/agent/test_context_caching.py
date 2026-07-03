@@ -238,32 +238,6 @@ def test_current_context_cached(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _build_self_findings_section caching
-# ---------------------------------------------------------------------------
-
-
-def test_self_findings_cached(tmp_path):
-    """Repeated call returns cached result."""
-    builder = _make_builder(tmp_path)
-    sf = tmp_path / "workspace" / "framework" / "self_findings.md"
-    sf.parent.mkdir(parents=True, exist_ok=True)
-    sf.write_text("Self-finding content.", encoding="utf-8")
-
-    s1 = builder._build_self_findings_section()
-    assert "Self-finding" in s1
-
-    s2 = builder._build_self_findings_section()
-    assert s1 is s2
-
-
-def test_self_findings_empty_when_missing(tmp_path):
-    """No self_findings.md returns empty string."""
-    builder = _make_builder(tmp_path)
-    result = builder._build_self_findings_section()
-    assert result == ""
-
-
-# ---------------------------------------------------------------------------
 # Integration: build_system_prompt cascade
 # ---------------------------------------------------------------------------
 
@@ -351,7 +325,6 @@ def test_empty_workspace_no_crash(tmp_path):
 
     assert builder._build_task_tree_section() == ""
     assert builder._build_current_context_section() == ""
-    assert builder._build_self_findings_section() == ""
     assert builder._build_memory_section() == ""
     bootstrap = builder._load_bootstrap_files()
     assert isinstance(bootstrap, str)
