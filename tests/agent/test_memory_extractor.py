@@ -450,6 +450,16 @@ class TestTopicToFilepath:
         assert "//" not in path
         assert path == "AI/harness"
 
+    def test_duplicate_segments_deduplicated(self) -> None:
+        path = MemoryExtractor._topic_to_filepath("Android/Android/testing")
+        assert path == "Android/testing"
+        path = MemoryExtractor._topic_to_filepath("events/events/events-index")
+        assert path == "events/events-index"
+        path = MemoryExtractor._topic_to_filepath("nanobot/nanobot/structure")
+        assert path == "nanobot/structure"
+        path = MemoryExtractor._topic_to_filepath("a/a/a/b/a")
+        assert path == "a/b/a"  # only consecutive duplicates removed
+
 
 # ---------------------------------------------------------------------------
 # _parse_json_output

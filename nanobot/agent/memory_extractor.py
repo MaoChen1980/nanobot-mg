@@ -1962,12 +1962,19 @@ class MemoryExtractor:
 
         Preserves forward slashes as directory separators so the LLM can
         organize knowledge into nested directories like AI/harness-design.md.
+        Deduplicates consecutive identical segments — LLM sometimes emits
+        ``Android/Android/testing`` instead of ``Android/testing``.
         """
         parts = topic.strip("/").split("/")
         safe_parts = [MemoryExtractor._sanitize_filename(p) for p in parts]
         safe_parts = [p for p in safe_parts if p]  # remove empties
         safe_parts = [p for p in safe_parts if p != ".."]  # block path traversal
-        return "/".join(safe_parts[:8])  # max 8 levels deep
+        # Deduplicate consecutive identical segments
+        deduped = [safe_parts[0]] if safe_parts else []
+        for p in safe_parts[1:]:
+            if p != deduped[-1]:
+                deduped.append(p)
+        return "/".join(deduped[:8])  # max 8 levels deep
 
     @staticmethod
     def save_prompt_snapshot(
