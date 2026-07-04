@@ -12,7 +12,9 @@ Favorite activity（最爱活动）：
 
 ## Response Preferences
 喜欢 markdown 表格、列表
-喜欢被提供选项
+喜欢被告知决策过程（透明性偏好）
+仅在必要时才参与决策
+必须参与的决策，请提供决策选项以及每个选项的分析（优缺点）
 
 ## Boundaries
 最不喜欢的事物：
