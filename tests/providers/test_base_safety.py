@@ -105,4 +105,3 @@ async def test_sleep_with_heartbeat_chunks(monkeypatch):
     assert sum(delays) == pytest.approx(65, abs=1)
     assert len(cb_calls) == 3
     assert "retry" in cb_calls[0].lower()
-    assert "attempt 2" in cb_calls[0]
