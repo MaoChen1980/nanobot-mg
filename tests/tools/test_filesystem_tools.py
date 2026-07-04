@@ -7,6 +7,14 @@ from nanobot.agent.tools.filesystem import (
     ReadFileTool,
     _find_match,
 )
+from nanobot.agent.tools import file_state
+
+
+@pytest.fixture(autouse=True)
+def _clear_file_state():
+    file_state.clear()
+    yield
+    file_state.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +147,7 @@ class TestEditFileTool:
     async def test_exact_match(self, tool, tmp_path):
         f = tmp_path / "a.py"
         f.write_text("hello world", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="world", new_text="earth")
         assert "Successfully" in result
         assert f.read_text() == "hello earth"
@@ -147,6 +156,7 @@ class TestEditFileTool:
     async def test_crlf_normalisation(self, tool, tmp_path):
         f = tmp_path / "crlf.py"
         f.write_bytes(b"line1\r\nline2\r\nline3")
+        file_state.record_read(str(f))
         result = await tool.execute(
             path=str(f), old_text="line1\nline2", new_text="LINE1\nLINE2",
         )
@@ -168,6 +178,7 @@ class TestEditFileTool:
     async def test_replace_all(self, tool, tmp_path):
         f = tmp_path / "multi.py"
         f.write_text("foo bar foo bar foo", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(
             path=str(f), old_text="foo", new_text="baz", replace_all=True,
         )
@@ -178,6 +189,7 @@ class TestEditFileTool:
     async def test_not_found(self, tool, tmp_path):
         f = tmp_path / "nf.py"
         f.write_text("hello", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="xyz", new_text="abc")
         assert "Error" in result
         assert "not found" in result
