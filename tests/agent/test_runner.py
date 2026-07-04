@@ -877,8 +877,8 @@ async def test_checkpoint2_injects_after_final_response_with_resuming_stream():
 
     assert result.had_injections is True
     assert result.final_content == "second answer"
-    # 2 calls (no verification gate)
-    assert call_count["n"] == 3
+    # 2 calls (no verification gate, no assess_me_callback for doubt)
+    assert call_count["n"] == 2
     # First stream_end should have resuming=True (because injections found)
     assert stream_end_calls[0] is True
     # Second stream_end: should_continue=False (no more injections),
@@ -956,16 +956,25 @@ async def test_doubt_skipped_at_max_iterations_boundary():
 @pytest.mark.asyncio
 async def test_doubt_only_injected_once():
     """After doubt injects once, second pass through the check should skip."""
-    from nanobot.agent.runner import AgentRunner, AgentRunSpec
+    from nanobot.agent.runner import AgentRunner, AgentRunSpec, AssessResult
     from nanobot.providers.base import LLMResponse
 
     provider = MagicMock()
     call_count = 0
+    doubt_call_count = 0
 
     async def chat_with_retry(**kwargs):
         nonlocal call_count
         call_count += 1
         return LLMResponse(content=f"answer {call_count}", tool_calls=[], usage={})
+
+    async def assess_me_callback(messages):
+        """Doubt injects once (first call), then skips subsequent calls."""
+        nonlocal doubt_call_count
+        doubt_call_count += 1
+        if doubt_call_count == 1:
+            return AssessResult(injected=True)
+        return AssessResult()  # injected=False → falsy → skip
 
     provider.chat_with_retry = chat_with_retry
     provider.chat_stream_with_retry = chat_with_retry
@@ -980,6 +989,7 @@ async def test_doubt_only_injected_once():
         model="test-model",
         max_iterations=5,  # room for doubt + response
         max_tool_result_chars=_MAX_TOOL_RESULT_CHARS,
+        assess_me_callback=assess_me_callback,
     ))
 
     # Doubt injects on iter 0 → LLM responds (call 2) → break (no second doubt)
