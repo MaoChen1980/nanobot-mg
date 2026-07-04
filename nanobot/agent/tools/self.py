@@ -128,7 +128,9 @@ class SelfTool(Tool):
             "set <key, value> → modify a runtime setting or store scratchpad notes. "
             "Aliases: 'inspect' for check, 'modify' for set."
         )
-        if not self._modify_allowed:
+        if self._modify_allowed:
+            base = "IMPORTANT: modifying runtime state affects agent behavior.\n" + base
+        else:
             base += "\nREAD-ONLY MODE: set is disabled."
         return base
 

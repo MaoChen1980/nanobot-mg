@@ -975,6 +975,16 @@ class LLMProvider(ABC):
             return "timeout"
         if "connection" in name:
             return "connection"
+
+        # Fallback: check the exception message for timeout/connection keywords.
+        # This catches cases where the exception is wrapped or has a generic class name
+        # but the message clearly indicates a timeout or connection error.
+        msg = str(e).lower()
+        if "timeout" in msg or "timed out" in msg:
+            return "timeout"
+        if "connection" in msg and ("refused" in msg or "fail" in msg or "reset" in msg):
+            return "connection"
+
         return None
 
     @abstractmethod

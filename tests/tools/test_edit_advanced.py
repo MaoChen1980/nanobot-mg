@@ -37,6 +37,7 @@ class TestDeleteLineCleanup:
     async def test_delete_line_consumes_trailing_newline(self, tool, tmp_path):
         f = tmp_path / "a.py"
         f.write_text("line1\nline2\nline3\n", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="line2", new_text="")
         assert "Successfully" in result
         content = f.read_text()
@@ -47,6 +48,7 @@ class TestDeleteLineCleanup:
     async def test_delete_line_with_explicit_newline_in_old_text(self, tool, tmp_path):
         f = tmp_path / "a.py"
         f.write_text("line1\nline2\nline3\n", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="line2\n", new_text="")
         assert "Successfully" in result
         assert f.read_text() == "line1\nline3\n"
@@ -56,6 +58,7 @@ class TestDeleteLineCleanup:
         """Deleting a word mid-line should not consume extra characters."""
         f = tmp_path / "a.py"
         f.write_text("hello world here\n", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="world ", new_text="")
         assert "Successfully" in result
         assert f.read_text() == "hello here\n"
@@ -83,6 +86,7 @@ class TestEditDiagnostics:
     async def test_ambiguous_match_reports_candidate_lines(self, tool, tmp_path):
         f = tmp_path / "dup.py"
         f.write_text("aaa\nbbb\naaa\nbbb\n", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="aaa\nbbb", new_text="xxx")
         assert "appears 2 times" in result.lower()
         assert "line 1" in result.lower()
@@ -93,6 +97,7 @@ class TestEditDiagnostics:
     async def test_not_found_reports_whitespace_hint(self, tool, tmp_path):
         f = tmp_path / "space.py"
         f.write_text("value =  1\n", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="value = 1", new_text="value = 2")
         assert "Error" in result
         assert "whitespace" in result.lower()
@@ -101,6 +106,7 @@ class TestEditDiagnostics:
     async def test_not_found_reports_case_hint(self, tool, tmp_path):
         f = tmp_path / "case.py"
         f.write_text("HelloWorld\n", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="helloworld", new_text="goodbye")
         assert "Error" in result
         assert "letter case differs" in result.lower()
@@ -138,6 +144,7 @@ class TestTrailingWhitespaceStrip:
     async def test_strips_trailing_whitespace_from_new_text(self, tool, tmp_path):
         f = tmp_path / "a.py"
         f.write_text("x = 1\n", encoding="utf-8")
+        file_state.record_read(str(f))
         result = await tool.execute(
             path=str(f), old_text="x = 1", new_text="x = 2   \ny = 3  ",
         )
@@ -149,6 +156,7 @@ class TestTrailingWhitespaceStrip:
     async def test_preserves_trailing_whitespace_in_markdown(self, tool, tmp_path):
         f = tmp_path / "doc.md"
         f.write_text("# Title\n", encoding="utf-8")
+        file_state.record_read(str(f))
         # Markdown uses trailing double-space for line breaks
         result = await tool.execute(
             path=str(f), old_text="# Title", new_text="# Title  \nSubtitle  ",
@@ -176,6 +184,7 @@ class TestFileSizeProtection:
     async def test_rejects_file_over_size_limit(self, tool, tmp_path):
         f = tmp_path / "huge.txt"
         f.write_text("x", encoding="utf-8")
+        file_state.record_read(str(f))
         # Monkey-patch the file size check by creating a stat mock
         original_stat = f.stat
 

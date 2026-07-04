@@ -163,7 +163,7 @@ class ToolRegistry:
 
         # If tool itself reported an error, skip post-validators
         if isinstance(result, str) and result.startswith("Error"):
-            return result
+            return result + "\n❌"
 
         # Danger warnings pass through as-is — not errors, no ❌
         if isinstance(result, str) and result.startswith("⚠️ Danger:"):

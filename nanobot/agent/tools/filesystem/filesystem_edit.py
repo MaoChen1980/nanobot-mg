@@ -150,6 +150,16 @@ class EditFileTool(_FsTool):
         "Requires reading the file with read_file first (SHA256 verification)."
     )
 
+    def __init__(
+        self,
+        workspace=None,
+        allowed_dir=None,
+        extra_allowed_dirs=None,
+    ):
+        super().__init__(workspace, allowed_dir, extra_allowed_dirs)
+        # Expose file_state module for test compatibility (tool.file_state.record_read)
+        self.file_state = file_state
+
     @staticmethod
     def _strip_trailing_ws(text: str) -> str:
         """Strip trailing whitespace from each line."""

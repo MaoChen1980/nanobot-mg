@@ -44,10 +44,13 @@ class ReframeTool(Tool):
 
     name = "reframe"
     description = (
-        "Provide the facts (what happened, what you tried, what went wrong) and get a clean, "
-        "focused answer without tool call clutter. "
-        "question and goal are required. Fill attempts, difficulties, constraints, resources "
-        "for better context. Costs tokens — be specific."
+        "Purpose: Get a clean, focused answer when stuck in a loop or when the problem "
+        "definition needs rethinking. No tool calls — pure reasoning output.\n"
+        "When to call: When the same approach fails 3+ times, the problem definition seems "
+        "wrong, or you need a fresh angle. Not for factual lookups.\n"
+        "What to provide: question (required) + goal (required) + attempts + difficulties + "
+        "constraints + resources (optional, improves quality). "
+        "Costs tokens — be specific about what happened and what you tried."
     )
 
     read_only = True

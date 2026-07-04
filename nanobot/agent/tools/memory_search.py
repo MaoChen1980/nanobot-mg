@@ -54,7 +54,7 @@ class MemorySearchTool(Tool):
     read_only = True
 
     description = (
-        "Search the knowledge base (memory/) by semantic similarity (FAISS). "
+        "memory_search: Search the knowledge base (memory/) by semantic similarity (FAISS). "
         "Understands concepts — 'deploy failure' finds 'rollback issues'. "
         "Also searches tasks/ and skills/ indexes. "
         "Returns source file, heading, score, text excerpt, and cross-references."

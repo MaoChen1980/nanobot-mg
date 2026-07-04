@@ -1381,7 +1381,9 @@ class AgentLoop:
         self._refresh_provider_snapshot()
         if msg.channel == "system":
             return await self._system_handler.handle(
-                msg, on_stream, on_stream_end, on_reasoning, on_reasoning_end, pending_queue, extra_hooks=extra_hooks,
+                msg, on_progress=on_progress, on_stream=on_stream, on_stream_end=on_stream_end,
+                on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end,
+                pending_queue=pending_queue, extra_hooks=extra_hooks,
             )
         return await self._user_handler.handle(
             msg, session_key, on_progress, on_stream, on_stream_end,

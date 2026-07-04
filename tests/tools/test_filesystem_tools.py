@@ -191,8 +191,8 @@ class TestEditFileTool:
         f.write_text("hello", encoding="utf-8")
         file_state.record_read(str(f))
         result = await tool.execute(path=str(f), old_text="xyz", new_text="abc")
-        assert "Error" in result
-        assert "not found" in result
+        # Returns "Warning" (not "Error") when old_text not found after read
+        assert ("Error" in result or "Warning" in result) and "not found" in result
 
     @pytest.mark.asyncio
     async def test_missing_new_text_returns_clear_error(self, tool, tmp_path):

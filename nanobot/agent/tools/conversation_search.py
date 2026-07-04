@@ -47,7 +47,7 @@ class ConversationSearchTool(Tool):
     read_only = True
 
     description = (
-        "Search past conversation history by character substring (SQL LIKE). "
+        "conversation_search: Search past conversation history by character substring (SQL LIKE). "
         "Use | to OR multiple keywords (e.g. 'deploy|rollback'). "
         "Supports optional start/end date filters. Also searches MEMORY.md."
     )

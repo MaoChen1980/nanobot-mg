@@ -117,12 +117,14 @@ class DebugRootCauseTool(Tool):
 
     name = "debug_root_cause"
     description = (
-        "Read the full conversation and recommend a structured investigation methodology "
-        "from 20 RCA approaches (divide & conquer, comparison, rollback, hypothesis testing, "
-        "reverse inference, trial & error, look inside, single variable, boundary testing, "
-        "reproduction, elimination, substitution, chain tracing, log injection, time travel, "
-        "wait & observe, layer stripping, outlier analysis, force failure, peer review). "
-        "You decide which tools to use for the actual investigation."
+        "Purpose: Structured root cause analysis for non-trivial bugs, errors, and unexpected "
+        "behavior — uses 20 RCA approaches (divide & conquer, comparison, rollback, hypothesis "
+        "testing, reverse inference, trial & error, look inside, single variable, boundary "
+        "testing, reproduction, elimination, substitution, chain tracing, log injection, time "
+        "travel, wait & observe, layer stripping, outlier analysis, force failure, peer review). "
+        "You decide which tools to use for the actual investigation. "
+        "Different from assess_me: debug_root_cause is for fixing bugs/errors, "
+        "assess_me is for cognitive auditing of agent reasoning."
     )
 
     read_only = True

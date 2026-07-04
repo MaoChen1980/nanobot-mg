@@ -53,11 +53,59 @@ def _has_stale_duplicate(session, message_id: str) -> bool:
     return False
 
 
+def _create_bus_progress_callback(loop, msg):
+    """Create a bus-based progress callback from message context.
+
+    Derived from msg.channel/chat_id/metadata so progress messages
+    can be routed through the bus when no hub-provided on_progress
+    callback is available.
+    """
+    proxy_key: str | None = None
+    channel = msg.channel
+    if channel.startswith("proxy:"):
+        proxy_key = channel[len("proxy:"):]
+
+    async def _bus_progress(content, *, tool_hint=False, tool_events=None):
+        meta = dict(msg.metadata or {})
+        meta["_progress"] = True
+        meta["_tool_hint"] = tool_hint
+        if proxy_key:
+            meta["_proxy_key"] = proxy_key
+        parts: list[str] = []
+        if tool_events:
+            for te in tool_events:
+                if not isinstance(te, dict):
+                    continue
+                phase = te.get("phase", "")
+                name = te.get("name", "tool")
+                if phase == "end":
+                    args = te.get("arguments", {})
+                    hint = format_single_tool_hint(name, args) if isinstance(args, dict) and args else name
+                    parts.append(f"✅ {hint} completed")
+                elif phase == "error":
+                    error = te.get("error", "")
+                    args = te.get("arguments", {})
+                    hint = format_single_tool_hint(name, args) if isinstance(args, dict) and args else name
+                    parts.append(f"❌ {hint}: {error}" if error else f"❌ {hint} failed")
+        formatted = "\n".join(parts)
+        final_content = content
+        if formatted:
+            final_content = (content + "\n" + formatted) if content else formatted
+        await loop.bus.publish_outbound(OutboundMessage(
+            channel=msg.channel, chat_id=msg.chat_id,
+            content=final_content, metadata=meta,
+        ))
+    return _bus_progress
+
+
 class SystemMessageHandler:
     def __init__(self, loop):
         self._loop = loop
 
-    async def handle(self, msg, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None, extra_hooks=None):
+    async def handle(self, msg, on_progress=None, on_stream=None, on_stream_end=None, on_reasoning=None, on_reasoning_end=None, pending_queue=None, extra_hooks=None):
+        # Bus fallback when no hub-provided on_progress callback
+        if on_progress is None:
+            on_progress = _create_bus_progress_callback(self._loop, msg)
         # Prefer origin channel/chat_id from metadata (set by _announce_result)
         # to avoid parsing issues with multi-colon channel values like "proxy:feishu:feishu1".
         if msg.metadata and msg.metadata.get("_origin_channel") and msg.metadata.get("_origin_chat_id"):
@@ -132,7 +180,7 @@ class SystemMessageHandler:
             context_state=cs,
             session_key=key,
         )
-        final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue, extra_hooks=extra_hooks)
+        final_content, _, all_msgs, stop_reason, _, initial_msg_count, _total_llm_requests = await self._loop._run_agent_loop(messages, on_progress=on_progress, on_stream=on_stream, on_stream_end=on_stream_end, on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end, session=session, channel=effective_channel, chat_id=chat_id, message_id=msg.metadata.get("message_id"), metadata=msg.metadata, session_key=key, pending_queue=pending_queue, extra_hooks=extra_hooks)
         # 不剥离 assess_me/DRC — _append_turn_to_session 会在 append 时过滤。
         # 预剥离会缩短 all_msgs 但 initial_msg_count 不变，导致索引错位。
         session.metadata["llm_request_count"] = session.metadata.get("llm_request_count", 0) + _total_llm_requests
@@ -396,47 +444,7 @@ class UserMessageHandler:
         return initial_messages, None
 
     def _make_bus_progress_callback(self, msg):
-        # Derive proxy_key from "proxy:channel:bot" prefix so the gateway can
-        # route progress messages to the correct proxy connection.
-        proxy_key: str | None = None
-        channel = msg.channel
-        if channel.startswith("proxy:"):
-            proxy_key = channel[len("proxy:"):]  # e.g. "feishu:feishu1"
-
-        async def _bus_progress(content, *, tool_hint=False, tool_events=None):
-            meta = dict(msg.metadata or {})
-            meta["_progress"] = True
-            meta["_tool_hint"] = tool_hint
-            if proxy_key:
-                meta["_proxy_key"] = proxy_key
-            # Format tool_events into inline text (same pattern as hub's
-            # _on_progress) so they aren't silently dropped — the gateway
-            # only delivers the content field.
-            parts: list[str] = []
-            if tool_events:
-                for te in tool_events:
-                    if not isinstance(te, dict):
-                        continue
-                    phase = te.get("phase", "")
-                    name = te.get("name", "tool")
-                    if phase == "end":
-                        args = te.get("arguments", {})
-                        hint = format_single_tool_hint(name, args) if isinstance(args, dict) and args else name
-                        parts.append(f"✅ {hint} completed")
-                    elif phase == "error":
-                        error = te.get("error", "")
-                        args = te.get("arguments", {})
-                        hint = format_single_tool_hint(name, args) if isinstance(args, dict) and args else name
-                        parts.append(f"❌ {hint}: {error}" if error else f"❌ {hint} failed")
-            formatted = "\n".join(parts)
-            final_content = content
-            if formatted:
-                final_content = (content + "\n" + formatted) if content else formatted
-            await self._loop.bus.publish_outbound(OutboundMessage(
-                channel=msg.channel, chat_id=msg.chat_id,
-                content=final_content, metadata=meta,
-            ))
-        return _bus_progress
+        return _create_bus_progress_callback(self._loop, msg)
 
     def _make_retry_wait_callback(self, msg, on_progress=None):
         async def _on_retry_wait(content):
