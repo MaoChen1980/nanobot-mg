@@ -8,6 +8,7 @@
 - blocker: null 或阻塞描述（反复尝试3次无法推进/无替代路径/未知错误时填写）
 - skill_pattern: null 或可复用模式描述
 - needs_revision: true 或 false（回复不准确/论据不足时填 true）
+- unused_skills: [] 或技能名数组（存在与当前任务高度相关但 agent 未加载使用的 skill 时填写）
 - content: 详细分析
 
 示例：
@@ -17,6 +18,7 @@
   "blocker": null,
   "skill_pattern": null,
   "needs_revision": false,
+  "unused_skills": [],
   "content": "分析内容"
 }
 
@@ -105,7 +107,7 @@ agent 陈述是否符合用户需求？
 检查：
 - 是否有技能描述与当前任务或问题高度相关？
 - 如果相关，agent 是否通过 read_file 加载并按步骤执行？
-- 存在相关技能但未使用 → 在 content 中标记"存在相关 skill: XXX 未使用"，status 设为 "findings"
+- 存在相关技能但未使用 → 将技能 SKILL.md 完整路径加入 unused_skills，status 设为 "findings"
 {% else %}
 无可用的扩展技能列表。
 {% endif %}

@@ -984,9 +984,13 @@ class AgentLoop:
                 else:
                     logger.info("Skill creation already in-flight for this pattern — skipping")
 
-            # ── injection decision (gated by status) ──
+            # ── injection decision (gated by status or unused_skills) ──
 
-            if status == "ok" and not needs_revision:
+            unused_skills = parsed.get("unused_skills", [])
+            if not isinstance(unused_skills, list):
+                unused_skills = []
+
+            if status == "ok" and not needs_revision and not unused_skills:
                 logger.info("assess_me: all clear, no action needed")
                 return AssessResult()
 
@@ -1007,6 +1011,19 @@ class AgentLoop:
                     "而非解释评估结果。如果修正涉及对话上下文中的信息，"
                     "请综合上下文完成修正。"
                 )
+
+            # Unused skills — inject specific read_file instructions
+            if unused_skills:
+                skill_instruction = (
+                    "\n\n---\n"
+                    "**发现未使用的相关技能，请立即加载并执行：**\n"
+                )
+                for i, s in enumerate(unused_skills, 1):
+                    skill_instruction += f"\n{i}. 用 `read_file` 加载 `{s}`"
+                skill_instruction += (
+                    "\n\n按 SKILL.md 中的步骤执行。"
+                )
+                injection_text += skill_instruction
 
             # Keep at most one assess_me message — remove all stale ones before injecting new
             for i in range(len(messages) - 1, -1, -1):
