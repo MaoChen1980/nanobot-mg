@@ -1049,12 +1049,12 @@ class AgentRunner:
             _now = time.monotonic()
             logger.info("RUN_Timing: post_stream_end={:.0f}ms", (_now - _run_t0) * 1000)
 
-            if response.finish_reason == "error" and (is_blank_text(clean) or clean.startswith("Error")):
+            if response.finish_reason == "error":
                 if response.error_kind == "timeout":
                     consecutive_timeout_count += 1
                 else:
                     consecutive_timeout_count = 0
-                final_content = clean or spec.error_message or _DEFAULT_ERROR_MESSAGE
+                final_content = clean if clean and not is_blank_text(clean) else (spec.error_message or _DEFAULT_ERROR_MESSAGE)
                 stop_reason = "error"
                 error = final_content
                 self._append_model_error_placeholder(messages)
@@ -1455,6 +1455,7 @@ def _clear_msg_deferred(spec) -> None:
 
 async def _flush_msg_deferred(spec, stop_reason: str) -> None:
     """Flush or discard deferred message tool content based on exit reason."""
+    import asyncio as _asyncio
     mt = spec.tools.get("message")
     if mt is None or not hasattr(mt, "has_deferred") or not mt.has_deferred:
         return
@@ -1462,7 +1463,10 @@ async def _flush_msg_deferred(spec, stop_reason: str) -> None:
         mt.clear_deferred()
         logger.info("Cleared deferred message tool content (stop_reason={})", stop_reason)
     else:
-        await mt.flush_deferred()
+        flush = getattr(mt, "flush_deferred", None)
+        if flush is None or not _asyncio.iscoroutinefunction(flush):
+            return
+        await flush()
         logger.info("Flushed deferred message tool content (stop_reason={})", stop_reason)
 
 
