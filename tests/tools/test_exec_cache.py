@@ -25,6 +25,10 @@ async def test_exec_saves_to_cache(tmp_path):
         # Mock _spawn to return a controlled result
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"hello world\nline 2\nline 3\n", b"")
+        # _drain calls stream.read() — configure stdout/stderr.read
+        # Return data on first call, then b"" (EOF) on subsequent calls to exit the drain loop
+        mock_proc.stdout.read = AsyncMock(side_effect=[b"hello world\nline 2\nline 3\n", b""])
+        mock_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
         mock_proc.returncode = 0
         with patch.object(ExecTool, "_spawn", return_value=mock_proc):
             result = await tool.execute(command="echo hello")
@@ -55,7 +59,8 @@ async def test_default_return_includes_cache_path(tmp_path):
     """Default exec result includes the cache file path."""
     tool = ExecTool(working_dir=str(tmp_path))
     mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (b"ok", b"")
+    mock_proc.stdout.read = AsyncMock(side_effect=[b"ok", b""])
+    mock_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
     mock_proc.returncode = 0
     with (
         patch.object(ExecTool, "_guard_command", return_value=None),
@@ -75,10 +80,8 @@ async def test_default_return_includes_cache_path(tmp_path):
 async def test_grep_filters_output(tmp_path):
     """grep parameter returns only lines matching the pattern."""
     mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (
-        b"line 1: apple\nline 2: banana\nline 3: apple pie\nline 4: cherry\n",
-        b"",
-    )
+    mock_proc.stdout.read = AsyncMock(side_effect=[b"line 1: apple\nline 2: banana\nline 3: apple pie\nline 4: cherry\n", b""])
+    mock_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
     mock_proc.returncode = 0
     tool = ExecTool(working_dir=str(tmp_path))
     with (
@@ -97,7 +100,8 @@ async def test_grep_filters_output(tmp_path):
 async def test_grep_returns_exit_code(tmp_path):
     """grep result still shows the exit code."""
     mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (b"hello\nworld\n", b"")
+    mock_proc.stdout.read = AsyncMock(side_effect=[b"hello\nworld\n", b""])
+    mock_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
     mock_proc.returncode = 1
     tool = ExecTool(working_dir=str(tmp_path))
     with (
@@ -113,7 +117,8 @@ async def test_grep_returns_exit_code(tmp_path):
 async def test_grep_no_matches(tmp_path):
     """When no lines match, grep returns a clear message."""
     mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (b"aaa\nbbb\nccc\n", b"")
+    mock_proc.stdout.read = AsyncMock(side_effect=[b"aaa\nbbb\nccc\n", b""])
+    mock_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
     mock_proc.returncode = 0
     tool = ExecTool(working_dir=str(tmp_path))
     with (
@@ -134,12 +139,15 @@ async def test_grep_no_matches(tmp_path):
 async def test_extract_with_cache_placeholder(tmp_path):
     """{cache} in extract is replaced with the actual file path."""
     mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (b"some output\n" * 10, b"")
+    mock_proc.stdout.read = AsyncMock(side_effect=[b"some output\n" * 10, b""])
+    mock_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
     mock_proc.returncode = 0
 
     # Mock the second spawn (for the extract command)
     mock_extract_proc = AsyncMock()
     mock_extract_proc.communicate.return_value = (b"10\n", b"")
+    mock_extract_proc.stdout.read = AsyncMock(side_effect=[b"10\n", b""])
+    mock_extract_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
     mock_extract_proc.returncode = 0
 
     spawns = [mock_proc, mock_extract_proc]
@@ -249,7 +257,8 @@ async def test_exec_allows_normal_commands(tmp_path):
 async def test_exec_exit_code_preserved(tmp_path):
     """Exit code is still shown in the result."""
     mock_proc = AsyncMock()
-    mock_proc.communicate.return_value = (b"", b"")
+    mock_proc.stdout.read = AsyncMock(side_effect=[b"", b""])
+    mock_proc.stderr.read = AsyncMock(side_effect=[b"", b""])
     mock_proc.returncode = 0
     tool = ExecTool(working_dir=str(tmp_path))
     with (
