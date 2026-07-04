@@ -61,9 +61,12 @@ def _create_bus_progress_callback(loop, msg):
     callback is available.
     """
     proxy_key: str | None = None
-    channel = msg.channel
-    if channel.startswith("proxy:"):
-        proxy_key = channel[len("proxy:"):]
+    # System/subagent messages have channel="system" but carry the real origin
+    # channel in _origin_channel metadata.  Use it for proxy_key derivation
+    # so progress messages can be routed through the correct proxy connection.
+    effective_ch = msg.metadata.get("_origin_channel") or msg.channel
+    if effective_ch.startswith("proxy:"):
+        proxy_key = effective_ch[len("proxy:"):]
 
     async def _bus_progress(content, *, tool_hint=False, tool_events=None):
         meta = dict(msg.metadata or {})
@@ -71,6 +74,10 @@ def _create_bus_progress_callback(loop, msg):
         meta["_tool_hint"] = tool_hint
         if proxy_key:
             meta["_proxy_key"] = proxy_key
+        # Use _origin_chat_id when present (system/subagent messages carry
+        # full qualified chat_id like "proxy:feishu:feishu1:oc_xxx" but the
+        # proxy expects just the raw chat_id "oc_xxx").
+        effective_chat_id = msg.metadata.get("_origin_chat_id") or msg.chat_id
         parts: list[str] = []
         if tool_events:
             for te in tool_events:
@@ -92,7 +99,7 @@ def _create_bus_progress_callback(loop, msg):
         if formatted:
             final_content = (content + "\n" + formatted) if content else formatted
         await loop.bus.publish_outbound(OutboundMessage(
-            channel=msg.channel, chat_id=msg.chat_id,
+            channel=msg.channel, chat_id=effective_chat_id,
             content=final_content, metadata=meta,
         ))
     return _bus_progress
