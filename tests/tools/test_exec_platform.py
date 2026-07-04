@@ -6,7 +6,7 @@ platform-specific binaries (all subprocess calls are mocked).
 """
 
 import sys
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -21,6 +21,21 @@ _WINDOWS_ENV_KEYS = {
 # ---------------------------------------------------------------------------
 # _build_env
 # ---------------------------------------------------------------------------
+
+
+def _mock_proc_with_stdout(stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0) -> MagicMock:
+    """Return a MagicMock subprocess.Process whose stdout/stderr read and wait are async."""
+    mock = MagicMock()
+    mock.returncode = returncode
+    mock.pid = 12345
+    # _drain() calls stream.read() which returns bytes on first call, empty to exit loop
+    mock.stdout.read = AsyncMock(side_effect=[stdout, b""])
+    mock.stderr.read = AsyncMock(side_effect=[stderr, b""])
+    # _kill_process() awaits process.wait() and calls process.kill()
+    mock.wait = AsyncMock(return_value=0)
+    mock.kill = MagicMock()
+    return mock
+
 
 class TestBuildEnvUnix:
 
@@ -211,9 +226,7 @@ class TestSandboxPlatform:
     @pytest.mark.asyncio
     async def test_bwrap_skipped_on_windows(self, tmp_path):
         """bwrap must be silently skipped on Windows, not crash."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"ok", b"")
-        mock_proc.returncode = 0
+        mock_proc = _mock_proc_with_stdout(b"ok", b"", 0)
 
         with (
             patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
@@ -297,9 +310,7 @@ class TestNullErrorOnWindows:
     @pytest.mark.asyncio
     async def test_null_without_redirect_no_error(self, tmp_path):
         """$null without a redirect operator must NOT trigger the error."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"ok", b"")
-        mock_proc.returncode = 0
+        mock_proc = _mock_proc_with_stdout(b"ok", b"", 0)
 
         captured_cmd = None
         async def capture_spawn(cmd, cwd, env):
@@ -333,9 +344,7 @@ class TestNullErrorOnWindows:
     @pytest.mark.asyncio
     async def test_no_error_on_unix(self, tmp_path):
         """$null redirect must NOT trigger an error on Unix."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"hi", b"")
-        mock_proc.returncode = 0
+        mock_proc = _mock_proc_with_stdout(b"hi", b"", 0)
 
         captured_cmd = None
         async def capture_spawn(cmd, cwd, env):
@@ -388,9 +397,7 @@ class TestMkdirPErrorOnWindows:
     @pytest.mark.asyncio
     async def test_mkdir_without_p_no_error(self, tmp_path):
         """mkdir without -p must NOT trigger the error."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
+        mock_proc = _mock_proc_with_stdout(b"", b"", 0)
 
         captured_cmd = None
         async def capture_spawn(cmd, cwd, env):
@@ -411,9 +418,7 @@ class TestMkdirPErrorOnWindows:
     @pytest.mark.asyncio
     async def test_mkdir_p_no_error_on_unix(self, tmp_path):
         """mkdir -p must NOT trigger an error on Unix."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
+        mock_proc = _mock_proc_with_stdout(b"", b"", 0)
 
         captured_cmd = None
         async def capture_spawn(cmd, cwd, env):
@@ -441,9 +446,7 @@ class TestExecuteEndToEnd:
     @pytest.mark.asyncio
     async def test_windows_full_path(self, tmp_path):
         """Full execute() flow on Windows: env, spawn, output formatting."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"hello world\r\n", b"")
-        mock_proc.returncode = 0
+        mock_proc = _mock_proc_with_stdout(b"hello world\r\n", b"", 0)
 
         with (
             patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", True),
@@ -459,9 +462,7 @@ class TestExecuteEndToEnd:
     @pytest.mark.asyncio
     async def test_unix_full_path(self, tmp_path):
         """Full execute() flow on Unix: env, spawn, output formatting."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"hello world\n", b"")
-        mock_proc.returncode = 0
+        mock_proc = _mock_proc_with_stdout(b"hello world\n", b"", 0)
 
         with (
             patch("nanobot.agent.tools.shell.shell._IS_WINDOWS", False),

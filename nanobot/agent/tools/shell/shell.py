@@ -804,6 +804,9 @@ class ExecTool(Tool):
             if not _IS_WINDOWS:
                 try:
                     os.waitpid(process.pid, os.WNOHANG)
+                except AttributeError:
+                    # frozen os module on Windows lacks WNOHANG
+                    pass
                 except (ProcessLookupError, ChildProcessError) as e:
                     logger.debug("Process already reaped or not found: {}", e)
 
