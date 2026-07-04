@@ -757,6 +757,135 @@ class GatewayApplication:
         if sent:
             logger.info("Log check: alerted {} session(s)", sent)
 
+        # Auto-fix: spawn fixer agents for unique errors (fire-and-forget)
+        if new_errors:
+            seen: dict[str, list[dict[str, Any]]] = {}
+            for err in new_errors:
+                sig = f"{err.get('f', '?')}|{err.get('m', '')[:80]}"
+                seen.setdefault(sig, []).append(err)
+            for i, (sig, group) in enumerate(seen.items()):
+                if i >= 2:
+                    logger.info("Log check: too many error types, skipping remaining {}")
+                    break
+                logger.info("Log check: spawning fixer for {}", sig)
+                self._bg_tasks.append(
+                    asyncio.create_task(
+                        self._auto_fix_log_errors(group, deliver_fn)
+                    )
+                )
+
+    async def _auto_fix_log_errors(
+        self,
+        error_entries: list[dict[str, Any]],
+        deliver_fn: Callable,
+    ) -> None:
+        """Spawn an agent to diagnose and fix a group of similar errors."""
+        if self.provider is None or self.provider_snapshot is None:
+            logger.debug("Log fixer: provider not available, skipping")
+            return
+        from nanobot.agent.runner import AgentRunner, AgentRunSpec
+        from nanobot.agent.subagent_tools import build_subagent_tools as _build_tools
+        from nanobot.bus.events import OutboundMessage
+        from nanobot.utils.prompt_templates import render_template
+
+        entry = error_entries[0]
+        count = len(error_entries)
+        project_root = Path(__file__).parent.parent.parent.resolve()
+
+        error_context = json.dumps({
+            "t": entry.get("t"),
+            "l": entry.get("l"),
+            "n": entry.get("n"),
+            "f": entry.get("f"),
+            "m": entry.get("m"),
+            "_traceback": entry.get("_traceback"),
+        }, ensure_ascii=False, indent=2)
+
+        system_prompt = render_template("agent/log_fixer.md")
+        user_content = (
+            f"## Error Details\n\n```json\n{error_context}\n```\n\n"
+            f"## Similar Errors\n{count} similar error(s) found (first shown above).\n\n"
+            f"## Project Root\n{project_root.as_posix()}\n\n"
+            "Diagnose the root cause and fix if confident."
+        )
+
+        try:
+            tools = _build_tools(
+                workspace=project_root,
+                web_config=self.config.tools.web,
+                exec_config=self.config.tools.exec,
+                restrict_to_workspace=self.config.tools.restrict_to_workspace,
+                memory_store=None,
+            )
+        except Exception as exc:
+            logger.warning("Log fixer: failed to build tools ({})", exc)
+            return
+
+        spec = AgentRunSpec(
+            initial_messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            tools=tools,
+            model=self.provider_snapshot.model,
+            max_iterations=50,
+            max_tool_result_chars=30000,
+        )
+
+        runner = AgentRunner(self.provider)
+        try:
+            result = await runner.run(spec)
+        except Exception:
+            logger.exception("Log fixer: agent run failed")
+            return
+
+        diagnosis = (result.final_content or "").strip()
+        if not diagnosis:
+            logger.info("Log fixer: no diagnosis produced")
+            return
+
+        logger.info(
+            "Log fixer: diagnosis for {} - {}",
+            entry.get("f", "?"), diagnosis[:100],
+        )
+
+        # Deliver fixer result to active proxy sessions
+        header = entry.get("f", "?")
+        msg_text = entry.get("m", "")
+        fixer_msg = (
+            f"[Auto-Fix] Error in {header}: {msg_text[:200]}\n\n"
+            f"{diagnosis}"
+        )
+        now = datetime.now(timezone.utc)
+        sessions = self.session_manager.list_sessions()
+        for session in sessions:
+            key = session.get("key", "")
+            if not key.startswith("proxy:"):
+                continue
+            updated = session.get("updated_at")
+            if updated:
+                try:
+                    updated_dt = datetime.fromisoformat(updated)
+                    if (now - updated_dt).total_seconds() > 86400:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            parts_key = key.split(":", 3)
+            if len(parts_key) < 4:
+                continue
+            proxy_key = f"{parts_key[1]}:{parts_key[2]}"
+            chat_id = parts_key[3]
+            try:
+                await deliver_fn(
+                    OutboundMessage(
+                        channel=f"proxy:{proxy_key}",
+                        chat_id=chat_id,
+                        content=fixer_msg,
+                    ),
+                )
+            except Exception:
+                logger.exception("Log fixer: failed to deliver to session {}", key)
+
     # ------------------------------------------------------------------
     # Service lifecycle
     # ------------------------------------------------------------------
