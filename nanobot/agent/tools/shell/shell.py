@@ -152,9 +152,9 @@ class ExecTool(Tool):
 
         if _IS_WINDOWS:
             self.instruction = (
-                "Execute shell commands. The shell is pwsh (PowerShell 7+), not bash. "
-                "Use PowerShell syntax: `Get-Content` not `cat`, `dir` not `ls`, "
-                "`Select-String` not `grep`, `Measure-Object` not `wc`. "
+                "Execute shell commands. The shell is cmd.exe, not bash or PowerShell. "
+                "Use cmd.exe syntax: `type` not `cat`, `dir` not `ls`, `findstr` not `grep`. "
+                "Avoid PowerShell-only commands (Get-Content, Select-String, Measure-Object). "
                 "Only use exec for tasks not covered by dedicated tools."
             )
         else:
@@ -440,13 +440,13 @@ class ExecTool(Tool):
             if exit_code != 0:
                 hint = self._EXIT_CODE_HINTS.get(exit_code, "")
                 hint_suffix = f" — {hint}" if hint else ""
-                logger.warning("Command exit with code {} (shell=pwsh, cwd={}, cmd={:.80}){}",
+                logger.warning("Command exit with code {} (shell=cmd, cwd={}, cmd={:.80}){}",
                                exit_code, cwd, command, hint_suffix)
 
             cwd_safe = cwd.replace('\\', '/')
             hint = self._EXIT_CODE_HINTS.get(exit_code, "")
             hint_suffix = f" — {hint}" if hint else ""
-            status_line = f"Exit: {exit_code}  |  cwd: {cwd_safe}  |  shell: {'pwsh' if _IS_WINDOWS else 'sh'}{hint_suffix}"
+            status_line = f"Exit: {exit_code}  |  cwd: {cwd_safe}  |  shell: {'cmd' if _IS_WINDOWS else 'sh'}{hint_suffix}"
 
             body = "\n".join(output_parts) if output_parts else "(no output)"
             SEP = "─" * 56
