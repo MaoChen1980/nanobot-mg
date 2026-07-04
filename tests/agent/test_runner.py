@@ -1378,29 +1378,37 @@ class TestAppendModelErrorPlaceholder:
         from nanobot.agent.runner import AgentRunner
         return AgentRunner
 
-    def test_skips_when_last_is_assistant_without_tool_calls(self):
+    def test_skips_when_last_is_user_with_placeholder(self):
+        # Skip condition: last is user AND content == placeholder
+        # When last is assistant (not user), skip condition not met → appends
         msgs = [{"role": "assistant", "content": "partial"}]
         self._runner()._append_model_error_placeholder(msgs)
-        assert len(msgs) == 1
+        assert len(msgs) == 2
+        assert msgs[-1]["role"] == "user"
+        assert "模型异常" in msgs[-1]["content"]
 
     def test_appends_when_last_is_user(self):
+        # Last is user but content != placeholder → does not skip, appends
         msgs = [{"role": "user", "content": "q"}]
         self._runner()._append_model_error_placeholder(msgs)
         assert len(msgs) == 2
-        assert msgs[-1]["role"] == "assistant"
-        assert "unavailable" in msgs[-1]["content"]
+        assert msgs[-1]["role"] == "user"
+        assert "模型异常" in msgs[-1]["content"]
 
     def test_appends_when_last_assistant_has_tool_calls(self):
+        # Skip condition only matches user+placeholder, so assistant always appends
         msgs = [{"role": "assistant", "content": "", "tool_calls": [{"id": "tc1"}]}]
         self._runner()._append_model_error_placeholder(msgs)
         assert len(msgs) == 2
-        assert "unavailable" in msgs[-1]["content"]
+        assert msgs[-1]["role"] == "user"
+        assert "模型异常" in msgs[-1]["content"]
 
     def test_appends_to_empty_list(self):
         msgs: list = []
         self._runner()._append_model_error_placeholder(msgs)
         assert len(msgs) == 1
-        assert "unavailable" in msgs[0]["content"]
+        assert msgs[0]["role"] == "user"
+        assert "模型异常" in msgs[0]["content"]
 
 
 # ===========================================================================
@@ -1459,7 +1467,7 @@ class TestForceFinalResponse:
             {"role": "tool", "content": "r", "tool_call_id": "tc1"},
         ]
         _force_final_response(msgs, "done")
-        assert msgs[-1]["role"] == "assistant"
+        assert msgs[-1]["role"] == "user"
         assert msgs[-1]["content"] == "done"
         assert "tool_calls" not in msgs[-1]
 
@@ -1474,7 +1482,7 @@ class TestForceFinalResponse:
         _force_final_response(msgs, "final")
         # Tool results stripped, assistant tool-call message kept, final appended
         assert all(m["role"] != "tool" for m in msgs)
-        assert msgs[-1]["role"] == "assistant"
+        assert msgs[-1]["role"] == "user"
         assert msgs[-1]["content"] == "final"
 
     def test_empty_messages(self):
