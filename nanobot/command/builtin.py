@@ -217,9 +217,9 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.priority("/stop", cmd_stop)
     router.priority("/restart", cmd_restart)
     router.priority("/status", cmd_status)
-    router.priority("/new", cmd_new)
-    router.priority("/clear", cmd_new)
-    router.priority("/reset", cmd_new)
+    router.exact("/new", cmd_new)
+    router.exact("/clear", cmd_new)
+    router.exact("/reset", cmd_new)
     router.exact("/sub", cmd_sub)
     router.exact("/help", cmd_help)
 

@@ -69,7 +69,7 @@ class TestMidTurnCommandDispatchedDirectly:
         loop.sessions.save = MagicMock()
         loop.sessions.invalidate = MagicMock()
         loop._schedule_background = MagicMock()
-        loop._cancel_active_tasks = AsyncMock(return_value=0)
+        loop.cancel_active_tasks = AsyncMock(return_value=0)
         return loop
 
     @pytest.fixture()
@@ -79,6 +79,7 @@ class TestMidTurnCommandDispatchedDirectly:
         msg.chat_id = "chat1"
         msg.content = "/new"
         msg.metadata = {}
+        msg.session_key = "test:chat1"
         return msg
 
     @pytest.mark.asyncio
