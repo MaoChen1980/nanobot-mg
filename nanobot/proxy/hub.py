@@ -328,12 +328,56 @@ class HubTCPServer:
         This is shared between the main route path and /stop handling so that
         both report tool events and thinking text to the user.
         """
+        # Buffer + flush strategy for streaming content:
+        #
+        #   LLM streams text in small deltas → on_progress(chunk) calls.
+        #   Without buffering, each chunk becomes a separate platform message
+        #   (e.g. 6–10 feishu messages for one response).
+        #
+        #   Solution: buffer plain streaming text, flush only at semantic
+        #   boundaries — tool events (start/end signal an LLM turn boundary)
+        #   and at the very end via _route_message.
+        #
+        #   Non-streaming APIs: on_progress is never called → buffer stays
+        #   empty, _ever_flushed stays False → _route_message falls through
+        #   to the original single-delivery path.  Works unchanged.
+        content_buffer: list[str] = []
+        _ever_flushed = False
+
+        async def _flush_buffer() -> str | None:
+            """Deliver accumulated streaming content as a single message.
+            Returns the flushed text, or None if buffer was empty.
+            """
+            nonlocal content_buffer, _ever_flushed
+            if not content_buffer:
+                return None
+            text = "".join(content_buffer)
+            content_buffer = []
+            _ever_flushed = True
+            await proxy_manager.deliver_to_proxy(proxy_key, {
+                "type": "deliver",
+                "chat_id": chat_id,
+                "content": text,
+            })
+            return text
+
         async def _on_progress(
             content: str,
             *,
             tool_hint: bool = False,
             tool_events: list | None = None,
         ) -> None:
+            nonlocal content_buffer, _ever_flushed
+
+            # Plain streaming content with no tool context → buffer it.
+            if content and not tool_hint and not tool_events:
+                content_buffer.append(content)
+                return
+
+            # Non-plain call (tool_hint / tool_events) → flush buffered
+            # streaming content first, then handle the current event.
+            await _flush_buffer()
+
             _user_tools = frozenset(["message"])
             has_non_user_event = False
             if tool_events:
@@ -368,6 +412,11 @@ class HubTCPServer:
                     "chat_id": chat_id,
                     "content": content,
                 })
+
+        # Attach introspection helpers so _route_message can decide whether to
+        # suppress the duplicate "full response" delivery at the end.
+        _on_progress.try_flush = _flush_buffer  # type: ignore[attr-defined]
+        _on_progress.ever_delivered = lambda: _ever_flushed  # type: ignore[attr-defined]
         return _on_progress
 
     async def _route_message(
@@ -544,6 +593,38 @@ class HubTCPServer:
         proxy_key = f"{msg.channel}:{msg.bot}"
         resp_dict = resp.to_dict()
         content = resp_dict.get("content", "")
+
+        # Flush any remaining streaming content in the buffer.
+        # If streaming ever flushed (tool boundaries), the content was already
+        # delivered in pieces — flush the tail and suppress the full-response
+        # duplicate to avoid "N chunks + 1 full response" message spam.
+        if hasattr(_on_progress, 'try_flush') and hasattr(_on_progress, 'ever_delivered'):
+            flushed = await _on_progress.try_flush()
+            if _on_progress.ever_delivered():
+                if flushed and (content == flushed or content.endswith(flushed)):
+                    # Flushed content matches the full response (or its tail).
+                    # Everything already delivered via streaming.
+                    logger.debug("Streaming covered response — suppress duplicate to proxy {}", proxy_key)
+                elif not flushed:
+                    # Previously flushed via tool events, no tail remaining.
+                    # Body already delivered in segments.
+                    logger.debug("Streaming delivered body — suppress duplicate to proxy {}", proxy_key)
+                else:
+                    # Flushed content doesn't match the response (e.g. subagent
+                    # content in buffer). Let the authoritative response through.
+                    logger.debug("Flushed content differs from final response — deliver authoritative copy to proxy {}", proxy_key)
+                    if content:
+                        resp_dict["type"] = "deliver"
+                        resp_dict["chat_id"] = msg.chat_id
+                        delivered = await self._proxy_manager.deliver_to_proxy(
+                            proxy_key, resp_dict,
+                        )
+                        if delivered:
+                            logger.info("Hub response delivered to proxy {}: content={}", proxy_key, content[:60])
+                        else:
+                            logger.warning("Response not delivered to proxy {} (disconnected)", proxy_key)
+                return
+
         if not content:
             logger.debug("Hub response empty — skipping deliver to proxy {}", proxy_key)
         else:
