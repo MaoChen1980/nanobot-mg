@@ -8,10 +8,11 @@ import pytest
 
 from nanobot.heartbeat.service import HeartbeatService
 from nanobot.heartbeat.state import HeartbeatState
+from nanobot.agent.context import _sanitize_session_key
 
 
 class TestTickWithState:
-    """Tests that exercise _tick with real HeartbeatState and TREE.md file."""
+    """Tests that exercise _tick with real HeartbeatState and tree.json file."""
 
     async def _make_service(self, tmp_path, due_task=None) -> HeartbeatService:
         loop = MagicMock()
@@ -20,19 +21,19 @@ class TestTickWithState:
         loop.dispatch_manager = MagicMock()
         loop.process_direct = AsyncMock(return_value=MagicMock(content="HEARTBEAT_OK"))
 
-        svc = HeartbeatService(agent_loop=loop, enabled=True)
+        svc = HeartbeatService(agent_loop=loop, enabled=True, session_key=None)
         svc._state = HeartbeatState(tmp_path / "tasks" / ".heartbeat_state.json")
         return svc
 
     def _write_tree(self, tmp_path, tasks: list[tuple[str, str]]):
-        """Write TREE.md with interval tasks under ## active."""
+        """Write tree.json with pending interval tasks."""
+        import json
         tree_dir = tmp_path / "tasks"
         tree_dir.mkdir(parents=True, exist_ok=True)
-        lines = ["## active"]
+        items = []
         for name, interval in tasks:
-            lines.append(f"- {name} [interval: {interval}]")
-        lines.append("## done")
-        (tree_dir / "TREE.md").write_text("\n".join(lines), encoding="utf-8")
+            items.append({"id": name, "name": name, "status": "pending", "interval": interval, "parent": None})
+        (tree_dir / "tree_cli_direct.json").write_text(json.dumps({"items": items}, indent=2), encoding="utf-8")
 
     # --- Cooldown ---
 
@@ -69,10 +70,12 @@ class TestTickWithState:
 
     @pytest.mark.asyncio
     async def test_tree_with_whitespace_variations(self, tmp_path):
+        import json
         tree_dir = tmp_path / "tasks"
         tree_dir.mkdir(parents=True)
-        (tree_dir / "TREE.md").write_text(
-            "  ##  active  \n  -  check health  [interval:  30m]  \n##done\n",
+        # Test task name with spaces
+        (tree_dir / "tree_cli_direct.json").write_text(
+            json.dumps({"items": [{"id": "check_health", "name": "check health", "status": "pending", "interval": "30m", "parent": None}]}),
             encoding="utf-8",
         )
         svc = await self._make_service(tmp_path)

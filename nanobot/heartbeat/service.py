@@ -97,10 +97,12 @@ class HeartbeatService:
         from nanobot.agent.context import _sanitize_session_key
 
         suffix = f"_{_sanitize_session_key(self.session_key)}" if self.session_key else ""
-        return self.agent_loop.workspace / "tasks" / f"tree{suffix}.json"
+        # Use Path() constructor to avoid PurePosixPath / string creating
+        # forward-slash paths on Windows which don't resolve as real paths.
+        return Path(str(self.agent_loop.workspace)) / "tasks" / f"tree{suffix}.json"
 
     def _find_pending_tasks(self) -> list[dict]:
-        """Scan tree.json for pending leaf tasks."""
+        """Scan tree.json for pending leaf tasks that are due (per-task cooldown check)."""
         tree_path = self._tree_path()
         if not tree_path.exists():
             return []
@@ -114,11 +116,35 @@ class HeartbeatService:
             return []
         # Collect parent IDs so we can identify leaves
         parent_ids = {item.get("parent") for item in items if item.get("parent")}
-        pending = [
-            item for item in items
-            if item.get("status") == "pending" and item.get("id") not in parent_ids
-        ]
+        pending = []
+        for item in items:
+            if item.get("status") != "pending" or item.get("id") in parent_ids:
+                continue
+            # Per-task cooldown: skip if task was recently run
+            task_id = item.get("id")
+            interval_str = item.get("interval")
+            if task_id and interval_str and self._state is not None:
+                last_run = self._state.last_run(task_id)
+                if last_run is not None:
+                    interval_s = self._parse_interval(interval_str)
+                    if last_run + interval_s > time.time():
+                        # Still in cooldown window — skip
+                        continue
+            pending.append(item)
         return pending[:5]  # cap at 5 to keep prompt short
+
+    def _parse_interval(self, interval_str: str) -> float:
+        """Parse an interval string like '30m' or '1h' into seconds."""
+        interval_str = interval_str.strip()
+        if interval_str.endswith("s"):
+            return float(interval_str[:-1])
+        elif interval_str.endswith("m"):
+            return float(interval_str[:-1]) * 60
+        elif interval_str.endswith("h"):
+            return float(interval_str[:-1]) * 3600
+        elif interval_str.endswith("d"):
+            return float(interval_str[:-1]) * 86400
+        return 0.0
 
     async def _tick(self) -> None:
         """Single heartbeat beat: skip chain → prompt → LLM → handle response."""
