@@ -490,8 +490,10 @@ class DingTalkProxyChannel(BaseProxyChannel):
                             logger.info(f"Sent {media_type} {media_id} to {chat_id} ({file_name})")
                             break
                         logger.warning("DingTalk media send API error ({}): errcode={} errmsg={}", media_type, errcode, result.get("errmsg", ""))
+                        break
                     else:
                         logger.warning("DingTalk media send failed ({}): {} - {}", media_type, resp.status_code, resp.text[:200])
+                        break
                 except Exception as e:
                     if attempt < 2:
                         wait = 1 << attempt
