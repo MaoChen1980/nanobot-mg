@@ -475,6 +475,7 @@ class AgentRunner:
             raise
         finally:
             run_context.messages = list(messages)
+            await hook.after_run(run_context)
             await hook.on_finally(run_context)
 
     async def _run_core(
