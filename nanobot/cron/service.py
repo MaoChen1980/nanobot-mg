@@ -305,6 +305,73 @@ class CronService:
 
         self._atomic_write(self.store_path, json.dumps(data, indent=2, ensure_ascii=False))
 
+    def _replay_action_queue(self) -> None:
+        """Replay action queue from when service was stopped.
+
+        When the service is not running, add_job/remove_job/update_job record their
+        operations to action.jsonl via _append_action(). On restart, these are
+        replayed so no operations are lost.
+        """
+        if not self._action_path.exists():
+            return
+        try:
+            lines = self._action_path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return
+        if not lines:
+            return
+        replayed = 0
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            action = entry.get("action")
+            params = entry.get("params", {})
+            if action == "add":
+                # Check if already exists (idempotent)
+                job_dict = params
+                job_id = job_dict.get("id")
+                if job_id and any(j.id == job_id for j in self._store.jobs):
+                    continue
+                try:
+                    job = CronJob.from_dict(job_dict)
+                    self._store.jobs.append(job)
+                    replayed += 1
+                except Exception:
+                    logger.warning("Cron: failed to replay 'add' action for job {}", job_id)
+            elif action == "del":
+                job_id = params.get("job_id")
+                if not job_id:
+                    continue
+                before = len(self._store.jobs)
+                self._store.jobs = [j for j in self._store.jobs if j.id != job_id]
+                if len(self._store.jobs) < before:
+                    replayed += 1
+            elif action == "update":
+                job_id = params.get("id")
+                if not job_id:
+                    continue
+                idx = next((i for i, j in enumerate(self._store.jobs) if j.id == job_id), None)
+                if idx is not None:
+                    try:
+                        updated = CronJob.from_dict(params)
+                        self._store.jobs[idx] = updated
+                        replayed += 1
+                    except Exception:
+                        logger.warning("Cron: failed to replay 'update' action for job {}", job_id)
+        if replayed:
+            self._save_store()
+            logger.info("Cron: replayed {} action(s) from queue", replayed)
+        # Clear the queue after replay
+        try:
+            self._action_path.write_text("", encoding="utf-8")
+        except Exception:
+            pass  # Non-fatal if we can't clear
+
     async def start(self) -> None:
         """Start the cron service."""
         self._running = True
@@ -316,6 +383,8 @@ class CronService:
                 "refusing to start with an empty job list. "
                 "Inspect the .corrupt-<ts> backup and restore manually."
             )
+        # Replay queued actions from when service was stopped (add/del/update ops)
+        self._replay_action_queue()
         self._recompute_next_runs()
         self._save_store()
         self._arm_timer()

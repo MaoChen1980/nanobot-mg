@@ -34,6 +34,7 @@ class NanobotDB:
             logger.exception("Failed to open database at {}", self.db_path)
             raise
         self._workspace = Path(workspace) if workspace else Path.home() / ".nanobot" / "workspace"
+        self._last_purge: datetime | None = None  # Timer-based purge to avoid O(N²) on every insert
         try:
             self._init_tables()
         except sqlite3.DatabaseError:
@@ -516,7 +517,7 @@ class NanobotDB:
         error: str | None = None,
         duration_ms: int | None = None,
     ) -> int:
-        self._purge_old_tool_calls()
+        self._purge_old_tool_calls()  # Timer-based: only purges once per day max
         if result:
             result = re.sub(r"[\ud800-\udfff]", "�", result)
         if error:
@@ -534,7 +535,12 @@ class NanobotDB:
         return cursor.lastrowid or 0
 
     def _purge_old_tool_calls(self) -> None:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=self._TOOL_CALL_RETENTION_DAYS)).isoformat()
+        now = datetime.now(timezone.utc)
+        # Only purge once per day max to avoid O(N²) on高频 inserts
+        if self._last_purge and (now - self._last_purge) < timedelta(days=1):
+            return
+        self._last_purge = now
+        cutoff = (now - timedelta(days=self._TOOL_CALL_RETENTION_DAYS)).isoformat()
         with self._conn_access() as conn:
             deleted = conn.execute(
                 "DELETE FROM tool_calls WHERE timestamp < ?", (cutoff,)

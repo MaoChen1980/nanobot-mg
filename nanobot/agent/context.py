@@ -98,6 +98,8 @@ class ContextBuilder:
         self._pending_memory_entries: list[dict] = []
         # Cache for _build_memory_quality_note: (mtime, formatted_string)
         self._memory_quality_cache: tuple[float, str] | None = None
+        # Gate: only rebuild tools index once per session (mtime cache avoids redundant disk writes)
+        self._tools_index_built = False
 
 
     def warmup(self) -> None:
@@ -154,8 +156,10 @@ class ContextBuilder:
         if tool_definitions:
             tools = self._build_tools_section(tool_definitions)
 
-        # Regenerate tools index so TOOLS.md is always fresh
-        _rebuild_tools_index(self.workspace)
+        # Regenerate tools index once per session (mtime cache inside avoids redundant disk writes)
+        if not self._tools_index_built:
+            _rebuild_tools_index(self.workspace)
+            self._tools_index_built = True
 
         bootstrap = self._load_bootstrap_files()
 
@@ -990,7 +994,9 @@ class ContextBuilder:
             cached = _template_content_cache.get(template_path)
             if cached is None or cached[0] != mtime:
                 if len(_template_content_cache) >= _MAX_TEMPLATE_CACHE_SIZE:
-                    _template_content_cache.clear()
+                    # LRU eviction: remove the oldest entry instead of clearing all
+                    oldest_key = next(iter(_template_content_cache))
+                    del _template_content_cache[oldest_key]
                 _template_content_cache[template_path] = (mtime, tpl.read_text(encoding="utf-8"))
                 cached = _template_content_cache[template_path]
             return content.strip() == cached[1].strip()
