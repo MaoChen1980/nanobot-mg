@@ -26,6 +26,35 @@ category: code-review
    - Maintainability (naming, comments, test coverage, error handling)
    - API compatibility (breaking changes, deprecated usage, version mismatches)
 
+### Full-Scope Analysis (for multi-module changes)
+
+For changes affecting multiple modules or complex data flows, extend analysis beyond the diff:
+
+**a) Data Flow Analysis** — Trace the input → processing → output path:
+- Identify upstream dependencies (what calls this module? what data feeds it?)
+- Map downstream consumers (who uses the output? what assumptions do they make?)
+- Verify data transformation correctness at each stage
+
+**b) Control Flow Analysis** — Analyze branches, exceptions, and concurrency:
+- Check all conditional branches for unhandled cases
+- Verify exception handling coverage (what exceptions are caught, propagated, swallowed?)
+- Look for race conditions or deadlocks in concurrent code
+
+**c) Call Chain Verification** — Cross-check上下游调用链:
+- Use `grep` to find all call sites of modified functions
+- Verify the call chain matches your understanding of the code
+- Check for indirect dependencies (decorators, middleware, SDK defaults)
+
+**d) Compile/Type Check (compiled languages)** — For Python/compiled projects:
+```bash
+# Python syntax check
+python -m py_compile <file.py>
+
+# Or for type checking
+mypy <file.py>  # if mypy is configured
+```
+**Always run syntax/compilation checks before finalizing the review.**
+
 ## Output Format
 
 ```
@@ -46,6 +75,8 @@ Overall assessment in 2-3 sentences. Include any positive observations about wel
 ```
 
 Be specific with file paths and line numbers. Every finding must be traceable to actual code.
+
+**⚠️ Before writing any behavioral claim (e.g. "no retry", "no timeout", "unhandled exception"), load the `verify-before-report-claim` skill and cross-verify against source code. Claims based on method names or line numbers — not actual code reading — are the #1 cause of false positives in code review reports.**
 
 ## Direct Review (small changes)
 

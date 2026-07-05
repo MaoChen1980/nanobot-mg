@@ -78,8 +78,12 @@ class AnthropicProvider(LLMProvider):
         client_kw["max_retries"] = 0
         # Disable HTTP connection reuse to avoid server-side keepalive drops
         # (MiniMax proxy closes connection mid-stream when reuse count is high).
+        # Set explicit timeout to catch network/proxy stalls that bypass per-event
+        # stream timeouts (e.g. if the connection stalls before the first event).
+        http_timeout_s = int(os.environ.get("NANOBOT_ANTHROPIC_TIMEOUT_S", "120"))
         client_kw["http_client"] = httpx.AsyncClient(
             limits=httpx.Limits(max_keepalive_connections=0),
+            timeout=httpx.Timeout(http_timeout_s),
         )
         self._client = AsyncAnthropic(**client_kw)
 
