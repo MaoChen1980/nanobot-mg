@@ -622,21 +622,21 @@ class TestWriteCleanupAndRebuildFilter:
     @pytest.mark.asyncio
     async def test_no_findings_returns_none(self, extractor: MemoryExtractor) -> None:
         result = await extractor._write_cleanup_and_rebuild([])
-        assert result is None
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_skip_type_returns_none(self, extractor: MemoryExtractor) -> None:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(ftype="skip", content="x", topic="")]
         )
-        assert result is None
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_empty_content_skipped(self, extractor: MemoryExtractor) -> None:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(content="  ", topic="t")]
         )
-        assert result is None
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_vague_advice_quality_gate(self, extractor: MemoryExtractor) -> None:
@@ -644,7 +644,7 @@ class TestWriteCleanupAndRebuildFilter:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(content="注意：性能问题了", topic="t")]
         )
-        assert result is None
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_vague_suggestion_quality_gate(self, extractor: MemoryExtractor) -> None:
@@ -652,14 +652,14 @@ class TestWriteCleanupAndRebuildFilter:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(content="建议：优化方案的", topic="t")]
         )
-        assert result is None
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_vague_optimization_quality_gate(self, extractor: MemoryExtractor) -> None:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(content="优化代码了", topic="t")]
         )
-        assert result is None
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -673,7 +673,7 @@ class TestWriteCleanupAndRebuildByType:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(ftype="preference", content="Likes Python", topic="")]
         )
-        assert result is not None
+        assert result is True
         user_file = extractor.store.user_file
         assert user_file.exists()
         text = user_file.read_text(encoding="utf-8")
@@ -685,7 +685,7 @@ class TestWriteCleanupAndRebuildByType:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(ftype="knowledge", content="some fact", topic="Python/async")]
         )
-        assert result is not None
+        assert result is True
         topic_file = extractor.store.memory_dir / "Python" / "async.md"
         assert topic_file.exists()
         text = topic_file.read_text(encoding="utf-8")
@@ -696,7 +696,7 @@ class TestWriteCleanupAndRebuildByType:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(ftype="knowledge", content="fact", topic="")]
         )
-        assert result is None
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_pitfall_written_with_prefix(self, extractor: MemoryExtractor) -> None:
@@ -734,7 +734,7 @@ class TestWriteCleanupAndRebuildByType:
         result = await extractor._write_cleanup_and_rebuild(
             [_make_finding(ftype="instruction", content="必ずテストを実行してからコミットする", topic="")]
         )
-        assert result is not None
+        assert result is True
         rules_file = extractor.store.rules_file
         assert rules_file.exists()
         text = rules_file.read_text(encoding="utf-8")
@@ -943,64 +943,6 @@ class TestWriteCleanupAndRebuildMerge:
         assert "body" in combined
 
 
-# ---------------------------------------------------------------------------
-# _write_cleanup_and_rebuild — recent_entries collection
-# ---------------------------------------------------------------------------
-
-
-class TestWriteCleanupAndRebuildRecent:
-    @pytest.mark.asyncio
-    async def test_recent_entries_collected(self, extractor: MemoryExtractor) -> None:
-        result = await extractor._write_cleanup_and_rebuild([
-            _make_finding(content="recent fact", topic="t", ts="2026-06-01T00:00:00",
-                          recent=True),
-        ])
-        assert result is not None
-        assert len(result) == 1
-        assert result[0]["topic"] == "t.md"
-        assert "recent fact" in result[0]["content"]
-
-    @pytest.mark.asyncio
-    async def test_no_recent_marker_excluded(self, extractor: MemoryExtractor) -> None:
-        result = await extractor._write_cleanup_and_rebuild([
-            _make_finding(content="not recent", topic="t", ts="2026-06-01T00:00:00",
-                          recent=False),
-        ])
-        assert result is not None
-        assert len(result) == 0
-
-    @pytest.mark.asyncio
-    async def test_recent_sorted_newest_first(self, extractor: MemoryExtractor) -> None:
-        result = await extractor._write_cleanup_and_rebuild([
-            _make_finding(content="old", topic="t", ts="2026-01-01T00:00:00",
-                          recent=True),
-            _make_finding(content="new", topic="t", ts="2026-06-01T00:00:00",
-                          recent=True),
-        ])
-        assert result is not None
-        assert "new" in result[0]["content"]
-        assert "old" in result[1]["content"]
-
-    @pytest.mark.asyncio
-    async def test_recent_max_12(self, extractor: MemoryExtractor) -> None:
-        findings = [
-            _make_finding(content=f"entry-{i}", topic="t", ts=f"2026-06-{i+1:02d}T00:00:00",
-                          recent=True)
-            for i in range(15)
-        ]
-        result = await extractor._write_cleanup_and_rebuild(findings)
-        assert result is not None
-        assert len(result) == 12
-
-    @pytest.mark.asyncio
-    async def test_recent_content_truncated_at_200(self, extractor: MemoryExtractor) -> None:
-        long_content = "x" * 300
-        result = await extractor._write_cleanup_and_rebuild([
-            _make_finding(content=long_content, topic="t", ts="2026-06-01T00:00:00",
-                          recent=True),
-        ])
-        assert result is not None
-        assert len(result[0]["content"]) <= 200
 
 
 # ---------------------------------------------------------------------------
@@ -1071,84 +1013,34 @@ class TestWriteCleanupAndRebuildStructure:
 
 class TestGenerateMemoryIndex:
     def test_empty_memory_dir_noop(self, extractor: MemoryExtractor) -> None:
-        """No files → MEMORY.md not created."""
-        extractor._generate_memory_index([])
-        mem_file = extractor.store.memory_file
-        assert not mem_file.exists()
+        """No files → MEMORY.md is still generated with empty stats."""
+        extractor._generate_memory_index()
+        text = extractor.store.memory_file.read_text(encoding="utf-8")
+        # Always written, even when empty
+        assert "Total knowledge files: 0" in text
 
     def test_single_file_indexed(self, extractor: MemoryExtractor) -> None:
         mem_dir = extractor.store.memory_dir
         (mem_dir / "test.md").write_text("# Test Topic\ncontent\n", encoding="utf-8")
-        extractor._generate_memory_index([])
+        extractor._generate_memory_index()
         text = extractor.store.memory_file.read_text(encoding="utf-8")
         assert "Test Topic" in text
-
-    def test_pinned_section_included(self, extractor: MemoryExtractor) -> None:
-        mem_dir = extractor.store.memory_dir
-        (mem_dir / "test.md").write_text(
-            "# Test\n- important item\n<!--pinned-->\n", encoding="utf-8",
-        )
-        extractor._generate_memory_index([])
-        text = extractor.store.memory_file.read_text(encoding="utf-8")
-        assert "## Pinned" in text
-        assert "important item" in text
-
-    def test_pinned_max_6(self, extractor: MemoryExtractor) -> None:
-        mem_dir = extractor.store.memory_dir
-        for i in range(8):
-            (mem_dir / f"file{i}.md").write_text(
-                f"# File {i}\n- item{i}\n<!--pinned-->\n", encoding="utf-8",
-            )
-        extractor._generate_memory_index([])
-        text = extractor.store.memory_file.read_text(encoding="utf-8")
-        pinned_lines = [line for line in text.split("\n") if line.startswith("- [")]
-        assert len(pinned_lines) <= 6
-
-    def test_recent_changes_section(self, extractor: MemoryExtractor) -> None:
-        mem_dir = extractor.store.memory_dir
-        (mem_dir / "test.md").write_text("# Test\ncontent\n", encoding="utf-8")
-        now = time.time()
-        extractor._generate_memory_index([
-            {"content": "new fact", "ts": now - 100, "topic": "test.md"},
-        ])
-        text = extractor.store.memory_file.read_text(encoding="utf-8")
-        assert "## Recent" in text
-        assert "new fact" in text
-
-    def test_recent_older_than_two_days_not_bold(self, extractor: MemoryExtractor) -> None:
-        mem_dir = extractor.store.memory_dir
-        (mem_dir / "test.md").write_text("# Test\ncontent\n", encoding="utf-8")
-        old_ts = time.time() - 200_000
-        extractor._generate_memory_index([
-            {"content": "old fact", "ts": old_ts, "topic": "test.md"},
-        ])
-        text = extractor.store.memory_file.read_text(encoding="utf-8")
-        assert "old fact" in text
 
     def test_category_clickable(self, extractor: MemoryExtractor) -> None:
         mem_dir = extractor.store.memory_dir
         dev_dir = mem_dir / "Dev"
         dev_dir.mkdir()
         (dev_dir / "test.md").write_text("# Dev Topic\ncontent\n", encoding="utf-8")
-        extractor._generate_memory_index([])
+        extractor._generate_memory_index()
         text = extractor.store.memory_file.read_text(encoding="utf-8")
-        assert "Dev/index.md" in text
-
-    def test_20_category_limit(self, extractor: MemoryExtractor) -> None:
-        mem_dir = extractor.store.memory_dir
-        for i in range(25):
-            d = mem_dir / f"cat{i}"
-            d.mkdir()
-            (d / "file.md").write_text(f"# Cat {i}\ncontent\n", encoding="utf-8")
-        extractor._generate_memory_index([])
-        text = extractor.store.memory_file.read_text(encoding="utf-8")
-        cat_lines = [line for line in text.split("\n") if line.startswith("- **")]
-        assert len(cat_lines) <= 20
+        # Link format: [Dev Topic](Dev/test.md)
+        assert "Dev Topic" in text
+        assert "Dev/test.md" in text
 
     def test_file_without_heading_uses_stem(self, extractor: MemoryExtractor) -> None:
         mem_dir = extractor.store.memory_dir
         (mem_dir / "topic.md").write_text("just content\n", encoding="utf-8")
-        extractor._generate_memory_index([])
+        extractor._generate_memory_index()
         text = extractor.store.memory_file.read_text(encoding="utf-8")
         assert "topic" in text
 

@@ -6,6 +6,8 @@ import os
 import time
 from pathlib import Path
 
+from nanobot.utils.tools_index import rebuild_tools_index as _rebuild_tools_index
+
 from nanobot.agent.context import ContextBuilder
 import nanobot.agent.context as ctx_module
 
@@ -297,8 +299,6 @@ def test_scenario_tree_md_changes_mid_session(tmp_path):
 
 def test_scenario_tool_added_mid_session(tmp_path):
     """Tool added mid-session, TOOLS.md regenerated on next build."""
-    from nanobot.utils.tools_index import rebuild_tools_index
-
     builder = _make_builder(tmp_path)
     builder._framework_config = {"model": "claude-sonnet-4", "provider": "anthropic"}
     ws = tmp_path / "workspace"
@@ -308,7 +308,11 @@ def test_scenario_tool_added_mid_session(tmp_path):
     tool_dir = ws / "tools" / "my-helper"
     tool_dir.mkdir(parents=True, exist_ok=True)
     (tool_dir / "readme.md").write_text("# My Helper\n\nHelper tool.", encoding="utf-8")
-    rebuild_tools_index(ws)
+    _rebuild_tools_index(ws)
+    # Force distinct mtime for bootstrap cache invalidation on Windows
+    tools_md = ws / "TOOLS.md"
+    new_mtime = time.time() + 1
+    os.utime(tools_md, (new_mtime, new_mtime))
 
     p2 = builder.build_system_prompt(channel="cli")
     assert p1 != p2

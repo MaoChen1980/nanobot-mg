@@ -46,6 +46,7 @@ def _make_spec(**overrides) -> MagicMock:
     spec.assess_me_callback = None
     spec.progress_callback = None
     spec.workspace = None
+    spec.prompts_dir = None
     for k, v in overrides.items():
         setattr(spec, k, v)
     return spec

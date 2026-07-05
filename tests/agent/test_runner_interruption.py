@@ -119,18 +119,13 @@ class TestInterruptionInjection:
         assistant_msgs = [m for m in result.messages if m.get("role") == "assistant"]
         user_msgs = [m for m in result.messages if m.get("role") == "user"]
 
-        # 3 assistant messages: original tc, closing, final
-        assert len(assistant_msgs) == 3
-        # 2 user messages: initial + injection
-        assert len(user_msgs) == 2
+        # 2 assistant messages: original tc, final
+        assert len(assistant_msgs) == 2
+        # 1 user message: initial + injection merged
+        assert len(user_msgs) == 1
 
-        # Closing assistant (second assistant msg) mentions completion + directive
-        closing = assistant_msgs[1]
-        assert "已完成" in closing["content"]
-        assert "你插入了新消息" in closing["content"]
-
-        # Injection follows the closing assistant
-        assert user_msgs[-1]["content"] == "new instruction"
+        # Injection is merged into the original user message
+        assert "new instruction" in user_msgs[0]["content"]
 
         # No BYPASSED markers
         assert not any("[BYPASSED]" in str(m) for m in result.messages)
@@ -173,16 +168,10 @@ class TestInterruptionInjection:
 
         assistant_msgs = [m for m in result.messages if m.get("role") == "assistant"]
 
-        # The first assistant should have only 1 tool_call (stripped)
+        # First assistant should have only 1 tool_call (tc2/tc3 stripped)
         first_asst = assistant_msgs[0]
         assert len(first_asst.get("tool_calls", [])) == 1
         assert first_asst["tool_calls"][0]["function"]["name"] == "tool_a"
-
-        # Closing assistant mentions pending items
-        closing = assistant_msgs[1]
-        assert "已完成" in closing["content"]
-        assert "已推迟" in closing["content"]
-        assert "你插入了新消息" in closing["content"]
 
         # Only 1 tool result (tool_a ran, tool_b/tool_c stripped)
         assert _has_role(result.messages, "tool") == 1
@@ -192,7 +181,7 @@ class TestInterruptionInjection:
 
     @pytest.mark.asyncio
     async def test_injection_preserves_result_with_text_content(self):
-        """2b: Partial execution + original assistant has text → text prepended."""
+        """2b: Partial execution + original assistant has text → text preserved in first assistant."""
         from nanobot.agent.runner import AgentRunSpec, AgentRunner
 
         provider = _make_provider(
@@ -215,12 +204,16 @@ class TestInterruptionInjection:
         ))
 
         assistant_msgs = [m for m in result.messages if m.get("role") == "assistant"]
-        closing = assistant_msgs[1]
 
-        # Original text "我正在处理" should be preserved at start of closing
-        assert closing["content"].startswith("我正在处理")
-        assert "已完成" in closing["content"]
-        assert "你插入了新消息" in closing["content"]
+        # Original text "我正在处理" preserved in first assistant message
+        assert assistant_msgs[0]["content"] == "我正在处理"
+        # 2 assistant messages: original + final "done"
+        assert len(assistant_msgs) == 2
+        # Injection merged into user message
+        user_msgs = [m for m in result.messages if m.get("role") == "user"]
+        assert "quick question" in user_msgs[-1]["content"]
+        # 1 tool result (only tool_a ran)
+        assert _has_role(result.messages, "tool") == 1
 
 
 # ── Tool Error scenarios ─────────────────────────────────────────────────────
@@ -254,17 +247,11 @@ class TestInterruptionToolError:
             fail_on_tool_error=True,
         ))
 
-        # Closing assistant should mention failure
-        error_msg = next(
-            (m for m in result.messages
-             if m.get("role") == "assistant" and "失败" in str(m.get("content", ""))),
-            None,
-        )
-        assert error_msg is not None, "Expected closing assistant with '失败'"
-        assert "tool_b" in error_msg["content"] or "失败" in error_msg["content"]
-
-        # Both tool results should be in messages
-        assert _has_role(result.messages, "tool") == 2
+        # Error is in the tool result (interrupted path skips closing message)
+        tool_msgs = [m for m in result.messages if m.get("role") == "tool"]
+        assert any("RuntimeError" in m.get("content", "") for m in tool_msgs)
+        # Runner completes normally after interruption restarts the loop
+        assert result.stop_reason == "completed"
 
     @pytest.mark.asyncio
     async def test_tool_error_first_tool(self):
@@ -288,15 +275,11 @@ class TestInterruptionToolError:
             fail_on_tool_error=True,
         ))
 
-        error_msg = next(
-            (m for m in result.messages
-             if m.get("role") == "assistant" and "失败" in str(m.get("content", ""))),
-            None,
-        )
-        assert error_msg is not None
-
-        # Tool result (even though failed) should be present
-        assert _has_role(result.messages, "tool") == 1
+        # Error is in the tool result (interrupted path skips closing message)
+        tool_msgs = [m for m in result.messages if m.get("role") == "tool"]
+        assert any("RuntimeError" in m.get("content", "") for m in tool_msgs)
+        # Runner completes normally after interruption restarts the loop
+        assert result.stop_reason == "completed"
 
 
 # ── Normal / no-interruption scenarios ───────────────────────────────────────

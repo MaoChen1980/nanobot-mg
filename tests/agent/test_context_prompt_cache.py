@@ -149,15 +149,12 @@ def test_subagent_result_does_not_create_consecutive_assistant_messages(tmp_path
 
 
 def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
-    """Skills with always=true appear in Active Skills (instructions section) but NOT
-    in the skills index.
-
-    Active Skills section moved from system prompt to build_instructions_section().
+    """Always:true skills appear in the categorized skills summary (### Available Skills),
+    not in a separate Active Skills section.
     """
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
-    # Skills summary is now in instructions (last user message), not system prompt
     instructions = builder.build_instructions_section()
 
     # Skills should appear in the summary index
@@ -165,24 +162,10 @@ def test_always_skills_excluded_from_skills_index(tmp_path) -> None:
     # Verify "my" skill is listed in the index (always: false)
     assert "**my**" in instructions
 
-    # Active Skills section: present in instructions when there ARE always:true skills
+    # Always:true skills are included in the same categorized summary.
     always_skills = builder.skills.get_always_skills()
-    if always_skills:
-        assert "## Active Skills" in instructions or "### Active Skills" in instructions
-        # those skills appear in Active Skills (format: ### Skill: {name})
-        for skill_name in always_skills:
-            assert f"### Skill: {skill_name}" in instructions
-        # but NOT in the skills index (Available Skills section)
-        avail_idx = instructions.find("Available Skills")
-        if avail_idx >= 0:
-            after_avail = instructions[avail_idx:]
-            next_section = after_avail.find("\n## ")
-            index_text = after_avail[:next_section] if next_section > 0 else after_avail
-            for skill_name in always_skills:
-                assert f"**{skill_name}**" not in index_text
-    else:
-        # No always:true skills → Active Skills section absent
-        assert "## Active Skills" not in instructions
+    for skill_name in always_skills:
+        assert f"**{skill_name}**" in instructions
 
 
 # ---------------------------------------------------------------------------

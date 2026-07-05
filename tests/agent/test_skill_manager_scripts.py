@@ -43,6 +43,7 @@ def test_validate_skill_rejects_placeholder_description(tmp_path: Path) -> None:
     (skill_dir / "SKILL.md").write_text(
         "---\n"
         "name: placeholder-skill\n"
+        "category: test-category\n"
         'description: "[TODO: fill me in]"\n'
         "---\n"
         "# Placeholder\n",
@@ -61,6 +62,7 @@ def test_validate_skill_rejects_root_files_outside_allowed_dirs(tmp_path: Path) 
     (skill_dir / "SKILL.md").write_text(
         "---\n"
         "name: bad-root-skill\n"
+        "category: test-category\n"
         "description: Valid description\n"
         "---\n"
         "# Skill\n",
@@ -80,6 +82,7 @@ def test_package_skill_creates_archive(tmp_path: Path) -> None:
     (skill_dir / "SKILL.md").write_text(
         "---\n"
         "name: package-me\n"
+        "category: test-category\n"
         "description: Package this skill.\n"
         "---\n"
         "# Skill\n",
@@ -105,6 +108,7 @@ def test_package_skill_rejects_symlink(tmp_path: Path) -> None:
     (skill_dir / "SKILL.md").write_text(
         "---\n"
         "name: symlink-skill\n"
+        "category: test-category\n"
         "description: Reject symlinks during packaging.\n"
         "---\n"
         "# Skill\n",

@@ -193,7 +193,7 @@ class TestBackfillMissingToolResults:
         assert result[1]["role"] == "tool"
         assert result[1]["tool_call_id"] == "call_1"
         assert result[1]["name"] == "foo"
-        assert "unavailable" in result[1]["content"]
+        assert "工具结果不可用" in result[1]["content"]
 
     def test_backfills_multiple_missing(self) -> None:
         msgs = [
