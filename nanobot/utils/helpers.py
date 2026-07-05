@@ -224,12 +224,20 @@ def build_assistant_message(
     reasoning_content: str | None = None,
     reasoning_details: list[dict] | None = None,
     thinking_blocks: list[dict] | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
-    """Build a provider-safe assistant message with optional reasoning fields."""
+    """Build a provider-safe assistant message with optional reasoning fields.
+
+    For Anthropic/Claude models (``model`` starts with ``"claude"`` or
+    ``"anthropic/"``), thinking_blocks are preserved without backfilling
+    into content — the Anthropic provider handles native ``type:"thinking"``
+    blocks and would duplicate the text if both fields carried it.
+    """
+    _is_claude = model is not None and (model.startswith("claude") or model.startswith("anthropic/"))
     if not content:
         if reasoning_content:
             content = reasoning_content
-        elif thinking_blocks:
+        elif thinking_blocks and not _is_claude:
             texts = [b.get("thinking", "") for b in thinking_blocks
                      if isinstance(b, dict) and b.get("thinking")]
             if texts:
@@ -415,10 +423,14 @@ def build_status_content(
     return "\n".join(lines)
 
 
-def split_thinking_messages(messages: list[dict]) -> list[dict]:
+def split_thinking_messages(messages: list[dict], model: str | None = None) -> list[dict]:
     """Normalize assistant messages that have thinking/reasoning into a single message.
 
     Never creates ``assistant → assistant`` sequences (those confuse the LLM).
+
+    For Anthropic/Claude models (``model`` starts with ``"claude"`` or
+    ``"anthropic/"``), the thinking→content conversion is skipped so native
+    ``type: "thinking"`` blocks are preserved for the Anthropic API.
     """
     result: list[dict] = []
     for msg in messages:
@@ -458,7 +470,15 @@ def split_thinking_messages(messages: list[dict]) -> list[dict]:
             and content.strip() == thinking
         )
 
-        # Tool-call-only messages: merge thinking into content, drop reasoning fields.
+        # Anthropic/Claude models support native type:"thinking" blocks — skip conversion.
+        # The model also natively supports tool_calls alongside thinking, so merging is harmful.
+        _is_claude = model is not None and (model.startswith("claude") or model.startswith("anthropic/"))
+        if _is_claude:
+            result.append(msg)
+            continue
+
+        # Tool-call-only messages for non-Claude providers: merge thinking into content,
+        # drop reasoning fields (OpenAI-compatible APIs don't accept thinking_blocks).
         if has_tool_calls and not content_is_backfilled and not (isinstance(content, str) and content.strip()):
             merged = dict(msg)
             merged["content"] = thinking

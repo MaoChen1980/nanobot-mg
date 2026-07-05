@@ -82,10 +82,12 @@ class ContextBuilder:
     _RUNTIME_CONTEXT_END = "## /Runtime Context"
 
     def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None, db=None,
-                 project_root: Path | None = None, framework_config: dict[str, int] | None = None):
+                 project_root: Path | None = None, framework_config: dict[str, int] | None = None,
+                 model: str | None = None):
         self.workspace = workspace
         self.project_root = project_root
         self.timezone = timezone
+        self.model = model
         self._workspace_path_str = workspace.expanduser().resolve().as_posix()
         self.memory = MemoryStore(workspace, db=db)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
@@ -542,11 +544,10 @@ class ContextBuilder:
             logger.warning("Failed to convert timestamp '{}' to timezone '{}'", ts, timezone)
         return ts
 
-    @staticmethod
-    def _split_thinking_messages(messages: list[dict]) -> list[dict]:
+    def _split_thinking_messages(self, messages: list[dict]) -> list[dict]:
         """Split assistant messages with thinking/reasoning into separate messages.
         Delegates to nanobot.utils.helpers.split_thinking_messages."""
-        return _split_thinking_messages(messages)
+        return _split_thinking_messages(messages, self.model)
 
     def _has_active_tasks(self, items: list[dict], _depth: int = 0) -> bool:
         """Check if tree.json has any non-terminal tasks (active, pending, etc.).
@@ -1141,6 +1142,7 @@ class ContextBuilder:
             reasoning_content=reasoning_content,
             reasoning_details=reasoning_details,
             thinking_blocks=thinking_blocks,
+            model=self.model,
         ))
         return messages
 

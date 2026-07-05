@@ -205,7 +205,7 @@ class AgentLoop:
 
         self._init_framework_dir(workspace)
         self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills, db=db,
-                                       project_root=project_root, framework_config={
+                                       project_root=project_root, model=self.model, framework_config={
                                            "max_iterations": self.max_iterations,
                                            "context_window_tokens": self.context_window_tokens,
                                            "max_tool_result_chars": self.max_tool_result_chars,

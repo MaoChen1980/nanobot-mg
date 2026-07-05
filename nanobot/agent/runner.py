@@ -267,6 +267,8 @@ class AgentRunner:
                     logger.exception("Failed to persist proactively-compressed messages to history")
 
             result = [system_prompt]
+            if _has_instr:
+                result.append(messages[1])  # preserve ## Instructions at index 1
             result.extend(event.synthetic_pair)
             for turn in to_keep:
                 result.extend(turn)
@@ -587,7 +589,7 @@ class AgentRunner:
                 messages_for_model = deduplicate_tool_call_ids(messages_for_model)
                 messages_for_model = drop_orphan_tool_results(messages_for_model)
                 messages_for_model = backfill_missing_tool_results(messages_for_model)
-                messages_for_model = split_thinking_messages(messages_for_model)
+                messages_for_model = split_thinking_messages(messages_for_model, spec.model)
             except Exception as exc:
                 logger.warning(
                     "Context governance failed on turn {} for {}: {}; applying minimal repair",
@@ -597,7 +599,7 @@ class AgentRunner:
                     messages_for_model = strip_bypassed_tool_messages(messages)
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
-                    messages_for_model = split_thinking_messages(messages_for_model)
+                    messages_for_model = split_thinking_messages(messages_for_model, spec.model)
                 except Exception:
                     logger.exception(
                         "Context governance minimal repair failed on turn {} for {}; "
@@ -695,8 +697,8 @@ class AgentRunner:
                         self._pt_responses = 0
                         try:
                             from nanobot.agent.memory_extractor import MemoryExtractor
-                            path = MemoryExtractor.save_prompt_snapshot(messages, spec.prompts_dir, spec.session_key)
-                            logger.info("Saved .pt snapshot: {} ({} msgs, session={})", path.name, len(messages), spec.session_key)
+                            path = MemoryExtractor.save_prompt_snapshot(messages_for_model, spec.prompts_dir, spec.session_key)
+                            logger.info("Saved .pt snapshot: {} ({} msgs, session={})", path.name, len(messages_for_model), spec.session_key)
                         except Exception:
                             logger.exception("Failed to save .pt snapshot (session={})", spec.session_key)
                 # Periodic self-assessment — fire at milestones (every assess_interval responses)
@@ -727,6 +729,7 @@ class AgentRunner:
                     reasoning_content=response.reasoning_content,
                     reasoning_details=response.reasoning_details,
                     thinking_blocks=response.thinking_blocks,
+                    model=spec.model,
                 )
                 messages.append(assistant_message)
                 tools_used.extend(tc.name for tc in tool_calls)
@@ -986,7 +989,8 @@ class AgentRunner:
                     messages_for_model = strip_bypassed_tool_messages(messages)
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
-                    messages_for_model = split_thinking_messages(messages_for_model)
+                    messages_for_model = split_thinking_messages(messages_for_model, spec.model)
+                    _ensure_instructions(messages_for_model, spec)
                 response = await request_finalization_retry(spec, messages_for_model, has_assessment=assess_injected)
                 _llm_request_count += 1
                 retry_usage = usage_dict(response.usage)
@@ -1019,6 +1023,7 @@ class AgentRunner:
                         reasoning_content=response.reasoning_content,
                         reasoning_details=response.reasoning_details,
                         thinking_blocks=response.thinking_blocks,
+                        model=spec.model,
                     ))
                     messages.append(build_length_recovery_message())
                     await hook.after_iteration(context)
@@ -1032,6 +1037,7 @@ class AgentRunner:
                     reasoning_content=response.reasoning_content,
                     reasoning_details=response.reasoning_details,
                     thinking_blocks=response.thinking_blocks,
+                    model=spec.model,
                 )
 
             should_continue, injection_cycles = await self._drain_injections_and_should_continue(
@@ -1120,7 +1126,8 @@ class AgentRunner:
                     messages_for_model = strip_bypassed_tool_messages(messages)
                     messages_for_model = drop_orphan_tool_results(messages_for_model)
                     messages_for_model = backfill_missing_tool_results(messages_for_model)
-                    messages_for_model = split_thinking_messages(messages_for_model)
+                    messages_for_model = split_thinking_messages(messages_for_model, spec.model)
+                    _ensure_instructions(messages_for_model, spec)
                     response = await request_finalization_retry(spec, messages_for_model, has_assessment=assess_injected)
                     _llm_request_count += 1
                     retry_usage = usage_dict(response.usage)
@@ -1160,6 +1167,7 @@ class AgentRunner:
                 reasoning_content=response.reasoning_content,
                 reasoning_details=response.reasoning_details,
                 thinking_blocks=response.thinking_blocks,
+                model=spec.model,
             ))
             await self._emit_checkpoint(
                 spec,
@@ -1478,3 +1486,23 @@ def _force_final_response(messages: list[dict], text: str) -> str:
         messages.pop()
     messages.append({"role": "user", "content": text})
     return text
+
+
+def _ensure_instructions(msgs: list[dict], spec: Any) -> None:
+    """Ensure ``## Instructions`` block exists at index 1 (after system prompt).
+
+    Replaces any existing stale copy so callers that bypass the normal per-iteration
+    injection (e.g. error-recovery finalization paths) still send fresh instructions
+    to the model.
+    """
+    instr_content = spec.instructions() if callable(spec.instructions) else spec.instructions
+    if not instr_content or not msgs:
+        return
+    instr = {"role": "user", "content": f"## Instructions\n\n{instr_content}"}
+    if (len(msgs) > 1
+            and msgs[1].get("role") == "user"
+            and isinstance(msgs[1].get("content"), str)
+            and msgs[1]["content"].startswith("## Instructions")):
+        msgs[1] = instr
+    else:
+        msgs.insert(1, instr)
