@@ -93,9 +93,15 @@ class _LoopHook(AgentHook):
 
         # Forward incremental non-think text
         text_incremental = new_clean[len(prev_clean):]
-        if text_incremental and self._on_stream:
-            self._had_content = True
-            await self._on_stream(text_incremental)
+        if text_incremental:
+            if self._on_stream:
+                self._had_content = True
+                await self._on_stream(text_incremental)
+            elif self._on_progress:
+                # No streaming callback (hub/feishu/cli direct path),
+                # deliver content through progress channel instead.
+                self._had_content = True
+                await self._on_progress(text_incremental)
 
         # Buffer think/reasoning — only flush if no non-think content appears
         think_incremental = new_think[len(prev_think):]
