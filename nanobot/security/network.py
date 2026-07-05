@@ -156,7 +156,10 @@ def targets_internal_address(command: str, allow_loopback: bool = False) -> bool
         try:
             infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         except socket.gaierror:
-            continue
+            # Cannot resolve hostname — treat as potentially internal for defense in depth.
+            # Unlike validate_url_target which raises, here we block to avoid SSRF via DNS rebinding.
+            logger.debug("DNS resolution failed for {} in targets_internal_address", hostname)
+            return True
         for info in infos:
             try:
                 addr = ipaddress.ip_address(info[4][0])
