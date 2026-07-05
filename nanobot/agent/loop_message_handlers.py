@@ -105,14 +105,25 @@ def _create_bus_progress_callback(loop, msg):
     return _bus_progress
 
 
+async def _noop_progress(content: str, *, tool_hint: bool = False, tool_events: list | None = None) -> None:
+    """No-op progress callback — subagent dispatch progress must not leak to the user."""
+    pass
+
+
 class SystemMessageHandler:
     def __init__(self, loop):
         self._loop = loop
 
     async def handle(self, msg, on_progress=None, on_stream=None, on_stream_end=None, on_reasoning=None, on_reasoning_end=None, pending_queue=None, extra_hooks=None):
         # Bus fallback when no hub-provided on_progress callback
+        # Subagent dispatches produce internal orchestrator activity (tool events,
+        # full LLM responses) that must NOT leak to the user — use a no-op
+        # progress callback so none of it reaches the outbound bus.
         if on_progress is None:
-            on_progress = _create_bus_progress_callback(self._loop, msg)
+            if is_subagent:
+                on_progress = _noop_progress
+            else:
+                on_progress = _create_bus_progress_callback(self._loop, msg)
         # Prefer origin channel/chat_id from metadata (set by _announce_result)
         # to avoid parsing issues with multi-colon channel values like "proxy:feishu:feishu1".
         if msg.metadata and msg.metadata.get("_origin_channel") and msg.metadata.get("_origin_chat_id"):
@@ -195,6 +206,16 @@ class SystemMessageHandler:
             self._loop.sessions.save(session)
         self._loop._append_turn_to_session(session, all_msgs, initial_msg_count if is_subagent else initial_msg_count - 1)
         self._loop.lifecycle.finalize(session)
+
+        # Subagent dispatches run inside the orchestrator's bus wait loop.
+        # Their output (tool events, LLM responses) is internal processing
+        # and must NOT be published to the outbound queue, which feeds into
+        # the user-facing delivery path (on_stream/on_progress in
+        # single-message mode, or _consume_outbound in interactive mode).
+        # Return None so run_dispatch skips bus.publish_outbound.
+        if is_subagent:
+            return None
+
         content = final_content or "Background task completed."
         buttons: list = []
         outbound_metadata: dict[str, Any] = {}

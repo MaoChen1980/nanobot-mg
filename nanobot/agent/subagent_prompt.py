@@ -20,6 +20,7 @@ def build_subagent_prompt(
     output_schema: str | None = None,
     role: str | None = None,
     session_key: str | None = None,
+    label: str | None = None,
 ) -> str:
     """Build system prompt for subagent — same structure as main agent.
 
@@ -121,7 +122,9 @@ def build_subagent_prompt(
     parts.append(
         "## Role\n\n"
         "You are a **Subagent** — a focused, task-oriented agent. "
-        "You have been spawned by an Orchestrator to execute a specific task.\n\n"
+        "You have been spawned by an Orchestrator to execute a specific task.\n"
+        f"{'Your label: **' + label + '**.\n' if label else ''}"
+        "\n"
         f"{role_line}\n\n"
         "### Constraints\n\n"
         "- **No nested spawn** — you cannot spawn sub-agents\n"

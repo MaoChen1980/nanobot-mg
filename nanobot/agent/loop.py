@@ -1706,27 +1706,16 @@ class AgentLoop:
                                     "Subagent dispatch failed for session {}", session_key,
                                 )
                                 continue
-                            # Drain outbound messages from this dispatch.
-                            # Subagent dispatches may produce content independently;
-                            # forward it to the user via streaming so they see
-                            # real-time progress.  We do NOT overwrite the original
-                            # _process_message response — concurrent dispatches
-                            # (e.g. proactive checks from the main bus loop) would
-                            # otherwise replace the authoritative content.
-                            captured = ""
+                            # Drain outbound messages so the queue doesn't grow
+                            # unbounded, but do NOT forward them to the user.
+                            # Subagents communicate via notify_orchestrator and
+                            # the orchestrator decides whether/how to inform the
+                            # user via the `message` tool.
                             while self.bus.outbound.qsize() > 0:
                                 try:
-                                    ob = self.bus.outbound.get_nowait()
+                                    self.bus.outbound.get_nowait()
                                 except asyncio.QueueEmpty:
                                     break
-                                if ob and ob.content and not ob.metadata.get("_stream_delta"):
-                                    captured = ob.content
-                            if captured and on_stream:
-                                await on_stream(captured)
-                            if captured and on_progress:
-                                await on_progress(captured.strip(), tool_hint=False)
-                            if captured and on_stream_end:
-                                await on_stream_end()
                     except asyncio.TimeoutError:
                         if still_running:
                             now = time.time()
