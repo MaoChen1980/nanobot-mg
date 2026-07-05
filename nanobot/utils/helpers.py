@@ -226,8 +226,14 @@ def build_assistant_message(
     thinking_blocks: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Build a provider-safe assistant message with optional reasoning fields."""
-    if not content and reasoning_content:
-        content = reasoning_content
+    if not content:
+        if reasoning_content:
+            content = reasoning_content
+        elif thinking_blocks:
+            texts = [b.get("thinking", "") for b in thinking_blocks
+                     if isinstance(b, dict) and b.get("thinking")]
+            if texts:
+                content = "\n".join(texts)
     msg: dict[str, Any] = {"role": "assistant", "content": content or ""}
     if tool_calls:
         msg["tool_calls"] = tool_calls
