@@ -3,7 +3,7 @@ name: skill-manager
 description: '管理技能库的增删改查，是技能自我进化的核心工具。
 
   当以下情况发生时激活：刚执行完一个 skill 发现步骤有误、完成复杂任务后发现可复用模式、
-  用户要求创建/更新/删除 skill、MEMORY.md 中有 pending_skills 未处理、
+  用户要求创建/更新/删除 skill、或有待处理的候选 skill 未处理、
   或发现 skill 描述或步骤过时。'
 version: 0.1.0
 category: agent

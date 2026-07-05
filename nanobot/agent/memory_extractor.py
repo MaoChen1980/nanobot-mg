@@ -403,11 +403,9 @@ class MemoryExtractor:
         for entries in memory_state.values():
             entries.sort(key=lambda e: e["ts"])
 
-        # ── Flush each topic: full file rewrite (skip pending_skills.md — kept in memory) ──
+        # ── Flush each topic: full file rewrite ──
         needs_content_consolidation: list[str] = []  # files with ≥3 new entries
         for rel_path, entries in memory_state.items():
-            if rel_path == "pending_skills.md":
-                continue
             content_lines: list[str] = []
             existing_paragraphs: list[dict[str, Any]] = []
             full_path = self.store.rules_file if rel_path == "RULES.md" else self.store.user_file if rel_path == "user.md" else self.store.memory_dir / rel_path
@@ -485,7 +483,7 @@ class MemoryExtractor:
             content_lines.append("")
 
             # Add TL;DR from most important finding (skip for RULES.md — too diverse)
-            if rel_path not in ("RULES.md", "user.md", "pending_skills.md"):
+            if rel_path not in ("RULES.md", "user.md"):
                 tldr = self._build_tldr(unique)
                 if tldr:
                     content_lines.append(tldr)
@@ -504,7 +502,7 @@ class MemoryExtractor:
             logger.info("MemoryExtractor: wrote {} paragraph(s) to {}", len(unique), rel_path)
 
             # Mark for content consolidation if this batch added ≥3 new entries
-            if len(entries) >= 3 and rel_path not in ("RULES.md", "user.md", "pending_skills.md"):
+            if len(entries) >= 3 and rel_path not in ("RULES.md", "user.md"):
                 needs_content_consolidation.append(rel_path)
 
         # ── Content-level consolidation for fragmented files ──
@@ -842,7 +840,7 @@ class MemoryExtractor:
         logger.info("MemoryExtractor: compressed events/{} ({} old → {} quarterly)", path.name, len(old_lines), len(compressed))
 
     # ------------------------------------------------------------------
-    # Tool/script materialization — tool_script findings → tools/ + pending_skills.md
+    # Tool/script materialization — tool_script findings → tools/
     # ------------------------------------------------------------------
 
     async def _materialize_tool_scripts(self) -> bool:
@@ -968,7 +966,7 @@ class MemoryExtractor:
         return changed
 
     # ------------------------------------------------------------------
-    # Skill creation — Phase 2: pending_skills.md → skills/<name>/SKILL.md
+    # Skill creation — Phase 2: pending entries → skills/<name>/SKILL.md
     # ------------------------------------------------------------------
 
     async def _materialize_skills(self) -> bool:
@@ -1038,7 +1036,7 @@ class MemoryExtractor:
             "2. 对每个 candidate，对召回的功能相似 skill 用 read_file 读完整内容对比\n"
             "3. 参考 skill-manager 流程决策：新建 / 更新 / 合并 / 跳过\n"
             "4. 用 write_file/edit_file 执行决策，直接写 SKILL.md\n"
-            "5. 完成后清理 pending_skills.md 中已处理的条目"
+            "5. 完成后清理已处理的条目"
         )
 
         spec = AgentRunSpec(
@@ -1266,7 +1264,7 @@ class MemoryExtractor:
 
         Returns True if any changes were executed.
         """
-        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "pending_skills.md", "lessons.md", "self_mod.md", "system.md"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "lessons.md", "self_mod.md", "system.md"}
 
         # Single pass: collect all file metadata (lines, heading) and topic structure
         file_meta: dict[str, dict[str, Any]] = {}
@@ -1798,7 +1796,7 @@ class MemoryExtractor:
 
     def _generate_index_files(self) -> None:
         """Generate index.md per directory for hierarchical navigation."""
-        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "pending_skills.md"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
         generated = 0
 
         # Collect all dirs that contain .md files

@@ -188,8 +188,6 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 
 **创建或者更新 skill 必须走内置的 skill-manager，不要手动写 SKILL.md。**
 
-MEMORY.md 中的 `pending_skills` 链接指向待处理的候选 skill，读到后用 skill-manager 处理（创建或忽略）。
-
 ---
 
 ### Cron 

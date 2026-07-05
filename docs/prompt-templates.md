@@ -347,7 +347,7 @@ Preferred language ：
 3. 对比决策：替换 / 合并 / 跳过
 4. 执行：新建 SKILL.md、替换内容、合并内容
 5. 验证输出
-6. 清理 `pending_skills.md`
+6. 清理已处理的条目
 
 #### 3.4.12 subagent_announce.md — Subagent 结果公告模板
 

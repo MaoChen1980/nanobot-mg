@@ -31,10 +31,7 @@
    - **合并**：读原有内容，整合两边的 Steps / Pitfalls / Verification，`write_file` 写回
    - **跳过**：什么都不做
 5. **验证输出** — `read_file` 确认 frontmatter 和所有必需段落完整，必要时 `exec` 运行 `quick_validate.py` 验证
-6. **清理 pending_skills.md**：
-   - `read_file` 读 `memory/pending_skills.md`
-   - 移除已处理的条目
-   - `write_file` 写回
+6. **清理已处理的条目**：从 `_pending_skill_entries` 中移除已处理的条目。
 
 ## 决策指引
 
