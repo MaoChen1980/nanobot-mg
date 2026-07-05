@@ -43,11 +43,11 @@ def build_subagent_prompt(
 
     parts: list[str] = []
 
-    # 1. Tools
-    if tool_definitions:
-        section = ctx._build_tools_section(tool_definitions)
-        if section:
-            parts.append(section)
+    # 1. Tools — redundant: full schema+description is sent via API's structured `tools` parameter
+    # if tool_definitions:
+    #     section = ctx._build_tools_section(tool_definitions)
+    #     if section:
+    #         parts.append(section)
 
     # 2. Skills
     skills_summary = ctx.skills.build_skills_summary()

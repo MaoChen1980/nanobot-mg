@@ -1576,7 +1576,7 @@ class MemoryExtractor:
         if not ref_index:
             return
 
-        exclude_names = {"MEMORY.md", "topic-map.json", "index.md"}
+        exclude_names = {"MEMORY.md", "topic-map.json", "index.md", "working.md"}
         # Sort terms by length (longest first) to prefer multi-word matches
         sorted_terms = sorted(ref_index.keys(), key=len, reverse=True)
 

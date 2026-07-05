@@ -155,8 +155,10 @@ class ContextBuilder:
         identity = self._get_identity(channel=channel)
 
         tools = None
-        if tool_definitions:
-            tools = self._build_tools_section(tool_definitions)
+        # Tools are sent via the API's structured `tools` parameter (full schema + description).
+        # A prose summary in the system prompt is redundant — the model reads the API param natively.
+        # if tool_definitions:
+        #     tools = self._build_tools_section(tool_definitions)
 
         # Regenerate tools index once per session (mtime cache inside avoids redundant disk writes)
         if not self._tools_index_built:
@@ -721,10 +723,10 @@ class ContextBuilder:
                 heading = name.replace(".md", "").title()
                 parts.append(f"### {heading}\n\n{text}")
 
-        # Scan recent events (last 7d) for proactive awareness — lightweight, cached by mtime
+        # Scan recent events (last 2d) for proactive awareness — lightweight, cached by mtime
         events_dir = memory_dir / "events"
         if events_dir.is_dir():
-            cutoff = time.time() - 7 * 86400
+            cutoff = time.time() - 2 * 86400
             recent_groups: dict[str, list[str]] = {}
             for p in sorted(events_dir.rglob("*.md")):
                 text = self._cached_read_text(p)
