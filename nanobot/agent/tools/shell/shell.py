@@ -381,12 +381,12 @@ class ExecTool(Tool):
                     if len(_stdout_bytes) > self._MAX_OUTPUT:
                         _truncated = _stdout_bytes[-self._MAX_OUTPUT:]
                         # Back up to last valid UTF-8 character boundary to avoid multi-byte char truncation
-                        for _i in range(min(10, len(_truncated))):
+                        for _ in range(min(10, len(_truncated))):
                             try:
                                 _truncated.decode("utf-8")
                                 break
                             except UnicodeDecodeError:
-                                _truncated = _truncated[_i + 1:]
+                                _truncated = _truncated[1:]
                         stdout_text = _truncated.decode("utf-8", errors="replace")
                     else:
                         stdout_text = stdout_full
@@ -394,12 +394,12 @@ class ExecTool(Tool):
                     # Truncate stderr for inline result — preserve valid character boundaries
                     if len(_stderr_bytes) > self._MAX_OUTPUT:
                         _display = _stderr_bytes[-self._MAX_OUTPUT:]
-                        for _i in range(min(10, len(_display))):
+                        for _ in range(min(10, len(_display))):
                             try:
                                 _display.decode("utf-8")
                                 break
                             except UnicodeDecodeError:
-                                _display = _display[_i + 1:]
+                                _display = _display[1:]
                         _prefix = "... ({:,} chars truncated) ...".format(
                             len(_stderr_bytes) - self._MAX_OUTPUT
                         )
