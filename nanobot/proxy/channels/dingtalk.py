@@ -402,14 +402,15 @@ class DingTalkProxyChannel(BaseProxyChannel):
                     try:
                         with httpx.Client(timeout=30) as client:
                             resp = client.post(url, json=payload, headers=headers)
-                        if resp.status_code >= 400:
-                            logger.warning("DingTalk markdown send failed: {} - {}", resp.status_code, resp.text[:200])
-                        else:
+                        if resp.status_code < 400:
                             result = resp.json()
                             errcode = result.get("errcode")
-                            if errcode not in (None, 0):
-                                logger.warning("DingTalk markdown send API error: errcode={} errmsg={}", errcode, result.get("errmsg", ""))
-                        break
+                            if errcode in (None, 0):
+                                logger.info(f"Sent markdown to {chat_id}")
+                                break
+                            logger.warning("DingTalk markdown send API error: errcode={} errmsg={}", errcode, result.get("errmsg", ""))
+                        else:
+                            logger.warning("DingTalk markdown send failed: {} - {}", resp.status_code, resp.text[:200])
                     except Exception as e:
                         if attempt < 2:
                             wait = 1 << attempt
@@ -482,14 +483,15 @@ class DingTalkProxyChannel(BaseProxyChannel):
                 try:
                     with httpx.Client(timeout=30) as client:
                         resp = client.post(url, json=payload, headers=headers)
-                    if resp.status_code >= 400:
-                        logger.warning("DingTalk media send failed ({}): {} - {}", media_type, resp.status_code, resp.text[:200])
-                    else:
+                    if resp.status_code < 400:
                         result = resp.json()
                         errcode = result.get("errcode")
-                        if errcode not in (None, 0):
-                            logger.warning("DingTalk media send API error ({}): errcode={} errmsg={}", media_type, errcode, result.get("errmsg", ""))
-                    break
+                        if errcode in (None, 0):
+                            logger.info(f"Sent {media_type} {media_id} to {chat_id} ({file_name})")
+                            break
+                        logger.warning("DingTalk media send API error ({}): errcode={} errmsg={}", media_type, errcode, result.get("errmsg", ""))
+                    else:
+                        logger.warning("DingTalk media send failed ({}): {} - {}", media_type, resp.status_code, resp.text[:200])
                 except Exception as e:
                     if attempt < 2:
                         wait = 1 << attempt
@@ -497,8 +499,6 @@ class DingTalkProxyChannel(BaseProxyChannel):
                         time.sleep(wait)
                     else:
                         logger.error("DingTalk media send exception: {}", e)
-                    else:
-                        logger.info(f"Sent {media_type} {media_id} to {chat_id} ({file_name})")
 
         except Exception as e:
             logger.error("DingTalk media send error ({}): {}", media_type, e)
