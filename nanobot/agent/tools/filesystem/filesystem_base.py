@@ -111,8 +111,10 @@ class _FsTool(Tool):
                 if pyright_result.returncode != 0:
                     errors = pyright_result.stdout.strip()
                     return f"Syntax check failed:\n{errors or str(e)}"
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
+            except subprocess.TimeoutExpired:
+                pass  # fall through to basic py_compile error
+            except FileNotFoundError:
+                return f"Syntax check failed (pyright not installed):\n{e}"
             return f"Syntax check failed:\n{e}"
         except FileNotFoundError:
             pass
