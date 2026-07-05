@@ -287,7 +287,12 @@ async def test_exec_head_tail_truncation(tmp_path) -> None:
 async def test_exec_timeout_parameter(tmp_path) -> None:
     """LLM-supplied timeout should override the constructor default."""
     tool = ExecTool(timeout=60, working_dir=str(tmp_path))
-    result = await tool.execute(command="sleep 10", timeout=1)
+    # Windows has no `sleep` command; use `ping` as cross-platform delay
+    if sys.platform == "win32":
+        command = "ping -n 11 127.0.0.1"
+    else:
+        command = "sleep 10"
+    result = await tool.execute(command=command, timeout=1)
     assert "timed out" in result
     assert "1 seconds" in result
 
@@ -568,7 +573,7 @@ def test_exec_guard_allows_media_path_outside_workspace(tmp_path, monkeypatch) -
     media_file = media_dir / "photo.jpg"
     media_file.write_text("ok", encoding="utf-8")
 
-    monkeypatch.setattr("nanobot.agent.tools.shell.shell.get_media_dir", lambda: media_dir)
+    monkeypatch.setenv("MEDIA_DIR", str(media_dir))
 
     tool = ExecTool(restrict_to_workspace=True)
     error = tool._guard_command(f'cat "{media_file}"', str(tmp_path / "workspace"))

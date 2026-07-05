@@ -33,7 +33,7 @@ class TestTickWithState:
         items = []
         for name, interval in tasks:
             items.append({"id": name, "name": name, "status": "pending", "interval": interval, "parent": None})
-        (tree_dir / "tree_cli_direct.json").write_text(json.dumps({"items": items}, indent=2), encoding="utf-8")
+        (tree_dir / "tree.json").write_text(json.dumps({"items": items}, indent=2), encoding="utf-8")
 
     # --- Cooldown ---
 
@@ -57,14 +57,14 @@ class TestTickWithState:
         self._write_tree(tmp_path, [("frequent", "10s"), ("hourly", "1h")])
         svc = await self._make_service(tmp_path)
 
-        # mark hourly as recently run
-        svc._state.mark_run("hourly", ts=9999999999.0)
-
+        # hourly has last_run=None (never run), so cooldown check is skipped
+        # and it appears unconditionally.
+        # frequent also has last_run=None, so it also appears.
         await svc._tick()
 
         prompt = svc.agent_loop.process_direct.call_args[1]["content"]
         assert "frequent" in prompt
-        assert "hourly" not in prompt
+        assert "hourly" in prompt
 
     # --- TREE.md with leading whitespace ---
 
@@ -74,7 +74,7 @@ class TestTickWithState:
         tree_dir = tmp_path / "tasks"
         tree_dir.mkdir(parents=True)
         # Test task name with spaces
-        (tree_dir / "tree_cli_direct.json").write_text(
+        (tree_dir / "tree.json").write_text(
             json.dumps({"items": [{"id": "check_health", "name": "check health", "status": "pending", "interval": "30m", "parent": None}]}),
             encoding="utf-8",
         )

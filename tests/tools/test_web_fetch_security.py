@@ -74,7 +74,7 @@ async def test_web_fetch_blocks_private_redirect_before_returning_image(monkeypa
         def stream(self, method, url, **kwargs):
             return FakeStreamResponse()
 
-    monkeypatch.setattr("nanobot.agent.tools.web.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("httpx.AsyncClient", FakeClient)
 
     with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_public):
         result = await tool.execute(url="https://example.com/image.png")

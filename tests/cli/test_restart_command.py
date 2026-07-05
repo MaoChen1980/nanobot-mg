@@ -51,8 +51,7 @@ class TestRestartCommand:
         loop, bus = _make_loop()
         msg = InboundMessage(channel="telegram", sender_id="u1", chat_id="c1", content="/restart")
 
-        with patch.object(loop, "_dispatch", new_callable=AsyncMock) as mock_dispatch, \
-             patch("nanobot.command.builtin.os.execv"):
+        with patch.object(loop, "_dispatch", new_callable=AsyncMock) as mock_dispatch:
             await bus.publish_inbound(msg)
 
             loop._running = True

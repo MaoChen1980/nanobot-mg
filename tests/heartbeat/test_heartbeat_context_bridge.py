@@ -1,6 +1,15 @@
 """Tests for heartbeat context bridge — injecting delivered messages into channel session."""
 
+from unittest.mock import MagicMock
+
 from nanobot.session.manager import SessionManager
+
+
+def _mock_db() -> MagicMock:
+    """Return a fresh MagicMock db with no pre-existing sessions."""
+    db = MagicMock()
+    db.load_session.return_value = None
+    return db
 
 
 class TestHeartbeatContextBridge:
@@ -10,7 +19,7 @@ class TestHeartbeatContextBridge:
     def test_notify_injects_into_channel_session(self, tmp_path):
         """After notify, the target channel session should contain the
         heartbeat response as an assistant turn."""
-        session_mgr = SessionManager(tmp_path / "sessions")
+        session_mgr = SessionManager(None)  # in-memory mode
         target_key = "telegram:12345"
 
         # Simulate: session exists with one user message
@@ -38,7 +47,7 @@ class TestHeartbeatContextBridge:
         """Simulates the full flow: prior conversation exists, heartbeat
         injects, then user replies.  The session should have the heartbeat
         message visible in get_history so the model sees the context."""
-        session_mgr = SessionManager(tmp_path / "sessions")
+        session_mgr = SessionManager(None)  # in-memory mode
         target_key = "telegram:12345"
 
         # Pre-existing conversation (user has chatted before)
@@ -72,7 +81,7 @@ class TestHeartbeatContextBridge:
     def test_injection_does_not_duplicate_on_existing_history(self, tmp_path):
         """If the channel session already has messages, the injection
         appends cleanly without corruption."""
-        session_mgr = SessionManager(tmp_path / "sessions")
+        session_mgr = SessionManager(None)  # in-memory mode
         target_key = "telegram:12345"
 
         # Pre-existing conversation
@@ -100,7 +109,7 @@ class TestHeartbeatContextBridge:
 
     def test_reply_after_injection_to_empty_session_keeps_context(self, tmp_path):
         """A user replying to the first delivered message still sees that context."""
-        session_mgr = SessionManager(tmp_path / "sessions")
+        session_mgr = SessionManager(None)  # in-memory mode
         target_key = "telegram:99999"
 
         session = session_mgr.get_or_create(target_key)

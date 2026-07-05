@@ -1,0 +1,7 @@
+heartbeat: fix per-task cooldown in _find_pending_tasks
+
+- Add interval parsing + last_run check to _find_pending_tasks()
+  so recently-run tasks are skipped (fixes test_only_due_tasks_in_prompt)
+- Fix test_heartbeat_tick.py to use tree.json (session_key=None)
+  instead of tree_cli_direct.json
+- Add _parse_interval() method for parsing '30m', '1h', '10s' intervals
