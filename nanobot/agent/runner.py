@@ -753,7 +753,7 @@ class AgentRunner:
             if response.should_execute_tools:
                 tool_calls = list(response.tool_calls)
                 context.tool_calls = list(tool_calls)
-                if response.content:
+                if response.content and not hook._had_content:
                     await hook.on_stream(context, response.content)
                 await hook.on_stream_end(context, resuming=True)
 
@@ -952,6 +952,13 @@ class AgentRunner:
                         context.final_content = final_content
                         context.stop_reason = stop_reason
                         context.error = final_content
+                        # Clear context tool state to prevent duplicate
+                        # delivery: after_iteration was already called at
+                        # line 909 with the same tool_events from this
+                        # iteration's tool execution.  The second call would
+                        # re-send identical tool finish events to the proxy.
+                        context.tool_events = []
+                        context.tool_calls = []
                         await hook.after_iteration(context)
                         break
 
