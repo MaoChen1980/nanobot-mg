@@ -304,7 +304,7 @@ class WebSearchTool(WebToolBase, Tool):
             "default": "markdown",
             "description": "Output format: 'markdown' (default) — clean structured text preserving tables and code blocks; 'text' — raw text extraction with minimal formatting",
         },
-        max_chars=p("integer", "Max characters to extract (minimum 100, default 100000). Pages exceeding this limit are truncated (~100KB of text). Typical pages are 10-40KB after extraction. Use smaller values (1000-5000) for quick previews to reduce token cost.",
+        max_chars=p("integer", "Max characters to extract (minimum 100, default 100000). Typical pages are 10-40KB after extraction. If you need complete data from a page, keep the default. Only lower this for a rough glance at the page topic.",
             minimum=100, default=100000,
         ),
         extract=p("string", "Optional regex — only lines matching this pattern are returned from the fetched text, with 1 line context before/after"),
