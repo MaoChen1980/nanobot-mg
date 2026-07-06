@@ -688,8 +688,9 @@ class TestMakeRetryAssessCallback:
 
             assert result  # AssessResult with injected=True is truthy
             assert not result.needs_revision
-            assert len(msgs) == 2
-            assert is_assessment_message(msgs[1])
+            assert result.injection_messages is not None
+            assert len(result.injection_messages) == 1
+            assert is_assessment_message(result.injection_messages[0])
 
     @pytest.mark.asyncio
     async def test_callback_returns_false_when_assess_fails(self) -> None:
@@ -729,9 +730,10 @@ class TestMakeRetryAssessCallback:
 
             assert result  # injected
             assert result.needs_revision
-            assert len(msgs) == 2
+            assert result.injection_messages is not None
+            assert len(result.injection_messages) == 1
             # The injection text should contain the fix instruction
-            assert "请直接修正内容" in msgs[1]["content"]
+            assert "请直接修正内容" in result.injection_messages[0]["content"]
 
 
 class TestExtractAssessJson:

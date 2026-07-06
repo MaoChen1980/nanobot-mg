@@ -322,12 +322,9 @@ class SubagentManager:
                                 "请综合上下文完成修正。"
                             )
 
-                        # Keep at most one assess_me message
-                        for i in range(len(msgs) - 1, -1, -1):
-                            if is_assessment_message(msgs[i]):
-                                msgs.pop(i)
-                        msgs.append(build_assessment_message(injection_text))
-                        logger.info("Subagent [{}] periodic assess_me injected", task_id)
+                        # Build injection messages for the runner to apply
+                        injection_msgs: list[dict] = [build_assessment_message(injection_text)]
+                        logger.info("Subagent [{}] periodic assess_me prepared", task_id)
 
                         # DRC — blocker triggers root cause analysis
                         blocker = parsed.get("blocker")
@@ -338,17 +335,18 @@ class SubagentManager:
                                 dcr.set_context(msgs)
                                 dcr_result = await dcr.execute(problem=blocker)
                                 if dcr_result and not dcr_result.startswith("Error:"):
-                                    for i in range(len(msgs) - 1, -1, -1):
-                                        if is_debug_root_cause_message(msgs[i]):
-                                            msgs.pop(i)
-                                    msgs.append(build_debug_root_cause_message(dcr_result))
-                                    logger.info("Subagent [{}] debug_root_cause injected", task_id)
+                                    injection_msgs.append(build_debug_root_cause_message(dcr_result))
+                                    logger.info("Subagent [{}] debug_root_cause prepared", task_id)
                             except Exception:
                                 logger.debug("Subagent [{}] debug_root_cause failed", task_id)
                         else:
                             logger.debug("Subagent [{}] debug_root_cause skipped — no blocker", task_id)
 
-                        return AssessResult(injected=True, needs_revision=needs_revision)
+                        return AssessResult(
+                            injected=True,
+                            needs_revision=needs_revision,
+                            injection_messages=injection_msgs,
+                        )
 
                     run_coro = self.runner.run(AgentRunSpec(
                         initial_messages=messages,

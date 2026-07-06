@@ -1098,13 +1098,11 @@ class AgentLoop:
                 )
                 injection_text += skill_instruction
 
-            # Message quality is already checked by the tool's pre-send assess
-            # callback. The end-of-loop assess handles broader concerns (task
-            # progress, DRC, skills). Inject as a user message.
-            for i in range(len(messages) - 1, -1, -1):
-                if is_assessment_message(messages[i]):
-                    messages.pop(i)
-            messages.append(build_assessment_message(injection_text))
+            # Build injection messages for the runner to apply.
+            # The runner (``_run_assess_callback``) handles cleanup of stale
+            # assessment/DRC messages and appends these — the callback returns
+            # data, the runner mutates.
+            injection_msgs: list[dict] = [build_assessment_message(injection_text)]
 
             # DRC — blocker 非空即触发根因分析
             if parsed.get("blocker") and parsed.get("blocker") != "null":
@@ -1117,17 +1115,18 @@ class AgentLoop:
                     dcr_result = await dcr.execute(problem=blocker)
                     logger.info("debug_root_cause call done (result_len={})", len(dcr_result) if dcr_result else 0)
                     if dcr_result and not dcr_result.startswith("Error:"):
-                        for i in range(len(messages) - 1, -1, -1):
-                            if is_debug_root_cause_message(messages[i]):
-                                messages.pop(i)
-                        messages.append(build_debug_root_cause_message(dcr_result))
+                        injection_msgs.append(build_debug_root_cause_message(dcr_result))
                         logger.info("debug_root_cause injected")
                 except Exception:
                     logger.exception("debug_root_cause failed")
             else:
                 logger.info("debug_root_cause skipped — assess_me signaled no need")
 
-            return AssessResult(injected=True, needs_revision=needs_revision)
+            return AssessResult(
+                injected=True,
+                needs_revision=needs_revision,
+                injection_messages=injection_msgs,
+            )
         return _cb
 
     async def _spawn_skill_creator(self, skill_pattern: str, session_key: str | None = None) -> None:

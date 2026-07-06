@@ -167,9 +167,18 @@ class AssessResult:
 
     ``__bool__`` returns ``self.injected`` so existing ``if injected:``
     checks continue working without changes.
+
+    **Message mutation contract:**
+    The assess callback evaluations the conversation and returns pre-built
+    injection messages.  The runner (``_run_assess_callback``) applies them
+    to ``messages`` — the callback itself **must not** mutate the message
+    list.
     """
     injected: bool = False
     needs_revision: bool = False
+    # Pre-built assessment / DRC messages to inject into the conversation.
+    # Applied by _run_assess_callback — the callback returns data, the runner mutates.
+    injection_messages: list[dict] | None = None
 
     def __bool__(self) -> bool:
         return self.injected
@@ -291,8 +300,11 @@ class AgentRunner:
     async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 180) -> AssessResult:
         """Run assess_me_callback with timeout protection.
 
-        Returns the callback's AssessResult (truthy if assessment was injected).
-        Returns AssessResult() on timeout or if no callback is configured.
+        The callback returns evaluation data; this method applies injection
+        messages to the conversation, keeping message mutation centralised
+        in the runner.  Stale assessment/DRC messages are **not** cleaned up
+        here — they're stripped on session commit and don't warrant the index
+        invalidation risk during an active turn.
         """
         if spec.assess_me_callback is None:
             return AssessResult()
@@ -302,10 +314,11 @@ class AgentRunner:
                 spec.session_key,
             )
             result = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
-            if result:
+            if result.injection_messages:
+                messages.extend(result.injection_messages)
                 logger.info(
-                    "assess_me_callback injected (session_key={})",
-                    spec.session_key,
+                    "assess_me_callback injected {} message(s) (session_key={})",
+                    len(result.injection_messages), spec.session_key,
                 )
             return result
         except asyncio.TimeoutError:
@@ -1204,6 +1217,7 @@ class AgentRunner:
             # response. The original final_content always goes to the user.
             if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _end_assess_ran = True
+                _assess_msg_idx = len(messages) - 1  # position of this response
                 assess_result = await self._run_assess_callback(spec, messages, timeout=180)
                 if assess_result.needs_revision or assess_result:
                     logger.info(
@@ -1212,9 +1226,10 @@ class AgentRunner:
                         iteration, spec.session_key or "default",
                     )
                     had_injections = True
-                    # The tool's pre-send assess callback already verified message
-                    # quality — the end-of-loop assess handles broader concerns
-                    # (task progress, DRC, skills). Nothing to clear here.
+                    # Response failed assessment — rollback so session history
+                    # stays clean. The assess callback appended guidance after
+                    # this index; keep that so the retry response is informed.
+                    messages.pop(_assess_msg_idx)
                     _end_assess_ran = False
                     continue
 

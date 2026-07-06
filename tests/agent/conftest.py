@@ -24,6 +24,25 @@ _nanobot = ModuleType("nanobot")
 _nanobot.__path__ = [str(_NANOBOT_ROOT / "nanobot")]
 _nanobot.__package__ = "nanobot"
 _nanobot.__file__ = None  # Mark as namespace package (no __init__)
+# Expose __version__ so nanobot/command/builtin.py import doesn't fail.
+# Values are resolved at conftest-load time via the same logic as __init__.py.
+_NANOBOT_VERSION: str | None = None
+try:
+    import subprocess
+    _NANOBOT_VERSION = subprocess.check_output(
+        ["git", "describe", "--tags", "--always"],
+        stderr=subprocess.DEVNULL,
+        cwd=_NANOBOT_ROOT,
+    ).decode().strip()
+except Exception:
+    try:
+        from importlib.metadata import version as _pkg_version
+        _NANOBOT_VERSION = _pkg_version("nanobot-ai")
+    except Exception:
+        pass
+if _NANOBOT_VERSION:
+    _nanobot.__version__ = _NANOBOT_VERSION
+
 sys.modules["nanobot"] = _nanobot
 
 # We don't stub nanobot.agent or nanobot.security as packages.
