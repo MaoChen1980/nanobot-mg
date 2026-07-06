@@ -232,6 +232,6 @@ action:
 **运行时读：** 已经自动注入，无需额外工具调用。
 
 **常用工具:**
-- send_message(recipient='subagent:<label>') — 一对一通知
+- tell_subagent(recipient='subagent:<label>') — 一对一通知
 - cancel_subagent(label="...") — 终止跑偏的 Subagent
 - CronCreate — 长耗时任务设自循环监控

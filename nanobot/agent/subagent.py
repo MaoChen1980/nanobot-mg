@@ -223,7 +223,7 @@ class SubagentManager:
                 tools.register(NotifyOrchestratorTool(
                     manager=self, subagent_id=task_id, subagent_label=label,
                 ))
-                # Note: SendMessageTool (main→subagent) is not registered here — it's main-agent only.
+                # Note: TellSubagentTool (main→subagent) is not registered here — it's main-agent only.
                 system_prompt = build_subagent_prompt(
                     self.workspace,
                     self.disabled_skills,

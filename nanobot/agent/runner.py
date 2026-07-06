@@ -14,7 +14,9 @@ from typing import Any, Callable
 from loguru import logger
 
 from nanobot.agent.assess_me import (
+    assess_message_content,
     build_assessment_message,
+    format_conversation,
     is_assessment_message,
 )
 from nanobot.agent.assess_me import assess_me as _run_assess_me
@@ -313,6 +315,37 @@ class AgentRunner:
                 timeout, spec.session_key,
             )
             return AssessResult()
+
+    def _make_message_assess_cb(self, messages: list[dict], spec: AgentRunSpec) -> Callable[[str], Awaitable[str | None]]:
+        """Build a pre-send quality check callback for the message tool.
+
+        Uses an LLM-based assess call to evaluate message content quality before
+        sending. Catches: debug artifacts, empty content, incompleteness, factual
+        errors, safety issues. The LLM returns structured JSON; if issues are
+        found the tool returns the feedback as its result so the LLM revises.
+
+        On LLM failure (timeout, non-JSON, etc.) the message passes through —
+        a false-negative is better than a false-positive block.
+        """
+
+        # Build context once (captures conversation up to this point)
+        _context = format_conversation(messages)
+
+        async def _check(content: str) -> str | None:
+            result = await assess_message_content(content, context=_context)
+            if result is None:
+                # LLM call failed — let the message through rather than block
+                return None
+            if result.get("status") == "ok":
+                return None
+            issues = result.get("issues", [])
+            summary = result.get("summary", "消息内容存在问题")
+            feedback = "消息未发送，存在以下问题：\n" + "\n".join(f"- {i}" for i in issues)
+            feedback += f"\n\n{summary}"
+            feedback += "\n\n请根据以上反馈修正内容后重新发送。"
+            return feedback
+
+        return _check
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
         """Drain pending injections. Returns normalized user messages."""
@@ -752,11 +785,16 @@ class AgentRunner:
                     messages.pop()  # No tools to execute, remove assistant with stale tool_calls
                     continue
 
-                # Defer message tool sends until end-of-loop assess approves
+                # Set up pre-send quality check on the message tool. The callback
+                # runs assess_me (or a lightweight equivalent) and returns feedback
+                # if the message content has quality issues — the tool then surfaces
+                # this as its tool result instead of sending.
                 if any(tc.name == "message" for tc in tool_calls):
                     mt = spec.tools.get("message")
-                    if mt is not None and hasattr(mt, "set_defer_mode"):
-                        mt.set_defer_mode(True)
+                    if mt is not None and hasattr(mt, "set_assess_callback"):
+                        mt.set_assess_callback(
+                            self._make_message_assess_cb(messages, spec)
+                        )
 
                 (results, new_events, fatal_error, was_interrupted,
                  injection_cycles, executed_count, saved_injections) = await execute_tools(
@@ -1199,11 +1237,9 @@ class AgentRunner:
                         iteration, spec.session_key or "default",
                     )
                     had_injections = True
-                    # Clear the deferred message queue — the assess_me callback
-                    # already injected feedback into messages. The LLM decides
-                    # what to correct: revise the output, adjust task state, or
-                    # continue working. No context surgery needed.
-                    _clear_msg_deferred(spec)
+                    # The tool's pre-send assess callback already verified message
+                    # quality — the end-of-loop assess handles broader concerns
+                    # (task progress, DRC, skills). Nothing to clear here.
                     _end_assess_ran = False
                     continue
 
@@ -1265,12 +1301,8 @@ class AgentRunner:
             if drained_after_max_iterations:
                 had_injections = True
 
-        # Flush or discard deferred message tool content
-        await _flush_msg_deferred(spec, stop_reason)
-        # Reset defer mode so the same tool instance isn't stuck in defer mode
-        mt = spec.tools.get("message")
-        if mt is not None and hasattr(mt, "set_defer_mode"):
-            mt.set_defer_mode(False)
+        # No deferred queue to flush — the tool's pre-send assess callback
+        # already handles quality checks synchronously in execute().
 
         _now = time.monotonic()
         logger.info("RUN_Timing: return={:.0f}ms", (_now - _run_t0) * 1000)
@@ -1453,30 +1485,6 @@ class AgentRunner:
     # Backward compatibility — delegate to module functions
     _drop_orphan_tool_results = staticmethod(drop_orphan_tool_results)
     _backfill_missing_tool_results = staticmethod(backfill_missing_tool_results)
-
-
-def _clear_msg_deferred(spec) -> None:
-    """Discard pending message tool sends (assess failed)."""
-    mt = spec.tools.get("message")
-    if mt is not None and hasattr(mt, "clear_deferred"):
-        mt.clear_deferred()
-
-
-async def _flush_msg_deferred(spec, stop_reason: str) -> None:
-    """Flush or discard deferred message tool content based on exit reason."""
-    import asyncio as _asyncio
-    mt = spec.tools.get("message")
-    if mt is None or not hasattr(mt, "has_deferred") or not mt.has_deferred:
-        return
-    if stop_reason in ("error", "tool_error", "tool_loop_breaker", "empty_final_response"):
-        mt.clear_deferred()
-        logger.info("Cleared deferred message tool content (stop_reason={})", stop_reason)
-    else:
-        flush = getattr(mt, "flush_deferred", None)
-        if flush is None or not _asyncio.iscoroutinefunction(flush):
-            return
-        await flush()
-        logger.info("Flushed deferred message tool content (stop_reason={})", stop_reason)
 
 
 def _force_final_response(messages: list[dict], text: str) -> str:

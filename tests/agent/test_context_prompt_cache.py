@@ -216,7 +216,7 @@ def test_instructions_contains_output_rules_subagent(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     instructions = builder.build_instructions_section(for_subagent=True)
     assert "### Output Rules" in instructions
-    assert "send_message" in instructions  # subagent-specific
+    assert "tell_subagent" in instructions  # subagent-specific
     assert "写代码先计划" not in instructions  # orchestrator-only
 
 

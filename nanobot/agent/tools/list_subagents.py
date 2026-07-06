@@ -15,7 +15,7 @@ class ListSubagentsTool(Tool):
 
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
-    instruction = "List all running subagents and their status. Use before check/cancel/send_message to get task_id or label."
+    instruction = "List all running subagents and their status. Use before check/cancel/tell_subagent to get task_id or label."
 
     name = "list_subagents"
 

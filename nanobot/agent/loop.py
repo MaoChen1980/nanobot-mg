@@ -418,12 +418,10 @@ class AgentLoop:
         """Register the default set of tools."""
         # Lazy imports — deferred to here so module-level import doesn't pull in all tool modules
         from nanobot.agent.tools.analyze import AnalyzeTool
-        from nanobot.agent.tools.assess_me import AssessMeTool
         from nanobot.agent.tools.cancel_subagent import CancelSubagentTool
         from nanobot.agent.tools.check_subagent import CheckSubagentTool
         from nanobot.agent.tools.conversation_search import ConversationSearchTool
         from nanobot.agent.tools.cron import CronTool
-        from nanobot.agent.tools.debug_root_cause import DebugRootCauseTool
         from nanobot.agent.tools.explore_module import ExploreModuleTool
         from nanobot.agent.tools.filesystem import (
             DeleteFileTool, EditFileTool, MoveFileTool, ReadFileTool, WriteFileTool,
@@ -432,12 +430,11 @@ class AgentLoop:
         from nanobot.agent.tools.log_event import LogEventTool
         from nanobot.agent.tools.memory_search import MemorySearchTool
         from nanobot.agent.tools.message import MessageTool
-        from nanobot.agent.tools.reframe import ReframeTool
         from nanobot.agent.tools.scan_project import ScanProjectTool
         from nanobot.agent.tools.search import GlobTool, GrepTool
         from nanobot.agent.tools.restart_agent import SelfRestartTool
         from nanobot.agent.tools.semantic_search import SearchTextTool
-        from nanobot.agent.tools.send_message import SendMessageTool
+        from nanobot.agent.tools.tell_subagent import TellSubagentTool
         from nanobot.agent.tools.shell import ExecTool
         from nanobot.agent.tools.spawn import SpawnTool
         from nanobot.agent.tools.checkpoint import RestoreCheckpointTool, SaveCheckpointTool, ListCheckpointsTool
@@ -461,6 +458,8 @@ class AgentLoop:
             )
             self.tools.register(WebFetchTool(config=self.web_config.fetch, proxy=self.web_config.proxy, user_agent=self.web_config.user_agent))
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound, workspace=self.workspace))
+        from nanobot.agent.tools.send_file import FileTool
+        self.tools.register(FileTool(send_callback=self.bus.publish_outbound, workspace=self.workspace))
         self.tools.register(MemorySearchTool(store=self.context.memory))
         self.tools.register(LogEventTool(store=self.context.memory))
         self.tools.register(ConversationSearchTool(store=self.context.memory))
@@ -471,9 +470,6 @@ class AgentLoop:
         self.tools.register(RestoreCheckpointTool())
         self.tools.register(AnalyzeTool(workspace=self.workspace, allowed_dir=allowed_dir))
         self.tools.register(ScanProjectTool(loop=self))
-        self.tools.register(ReframeTool(workspace=self.workspace))
-        self.tools.register(DebugRootCauseTool())
-        self.tools.register(AssessMeTool())
         if self._db:
             from nanobot.agent.tools.tool_call_log import ToolCallLogTool
             self.tools.register(ToolCallLogTool(db=self._db))
@@ -481,7 +477,7 @@ class AgentLoop:
         self.tools.register(CheckSubagentTool(manager=self.subagents))
         self.tools.register(CancelSubagentTool(manager=self.subagents))
         self.tools.register(ListSubagentsTool(manager=self.subagents))
-        self.tools.register(SendMessageTool(manager=self.subagents))
+        self.tools.register(TellSubagentTool(manager=self.subagents))
         if self.cron_service:
             self.tools.register(
                 CronTool(self.cron_service, default_timezone=self.context.timezone or "UTC")
@@ -529,7 +525,7 @@ class AgentLoop:
             include_timestamps=True, timezone=self.context.timezone
         )
 
-        for name in ("message", "spawn", "cron", "check_config", "assess_me", "debug_root_cause"):
+        for name in ("message", "send_file", "spawn", "cron", "check_config"):
             tool = self.tools.get(name)
             if tool is None:
                 continue
@@ -540,9 +536,7 @@ class AgentLoop:
                 sc(channel, chat_id, effective_key=effective_key)
             elif name == "cron":
                 sc(channel, chat_id, metadata=metadata, session_key=session_key)
-            elif name in ("assess_me", "debug_root_cause"):
-                sc(messages=history)
-            elif name == "message":
+            elif name in ("message", "send_file"):
                 sc(channel, chat_id, message_id, metadata=metadata)
             else:
                 sc(channel, chat_id)
@@ -1025,7 +1019,9 @@ class AgentLoop:
                 )
                 injection_text += skill_instruction
 
-            # Keep at most one assess_me message — remove all stale ones before injecting new
+            # Message quality is already checked by the tool's pre-send assess
+            # callback. The end-of-loop assess handles broader concerns (task
+            # progress, DRC, skills). Inject as a user message.
             for i in range(len(messages) - 1, -1, -1):
                 if is_assessment_message(messages[i]):
                     messages.pop(i)
@@ -1245,8 +1241,8 @@ class AgentLoop:
                 "• Subagent 进展如何？用 list_subagents / check_subagent 检查状态，有没卡住或完成的\n"
                 f"• 读 team_board{suffix}.md — subagent 可能写了事实发现、踩坑、洞察，需要你关注或同步\n"
                 f"• 读 tree{suffix}.json（不存在则创建空树 `{{\"items\": []}}`）— 检查 task backlog，决定下一步调度\n"
-                "• 需要你回复或指导某个 subagent 吗？→ send_message 发送指令\n"
-                "• 发现信息不对称？→ send_message 主动告知，不要等 subagent 来问\n"
+                "• 需要你回复或指导某个 subagent 吗？→ tell_subagent 发送指令\n"
+                "• 发现信息不对称？→ tell_subagent 主动告知，不要等 subagent 来问\n"
                 "• 某个 subagent 的结果影响其他 subagent？→ 协调同步\n"
                 "\n"
                 "**调度决策**\n"

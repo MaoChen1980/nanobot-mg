@@ -1,4 +1,4 @@
-"""SendMessageTool — Orchestrator → Subagent messaging."""
+"""TellSubagentTool — Orchestrator → Subagent messaging."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
         required=["recipient", "message"],
     )
 )
-class SendMessageTool(Tool):
+class TellSubagentTool(Tool):
     """Orchestrator → Subagent messaging — send instructions to a running subagent."""
 
     def __init__(self, manager: SubagentManager) -> None:
@@ -30,7 +30,7 @@ class SendMessageTool(Tool):
         "The subagent receives the message in its next iteration."
     )
 
-    name = "send_message"
+    name = "tell_subagent"
 
     @property
     def description(self) -> str:

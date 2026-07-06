@@ -195,13 +195,13 @@ class TestSpecificSchemaDefaults:
             if os.path.exists(path):
                 os.remove(path)
 
-    def test_send_message_priority_enum(self):
-        # SendMessageTool does not have a priority parameter in its schema.
+    def test_tell_subagent_priority_enum(self):
+        # TellSubagentTool does not have a priority parameter in its schema.
         # The tool accepts message priority via kwargs but it is not part of
         # the LLM-facing parameter schema.
-        from nanobot.agent.tools.send_message import SendMessageTool
+        from nanobot.agent.tools.tell_subagent import TellSubagentTool
         from unittest.mock import MagicMock
-        tool = SendMessageTool(manager=MagicMock())
+        tool = TellSubagentTool(manager=MagicMock())
         schema = tool._tool_parameters_schema
         # priority is not a declared schema parameter (it goes via **kwargs)
         assert "priority" not in schema["properties"]

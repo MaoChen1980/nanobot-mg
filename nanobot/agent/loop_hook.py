@@ -177,10 +177,10 @@ class _LoopHook(AgentHook):
             self._on_progress is not None,
         )
 
-        # Send tool start events when /tool is on — exclude message tool,
-        # its content is already delivered directly to the user.
+        # Send tool start events when /tool is on — exclude message and send_file tools,
+        # their content is already delivered directly to the user.
         if self._observe_tool:
-            visible_calls = [tc for tc in context.tool_calls if tc.name != "message"]
+            visible_calls = [tc for tc in context.tool_calls if tc.name not in ("message", "send_file")]
             if visible_calls:
                 tool_hint = self._loop._strip_think(self._loop._tool_hint(visible_calls))
                 tool_events = [build_tool_event_start_payload(tc) for tc in visible_calls]
@@ -218,8 +218,8 @@ class _LoopHook(AgentHook):
         elif context.tool_calls and not context.tool_events:
             logger.warning("Tool calls made but no events recorded ({} call(s))", len(context.tool_calls))
 
-        # Send tool finish events when /tool is on — exclude message tool,
-        # its results are not relevant to the user.
+        # Send tool finish events when /tool is on — exclude message and send_file tools,
+        # their results are not relevant to the user.
         if (
             self._observe_tool
             and context.tool_calls
@@ -227,7 +227,7 @@ class _LoopHook(AgentHook):
             and on_progress_accepts_tool_events(self._on_progress)
         ):
             tool_events = build_tool_event_finish_payloads(context)
-            tool_events = [te for te in tool_events if te.get("name") != "message"]
+            tool_events = [te for te in tool_events if te.get("name") not in ("message", "send_file")]
             if tool_events:
                 await self._send_progress("", tool_hint=False, tool_events=tool_events)
         u = context.usage or {}

@@ -94,100 +94,71 @@ async def test_message_tool_does_not_inherit_metadata_for_cross_target() -> None
 
 
 @pytest.mark.asyncio
-async def test_message_tool_passes_through_url_media_paths() -> None:
+async def test_message_tool_assess_callback_rejects_low_quality() -> None:
+    """When assess_callback returns feedback, execute() returns it without sending."""
     sent: list[OutboundMessage] = []
 
     async def _send(msg: OutboundMessage) -> None:
         sent.append(msg)
 
-    tool = MessageTool(send_callback=_send)
+    async def _assess(content: str) -> str | None:
+        if "bad" in content:
+            return "Message not sent: contains inappropriate content"
+        return None
 
-    url = "https://example.com/image.png"
-
-    await tool.execute(
-        content="see attached",
-        channel="telegram",
-        chat_id="1",
-        media=[url],
-    )
-
-    assert sent[0].media == [url]
-
-
-@pytest.mark.asyncio
-async def test_message_tool_defer_mode_queues_and_explains_semantics() -> None:
-    """When defer_mode is active, message() must NOT send and must return a
-    placeholder that clearly tells the LLM the message is queued, NOT delivered.
-
-    Regression guard for: cron agent was confused by 'queued for delivery' status
-    and didn't know whether the message was sent.
-    """
-    sent: list[OutboundMessage] = []
-
-    async def _send(msg: OutboundMessage) -> None:
-        sent.append(msg)
-
-    tool = MessageTool(send_callback=_send)
-    tool.set_defer_mode(True)
+    tool = MessageTool(send_callback=_send, assess_callback=_assess)
 
     result = await tool.execute(
-        content="hello user",
+        content="this is bad content",
         channel="telegram",
         chat_id="1",
     )
 
-    # Nothing was actually sent — caller (framework) decides when to flush
-    assert sent == []
-    # The placeholder must contain the key clarifications so the LLM doesn't
-    # assume the message was delivered.
-    assert "QUEUED" in result or "queued" in result
-    assert "NOT yet sent" in result or "NOT" in result
-    assert "DISCARDED" in result or "discarded" in result
-    # The placeholder must mention the assess mechanism so the LLM understands
-    # the queue/assess cycle.
-    assert "assess" in result.lower() or "quality" in result.lower()
-    # Deferred list should hold exactly one message for later flush
-    assert tool.has_deferred is True
-    assert len(tool._deferred) == 1
-
-    # flush_deferred() should actually deliver
-    await tool.flush_deferred()
-    assert len(sent) == 1
-    assert sent[0].content == "hello user"
-    assert tool.has_deferred is False
+    assert result == "Message not sent: contains inappropriate content"
+    assert sent == []  # Nothing sent
 
 
 @pytest.mark.asyncio
-async def test_message_tool_defer_mode_replacement_after_revisions() -> None:
-    """Calling message() multiple times under defer_mode should queue each one
-    (the most recent represents the user's intent). The framework's
-    _clear_msg_deferred() is what discards — flush_deferred() delivers.
-    """
+async def test_message_tool_assess_callback_passes_good_quality() -> None:
+    """When assess_callback returns None, execute() sends normally."""
+    sent: list[OutboundMessage] = []
+
+    async def _send(msg: OutboundMessage) -> None:
+        sent.append(msg)
+
+    async def _assess(content: str) -> str | None:
+        return None  # Always pass
+
+    tool = MessageTool(send_callback=_send, assess_callback=_assess)
+
+    result = await tool.execute(
+        content="good content",
+        channel="telegram",
+        chat_id="1",
+    )
+
+    assert "Message sent" in result
+    assert len(sent) == 1
+    assert sent[0].content == "good content"
+
+
+@pytest.mark.asyncio
+async def test_message_tool_assess_callback_skipped_when_none() -> None:
+    """When no assess_callback is set, execute() sends without quality check."""
     sent: list[OutboundMessage] = []
 
     async def _send(msg: OutboundMessage) -> None:
         sent.append(msg)
 
     tool = MessageTool(send_callback=_send)
-    tool.set_defer_mode(True)
 
-    r1 = await tool.execute(content="first draft", channel="feishu", chat_id="x")
-    r2 = await tool.execute(content="revised", channel="feishu", chat_id="x")
-    r3 = await tool.execute(content="final", channel="feishu", chat_id="x")
+    result = await tool.execute(
+        content="any content",
+        channel="telegram",
+        chat_id="1",
+    )
 
-    # All three should report queued (not error)
-    assert "queued" in r1.lower()
-    assert "queued" in r2.lower()
-    assert "queued" in r3.lower()
-    # Nothing delivered yet
-    assert sent == []
-    # Three messages in the deferred list
-    assert len(tool._deferred) == 3
-
-    # clear_deferred() should drop them all
-    tool.clear_deferred()
-    assert tool.has_deferred is False
-    # No flush happened, so nothing reached the user
-    assert sent == []
+    assert "Message sent" in result
+    assert len(sent) == 1
 
 

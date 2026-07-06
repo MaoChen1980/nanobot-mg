@@ -1,11 +1,11 @@
-"""Message tool for sending messages to users."""
+"""Message tool for sending text messages to users."""
 
 from __future__ import annotations
 
-import os
+from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 
@@ -27,12 +27,6 @@ from nanobot.config.paths import get_workspace_path
             "Optional: target chat/recipient override. "
             "Defaults to the current conversation chat.",
         ),
-        media=p("array",
-            "Optional: list of absolute file paths to send as attachments. "
-            "Use this to send documents (PDF, DOCX, XLSX, PPTX), images, or any other file to the user. "
-            "The framework handles platform-specific upload automatically.",
-            items=p("string", "Absolute path to the file on disk"),
-        ),
         buttons=p("array",
             "Optional: inline keyboard buttons as list of rows, each row is list of button labels. "
             "Constraints: max 4 rows, max 3 buttons per row, max 20 chars per label. "
@@ -47,17 +41,19 @@ from nanobot.config.paths import get_workspace_path
     )
 )
 class MessageTool(Tool):
-    """Tool to send messages to users on chat channels."""
+    """Tool to send text messages to users on chat channels."""
 
     def __init__(
         self,
         send_callback: Callable[[OutboundMessage], Awaitable[None]] | None = None,
+        assess_callback: Callable[[str], Awaitable[str | None]] | None = None,
         default_channel: str = "",
         default_chat_id: str = "",
         default_message_id: str | None = None,
         workspace: str | Path | None = None,
     ):
         self._send_callback = send_callback
+        self._assess_callback = assess_callback
         self._workspace = Path(workspace).expanduser() if workspace is not None else get_workspace_path()
         self._default_channel: ContextVar[str] = ContextVar("message_default_channel", default=default_channel)
         self._default_chat_id: ContextVar[str] = ContextVar("message_default_chat_id", default=default_chat_id)
@@ -73,8 +69,6 @@ class MessageTool(Tool):
             "message_record_channel_delivery",
             default=False,
         )
-        self._deferred: list[OutboundMessage] = []
-        self._defer_mode: bool = False
 
     def set_context(
         self,
@@ -93,23 +87,14 @@ class MessageTool(Tool):
         """Set the callback for sending messages."""
         self._send_callback = callback
 
-    def set_defer_mode(self, active: bool) -> None:
-        """When active, execute() queues messages instead of sending."""
-        self._defer_mode = active
+    def set_assess_callback(self, callback: Callable[[str], Awaitable[str | None]]) -> None:
+        """Set the callback for pre-send quality assessment.
 
-    async def flush_deferred(self) -> None:
-        """Send all deferred messages and clear the queue."""
-        for msg in self._deferred:
-            await self._send_callback(msg)
-        self._deferred.clear()
-
-    def clear_deferred(self) -> None:
-        """Discard all deferred messages without sending."""
-        self._deferred.clear()
-
-    @property
-    def has_deferred(self) -> bool:
-        return bool(self._deferred)
+        The callback receives the message content and returns ``None`` if
+        the message is acceptable, or a feedback string explaining why it
+        should not be sent (which is returned to the LLM as the tool result).
+        """
+        self._assess_callback = callback
 
     def set_record_channel_delivery(self, active: bool):
         """Mark tool-sent messages as proactive channel deliveries."""
@@ -119,15 +104,21 @@ class MessageTool(Tool):
         """Restore previous proactive delivery recording state."""
         self._record_channel_delivery_var.reset(token)
 
-    instruction = "Send messages/files/buttons to the user. Do NOT use exec or plain text replies to send messages."
+    instruction = (
+        "Send text messages and buttons to the user. "
+        "Use this tool to output ALL intermediate conclusions and final results — "
+        "do NOT output conclusions as plain text replies. "
+        "The framework runs quality assessment on content sent through this tool, "
+        "so ensure your output is complete, accurate, and user-ready."
+    )
 
     name = "message"
 
     description = (
-        "Send a message or results to the user through chat channels. "
-        "Supports text, file attachments (media), inline keyboard buttons, "
-        "and cross-channel replies. Unlike text output, sending a message "
-        "does not end the turn."
+        "Send a text message or results to the user through chat channels. "
+        "Supports text, inline keyboard buttons, and cross-channel replies. "
+        "Unlike text output, sending a message does not end the turn. "
+        "For file attachments use the send_file tool instead."
     )
 
     async def execute(
@@ -136,7 +127,6 @@ class MessageTool(Tool):
         channel: str | None = None,
         chat_id: str | None = None,
         message_id: str | None = None,
-        media: list[str] | None = None,
         buttons: list[list[str]] | None = None,
         **kwargs: Any
     ) -> str:
@@ -153,11 +143,6 @@ class MessageTool(Tool):
         default_chat_id = self._default_chat_id.get()
         channel = channel or default_channel
         chat_id = chat_id or default_chat_id
-        # Only inherit default message_id when targeting the same channel+chat.
-        # Cross-chat sends must not carry the original message_id, because
-        # some channels (e.g. Feishu) use it to determine the target
-        # conversation via their Reply API, which would route the message
-        # to the wrong chat entirely.
         same_target = channel == default_channel and chat_id == default_chat_id
         if same_target:
             message_id = message_id or self._default_message_id.get()
@@ -170,19 +155,11 @@ class MessageTool(Tool):
         if not self._send_callback:
             return "Error: Message sending not configured"
 
-        if media:
-            resolved = []
-            for p in media:
-                if p.startswith(("http://", "https://")):
-                    resolved.append(p)
-                else:
-                    if not os.path.isabs(p):
-                        return f"Error: media path must be absolute, got: {p}"
-                    fp = Path(p)
-                    if not fp.exists():
-                        return f"Error: media file not found: {fp.as_posix()}"
-                    resolved.append(str(fp))
-            media = resolved
+        # Quality assessment before send
+        if self._assess_callback:
+            feedback = await self._assess_callback(content)
+            if feedback:
+                return feedback
 
         metadata = dict(self._default_metadata.get()) if same_target else {}
         if message_id:
@@ -194,30 +171,15 @@ class MessageTool(Tool):
             channel=channel,
             chat_id=chat_id,
             content=content,
-            media=media or [],
+            media=[],
             buttons=buttons or [],
             metadata=metadata,
         )
 
-        if self._defer_mode:
-            self._deferred.append(msg)
-            return (
-                "```queued\n"
-                "[Message QUEUED for end-of-loop delivery — NOT yet sent to the user. "
-                "The framework runs a quality assessment (assess_me) at the end of this turn. "
-                "If the assessment approves, all queued messages are flushed to the user channel. "
-                "If the assessment requests revision, the queued message is DISCARDED (not delivered). "
-                "To deliver a revised version, call message() again with the updated content — "
-                "the new message will replace this queued one in the assessment queue. "
-                "Do NOT call message() repeatedly with the same content expecting different results.]"
-                "\n```"
-            )
-
         try:
             await self._send_callback(msg)
-            media_info = f" with {len(media)} attachments" if media else ""
             button_info = f" with {sum(len(row) for row in buttons)} button(s)" if buttons else ""
-            return f"Message sent to {channel}:{chat_id}{media_info}{button_info}"
+            return f"Message sent to {channel}:{chat_id}{button_info}"
         except Exception as e:
             logger.exception("Failed to send message")
             return f"Error sending message: {str(e)}"

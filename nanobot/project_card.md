@@ -68,7 +68,7 @@ E:\claude\nanobot-mg\nanobot/
       search.py (28KB)
       self.py (21KB)
       semantic_search.py (4KB)
-      send_message.py (2KB)
+      tell_subagent.py (2KB)
       shell_validators.py (7KB)
       spawn.py (9KB)
       tool_call_log.py (3KB)

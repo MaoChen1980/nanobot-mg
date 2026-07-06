@@ -388,7 +388,7 @@ class HubTCPServer:
             # streaming content first, then handle the current event.
             await _flush_buffer()
 
-            _user_tools = frozenset(["message"])
+            _user_tools = frozenset(["message", "send_file"])
             has_non_user_event = False
             if tool_events:
                 for te in tool_events:

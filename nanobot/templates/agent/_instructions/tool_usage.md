@@ -21,9 +21,9 @@
 - 扫描项目整体结构 → `scan_project`
 
 ### 调试
-- 遇到错误 → `debug_root_cause`（系统化根因分析）
-- 卡住/绕圈 → `reframe`（清空噪声重新聚焦）
-- 不确定方向 → `assess_me`（第二 LLM 评估）
+- 遇到错误 → 系统自动注入 `[debug_root_cause]` 根因分析，参考其中的分析推进
+- 卡住/绕圈 → 加载 `skills/reframe/SKILL.md` 用 reframe 方法清空噪声
+- `[assess]` / `[debug_root_cause]` 块是系统注入的上下文，不是用户输入
 
 ### 执行
 - 执行 shell 命令 → `exec`（只有用户明确要求或文件操作时用）
@@ -47,7 +47,7 @@
 **通信控制：**
 - spawn（fire-and-forget，结果自动返回）
 - check_subagent(task_id) — 仅用于确认是否存活，不要轮询
-- send_message(recipient, message) — 发给 subagent（只支持 `recipient='subagent:<label>'`，subagent→main 用 notify_orchestrator）
+- tell_subagent(recipient, message) — 发给 subagent（只支持 `recipient='subagent:<label>'`，subagent→main 用 notify_orchestrator）
 - cancel_subagent(label) — 取消运行中的 subagent
 - list_subagents — 查看所有运行中的 subagent
 

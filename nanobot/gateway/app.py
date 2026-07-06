@@ -279,6 +279,7 @@ class GatewayApplication:
         """Connect cross-component callbacks (message tool, cron, etc.)."""
         from nanobot.agent.tools.cron import CronTool
         from nanobot.agent.tools.message import MessageTool
+        from nanobot.agent.tools.send_file import FileTool
         from nanobot.bus.events import OutboundMessage
 
         def _channel_session_key(channel: str, chat_id: str) -> str:
@@ -389,6 +390,9 @@ class GatewayApplication:
         message = getattr(self.agent, "tools", {}).get("message")
         if isinstance(message, MessageTool):
             message.set_send_callback(_deliver_to_channel)
+        send_file = getattr(self.agent, "tools", {}).get("send_file")
+        if isinstance(send_file, FileTool):
+            send_file.set_send_callback(_deliver_to_channel)
 
         # Cron job handler
         async def on_cron_job(job: Any) -> str | None:

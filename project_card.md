@@ -87,7 +87,6 @@ nanobot-mg/
         search.py (28KB)
         self.py (21KB)
         semantic_search.py (4KB)
-        send_message.py (3KB)
         shell_validators.py (7KB)
         spawn.py (7KB)
         tool_call_log.py (3KB)

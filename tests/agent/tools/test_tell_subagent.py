@@ -1,4 +1,4 @@
-"""Tests for send_message, send_to_subagent, and related fixes."""
+"""Tests for tell_subagent, send_to_subagent, and related fixes."""
 
 import asyncio
 import time
@@ -15,10 +15,10 @@ _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
 
 @pytest.mark.asyncio
-async def test_send_message_orchestrator_to_subagent(tmp_path):
-    """send_message(recipient='subagent:label') delivers to subagent inbox."""
+async def test_tell_subagent_orchestrator_to_subagent(tmp_path):
+    """tell_subagent(recipient='subagent:label') delivers to subagent inbox."""
     from nanobot.agent.subagent import SubagentManager
-    from nanobot.agent.tools.send_message import SendMessageTool
+    from nanobot.agent.tools.tell_subagent import TellSubagentTool
     from nanobot.bus.queue import MessageBus
 
     bus = MessageBus()
@@ -37,7 +37,7 @@ async def test_send_message_orchestrator_to_subagent(tmp_path):
     task = asyncio.create_task(asyncio.Event().wait())  # "running" task
     mgr._running_tasks["test-id"] = task
 
-    tool = SendMessageTool(manager=mgr)  # no subagent_id = orchestrator mode
+    tool = TellSubagentTool(manager=mgr)  # no subagent_id = orchestrator mode
     result = await tool.execute(recipient="subagent:test-subagent", message="hello there")
 
     assert "sent" in result.lower()
