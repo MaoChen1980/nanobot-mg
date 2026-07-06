@@ -52,6 +52,7 @@ class AgentHook:
 
     def __init__(self, reraise: bool = False) -> None:
         self._reraise = reraise
+        self._had_content: bool = False
 
     def wants_streaming(self) -> bool:
         return False
