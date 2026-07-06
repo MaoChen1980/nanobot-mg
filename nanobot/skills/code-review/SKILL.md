@@ -17,6 +17,26 @@ category: code-review
 
 ## Strategy
 
+**Rule #0 — Source code is the only ground truth.**  
+Every behavioral claim ("X does Y", "X does NOT do Y", "no retry", "no timeout", "exception is swallowed") MUST be verified by reading the actual source code before writing it as a finding. Do NOT assert behavior based on method names, line number guesses, or documentation alone.
+
+**Verification workflow for every finding:**
+
+```
+claim made ("no retry" / "always returns" / "missing break", etc.)
+    ↓
+grep the relevant file for the exact pattern
+    ↓
+read_file the surrounding context (≥10 lines around match)
+    ↓
+confirm: does the code actually do what the claim says?
+    ↓
+IF YES → write finding with file:line reference
+IF NO  → discard or correct the claim
+```
+
+If the finding involves a different file than the one currently being read, repeat the verification chain for that file before writing the claim.
+
 1. **Get the diff** — `exec("git diff main...HEAD")` or `exec("git diff --cached")` to see what changed
 2. **Read the modified files** — Focus on the diff context; read surrounding code when needed
 3. **Check each change** for:
@@ -76,7 +96,9 @@ Overall assessment in 2-3 sentences. Include any positive observations about wel
 
 Be specific with file paths and line numbers. Every finding must be traceable to actual code.
 
-**⚠️ Before writing any behavioral claim (e.g. "no retry", "no timeout", "unhandled exception"), load the `verify-before-report-claim` skill and cross-verify against source code. Claims based on method names or line numbers — not actual code reading — are the #1 cause of false positives in code review reports.**
+**Behavioral claims require explicit source verification.** Before writing "X does NOT do Y" or "no retry" / "missing timeout" / "unhandled exception", you MUST have read the relevant source code in this conversation. A finding without a corresponding read_file/grep in the conversation history is a draft — do not finalize it until verification is complete.
+
+**⚠️ Behavioral claims without source verification are the #1 cause of false positives in code review. Follow Rule #0 above — every claim must be traced to a read_file/grep call in the conversation before it is written.**
 
 ## Direct Review (small changes)
 
@@ -107,6 +129,7 @@ Include the diff output and relevant file contents in the spawn task.
 - Every finding explains both *what* is wrong and *why* it matters
 - Output format matches the required sections
 - For spawn reviews: verify the subagent's output is complete, not truncated
+- **Every behavioral claim ("X does Y" / "X does NOT do Y") has a corresponding source code read recorded in the conversation** — this is the primary false-positive prevention mechanism. If you cannot point to the exact read_file/grep call that verified the claim, the claim must not be written as a finding.
 - **Self-optimization**: 此 Skill 可自我进化。
   - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
