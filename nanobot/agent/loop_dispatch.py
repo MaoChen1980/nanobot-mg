@@ -120,6 +120,7 @@ class DispatchManager:
         async def on_reasoning_end() -> None:
             pass
 
+        return on_stream, on_stream_end, on_reasoning, on_reasoning_end
 
     async def _handle_cancellation(
         self, msg: InboundMessage, session_key: str,

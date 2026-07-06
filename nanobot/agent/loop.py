@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from loguru import logger
 
 from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
-from nanobot.agent.context import ContextBuilder, _sanitize_session_key
+from nanobot.agent.context import ContextBuilder, _sanitize_session_key, parse_task_tree
 from nanobot.agent.context_vars import _current_debug_enabled
 from nanobot.agent.hook import AgentHook, CompositeHook
 from nanobot.agent.loop_hook import _LoopHook
@@ -985,13 +985,11 @@ class AgentLoop:
             # skips task-progress sections when there's nothing in progress.
             _has_active = True  # conservative default
             try:
-                from nanobot.agent.context import _sanitize_session_key
                 suffix = f"_{_sanitize_session_key(session.key)}" if session and session.key else ""
                 tree_path = loop.workspace / "tasks" / f"tree{suffix}.json"
                 if tree_path.exists():
                     raw = tree_path.read_text(encoding="utf-8")
-                    data = json.loads(raw)
-                    for item in data.get("items", []):
+                    for item in parse_task_tree(raw):
                         st = item.get("status")
                         if st is None or st not in ("completed", "failed"):
                             _has_active = True

@@ -73,6 +73,22 @@ class ContextState:
     history_budget_tokens: int | None = None
 
 
+def parse_task_tree(raw: str) -> list[dict]:
+    """Parse tree.json content, accepting both ``{"items": [...]}`` and bare ``[...]`` root.
+
+    Returns empty list on any parse failure or if no items found.
+    """
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return data.get("items", [])
+    return []
+
+
 class ContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
 
@@ -591,12 +607,7 @@ class ContextBuilder:
         raw = self._cached_read_text(tree_path)
         if not raw:
             return ""
-        try:
-            data = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to parse %s — skipping tree section", tree_rel)
-            return ""
-        items = data.get("items", [])
+        items = parse_task_tree(raw)
         if not items:
             return ""
         # Skip injection when no active tasks remain

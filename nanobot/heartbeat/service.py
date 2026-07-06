@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from nanobot.agent.context import parse_task_tree
 from nanobot.heartbeat.state import HeartbeatState
 
 if TYPE_CHECKING:
@@ -109,10 +109,9 @@ class HeartbeatService:
             return []
         try:
             raw = tree_path.read_text(encoding="utf-8")
-            data = json.loads(raw)
-        except (json.JSONDecodeError, OSError):
+        except OSError:
             return []
-        items: list[dict] = data.get("items", [])
+        items = parse_task_tree(raw)
         if not items:
             return []
         # Collect parent IDs so we can identify leaves
