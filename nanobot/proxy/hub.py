@@ -416,7 +416,7 @@ class HubTCPServer:
                         "chat_id": chat_id,
                         "content": text,
                     })
-            if content and (not tool_events or has_non_user_event):
+            if content and not tool_hint and (not tool_events or has_non_user_event):
                 await proxy_manager.deliver_to_proxy(proxy_key, {
                     "type": "deliver",
                     "chat_id": chat_id,
