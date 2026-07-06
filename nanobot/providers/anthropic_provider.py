@@ -147,10 +147,26 @@ class AnthropicProvider(LLMProvider):
         # Fallback for non-APIStatusError exceptions (connection, timeout, etc.)
         logger.exception("Anthropic API error (non-APIStatusError): {}", e)
         err_str = str(e).strip()
+        error_kind = LLMProvider._classify_error(e)
+        # Network errors (timeouts, connection failures) are always retryable.
+        # Set error_should_retry=True explicitly so callers that guard on that
+        # field get the correct behaviour without relying on error_kind fallbacks.
+        # Provide a reasonable retry-after hint for transient error kinds so the
+        # caller does not have to fall back to base-delay guessing.
+        should_retry = error_kind in ("timeout", "connection")
+        retry_after: float | None = None
+        if should_retry:
+            retry_after = LLMProvider._extract_retry_after(err_str or None)
+            if retry_after is None:
+                # No server-provided hint; use a conservative default for network stalls.
+                retry_after = 30.0
         return LLMResponse(
             content=f"Error calling LLM: {err_str}" if err_str else "Error calling LLM: connection error (no detail)",
             finish_reason="error",
-            error_kind=LLMProvider._classify_error(e),
+            error_kind=error_kind,
+            retry_after=retry_after,
+            error_retry_after_s=retry_after,
+            error_should_retry=should_retry,
         )
 
     @staticmethod
