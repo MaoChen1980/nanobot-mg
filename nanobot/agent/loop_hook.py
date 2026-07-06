@@ -175,9 +175,12 @@ class _LoopHook(AgentHook):
         if self._observe_tool:
             visible_calls = [tc for tc in context.tool_calls if tc.name not in ("message", "send_file")]
             if visible_calls:
-                tool_hint = self._loop._strip_think(self._loop._tool_hint(visible_calls))
                 tool_events = [build_tool_event_start_payload(tc) for tc in visible_calls]
-                await self._send_progress(tool_hint, tool_hint=True, tool_events=tool_events)
+                # Include LLM's pre-tool text alongside tool events so it reaches
+                # the user (hub's _on_progress drops plain streaming content).
+                response_text = self._loop._strip_think(context.response.content or "") if context.response else ""
+                display = response_text if response_text and response_text.strip() else self._loop._strip_think(self._loop._tool_hint(visible_calls))
+                await self._send_progress(display, tool_hint=False, tool_events=tool_events)
 
         for tc in context.tool_calls:
             args_str = json.dumps(tc.arguments, ensure_ascii=False)
