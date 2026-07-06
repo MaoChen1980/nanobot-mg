@@ -92,14 +92,6 @@ def build_subagent_prompt(
         max_tool_result_chars=ctx._framework_config.get("max_tool_result_chars", 32_000),
         exec_timeout=ctx._framework_config.get("exec_timeout", 60),
     )
-    # Post-process old path references in the template
-    if suffix:
-        old_tree = f"{ws_path}/tasks/tree.json"
-        old_current = f"{ws_path}/tasks/CURRENT.md"
-        old_board = f"{ws_path}/tasks/team_board.md"
-        fw_content = fw_content.replace(old_tree, f"{ws_path}/{tree_rel}")
-        fw_content = fw_content.replace(old_current, f"{ws_path}/{current_rel}")
-        fw_content = fw_content.replace(old_board, f"{ws_path}/{team_board_rel}")
     parts.append(fw_content)
 
     # 8. Output schema (optional)

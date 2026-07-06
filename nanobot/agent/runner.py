@@ -32,7 +32,6 @@ from nanobot.utils.helpers import (
     split_thinking_messages,
     truncate_text,
 )
-from nanobot.utils.media_decode import strip_image_blocks
 from nanobot.utils.runtime import (
     EMPTY_FINAL_RESPONSE_MESSAGE,
     build_length_recovery_message,
@@ -648,25 +647,7 @@ class AgentRunner:
             logger.info("RUN_DBG: before_llm_call (iter={})", iteration)
             messages_for_model = hook.before_llm_call(context, messages_for_model)
 
-            # Inject instructions right after system prompt — always index 1,
-            # never competes with real user messages, no sequence disruption.
-            # NOTE: messages_for_model may BE the messages list (when
-            # strip_bypassed_tool_messages finds nothing to strip), so we
-            # must REPLACE stale instructions rather than inserting — a bare
-            # insert(1, ...) would mutate the source list and accumulate
-            # duplicates across iterations.
-            # If spec.instructions is a callable, call it each iteration for
-            # fresh content (used by subagents to refresh team_board, etc.).
-            instr_content = spec.instructions() if callable(spec.instructions) else spec.instructions
-            if instr_content and messages_for_model:
-                instr = {"role": "user", "content": f"## Instructions\n\n{instr_content}"}
-                if (len(messages_for_model) > 1
-                        and messages_for_model[1].get("role") == "user"
-                        and isinstance(messages_for_model[1].get("content"), str)
-                        and messages_for_model[1]["content"].startswith("## Instructions")):
-                    messages_for_model[1] = instr
-                else:
-                    messages_for_model.insert(1, instr)
+            _ensure_instructions(messages_for_model, spec)
 
             # Inject pending memory into instructions block
             if _pending_memory and len(messages_for_model) > 1:
@@ -716,11 +697,6 @@ class AgentRunner:
                         logger.exception("Failed to persist overflow-compressed messages to history")
                 if compress_event.summary:
                     _overflow_summary = compress_event.summary
-            # Images are only useful once — strip base64 payloads so
-            # subsequent turns don't re-send megabytes of image data.
-            # The model can re-read with read_file if needed.
-            if response.finish_reason != "error":
-                strip_image_blocks(messages)
                 # Periodic self-assessment — fire at milestones (every assess_interval responses)
                 # within this run, not just at user-message boundaries.
                 # Uses threshold (>=) instead of exact multiple (%) so batch jumps don't skip.
@@ -952,14 +928,6 @@ class AgentRunner:
                         context.final_content = final_content
                         context.stop_reason = stop_reason
                         context.error = final_content
-                        # Clear context tool state to prevent duplicate
-                        # delivery: after_iteration was already called at
-                        # line 909 with the same tool_events from this
-                        # iteration's tool execution.  The second call would
-                        # re-send identical tool finish events to the proxy.
-                        context.tool_events = []
-                        context.tool_calls = []
-                        await hook.after_iteration(context)
                         break
 
                 # --- Store memory from keyword tag for next iteration ---

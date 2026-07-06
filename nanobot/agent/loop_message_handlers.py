@@ -20,39 +20,6 @@ from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 from nanobot.utils.tool_hints import format_single_tool_hint
 
-_STALE_MESSAGE_MINUTES = 20
-
-
-def _has_stale_duplicate(session, message_id: str) -> bool:
-    """Check if a message with the same ID was already processed long ago.
-
-    Only matches by ``message_id`` — no content matching.
-    Only returns True if the original message is older than ``_STALE_MESSAGE_MINUTES``.
-    """
-    if not message_id:
-        return False
-    from datetime import datetime, timedelta, timezone
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=_STALE_MESSAGE_MINUTES)
-    for i in range(len(session.messages) - 1, -1, -1):
-        role = session.messages[i].get("role")
-        if role in ("assistant", "tool"):
-            continue
-        if role == "user":
-            stored_id = session.messages[i].get("_message_id", "") or ""
-            if stored_id == message_id:
-                ts = session.messages[i].get("timestamp", "")
-                try:
-                    msg_time = datetime.fromisoformat(ts)
-                    if msg_time.tzinfo is None:
-                        msg_time = msg_time.replace(tzinfo=timezone.utc)
-                except (ValueError, TypeError):
-                    msg_time = datetime.now(timezone.utc)
-                stale = msg_time < cutoff
-                return stale
-        break
-    return False
-
-
 def _create_bus_progress_callback(loop, msg):
     """Create a bus-based progress callback from message context.
 
@@ -275,14 +242,6 @@ class UserMessageHandler:
         if result := await self._dispatch_command(msg, session, key):
             return result
 
-        # Stage 0a: Stale message guard — skip only if same message_id was
-        # already processed more than N hours ago. Recent re-dispatches
-        # (e.g. from card action callbacks) are allowed through.
-        msg_id = msg.metadata.get("message_id", "") or ""
-        if _has_stale_duplicate(session, msg_id):
-            logger.info("Stale re-dispatch detected for session {} (msg='{}...'), skipping", key, msg.content[:40])
-            return None
-
         # Stage 1: session preparation (checkpoint restore & history loading)
         session, pending, history, channel, chat_id, key = self._prepare_session(msg, session_key)
 
@@ -476,8 +435,8 @@ class UserMessageHandler:
 
     def _make_retry_wait_callback(self, msg, on_progress=None):
         async def _on_retry_wait(content):
-            # Internal retry categories are meaningless to the user — skip them.
             if content in {"empty_response", "length_recovery"}:
+                logger.debug("Retry wait: skipping callback for category '{}'", content)
                 return
             if on_progress:
                 await on_progress(content, tool_events=None)

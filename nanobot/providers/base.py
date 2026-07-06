@@ -14,6 +14,7 @@ from typing import Any
 
 from loguru import logger
 
+from nanobot.agent.loop_utils import strip_think
 from nanobot.utils.media_decode import image_placeholder_text
 
 # Regex matching lone surrogates (U+D800–U+DFFF) that crash UTF-8 encoding.
@@ -506,7 +507,10 @@ class LLMProvider(ABC):
     async def _safe_chat(self, **kwargs: Any) -> LLMResponse:
         """Call chat() and convert unexpected exceptions to error responses."""
         try:
-            return await self.chat(**kwargs)
+            response = await self.chat(**kwargs)
+            if response.content:
+                response.content = strip_think(response.content)
+            return response
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -546,7 +550,10 @@ class LLMProvider(ABC):
     async def _safe_chat_stream(self, **kwargs: Any) -> LLMResponse:
         """Call chat_stream() and convert unexpected exceptions to error responses."""
         try:
-            return await self.chat_stream(**kwargs)
+            response = await self.chat_stream(**kwargs)
+            if response.content:
+                response.content = strip_think(response.content)
+            return response
         except asyncio.CancelledError:
             raise
         except Exception as exc:

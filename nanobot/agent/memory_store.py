@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from nanobot.utils.helpers import ensure_dir, truncate_text
-from nanobot.agent.loop_utils import strip_think
 from nanobot.agent.memory_vector import MemoryVectorIndex
 from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.gitstore import GitStore
@@ -259,7 +258,7 @@ class MemoryStore:
         if self._db is None:
             return 0
         limit = max_chars if max_chars is not None else _HISTORY_ENTRY_HARD_CAP
-        content = strip_think(entry.rstrip())
+        content = entry.rstrip()
         if len(content) > limit:
             content = truncate_text(content, limit)
         return self._db.append_history(content, timestamp=timestamp)

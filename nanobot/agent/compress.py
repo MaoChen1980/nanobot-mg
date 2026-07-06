@@ -27,7 +27,6 @@ from loguru import logger
 
 from nanobot.agent.compressor import CompressEvent, Compressor
 from nanobot.agent.llm_context import chat_stream_with_retry
-from nanobot.agent.loop_utils import strip_think
 from nanobot.session.manager import Session
 from nanobot.utils.helpers import estimate_message_tokens
 
@@ -311,7 +310,7 @@ async def compress_turns(
     summary = await summarize_turns(
         to_compress, future_context=keep, previous_summary=previous_summary,
     )
-    summary = strip_think(summary).strip() if summary else ""
+    summary = summary.strip() if summary else ""
     summary = _strip_xml_tool_calls(summary) if summary else ""
     if not summary:
         return None, []

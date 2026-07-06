@@ -29,54 +29,47 @@ class DispatchManager:
         """Execute dispatch body: process message with streaming, handle cancel/error."""
         _current_inbound.set(msg)
         try:
-            try:
-                on_stream, on_stream_end, on_reasoning, on_reasoning_end = self._maybe_streaming(msg)
-                response = await self._loop._process_message(
-                    msg, on_stream=on_stream, on_stream_end=on_stream_end,
-                    on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end,
-                    pending_queue=pending,
-                )
-                if response is not None:
-                    # Carry session_key in metadata so gateway consumers
-                    # can route outbound messages (e.g. subagent results)
-                    # to the correct proxy connection.
-                    if msg.session_key:
-                        response = OutboundMessage(
-                            channel=response.channel, chat_id=response.chat_id,
-                            content=response.content, reply_to=response.reply_to,
-                            media=response.media,
-                            metadata={**response.metadata, "_session_key": msg.session_key},
-                            buttons=response.buttons,
-                            tools_used=response.tools_used,
-                            usage=response.usage,
-                            stop_reason=response.stop_reason,
-                            error=response.error,
-                        )
-                    await self._loop.bus.publish_outbound(response)
-                elif msg.channel == "cli":
-                    await self._loop.bus.publish_outbound(OutboundMessage(
-                        channel=msg.channel, chat_id=msg.chat_id,
-                        content="", metadata=msg.metadata or {},
-                    ))
-            except asyncio.CancelledError:
-                await self._handle_cancellation(msg, session_key)
-                raise
-            except Exception:
-                logger.exception(
-                    "Error processing message for session {}", session_key,
-                )
-                # Clean up checkpoint so next turn starts fresh
-                try:
-                    key = self._effective_session_key(msg)
-                    self._loop.lifecycle.cleanup_on_error(key)
-                except Exception as inner:
-                    logger.debug("Checkpoint cleanup failed: {}", inner)
+            on_stream, on_stream_end, on_reasoning, on_reasoning_end = self._maybe_streaming(msg)
+            response = await self._loop._process_message(
+                msg, on_stream=on_stream, on_stream_end=on_stream_end,
+                on_reasoning=on_reasoning, on_reasoning_end=on_reasoning_end,
+                pending_queue=pending,
+            )
+            if response is not None:
+                if msg.session_key:
+                    response = OutboundMessage(
+                        channel=response.channel, chat_id=response.chat_id,
+                        content=response.content, reply_to=response.reply_to,
+                        media=response.media,
+                        metadata={**response.metadata, "_session_key": msg.session_key},
+                        buttons=response.buttons,
+                        tools_used=response.tools_used,
+                        usage=response.usage,
+                        stop_reason=response.stop_reason,
+                        error=response.error,
+                    )
+                await self._loop.bus.publish_outbound(response)
+            elif msg.channel == "cli":
                 await self._loop.bus.publish_outbound(OutboundMessage(
                     channel=msg.channel, chat_id=msg.chat_id,
-                    content="Sorry, I encountered an error.",
+                    content="", metadata=msg.metadata or {},
                 ))
-        finally:
-            await self._republish_leftover_messages(session_key, pending)
+        except asyncio.CancelledError:
+            await self._handle_cancellation(msg, session_key)
+            raise
+        except Exception:
+            logger.exception(
+                "Error processing message for session {}", session_key,
+            )
+            try:
+                key = self._effective_session_key(msg)
+                self._loop.lifecycle.cleanup_on_error(key)
+            except Exception as inner:
+                logger.debug("Checkpoint cleanup failed: {}", inner)
+            await self._loop.bus.publish_outbound(OutboundMessage(
+                channel=msg.channel, chat_id=msg.chat_id,
+                content="Sorry, I encountered an error.",
+            ))
 
     def _effective_session_key(self, msg: InboundMessage) -> str:
         return msg.session_key
@@ -127,7 +120,6 @@ class DispatchManager:
         async def on_reasoning_end() -> None:
             pass
 
-        return on_stream, on_stream_end, on_reasoning, on_reasoning_end
 
     async def _handle_cancellation(
         self, msg: InboundMessage, session_key: str,
@@ -155,24 +147,3 @@ class DispatchManager:
                 exc_info=True,
             )
 
-    async def _republish_leftover_messages(
-        self, session_key: str, queue: asyncio.Queue,
-    ) -> None:
-        """Re-publish leftover messages from pending queue to bus."""
-        state = self._loop._session_dispatch.pop(session_key, None)
-        if state is None:
-            return
-        queue = state.pending
-        leftover = 0
-        while True:
-            try:
-                item = queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-            await self._loop.bus.publish_inbound(item)
-            leftover += 1
-        if leftover:
-            logger.info(
-                "Re-published {} leftover message(s) to bus for session {}",
-                leftover, session_key,
-            )

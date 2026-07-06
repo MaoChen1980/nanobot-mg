@@ -57,6 +57,7 @@ from .loop_constants import (
     _DEFAULT_RETRY_BACKOFF_MULTIPLIER,
     _PENDING_USER_TURN_KEY,
     _RUNTIME_CHECKPOINT_KEY,
+    _SUMMARY_RE,
 )
 from .loop_dispatch import DispatchManager
 from .loop_mcp import close_mcp as _close_mcp
@@ -66,12 +67,6 @@ from .loop_message_handlers import SystemMessageHandler, UserMessageHandler
 if TYPE_CHECKING:
     from nanobot.config.schema import ChannelsConfig, ExecToolConfig, ToolsConfig, WebToolsConfig
     from nanobot.cron.service import CronService
-
-# Regex for LLM-provided tool result summaries (see tool_result_summary instruction).
-_SUMMARY_RE = re.compile(
-    r'\[tool_summary:([^\]]+)\](.*?)\[/tool_summary\]',
-    re.DOTALL,
-)
 
 
 @dataclasses.dataclass
@@ -104,6 +99,90 @@ def _make_skill_done_callback(loop: AgentLoop, dedup_key: str) -> Callable[[asyn
         if exc is not None:
             logger.error("Skill creation failed: {}", exc)
     return _cb
+
+
+class _DispatchContext:
+    """Async context manager for dispatch lifecycle.
+
+    On enter: acquires/creates the per-session lock and registers a pending
+    queue in ``_session_dispatch`` so mid-turn messages are queued instead
+    of spawning competing tasks.
+    On exit: drains leftover pending messages, cleans up dispatch state,
+    prunes stale session locks, and triggers proactive subagent checks.
+    """
+
+    def __init__(self, loop: AgentLoop, msg: InboundMessage) -> None:
+        self._loop = loop
+        self.msg = msg
+        self.session_key: str = ""
+        self.lock: asyncio.Lock | None = None
+        self.pending: asyncio.Queue | None = None
+
+    async def __aenter__(self) -> _DispatchContext:
+        self.session_key = self._loop._dispatch_manager._effective_session_key(self.msg)
+        if self.session_key and self.session_key != self.msg.session_key:
+            self.msg = dataclasses.replace(self.msg, session_key_override=self.session_key)
+
+        self.lock = self._loop._session_locks.setdefault(self.session_key, asyncio.Lock())
+        self._loop._session_lock_last_used[self.session_key] = time.time()
+
+        self.pending = asyncio.Queue(maxsize=200)
+        if self.session_key not in self._loop._session_dispatch:
+            self._loop._session_dispatch[self.session_key] = _SessionDispatchState(
+                tasks=[], pending=self.pending,
+            )
+        else:
+            self.pending = self._loop._session_dispatch[self.session_key].pending
+
+        return self
+
+    async def __aexit__(self, *exc_info: Any) -> None:
+        # Drain leftover pending messages back to the bus.
+        try:
+            await self._republish_leftover()
+        except Exception:
+            logger.exception("_DispatchContext: error republishing leftover messages")
+
+        # Clean up dispatch state so the next message creates a fresh one.
+        self._loop._session_dispatch.pop(self.session_key, None)
+
+        # Periodic session-lock LRU pruning (every 100 dispatches).
+        self._loop._session_lock_prune_counter += 1
+        if self._loop._session_lock_prune_counter >= 100:
+            self._loop._session_lock_prune_counter = 0
+            self._loop._prune_session_locks()
+
+        # Proactive subagent check: after dispatch, if subagents still running,
+        # inject a check so the agent actively pulls their status.
+        if self._loop.subagents.get_running_count_by_session(self.session_key) > 0:
+            now = time.time()
+            state = self._loop._last_subagent_check.get(self.session_key)
+            last = state.last_check if state else 0
+            if now - last >= self._loop._PROACTIVE_CHECK_INTERVAL:
+                self._loop._last_subagent_check[self.session_key] = _SubagentCheckState(
+                    now, self.msg.channel, self.msg.chat_id,
+                )
+                await self._loop._publish_subagent_check(
+                    self.session_key, self.msg.channel, self.msg.chat_id,
+                )
+
+    async def _republish_leftover(self) -> None:
+        """Re-publish leftover messages from the pending queue back to the bus."""
+        if self.pending is None:
+            return
+        leftover = 0
+        while True:
+            try:
+                item = self.pending.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            await self._loop.bus.publish_inbound(item)
+            leftover += 1
+        if leftover:
+            logger.info(
+                "Re-published {} leftover message(s) to bus for session {}",
+                leftover, self.session_key,
+            )
 
 
 class AgentLoop:
@@ -1294,51 +1373,12 @@ class AgentLoop:
     async def _dispatch(self, msg: InboundMessage) -> None:
         """Process a message: per-session serial, cross-session concurrent.
 
-        Cleans up the dispatch state on exit so the next message for this
-        session creates a fresh dispatch instead of rotting in the stale
-        pending queue.
+        Session lifecycle (lock, pending queue, cleanup) is managed by
+        ``_DispatchContext``.
         """
-        session_key = self._dispatch_manager._effective_session_key(msg)
-        if session_key != msg.session_key:
-            msg = dataclasses.replace(msg, session_key_override=session_key)
-        lock = self._session_locks.setdefault(session_key, asyncio.Lock())
-        self._session_lock_last_used[session_key] = time.time()
-
-        # Register a pending queue so follow-up messages for this session are
-        # routed here (mid-turn injection) instead of spawning a new task.
-        pending = asyncio.Queue(maxsize=200)
-        # Don't overwrite existing state (created by run()) — reuse existing queue
-        if session_key not in self._session_dispatch:
-            self._session_dispatch[session_key] = _SessionDispatchState(tasks=[], pending=pending)
-        else:
-            pending = self._session_dispatch[session_key].pending
-
-        async with lock:
-            await self._dispatch_manager.run_dispatch(msg, session_key, pending)
-
-        # Pop ourselves so the next message for this session creates a fresh
-        # dispatch.  The done_callback added by run() already handles removing
-        # the task entry from state.tasks, but the stale _SessionDispatchState
-        # itself must be removed here.
-        self._session_dispatch.pop(session_key, None)
-
-        # Periodic session-lock LRU pruning (every 100 dispatches)
-        self._session_lock_prune_counter += 1
-        if self._session_lock_prune_counter >= 100:
-            self._session_lock_prune_counter = 0
-            self._prune_session_locks()
-
-        # Proactive subagent check: after dispatch, if subagents still
-        # running for this session, inject a check so the agent actively
-        # pulls their status instead of passively waiting for push results.
-        # This is the primary active mechanism — _check_subagents is safety net.
-        if self.subagents.get_running_count_by_session(session_key) > 0:
-            now = time.time()
-            state = self._last_subagent_check.get(session_key)
-            last = state.last_check if state else 0
-            if now - last >= self._PROACTIVE_CHECK_INTERVAL:
-                self._last_subagent_check[session_key] = _SubagentCheckState(now, msg.channel, msg.chat_id)
-                await self._publish_subagent_check(session_key, msg.channel, msg.chat_id)
+        async with _DispatchContext(self, msg) as ctx:
+            async with ctx.lock:
+                await self._dispatch_manager.run_dispatch(ctx.msg, ctx.session_key, ctx.pending)
 
     async def close_mcp(self) -> None:
         """Drain pending background archives, then close MCP connections."""

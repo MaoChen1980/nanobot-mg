@@ -9,19 +9,12 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
+from nanobot.agent.loop_constants import _SUMMARY_RE as _USER_TOOL_SUMMARY_RE
 from nanobot.utils.progress_events import (
     build_tool_event_finish_payloads,
     build_tool_event_start_payload,
     on_progress_accepts_tool_events,
     process_tool_events_and_progress,
-)
-
-# Strip tool_summary markers entirely (tag + content) from user-facing output.
-# The summary replaces the tool result in session history, not the assistant's
-# visible response.  Same pattern as _SUMMARY_RE in loop.py.
-_USER_TOOL_SUMMARY_RE = re.compile(
-    r'\[tool_summary:([^\]]+)\](.*?)\[/tool_summary\]',
-    re.DOTALL,
 )
 
 if TYPE_CHECKING:

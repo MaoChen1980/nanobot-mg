@@ -196,15 +196,6 @@ class ContextBuilder:
             heartbeat_interval_minutes=self._framework_config.get("heartbeat_interval_minutes", 30),
         )
 
-        # Post-process: replace old path references in included templates
-        if suffix:
-            old_tree = f"{self._workspace_path_str}/tasks/tree.json"
-            old_current = f"{self._workspace_path_str}/tasks/CURRENT.md"
-            old_board = f"{self._workspace_path_str}/tasks/team_board.md"
-            result = result.replace(old_tree, f"{self._workspace_path_str}/{tree_rel}")
-            result = result.replace(old_current, f"{self._workspace_path_str}/{current_rel}")
-            result = result.replace(old_board, f"{self._workspace_path_str}/{team_board_rel}")
-
         _elapsed = (time.time() - _t0) * 1000
         if _elapsed > 100:
             logger.info("build_system_prompt took {:.0f}ms", _elapsed)
@@ -355,20 +346,6 @@ class ContextBuilder:
             for name, rule in sorted(tool_instruction_map.items()):
                 tool_usage_lines.append(f"- **{name}**: {rule}")
             sections.append("\n".join(tool_usage_lines))
-
-        # Post-process: replace well-known path references with session-scoped equivalents.
-        # This covers templates that still use `{{ workspace_path }}/tasks/tree.json` etc.
-        # without requiring every template file to be updated.
-        if suffix:
-            old_tree = f"{self._workspace_path_str}/tasks/tree.json"
-            old_current = f"{self._workspace_path_str}/tasks/CURRENT.md"
-            old_board = f"{self._workspace_path_str}/tasks/team_board.md"
-            for i, sec in enumerate(sections):
-                sec = sec.replace(old_tree, f"{self._workspace_path_str}/{tree_rel}")
-                sec = sec.replace(old_current, f"{self._workspace_path_str}/{current_rel}")
-                if team_board_rel:
-                    sec = sec.replace(old_board, f"{self._workspace_path_str}/{team_board_rel}")
-                sections[i] = sec
 
         # Available skills summary — includes all skills (always-skills no longer auto-injected)
         skills_summary = self.skills.build_skills_summary()

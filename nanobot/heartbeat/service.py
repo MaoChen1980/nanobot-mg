@@ -47,6 +47,7 @@ class HeartbeatService:
         self._task: asyncio.Task | None = None
         self._running = False
         self._last_run: float = 0.0
+        self._last_tree_mtime: float = 0.0
         self._state: HeartbeatState | None = None
 
     # ------------------------------------------------------------------
@@ -168,6 +169,14 @@ class HeartbeatService:
         if not pending:
             logger.debug("Heartbeat skipped: no pending tasks")
             return
+
+        # --- Skip LLM call if tree.json unchanged since last beat ---
+        tree_path = self._tree_path()
+        current_mtime = tree_path.stat().st_mtime if tree_path.exists() else 0
+        if current_mtime <= self._last_tree_mtime:
+            logger.debug("Heartbeat skipped: tree.json unchanged since last beat")
+            return
+        self._last_tree_mtime = current_mtime
 
         # --- Build prompt ---
         prompt = self._build_prompt(pending)
