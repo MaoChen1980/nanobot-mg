@@ -48,6 +48,17 @@ class TestLooksLikeTraceback:
         assert _looks_like_traceback("  ValueError: invalid literal")
         assert _looks_like_traceback("  Exception: boom")
 
+    def test_loguru_file_line(self):
+        # loguru uses "> File ..." format instead of "  File ..."
+        assert _looks_like_traceback('> File "E:\\code\\app.py", line 42, in func')
+        assert _looks_like_traceback('> File "/path/to/module.py", line 123, in main')
+
+    def test_loguru_exception_line(self):
+        # loguru outputs exception lines without leading spaces
+        assert _looks_like_traceback("ValueError: invalid literal")
+        assert _looks_like_traceback("Exception: something went wrong")
+        assert _looks_like_traceback("RuntimeError: maximum recursion")
+
     def test_normal_text_returns_false(self):
         assert not _looks_like_traceback("Hello world")
 

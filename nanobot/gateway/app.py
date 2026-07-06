@@ -25,12 +25,17 @@ console = Console()
 
 def _looks_like_traceback(line: str) -> bool:
     """Check if a non-JSON line is part of a traceback."""
+    # NOTE: loguru uses "> File ..." format (with "> " prefix) and exception
+    # lines without leading spaces (e.g., "ValueError: ..."). Standard Python
+    # traceback uses "  File ..." and "  ExceptionType: ...".
     return (line.startswith("Traceback")
-            or line.startswith('  File "')
+            or line.startswith('  File "')  # standard Python format
+            or line.startswith("> File ")  # loguru format
             or line.startswith("    ")  # indented code in traceback
-            or line.startswith("  ") and any(
+            or "Error:" in line or "Exception:" in line  # loguru exception lines
+            or (line.startswith("  ") and any(  # standard Python exception lines
                 kw in line for kw in ("Error:", "Exception:")
-            ))
+            )))
 
 
 def _find_webui_index() -> Path:

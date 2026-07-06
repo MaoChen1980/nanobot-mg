@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,6 +55,10 @@ class ProxyMessage:
 
     @classmethod
     def from_dict(cls, d: dict) -> "ProxyMessage":
+        metadata = d.get("metadata", {})
+        if not isinstance(metadata, dict):
+            logger.warning("ProxyMessage metadata is not a dict: type={}, using empty dict", type(metadata).__name__)
+            metadata = {}
         return cls(
             channel=d["channel"],
             bot=d["bot"],
@@ -61,7 +68,7 @@ class ProxyMessage:
             message_id=d["message_id"],
             media=d.get("media", []),
             timestamp=d.get("timestamp", ""),
-            metadata=d.get("metadata", {}),
+            metadata=metadata,
         )
 
 
