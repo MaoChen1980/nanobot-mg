@@ -1441,17 +1441,31 @@ class AgentLoop:
 
         # ── collect LLM-provided tool summaries ──
         _tc_summary: dict[str, str] = {}
+        # Track read_file calls on instructional paths — never replace these
+        # with summaries since the LLM needs the full content for correct behavior.
+        _protected_read: set[str] = set()
+        _INSTRUCTIONAL_PATHS = ("skills/", "framework/", "memory/", "SOUL.md", "USER.md", "TOOLS.md")
         for m in messages[skip:]:
             if m.get("role") != "assistant":
                 continue
             content = m.get("content", "")
-            if not isinstance(content, str):
-                continue
-            for match in _SUMMARY_RE.finditer(content):
-                cid, summary = match.group(1), match.group(2).strip()
-                if summary and cid not in _tc_summary:
-                    _tc_summary[cid] = summary
-                    logger.info("TOOL_SUMMARY: collected summary for call_id={} ({} chars) {!r}", cid, len(summary), summary[:120])
+            if isinstance(content, str):
+                for match in _SUMMARY_RE.finditer(content):
+                    cid, summary = match.group(1), match.group(2).strip()
+                    if summary and cid not in _tc_summary:
+                        _tc_summary[cid] = summary
+                        logger.info("TOOL_SUMMARY: collected summary for call_id={} ({} chars) {!r}", cid, len(summary), summary[:120])
+            # Collect protected read_file call_ids (instructional paths)
+            for tc in m.get("tool_calls") or ():
+                if tc.get("function", {}).get("name") != "read_file":
+                    continue
+                try:
+                    args = json.loads(tc["function"].get("arguments", "{}"))
+                    path = args.get("path", "")
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    continue
+                if any(path.startswith(p) or f"/{p}" in path for p in _INSTRUCTIONAL_PATHS):
+                    _protected_read.add(tc["id"])
 
         for m in messages[skip:]:
             entry = dict(m)
@@ -1464,9 +1478,12 @@ class AgentLoop:
                 # Replace with LLM-provided summary when available
                 tc_id = entry.get("tool_call_id")
                 if tc_id and isinstance(tc_id, str) and tc_id in _tc_summary:
-                    old_len = len(entry["content"]) if isinstance(entry.get("content"), str) else -1
-                    entry["content"] = _tc_summary[tc_id]
-                    logger.info("TOOL_SUMMARY: replaced tool result {} ({} chars → {} chars)", tc_id, old_len, len(entry["content"]))
+                    if tc_id in _protected_read:
+                        logger.info("TOOL_SUMMARY: SKIPPED summary replacement for protected call_id={} (instructional path)", tc_id)
+                    else:
+                        old_len = len(entry["content"]) if isinstance(entry.get("content"), str) else -1
+                        entry["content"] = _tc_summary[tc_id]
+                        logger.info("TOOL_SUMMARY: replaced tool result {} ({} chars → {} chars)", tc_id, old_len, len(entry["content"]))
                 elif isinstance(content, str) and len(content) > self.max_tool_result_chars:
                     entry["content"] = truncate_text_fn(content, self.max_tool_result_chars)
                 elif isinstance(content, list):
