@@ -2,7 +2,8 @@
 name: verify-before-report-claim
 description: 'Code review 中行为断言验证模式。当在 code review 中需要断言代码行为（如"无重试/无超时/无校验"等）时激活。'
 category: code-review
-version: 0.1.0
+version: 0.2.0
+always: true
 ---
 <!--ts:1783272563.0-->
 
