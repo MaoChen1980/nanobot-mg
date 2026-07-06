@@ -65,7 +65,7 @@ Interact with GitHub using the `gh` CLI. When not inside a git directory, always
 - Run `gh pr checks <number> --repo owner/repo` and confirm it returns check results without errors
 - Run `gh api repos/owner/repo/pulls/55 --jq '.title'` and verify a non-empty title string is returned
 - Run `gh --version` to confirm the CLI is installed and authenticated
-- **Self-optimization**: 此 Skill 可自我进化。
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
   - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 

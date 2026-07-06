@@ -72,6 +72,6 @@ Side effects happen inline as decisions crystallize:
 - **Sharpening a fuzzy term during the conversation?** Update `CONTEXT.md` right there.
 - **User rejects the candidate with a load-bearing reason?** Offer an ADR, framed as: _"Want me to record this as an ADR so future architecture reviews don't re-suggest it?"_ Only offer when the reason would actually be needed by a future explorer to avoid re-suggesting the same thing — skip ephemeral reasons ("not worth it right now") and self-evident ones. See [ADR-FORMAT.md](../grill-with-docs/ADR-FORMAT.md).
 - **Want to explore alternative interfaces for the deepened module?** See [INTERFACE-DESIGN.md](INTERFACE-DESIGN.md).
-- **Self-optimization**: 此 Skill 可自我进化。
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
   - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准

@@ -132,6 +132,6 @@ Take a second pass. Go back to the code and refine/polish further to make this a
 ## MULTI-PAGE OPTION
 
 To create additional pages when requested, create more creative pages along the same lines as the design philosophy but distinctly different as well. Bundle those pages in the same .pdf or many .pngs. Treat the first page as just a single page in a whole coffee table book waiting to be filled. Make the next pages unique twists and memories of the original. Have them almost tell a story in a very tasteful way. Exercise full creative freedom.
-- **Self-optimization**: 此 Skill 可自我进化。
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
   - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准

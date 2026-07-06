@@ -368,8 +368,11 @@ class ContextBuilder:
         if skills_summary:
             sections.append(
                 "### Available Skills\n\n"
-                "以下 skills 扩展了你的能力。当用户输入匹配某个 skill 的描述时，"
-                "必须优先加载该 skill——用 read_file 阅读其 SKILL.md 并按步骤执行。\n\n"
+                "回复前扫描下方 skills。如果某个 skill 与当前工作相关甚至部分相关，"
+                "你必须用 `read_file` 加载其 SKILL.md 并按步骤执行。拿不准就读——"
+                "多读比漏掉关键步骤要好。即使你认为用基础工具也能处理，也建议加载 "
+                "skill——它包含专业知识和已验证的工作流。"
+                "如果确实都不相关，则不加载。\n\n"
                 f"{skills_summary}"
             )
 

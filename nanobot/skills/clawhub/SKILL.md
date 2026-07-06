@@ -49,7 +49,7 @@ Public skill registry for AI agents. Search via natural language (vector search)
 - After install: verify the skill appears in `ls ~/.nanobot/workspace/skills/`
 - After update: run the list command to confirm updated versions are shown
 - Remind user to start a new session to load a newly installed skill
-- **Self-optimization**: 此 Skill 可自我进化。
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
   - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
 

@@ -474,6 +474,6 @@ git branch -D pr-$PR_NUMBER
 - **Approve** — no critical or warning-level issues, only minor suggestions or all clear
 - **Request Changes** — any critical or warning-level issue that should be fixed before merge
 - **Comment** — observations and suggestions, but nothing blocking (use when you're unsure or the PR is a draft)
-- **Self-optimization**: 此 Skill 可自我进化。
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
   - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准

@@ -21,7 +21,7 @@ _STRIP_SKILL_FRONTMATTER = re.compile(
 
 _SELF_OPTIMIZATION_FOOTER = (
     "\n"
-    "- **Self-optimization**: 此 Skill 可自我进化。\n"
+    "- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。\n"
     "  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug\n"
     "  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准\n"
     "  - **Always 审查**：如果此 skill 的行为已成为 LLM 自然倾向（不注入也会正确执行），"
@@ -80,7 +80,7 @@ class SkillsLoader:
         """
         try:
             content = skill_file.read_text(encoding="utf-8")
-            if "**Self-optimization**" in content:
+            if "Verification 未通过" in content:
                 return  # Footer already present
             skill_file.write_text(
                 content.rstrip("\n") + _SELF_OPTIMIZATION_FOOTER, encoding="utf-8"
@@ -238,7 +238,6 @@ class SkillsLoader:
             entries = grouped[cat]
             label = cat.replace("-", " ").title()
             lines.append(f"### {label} ({len(entries)} skill{'s' if len(entries) != 1 else ''})")
-            lines.append("<details><summary>Expand</summary>")
             lines.append("")
             for entry in entries:
                 skill_name = entry["name"]
@@ -251,7 +250,6 @@ class SkillsLoader:
                     missing = self._get_missing_requirements(meta)
                     suffix = f" (unavailable: {missing})" if missing else " (unavailable)"
                     lines.append(f"- **{skill_name}** — {desc}{suffix}  `{entry['path']}`")
-            lines.append("</details>")
             lines.append("")
 
         return "\n".join(lines)
