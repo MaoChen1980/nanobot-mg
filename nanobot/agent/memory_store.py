@@ -11,7 +11,7 @@ from loguru import logger
 
 from nanobot.utils.helpers import ensure_dir, truncate_text
 from nanobot.agent.memory_vector import MemoryVectorIndex
-from nanobot.agent.skills import SkillsLoader
+from nanobot.agent.skills import BUILTIN_SKILLS_DIR, SkillsLoader
 from nanobot.utils.gitstore import GitStore
 
 if TYPE_CHECKING:
@@ -163,14 +163,21 @@ class MemoryStore:
         self.tasks_index.build_from_files(file_texts)
 
     def build_skills_index(self) -> None:
-        """Full rebuild of the skills FAISS index from SkillsLoader."""
-        skills = self.skills_loader.list_skills(filter_unavailable=False)
+        """Full rebuild of the skills FAISS index from skills directories.
+
+        Scans both workspace and built-in directories independently, so built-in
+        skills are always indexed regardless of shadowing. This lets memory_search
+        detect naming conflicts during skill creation.
+        """
         file_texts: dict[str, str] = {}
-        for s in skills:
-            meta = self.skills_loader.get_skill_metadata(s["name"]) or {}
-            desc = (meta.get("description") or "").strip()
-            content = f"# {s['name']}\n\n{desc}\n\nPath: {s['path']}"
-            file_texts[f"skills/{s['name']}.md"] = content
+        for root in (self.skills_loader.workspace_skills, BUILTIN_SKILLS_DIR):
+            if root.exists():
+                for d in sorted(root.iterdir()):
+                    skill_file = d / "SKILL.md"
+                    if d.is_dir() and skill_file.exists():
+                        key = f"skills/{d.name}.md"
+                        if key not in file_texts:
+                            file_texts[key] = skill_file.read_text(encoding="utf-8")
         self.skills_index.build_from_files(file_texts)
 
     def condense_session_to_history(self, messages: list[dict]) -> int:

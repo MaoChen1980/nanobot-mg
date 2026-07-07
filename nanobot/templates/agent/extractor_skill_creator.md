@@ -16,7 +16,7 @@
 
 ## 流程
 
-1. **语义检索已有 skill** — 用 `memory_search` 检索 `{{ workspace_path }}/skills/`，query 用 candidate 的核心功能描述，`k=6`
+1. **语义检索已有 skill** — 用 `memory_search` 检索已有 skill（含 workspace 和内置），query 用 candidate 的核心功能描述，`k=6`
 
 2. **逐条处理 candidate**：
    - 无功能相似 skill（memory_search 无相关结果）→ 新建
