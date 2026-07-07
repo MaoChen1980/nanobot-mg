@@ -16,6 +16,7 @@ from loguru import logger
 
 from nanobot.agent.compressor import CompressEvent, Compressor
 from nanobot.agent.llm_context import chat_stream_with_retry, chat_with_retry
+from nanobot.utils.helpers import format_timestamp_cst
 
 try:
     from tmp.llm_dump_util import dump_llm_call
@@ -178,7 +179,7 @@ class MessagePipe:
         event = await Compressor.compress(
             to_compress, keep,
             previous_summary=previous_summary,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=format_timestamp_cst(),
         )
 
         # Build result: system + instructions (if present) + synthetic pair + kept turns

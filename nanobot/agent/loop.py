@@ -1557,7 +1557,8 @@ class AgentLoop:
             # Strip tool_summary markers from assistant content
             if role == "assistant" and isinstance(entry.get("content"), str):
                 entry["content"] = _SUMMARY_RE.sub("", entry["content"]).strip()
-            entry.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+            from nanobot.utils.helpers import format_timestamp_cst
+            entry.setdefault("timestamp", format_timestamp_cst())
             session.messages.append(entry)
         session.updated_at = datetime.now(timezone.utc)
 
@@ -1585,7 +1586,7 @@ class AgentLoop:
         session.add_message(
             "assistant",
             msg.content,
-            timestamp=msg.timestamp.isoformat(),
+            timestamp=format_timestamp_cst(msg.timestamp),
             sender_id=msg.sender_id,
             injected_event=injected_event,
             subagent_task_id=task_id,

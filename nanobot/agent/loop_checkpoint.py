@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from nanobot.utils.helpers import format_timestamp_cst
+
 
 if TYPE_CHECKING:
     from nanobot.agent.loop import AgentLoop
@@ -68,12 +70,12 @@ def restore_and_clear_checkpoint(
     restored_messages: list[dict[str, Any]] = []
     if isinstance(assistant_message, dict):
         restored = dict(assistant_message)
-        restored.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+        restored.setdefault("timestamp", format_timestamp_cst())
         restored_messages.append(restored)
     for message in completed_tool_results:
         if isinstance(message, dict):
             restored = dict(message)
-            restored.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+            restored.setdefault("timestamp", format_timestamp_cst())
             restored_messages.append(restored)
     for tool_call in pending_tool_calls:
         if not isinstance(tool_call, dict):
@@ -86,7 +88,7 @@ def restore_and_clear_checkpoint(
                 "tool_call_id": tool_id,
                 "name": name,
                 "content": pending_tool_content or default_pending,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": format_timestamp_cst(),
             }
         )
 
@@ -118,7 +120,7 @@ def restore_pending_user_turn(session: Any) -> bool:
             {
                 "role": "user",
                 "content": "[任务在生成回复前被中断。]",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": format_timestamp_cst(),
             }
         )
         session.updated_at = datetime.now(timezone.utc)

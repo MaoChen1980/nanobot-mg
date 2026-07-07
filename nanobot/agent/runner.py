@@ -28,6 +28,7 @@ from nanobot.session.manager import Session
 from nanobot.utils.compat import dataclass
 from nanobot.utils.helpers import (
     build_assistant_message,
+    format_timestamp_cst,
     maybe_persist_tool_result,
     split_thinking_messages,
     truncate_text,
@@ -806,7 +807,7 @@ class AgentRunner:
                         content = _normalize(spec, tc.id, tc.name, res,
                                               duration_ms=ev.get("duration_ms", 0),
                                               status=ev.get("status", "ok"))
-                        ts = res.timestamp.isoformat() if hasattr(res, "timestamp") and res.timestamp else datetime.now(timezone.utc).isoformat()
+                        ts = format_timestamp_cst(res.timestamp) if hasattr(res, "timestamp") and res.timestamp else format_timestamp_cst()
                         tool_message = {
                             "role": "tool", "tool_call_id": tc.id, "name": tc.name,
                             "content": content, "timestamp": ts,
@@ -856,7 +857,7 @@ class AgentRunner:
                     content = _normalize(spec, tool_call.id, tool_call.name, result,
                                           duration_ms=ev.get("duration_ms", 0),
                                           status=ev.get("status", "ok"))
-                    ts = result.timestamp.isoformat() if hasattr(result, "timestamp") and result.timestamp else datetime.now(timezone.utc).isoformat()
+                    ts = format_timestamp_cst(result.timestamp) if hasattr(result, "timestamp") and result.timestamp else format_timestamp_cst()
                     tool_message = {
                         "role": "tool", "tool_call_id": tool_call.id, "name": tool_call.name,
                         "content": content, "timestamp": ts,
@@ -1114,7 +1115,7 @@ class AgentRunner:
                             summary, pair = await compress_turns(
                                 [m for t in s_turns for m in t],
                                 [m for t in turns[-10:] for m in t],
-                                timestamp=datetime.now(timezone.utc).isoformat(),
+                                timestamp=format_timestamp_cst(),
                             )
                             if pair:
                                 for m in messages[:boundary]:

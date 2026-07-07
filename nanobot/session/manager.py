@@ -55,10 +55,11 @@ class Session:
 
     def add_message(self, role: str, content: str, timestamp: str | None = None, **kwargs: Any) -> None:
         """Add a message to the session. *timestamp* should be an ISO-format str if provided."""
+        from nanobot.utils.helpers import format_timestamp_cst
         msg = {
             "role": role,
             "content": content,
-            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+            "timestamp": timestamp or format_timestamp_cst(),
             **kwargs
         }
         self.messages.append(msg)

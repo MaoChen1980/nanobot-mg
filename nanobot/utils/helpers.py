@@ -7,9 +7,10 @@ import re
 import shutil
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from loguru import logger
 
@@ -49,6 +50,18 @@ def current_time_str(timezone: str | None = None) -> str:
         now = datetime.now(tz=tz) if tz else datetime.now().astimezone()
 
     return _format_datetime(now)
+
+
+_CST_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def format_timestamp_cst(dt: datetime | None = None) -> str:
+    """Format a datetime as 'YYYY-MM-DD HH:MM:SS CST' (default: now in Asia/Shanghai)."""
+    if dt is None:
+        dt = datetime.now(_CST_TZ)
+    elif dt.tzinfo is not None:
+        dt = dt.astimezone(_CST_TZ)
+    return dt.strftime("%Y-%m-%d %H:%M:%S") + " CST"
 
 
 def _format_datetime(dt: datetime) -> str:
