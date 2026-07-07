@@ -82,6 +82,10 @@ class SystemMessageHandler:
         self._loop = loop
 
     async def handle(self, msg, on_progress=None, on_stream=None, on_stream_end=None, on_reasoning=None, on_reasoning_end=None, pending_queue=None, extra_hooks=None):
+        # Subagent messages arrive on "system" channel from _inject_to_orchestrator,
+        # identified by _origin_channel/_origin_chat_id metadata.  Must be resolved
+        # before on_progress fallback below.
+        is_subagent = bool(msg.metadata.get("_origin_channel"))
         # Bus fallback when no hub-provided on_progress callback
         # Subagent dispatches produce internal orchestrator activity (tool events,
         # full LLM responses) that must NOT leak to the user — use a no-op
@@ -101,9 +105,6 @@ class SystemMessageHandler:
         logger.info("Processing system message from {}", msg.sender_id)
         key = msg.session_key_override or f"{channel}:{chat_id}"
         session = self._loop.lifecycle.prepare(key)
-        # Subagent messages arrive on "system" channel from _inject_to_orchestrator,
-        # identified by _origin_channel/_origin_chat_id metadata.
-        is_subagent = bool(msg.metadata.get("_origin_channel"))
         # For "system" channel (subagent), use channel extracted from chat_id (e.g. "slack").
         # For all other channels (cron, proxy, direct), use msg.channel directly.
         effective_channel = channel if msg.channel == "system" else msg.channel
