@@ -1689,8 +1689,18 @@ class AgentLoop:
         pending_queue: asyncio.Queue | None = None,
         ephemeral: bool = False,
         extra_hooks: list[AgentHook] | None = None,
+        on_outbound: Callable[["OutboundMessage"], Awaitable[None]] | None = None,
     ) -> OutboundMessage | None:
-        """Process a message directly and return the outbound payload."""
+        """Process a message directly and return the outbound payload.
+
+        When *on_outbound* is provided, the response is delivered via the
+        callback immediately after ``_process_message`` returns, and
+        ``_dispatch`` responses from the subagent wait-loop are forwarded
+        instead of drained.  Returns ``None`` in this case — the caller
+        should skip the legacy ``deliver_to_proxy`` path.
+
+        Without *on_outbound*, behaviour is unchanged (legacy mode).
+        """
         from nanobot.agent.context_vars import _current_inbound
 
         await self._connect_mcp()
@@ -1712,6 +1722,16 @@ class AgentLoop:
                 pending_queue=pending_queue,
                 extra_hooks=extra_hooks,
             )
+            # ---------------------------------------------------------------
+            # Deliver response immediately via callback (if one is wired up)
+            # ---------------------------------------------------------------
+            # When on_outbound is set the caller (e.g. hub) wants the response
+            # delivered as soon as it's available — not after the subagent wait
+            # loop finishes.  Progress updates are already delivered via the
+            # on_progress callback during _process_message.
+            if response is not None and response.content and on_outbound:
+                await on_outbound(response)
+
             # ---------------------------------------------------------------
             # Bus-driven wait loop for subagent completion
             # ---------------------------------------------------------------
@@ -1761,16 +1781,25 @@ class AgentLoop:
                                     "Subagent dispatch failed for session {}", session_key,
                                 )
                                 continue
-                            # Drain outbound messages so the queue doesn't grow
-                            # unbounded, but do NOT forward them to the user.
-                            # Subagents communicate via notify_orchestrator and
-                            # the orchestrator decides whether/how to inform the
-                            # user via the `message` tool.
-                            while self.bus.outbound.qsize() > 0:
-                                try:
-                                    self.bus.outbound.get_nowait()
-                                except asyncio.QueueEmpty:
-                                    break
+                            # Forward any outbound messages produced by _dispatch
+                            # (e.g. proactive-check results).  When on_outbound is
+                            # wired up the messages are delivered to the caller
+                            # immediately; otherwise drain them to prevent queue
+                            # growth (legacy behaviour).
+                            if on_outbound:
+                                while self.bus.outbound.qsize() > 0:
+                                    try:
+                                        outbound_msg = self.bus.outbound.get_nowait()
+                                        if outbound_msg.content:
+                                            await on_outbound(outbound_msg)
+                                    except asyncio.QueueEmpty:
+                                        break
+                            else:
+                                while self.bus.outbound.qsize() > 0:
+                                    try:
+                                        self.bus.outbound.get_nowait()
+                                    except asyncio.QueueEmpty:
+                                        break
                     except asyncio.TimeoutError:
                         if still_running:
                             now = time.time()
@@ -1783,6 +1812,8 @@ class AgentLoop:
                     except asyncio.CancelledError:
                         if not self._running:
                             break
+            if on_outbound:
+                return None  # Response already delivered via callback
             return response
         finally:
             await self.close_mcp()

@@ -388,6 +388,58 @@ class HubTCPServer:
 
         return _on_progress
 
+    @staticmethod
+    def _make_outbound_callback(
+        proxy_manager: ProxyManager,
+        proxy_key: str,
+        msg: ProxyMessage,
+    ) -> Callable[[Any], Awaitable[None]]:
+        """Build callback that delivers outbound messages to the proxy.
+
+        Used by ``process_direct``'s ``on_outbound`` parameter to forward
+        MGA v1.6 proactive-check responses and streamed content to the
+        current TCP connection immediately.
+        """
+
+        async def _on_outbound(outbound_msg: Any) -> None:
+            content = _SUMMARY_RE.sub("", outbound_msg.content or "")
+            if not content:
+                return
+            hub_resp = outbound_to_hub_response(outbound_msg, reply_to=msg.message_id)
+            resp_dict = hub_resp.to_dict()
+            resp_dict["content"] = content
+            resp_dict["type"] = "deliver"
+            resp_dict["chat_id"] = msg.chat_id
+            await proxy_manager.deliver_to_proxy(proxy_key, resp_dict)
+
+        return _on_outbound
+
+    async def _redispatch_pending(
+        self,
+        pending_queue: asyncio.Queue,
+        proxy_key: str,
+        msg: ProxyMessage,
+    ) -> None:
+        """Re-dispatch pending messages that arrived during processing."""
+        remaining_items: list[_PendingItem] = []
+        while not pending_queue.empty():
+            try:
+                remaining_items.append(pending_queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+        if remaining_items:
+            logger.info(
+                "Re-dispatching {} messages", len(remaining_items),
+            )
+            for item in remaining_items:
+                pard = ProxyMessage.from_dict(item.data)
+                if pard.message_id:
+                    dk = f"{proxy_key}:{pard.message_id}" if proxy_key else pard.message_id
+                    self._seen_message_ids.pop(dk, None)
+                asyncio.create_task(self._route_message(
+                    item.write_lock, item.writer, item.data, item.peername,
+                ))
+
     async def _route_message(
         self,
         write_lock: asyncio.Lock,
@@ -498,6 +550,9 @@ class HubTCPServer:
 
         try:
             async with session_lock:
+                on_outbound = self._make_outbound_callback(
+                    self._proxy_manager, proxy_key, msg,
+                )
                 if self._concurrency_gate:
                     async with self._concurrency_gate:
                         response = await self._agent_loop.process_direct(
@@ -508,6 +563,7 @@ class HubTCPServer:
                             media=inbound.media or None,
                             on_progress=_on_progress,
                             pending_queue=pending_queue,
+                            on_outbound=on_outbound,
                         )
                 else:
                     response = await self._agent_loop.process_direct(
@@ -519,8 +575,10 @@ class HubTCPServer:
                         metadata=inbound.metadata,
                         on_progress=_on_progress,
                         pending_queue=pending_queue,
+                        on_outbound=on_outbound,
                     )
             if response is None:
+                await self._redispatch_pending(pending_queue, proxy_key, msg)
                 return
             resp = outbound_to_hub_response(response, reply_to=msg.message_id)
         except asyncio.CancelledError:
@@ -532,30 +590,7 @@ class HubTCPServer:
         finally:
             self._session_tasks.pop(session_key, None)
 
-        # After dispatch, re-dispatch any messages that arrived too late
-        # for _drain_pending to consume during the agent loop.
-        remaining_items: list[_PendingItem] = []
-        while not pending_queue.empty():
-            try:
-                remaining_items.append(pending_queue.get_nowait())
-            except asyncio.QueueEmpty:
-                break
-        if remaining_items:
-            logger.info(
-                "Re-dispatching {} messages for session {}",
-                len(remaining_items), session_key,
-            )
-            for item in remaining_items:
-                # Clear dedup entry so re-dispatch isn't dropped as duplicate
-                pard = ProxyMessage.from_dict(item.data)
-                if pard.message_id:
-                    dk = f"{proxy_key}:{pard.message_id}" if proxy_key else pard.message_id
-                    self._seen_message_ids.pop(dk, None)
-                task = asyncio.create_task(self._route_message(
-                    item.write_lock, item.writer, item.data, item.peername,
-                ))
-                # Re-dispatched tasks are already tracked by _handle_client
-                # (_pending_tasks in the closure scope), skip re-tracking.
+        await self._redispatch_pending(pending_queue, proxy_key, msg)
 
         # Route response through proxy_manager so it reaches the CURRENT
         # TCP connection — the proxy may have reconnected during processing.
