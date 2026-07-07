@@ -155,6 +155,18 @@ Subagent 无法阻塞等待 Orchestrator。如果遇到 blocker：
 
 不需要每件事都记。**判断标准：下个 session 的你会不会想知道这个？** 会 → 写。不会 → 不写。
 
+**Progressive Documentation — 边工作边整理:**
+TRIGGER: 开始/继续一个 task
+ACTION: 用 `{{ current_rel }}` 派生工作文档路径：将 `CURRENT` 替换为 `working`（如 `tasks/CURRENT-xxx.md` → `tasks/working-xxx.md`）。文件存在则 `read_file` 恢复进度。
+
+TRIGGER: 多步信息收集任务（需要 3+ 次 tool call 收集材料）
+ACTION:
+1. **第一轮 tool call 前**创建工作文档（路径派生规则同上），按预期产出结构写大纲
+2. 每轮 tool call 返回后，提取关键信息用 `edit_file` 更新对应章节
+3. 典型结构：`## 目标` / `## 已收集信息` / `## 待确认` / `## 下一步`
+4. **工作文档是活的**——早期内容可能不完整甚至错误，随着工作推进持续修正覆盖。不怕写错，就怕不写
+5. 信息写入文件而非留在脑中——context 压缩不会丢，下轮可继续用
+
 ### CLI
 **核心规则：任何需要连续交互、或有状态的 CLI 操作，用 tmux/psmux。**
 
