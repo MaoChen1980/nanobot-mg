@@ -994,22 +994,19 @@ class FeishuProxyChannel(BaseProxyChannel):
                             chat_id, len(content),
                         )
                         return True
-                    # API-level error — no point retrying
                     logger.warning(
-                        "Feishu card send failed ({}): {} - will fall back",
-                        resp.code, resp.msg,
+                        "Feishu card send failed (attempt {}): code={} msg={}",
+                        attempt + 1, resp.code, resp.msg,
                     )
-                    break
                 except Exception as e:
-                    if attempt < 2:
-                        wait = 1 << attempt  # 1, 2, 4 sec
-                        logger.warning(
-                            "Feishu card send attempt {} failed, retrying in {}s: {}",
-                            attempt + 1, wait, e,
-                        )
-                        time.sleep(wait)
-                    else:
-                        logger.exception("Feishu card send exception: {}", e)
+                    logger.exception(
+                        "Feishu card send attempt {} exception: {}",
+                        attempt + 1, e,
+                    )
+                if attempt < 2:
+                    wait = 1 << attempt  # 1, 2, 4 sec
+                    logger.warning("Retrying in {}s...", wait)
+                    time.sleep(wait)
         except Exception as e:
             logger.exception("Feishu card send exception: {}", e)
         return False
@@ -1057,20 +1054,18 @@ class FeishuProxyChannel(BaseProxyChannel):
                         )
                         return True
                     logger.warning(
-                        "Feishu post send failed ({}): {} - will fall back",
-                        resp.code, resp.msg,
+                        "Feishu post send failed (attempt {}): code={} msg={}",
+                        attempt + 1, resp.code, resp.msg,
                     )
-                    break
                 except Exception as e:
-                    if attempt < 2:
-                        wait = 1 << attempt
-                        logger.warning(
-                            "Feishu post send attempt {} failed, retrying in {}s: {}",
-                            attempt + 1, wait, e,
-                        )
-                        time.sleep(wait)
-                    else:
-                        logger.exception("Post send exception: {}", e)
+                    logger.exception(
+                        "Feishu post send attempt {} exception: {}",
+                        attempt + 1, e,
+                    )
+                if attempt < 2:
+                    wait = 1 << attempt  # 1, 2, 4 sec
+                    logger.warning("Retrying in {}s...", wait)
+                    time.sleep(wait)
         except Exception as e:
             logger.exception("Post send exception: {}", e)
         return False
@@ -1105,21 +1100,19 @@ class FeishuProxyChannel(BaseProxyChannel):
                             chat_id, len(content),
                         )
                         return
-                    logger.error(
-                        "Feishu plain text send failed ({}): {}",
-                        resp.code, resp.msg,
+                    logger.warning(
+                        "Feishu plain text send failed (attempt {}): code={} msg={}",
+                        attempt + 1, resp.code, resp.msg,
                     )
-                    break
                 except Exception as e:
-                    if attempt < 2:
-                        wait = 1 << attempt
-                        logger.warning(
-                            "Feishu plain text attempt {} failed, retrying in {}s: {}",
-                            attempt + 1, wait, e,
-                        )
-                        time.sleep(wait)
-                    else:
-                        logger.exception("Feishu plain-text fallback exception: {}", e)
+                    logger.exception(
+                        "Feishu plain text send attempt {} exception: {}",
+                        attempt + 1, e,
+                    )
+                if attempt < 2:
+                    wait = 1 << attempt  # 1, 2, 4 sec
+                    logger.warning("Retrying in {}s...", wait)
+                    time.sleep(wait)
         except Exception as e:
             logger.exception("Feishu plain-text fallback exception: {}", e)
 
