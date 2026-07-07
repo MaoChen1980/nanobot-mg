@@ -23,6 +23,36 @@ from nanobot.utils.gitstore import sync_workspace_templates
 console = Console()
 
 
+async def _create_reusable_socket(host: str, port: int) -> socket.socket:
+    """Create a TCP socket with SO_REUSEADDR, retrying on EADDRINUSE.
+
+    Mirrors the retry logic in HubTCPServer.start() — ensures the gateway
+    can restart quickly even when the previous instance's port is in TIME_WAIT.
+    """
+    import socket as _socket
+
+    max_attempts = 25
+    retry_delay = 3.0  # seconds
+
+    for attempt in range(1, max_attempts + 1):
+        sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host, port))
+            return sock
+        except OSError as e:
+            sock.close()
+            # Linux/macOS: errno 98 = EADDRINUSE
+            if e.errno == 98 and attempt < max_attempts:
+                logger.warning(
+                    "Port {}:{} busy, retrying in {:.0f}s (attempt {}/{})",
+                    host, port, retry_delay, attempt, max_attempts,
+                )
+                await asyncio.sleep(retry_delay)
+                continue
+            raise
+
+
 def _looks_like_traceback(line: str) -> bool:
     """Check if a non-JSON line is part of a traceback."""
     # NOTE: loguru uses "> File ..." format (with "> " prefix) and exception
@@ -907,6 +937,10 @@ class GatewayApplication:
             webui_index = _find_webui_index()
             api_app = make_api_app(webui_index, proxy_manager=None)
 
+            # Create socket with SO_REUSEADDR to handle TIME_WAIT after crashes
+            sock = await _create_reusable_socket(
+                self.config.gateway.host, self.port
+            )
             config = uvicorn.Config(
                 api_app,
                 host=self.config.gateway.host,
@@ -915,7 +949,7 @@ class GatewayApplication:
             )
             server = uvicorn.Server(config)
             server.install_signal_handlers = lambda: None
-            await server.serve()
+            await server.serve(sockets=[sock])
             return
 
         await self.cron.start()
@@ -1099,6 +1133,8 @@ class GatewayApplication:
         )
         api_app.state.gateway = self
 
+        # Create socket with SO_REUSEADDR to handle TIME_WAIT after crashes
+        sock = await _create_reusable_socket(host, api_port)
         config = uvicorn.Config(
             api_app,
             host=host,
@@ -1108,7 +1144,9 @@ class GatewayApplication:
         self.api_server = uvicorn.Server(config)
         # Prevent uvicorn from installing signal handlers — gateway owns lifecycle.
         self.api_server.install_signal_handlers = lambda: None
-        self._uvicorn_task = asyncio.create_task(self.api_server.serve())
+        self._uvicorn_task = asyncio.create_task(
+            self.api_server.serve(sockets=[sock])
+        )
         console.print(
             f"[green]✓[/green] Settings server: http://{host}:{api_port}/"
         )
