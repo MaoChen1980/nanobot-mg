@@ -12,7 +12,7 @@
    - 操作级别（单一操作，如"添加 log"）→ **不要创建 skill**，跳过
    - name 要用场景级别：`android-ui-test` 好，`android-add-log` 差
 
-1. **语义查重** — 用 `memory_search` 检索 `{{ workspace_path }}/skills/`，query 用新 skill 的核心功能描述，`k=6`。对召回结果 `read_file` 读全文
+1. **语义查重** — 用 `skill_search` 检索 `{{ workspace_path }}/skills/`，query 用新 skill 的核心功能描述，`k=6`。对召回结果 `read_file` 读全文
 
 2. **对比决策** — 如有功能重复的已有 skill，参考 `skill-manager` 的对比流程（`read_file` 读 `skills/skill-manager/SKILL.md`），判断是替换/合并/跳过。特别注意：如果 candidate 是已有 skill 的子功能，应合并到已有 skill 中而不是新建
 

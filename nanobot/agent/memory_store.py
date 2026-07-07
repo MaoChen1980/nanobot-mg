@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,24 @@ if TYPE_CHECKING:
 
 
 _HISTORY_ENTRY_HARD_CAP = 64_000
+
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+
+
+def _extract_frontmatter_field(content: str, field: str) -> str | None:
+    """Extract a YAML field from markdown frontmatter via safe YAML parse."""
+    m = _FRONTMATTER_RE.search(content)
+    if not m:
+        return None
+    try:
+        import yaml
+
+        parsed = yaml.safe_load(m.group(1))
+        if isinstance(parsed, dict) and isinstance(parsed.get(field), str):
+            return parsed[field].strip()
+    except Exception:
+        pass
+    return None
 
 
 class MemoryStore:
@@ -163,11 +182,16 @@ class MemoryStore:
         self.tasks_index.build_from_files(file_texts)
 
     def build_skills_index(self) -> None:
-        """Full rebuild of the skills FAISS index from skills directories.
+        """Full rebuild of the skills FAISS index from frontmatter metadata.
 
-        Scans both workspace and built-in directories independently, so built-in
-        skills are always indexed regardless of shadowing. This lets memory_search
-        detect naming conflicts during skill creation.
+        Indexes each skill as ``{name}: {description}  {path}`` (from SKILL.md frontmatter).
+        The path is the real file path so LLM can ``read_file`` to load the full skill.
+        Scans workspace and built-in dirs independently so built-in skills are
+        always indexed regardless of shadowing.
+
+        This supports two use cases:
+        1. **skill_search tool** — LLM queries to find applicable skills for the task.
+        2. **Dedup during skill creation** — detect existing coverage before creating.
         """
         file_texts: dict[str, str] = {}
         for root in (self.skills_loader.workspace_skills, BUILTIN_SKILLS_DIR):
@@ -177,7 +201,10 @@ class MemoryStore:
                     if d.is_dir() and skill_file.exists():
                         key = f"skills/{d.name}.md"
                         if key not in file_texts:
-                            file_texts[key] = skill_file.read_text(encoding="utf-8")
+                            content = skill_file.read_text(encoding="utf-8")
+                            name = d.name
+                            desc = _extract_frontmatter_field(content, "description") or name
+                            file_texts[key] = f"{name}: {desc}  {skill_file}"
         self.skills_index.build_from_files(file_texts)
 
     def condense_session_to_history(self, messages: list[dict]) -> int:

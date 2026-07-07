@@ -72,7 +72,7 @@ category: agent
 
 **核心原则：更新优先于创建，合并优先于新建。** 在创建任何新 skill 之前，必须先执行语义查重——新建永远是最后选项。
 
-1. **语义查重**：用 `memory_search` 语义检索已有 skill，query 用 candidate 的核心功能描述，`k=6`。对召回结果逐一 `read_file` 读 SKILL.md 全文，判断候选与已有 skill 之间是什么关系。
+1. **语义查重**：用 `skill_search` 语义检索已有 skill，query 用 candidate 的核心功能描述，`k=6`。对召回结果逐一 `read_file` 读 SKILL.md 全文，判断候选与已有 skill 之间是什么关系。
 
 2. **有结果（重叠/覆盖）？** 明确两者关系后决策：
    - **candidate 是已有 skill 的子集**（如"数据获取"只是"股市决策"的一步）→ **不要创建新 skill。** 检查已有 skill 的相关步骤是否已覆盖、描述是否已涵盖此场景。未覆盖则更新已有 skill，已覆盖则跳过。
@@ -80,7 +80,7 @@ category: agent
    - **功能等价或大部分重叠** → 走 **Compare and merge** 流程，保留更优的那个或将两者合并。
    - **已有 skill 已完整覆盖** → 仍检查 candidate 是否有更新的信息、更好的步骤、更清晰的描述。如有 → 更新已有 skill。如无 → **跳过。**
 
-3. **memory_search 无结果（不重叠）？**
+3. **skill_search 无结果（不重叠）？**
    - 检查 candidate 是否能**合并到**某个功能相近的已有 skill 中（不仅仅是语义相似，而是看功能覆盖度是否有交集）
    - candidate 的核心功能已被某个已有 skill 部分覆盖，或两者解决的是同一类问题 → 走 **Compare and merge** 流程，将 candidate 的内容合并到已有 skill 中
    - 功能确实全新 → 走下方完整创建流程

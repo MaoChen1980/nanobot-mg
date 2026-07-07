@@ -8,7 +8,7 @@
 你有以下工具可用：
 - `glob` — 扫描已有 skill 目录
 - `grep` — 搜索文件内容
-- `memory_search` — 语义检索已有 skill（按功能相似度召回，不受命名差异影响）
+- `skill_search` — 语义检索已有 skill（按功能相似度召回，不受命名差异影响）
 - `read_file` — 读已有 SKILL.md 完整内容
 - `write_file` — 新建或覆盖 SKILL.md
 - `edit_file` — 精确修改 SKILL.md
@@ -16,10 +16,10 @@
 
 ## 流程
 
-1. **语义检索已有 skill** — 用 `memory_search` 检索已有 skill（含 workspace 和内置），query 用 candidate 的核心功能描述，`k=6`
+1. **语义检索已有 skill** — 用 `skill_search` 检索已有 skill（含 workspace 和内置），query 用 candidate 的核心功能描述，`k=6`
 
 2. **逐条处理 candidate**：
-   - 无功能相似 skill（memory_search 无相关结果）→ 新建
+   - 无功能相似 skill（skill_search 无相关结果）→ 新建
    - 有功能相似 skill → 对召回结果逐一 `read_file` 读 SKILL.md 全文
 3. **对比决策** — 参考 skill-manager 的对比流程（`read_file` 读 `skills/skill-manager/SKILL.md`）：
    - 新 candidate 更好 → 替换
@@ -37,11 +37,11 @@
 
 **先做粒度门控** — candidate 是场景级别还是操作级别？
 - 场景级别（覆盖完整用例，可能包含多个子操作）→ 走下方决策
-- 操作级别（只有一个步骤，如"添加日志"、"启动模拟器"）→ **不要新建 skill**。用 memory_search 查找它所属的场景 skill，合并到该 skill 的 Steps 中。找不到所属场景 → 跳过，下次 consolidate 时处理。
+- 操作级别（只有一个步骤，如"添加日志"、"启动模拟器"）→ **不要新建 skill**。用 skill_search 查找它所属的场景 skill，合并到该 skill 的 Steps 中。找不到所属场景 → 跳过，下次 consolidate 时处理。
 
 | 信号 | 动作 |
 |------|------|
-| 新场景，memory_search 无相关结果 | 新建（name 要用场景级别，不要用操作级别） |
+| 新场景，skill_search 无相关结果 | 新建（name 要用场景级别，不要用操作级别） |
 | candidate 是已有 skill 的子功能（范围窄于已有 skill） | 不新建，合并到已有 skill 的 Steps 中新增 `### 子功能名` 节，更新 description 覆盖新增触发场景 |
 | 功能覆盖但新 candidate 更准确完整 | 替换 |
 | 功能互补 | 合并（合并后 name/description 要覆盖各 skill 原有触发场景） |
@@ -91,7 +91,7 @@ description: >
 
 ## 额外任务：扫描合并已有 skill
 
-处理完所有 pending entry 后，用 `memory_search` 检索 `{{ workspace_path }}/skills/` 下的所有 skill，找出语义相似、可以合并为同一场景级 skill 的群组。
+处理完所有 pending entry 后，用 `skill_search` 检索 `{{ workspace_path }}/skills/` 下的所有 skill，找出语义相似、可以合并为同一场景级 skill 的群组。
 
 标准：
 - 解决相同或高度重叠的问题域（如"拉取日线"+"拉取夜盘"+"实时行情"+"决策模块" → "金融决策"）
@@ -100,7 +100,7 @@ description: >
 
 流程：
 1. 用 `glob` 列出所有 workspace skill
-2. 对每个 skill，用 `memory_search` 召回相似 skill（这一步 FAISS 帮你过滤了）
+2. 对每个 skill，用 `skill_search` 召回相似 skill（这一步 FAISS 帮你过滤了）
 3. 读完整 SKILL.md 对比
 4. 判定该不该合并、合并成什么
 5. 执行合并：`write_file` 写新 SKILL.md，`exec rm -rf` 删旧的

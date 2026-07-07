@@ -78,7 +78,7 @@ agent 陈述是否符合用户需求？
 - **陈述层面**：最近一条 assistant 回复是否引用了未获取或未验证的信息
 - **任务层面**：整体任务还需要哪些信息才能继续推进
 
-如果发现信息缺失补充信息存在时,应该按顺序 memory_search, conversation_search, read/grep工作相关文件，最后是web_search/web_fetch 获取信息。
+如果发现信息缺失补充信息存在时,应该按顺序 memory_search, conversation_search, skill_search, read/grep工作相关文件，最后是web_search/web_fetch 获取信息。
 
 #### 可复用模式 — 进化门控
 

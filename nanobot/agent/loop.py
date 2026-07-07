@@ -513,6 +513,7 @@ class AgentLoop:
         from nanobot.agent.tools.search import GlobTool, GrepTool
         from nanobot.agent.tools.restart_agent import SelfRestartTool
         from nanobot.agent.tools.semantic_search import SearchTextTool
+        from nanobot.agent.tools.skill_search import SkillSearchTool
         from nanobot.agent.tools.tell_subagent import TellSubagentTool
         from nanobot.agent.tools.shell import ExecTool
         from nanobot.agent.tools.spawn import SpawnTool
@@ -540,6 +541,7 @@ class AgentLoop:
         from nanobot.agent.tools.send_file import FileTool
         self.tools.register(FileTool(send_callback=self.bus.publish_outbound, workspace=self.workspace))
         self.tools.register(MemorySearchTool(store=self.context.memory))
+        self.tools.register(SkillSearchTool(store=self.context.memory))
         self.tools.register(LogEventTool(store=self.context.memory))
         self.tools.register(ConversationSearchTool(store=self.context.memory))
         self.tools.register(SearchTextTool(workspace=self.workspace, allowed_dir=allowed_dir))
@@ -1134,6 +1136,7 @@ class AgentLoop:
         from nanobot.agent.tools.registry import ToolRegistry
         from nanobot.agent.tools.search import GlobTool, GrepTool
         from nanobot.agent.tools.shell import ExecTool
+        from nanobot.agent.tools.skill_search import SkillSearchTool
         from nanobot.utils.prompt_templates import render_template
 
         logger.info("Skill creation: building agent for assess_me observation")
@@ -1148,6 +1151,7 @@ class AgentLoop:
             working_dir=str(self.workspace),
             timeout=self.exec_config.timeout,
         ))
+        tools.register(SkillSearchTool(store=self.context.memory))
 
         system_prompt = render_template(
             "agent/_instructions/skill_creation.md",

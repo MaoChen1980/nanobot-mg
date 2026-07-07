@@ -12,6 +12,7 @@
 - 语义概念匹配 → `semantic_search`（向量语义，非关键词）
 - 按文件名找文件 → `glob`
 - 查知识库历史经验 → `memory_search`
+- 找可用 skill 匹配当前任务 → `skill_search`
 - 查过往对话内容 → `conversation_search`
 - 查工具调用记录 → `tool_call_log`
 

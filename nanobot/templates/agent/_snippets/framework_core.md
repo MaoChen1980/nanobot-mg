@@ -174,6 +174,7 @@ user:     /stop
 积累的经验在 `{{ workspace_path }}/memory/`
 
 `memory_search` 搜索 `{{ workspace_path }}/memory/` 帮你复用积累的经验
+`skill_search` 根据当前任务语义匹配可用 skill
 `conversation_search` 搜索过去对话帮你回忆事实细节
 
 

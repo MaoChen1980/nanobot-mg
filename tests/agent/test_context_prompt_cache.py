@@ -39,7 +39,9 @@ def test_system_prompt_reflects_current_dream_memory_contract(tmp_path) -> None:
     sync_workspace_templates(workspace, silent=True)
 
     # Populate categorized memory with customized content (simulating Dream write)
-    (workspace / "memory" / "system.md").write_text(
+    mem_dir = workspace / "memory"
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    (mem_dir / "system.md").write_text(
         "# System\n\nUser prefers dark mode.\n", encoding="utf-8"
     )
 
@@ -293,7 +295,9 @@ def test_customized_memory_md_is_injected_in_system_prompt(tmp_path) -> None:
     from nanobot.utils.gitstore import sync_workspace_templates
     sync_workspace_templates(workspace, silent=True)
 
-    (workspace / "memory" / "system.md").write_text(
+    mem_dir = workspace / "memory"
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    (mem_dir / "system.md").write_text(
         "# System\n\nUser prefers dark mode.\n", encoding="utf-8"
     )
 

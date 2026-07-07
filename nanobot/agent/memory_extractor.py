@@ -1006,6 +1006,7 @@ class MemoryExtractor:
         from nanobot.agent.runner import AgentRunner, AgentRunSpec
         from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
         from nanobot.agent.tools.memory_search import MemorySearchTool
+        from nanobot.agent.tools.skill_search import SkillSearchTool
         from nanobot.agent.tools.registry import ToolRegistry
         from nanobot.agent.tools.search import GlobTool, GrepTool
         from nanobot.agent.tools.shell.shell import ExecTool
@@ -1017,6 +1018,7 @@ class MemoryExtractor:
         tools.register(GlobTool(workspace=self.store.workspace))
         tools.register(GrepTool(workspace=self.store.workspace))
         tools.register(MemorySearchTool(store=self.store))
+        tools.register(SkillSearchTool(store=self.store))
         tools.register(ExecTool(
             working_dir=str(self.store.workspace),
             timeout=120,
@@ -1031,12 +1033,7 @@ class MemoryExtractor:
         user_content = (
             f"## Pending skill entries\n\n{pending_text}\n\n"
             "以上是 MemoryExtractor 从对话快照中提取的待处理 skill 需求。"
-            "请按以下步骤处理每个 candidate：\n\n"
-            "1. 用 memory_search 检索 workspace/skills/ 下已有 skill（k=6）\n"
-            "2. 对每个 candidate，对召回的功能相似 skill 用 read_file 读完整内容对比\n"
-            "3. 参考 skill-manager 流程决策：新建 / 更新 / 合并 / 跳过\n"
-            "4. 用 write_file/edit_file 执行决策，直接写 SKILL.md\n"
-            "5. 完成后清理已处理的条目"
+            "请按系统 prompt 的流程处理每个 candidate。"
         )
 
         spec = AgentRunSpec(

@@ -135,7 +135,8 @@ user:     [Orchestrator]: 先不看代码，只看文档
 系统预制知识在 skill 中，积累的经验在 `{{ workspace_path }}/memory/`
 
 `memory_search` 帮你复用经验
-`conversation_search`，帮你回忆过去的事实细节
+`skill_search` 帮你根据当前任务找可用 skill
+`conversation_search` 帮你回忆过去的事实细节
 
 
 ### Skills

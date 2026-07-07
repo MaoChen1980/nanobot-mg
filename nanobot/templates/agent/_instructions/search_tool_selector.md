@@ -9,6 +9,7 @@
 | 从过往对话中找特定事实或话题 | `conversation_search` | 字符子串 (SQL LIKE) |
 | 在代码/文件中找精确关键词或标识符 | `grep` | 正则/字符 |
 | 对已有文档内容做语义匹配 | `semantic_search` | 语义 (embedding) |
+| 找可用 skill 匹配当前任务 | `skill_search` | 语义 (FAISS) |
 | 查最新信息、文档或新闻 | `web_search` | 网络搜索 |
 
 **Decision flow:**
