@@ -207,8 +207,7 @@ class AgentRunner:
         self.provider = provider
         self._db = db
         self._current_spec: AgentRunSpec | None = None
-        self._assess_responses = 0  # periodic assess_me counter (local to this run)
-        self._last_assess_at = 0
+        self._assess_responses = 0  # periodic assess_me counter (local to this run, resets on fire)
         self._pt_responses = 0  # periodic .pt snapshot counter (local to this run)
 
     async def _maybe_compress_messages(
@@ -300,11 +299,9 @@ class AgentRunner:
     async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 180) -> AssessResult:
         """Run assess_me_callback with timeout protection.
 
-        The callback returns evaluation data; this method applies injection
-        messages to the conversation, keeping message mutation centralised
-        in the runner.  Stale assessment/DRC messages are **not** cleaned up
-        here — they're stripped on session commit and don't warrant the index
-        invalidation risk during an active turn.
+        The callback returns evaluation data; this method strips stale
+        assessment messages from *messages* before injecting new ones,
+        keeping at most one assessment in the conversation at any time.
         """
         if spec.assess_me_callback is None:
             return AssessResult()
@@ -315,6 +312,7 @@ class AgentRunner:
             )
             result = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
             if result.injection_messages:
+                messages[:] = [m for m in messages if not is_assessment_message(m)]
                 messages.extend(result.injection_messages)
                 logger.info(
                     "assess_me_callback injected {} message(s) (session_key={})",
@@ -504,6 +502,9 @@ class AgentRunner:
 
     async def run(self, spec: AgentRunSpec) -> AgentRunResult:
         self._current_spec = spec
+        # Reset per-run counters — AgentRunner is long-lived, run() can be called multiple times
+        self._assess_responses = 0
+        self._pt_responses = 0
         hook = spec.hook or AgentHook()
         messages = list(spec.initial_messages)
         run_context = AgentRunHookContext(messages=list(messages))
@@ -710,27 +711,26 @@ class AgentRunner:
                         logger.exception("Failed to persist overflow-compressed messages to history")
                 if compress_event.summary:
                     _overflow_summary = compress_event.summary
-                # Periodic self-assessment — fire at milestones (every assess_interval responses)
-                # within this run, not just at user-message boundaries.
-                # Uses threshold (>=) instead of exact multiple (%) so batch jumps don't skip.
-                # .pt snapshot — every N LLM responses (independent counter)
-                if spec.prompts_dir is not None and spec.session_key:
-                    self._pt_responses += 1
-                    if self._pt_responses >= spec.pt_save_interval:
-                        self._pt_responses = 0
-                        try:
-                            from nanobot.agent.memory_extractor import MemoryExtractor
-                            path = MemoryExtractor.save_prompt_snapshot(messages_for_model, spec.prompts_dir, spec.session_key)
-                            logger.info("Saved .pt snapshot: {} ({} msgs, session={})", path.name, len(messages_for_model), spec.session_key)
-                        except Exception:
-                            logger.exception("Failed to save .pt snapshot (session={})", spec.session_key)
-                # Periodic self-assessment — fire at milestones (every assess_interval responses)
-                if spec.assess_me_callback is not None:
-                    self._assess_responses += 1
-                    count = self._assess_responses
-                    if (count - self._last_assess_at) >= spec.assess_interval:
-                        self._last_assess_at = count
-                        await self._run_assess_callback(spec, messages)
+            # Periodic self-assessment — fire at milestones (every assess_interval responses)
+            # within this run, not just at user-message boundaries.
+            # Uses threshold (>=) instead of exact multiple (%) so batch jumps don't skip.
+            # .pt snapshot — every N LLM responses (independent counter)
+            if spec.prompts_dir is not None and spec.session_key:
+                self._pt_responses += 1
+                if self._pt_responses >= spec.pt_save_interval:
+                    self._pt_responses = 0
+                    try:
+                        from nanobot.agent.memory_extractor import MemoryExtractor
+                        path = MemoryExtractor.save_prompt_snapshot(messages_for_model, spec.prompts_dir, spec.session_key)
+                        logger.info("Saved .pt snapshot: {} ({} msgs, session={})", path.name, len(messages_for_model), spec.session_key)
+                    except Exception:
+                        logger.exception("Failed to save .pt snapshot (session={})", spec.session_key)
+            # Periodic self-assessment — fire every assess_interval responses, reset on fire
+            if spec.assess_me_callback is not None:
+                self._assess_responses += 1
+                if self._assess_responses >= spec.assess_interval:
+                    self._assess_responses = 0
+                    await self._run_assess_callback(spec, messages)
             _now = time.monotonic()
             logger.info("RUN_Timing: post_llm={:.0f}ms", (_now - _run_t0) * 1000)
             raw_usage = usage_dict(response.usage)

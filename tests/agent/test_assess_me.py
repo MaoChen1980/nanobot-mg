@@ -895,7 +895,8 @@ class TestAssessMeTemplate:
         return [
             "信息缺口",
             "假设检查",
-            "任务完成评估",
+            "目标完成评估",
+            "影响评估",
             "可复用模式",
             "Skills 匹配",
             "事实合规",
@@ -921,7 +922,7 @@ class TestAssessMeTemplate:
             has_active_task=False,
         )
         # Task-specific section headers should be absent
-        for section_header in ("#### 2. 任务完成评估", "#### 3. 假设检查"):
+        for section_header in ("#### 2. 目标完成评估", "#### 3. 假设检查", "#### 4. 影响评估"):
             assert section_header not in content, (
                 f"Template should NOT include task section header when has_active_task=False: {section_header}"
             )
