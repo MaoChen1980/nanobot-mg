@@ -48,6 +48,10 @@ class SkillSearchTool(Tool):
         if not query:
             return "Please provide a query."
 
+        # Ensure index is up to date with any SKILL.md changes
+        if hasattr(self._store, "refresh_skills_index"):
+            self._store.refresh_skills_index()
+
         skills_index = getattr(self._store, "skills_index", None)
         if skills_index is None:
             return "No skills index available."

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -83,9 +84,10 @@ class MemoryStore:
             self.tasks_index = None
         self.skills_loader = SkillsLoader(workspace)
         self.skills_index = MemoryVectorIndex(self.memory_dir, index_dir=".skills_index")
-        if not self.skills_index.load() and self.skills_loader.list_skills(filter_unavailable=False):
-            logger.info("No skills FAISS index found — building from skills list")
-            self.build_skills_index()
+        self.skills_index.load()  # pre-load existing index for immediate use
+        self._last_skills_rebuild: float = 0.0
+        if self.skills_loader.list_skills(filter_unavailable=False):
+            self.build_skills_index()  # always rebuild to pick up any changes
 
     @property
     def git(self) -> GitStore:
@@ -206,6 +208,49 @@ class MemoryStore:
                             desc = _extract_frontmatter_field(content, "description") or name
                             file_texts[key] = f"{name}: {desc}  {skill_file}"
         self.skills_index.build_from_files(file_texts)
+        self._last_skills_rebuild = time.time()
+
+    def refresh_skills_index(self) -> bool:
+        """Rebuild skills FAISS index if any workspace SKILL.md changed since last build.
+
+        Two-level check:
+          1. Directory mtime — fast path that catches add/delete/modify (works on NTFS).
+          2. Per-file mtime — catches in-place modifications on filesystems where
+             directory mtime doesn't update when file content changes.
+
+        Only checks workspace skills; built-in skills never change at runtime.
+        Returns True if index was rebuilt.
+        """
+        if not self._last_skills_rebuild:
+            return False
+        ws = self.skills_loader.workspace_skills
+        if not ws or not ws.exists():
+            return False
+
+        # Level 1: directory mtime (catches add/delete, fast — one stat call)
+        try:
+            dir_mtime = ws.stat().st_mtime
+            changed = dir_mtime > self._last_skills_rebuild
+        except OSError:
+            changed = False  # can't stat dir, skip fast path
+
+        # Level 2: per-file mtime (catches in-place modification)
+        if not changed:
+            try:
+                for d in ws.iterdir():
+                    skill_file = d / "SKILL.md"
+                    if skill_file.exists():
+                        if skill_file.stat().st_mtime > self._last_skills_rebuild:
+                            changed = True
+                            break
+            except OSError:
+                changed = True  # be safe — rebuild rather than miss changes
+
+        if changed:
+            logger.info("Workspace skills changed — rebuilding FAISS index")
+            self.build_skills_index()
+            return True
+        return False
 
     def condense_session_to_history(self, messages: list[dict]) -> int:
         """Archive session messages into history, grouped by turns.
