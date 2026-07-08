@@ -201,11 +201,12 @@ class UserMessageHandler:
     async def handle(self, msg, session_key, on_progress, on_stream, on_stream_end, on_reasoning=None, on_reasoning_end=None, pending_queue=None, extra_hooks=None):
 
         if msg.media:
-            # All media (images, files, etc.) → save to workspace, no auto-processing
+            # All media (images, files, etc.) → save to workspace for tool access
             import shutil
             ws = self._loop.workspace
             ws.mkdir(parents=True, exist_ok=True)
             labels: list[str] = []
+            dest_paths: list[str] = []
             for p in msg.media:
                 pa = Path(p)
                 if not pa.is_file():
@@ -220,11 +221,13 @@ class UserMessageHandler:
                         counter += 1
                 shutil.copy2(str(pa), str(dest))
                 labels.append(f"{pa.name} → {dest}")
+                dest_paths.append(str(dest))
 
             # Inform LLM what was received, with real paths so it can read them
             ref = f"[用户发送了: {'、'.join(labels)}]"
             new_content = f"{msg.content}\n\n{ref}" if msg.content else ref
-            msg = dataclasses.replace(msg, content=new_content, media=[])
+            # Keep dest_paths so downstream _build_user_content can inject image_url blocks
+            msg = dataclasses.replace(msg, content=new_content, media=dest_paths)
 
         # Inject quoted message context into content
         quoted = msg.metadata.get("quoted_message", "")

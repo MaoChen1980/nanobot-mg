@@ -259,12 +259,15 @@ class FeishuProxyChannel(BaseProxyChannel):
                     logger.debug("Feishu sending to hub: text={!r}, file_key={}, msg_type={}",
                                  text[:100] if text else "", file_key, msg_type)
 
-                    # ── Download inbound media (image/file/audio/video) ───────
-                    if file_key and msg_type in ("image", "file", "audio", "video"):
-                        local_path = self._download_media(file_key, msg_type, message_id)
-                        if local_path:
-                            msg_data["media"] = [local_path]
-                            logger.info("Feishu inbound media: type={}, key={} → {}", msg_type, file_key, local_path)
+                    # ── Download inbound media (image/file/audio/video/post) ──
+                    if file_key:
+                        # post-embedded images use msg_type="post" — map to "image" for download
+                        download_type = "image" if msg_type == "post" else msg_type
+                        if download_type in ("image", "file", "audio", "video"):
+                            local_path = self._download_media(file_key, download_type, message_id)
+                            if local_path:
+                                msg_data["media"] = [local_path]
+                                logger.info("Feishu inbound media: type={}, key={} → {}", download_type, file_key, local_path)
 
                     self.send_to_hub(msg_data)  # fire-and-forget — reply arrives via _handle_deliver
                 except Exception as e:
