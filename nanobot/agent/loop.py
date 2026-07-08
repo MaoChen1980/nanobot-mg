@@ -34,7 +34,7 @@ from nanobot.providers.factory import ProviderSnapshot
 from nanobot.session.lifecycle import SessionLifecycle
 from nanobot.session.manager import Session, SessionManager
 from nanobot.utils.document import separate_and_extract_media
-from nanobot.utils.helpers import truncate_text as truncate_text_fn
+from nanobot.utils.helpers import truncate_text as truncate_text_fn, format_timestamp_cst
 from nanobot.utils.media_decode import image_placeholder_text
 
 from .loop_checkpoint import (
