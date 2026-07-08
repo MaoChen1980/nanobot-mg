@@ -17,6 +17,8 @@ from .filesystem_base import _FsTool, _normalize_quotes
 _EDIT_FILE_SCHEMA = build_parameters_schema(
     path=p("string", "Absolute path to a file to edit. Directories and special files are rejected."),
     old_text=p("string", "Text to find and replace. Must match EXACTLY and be UNIQUE in the file — include surrounding lines for disambiguation, or set replace_all=true. "
+        "MANDATORY: Before using this tool, call read_file or grep to confirm the exact old_text exists in the file. "
+        "Do NOT attempt edit_file if the file has been modified since your last read — always re-read or grep first. "
         "Leave empty to create a new file (errors if file already exists with content). "
         "Pair with first_line+last_line for line-range mode instead of text matching."),
     new_text=p("string", "REQUIRED in all modes. Replacement text. "
@@ -360,9 +362,10 @@ class EditFileTool(_FsTool):
             return (
                 f"Error: old_text not found in {path}. "
                 f"Possible cause: {', '.join(hints)}. "
-                "Copy the exact text from read_file and try again."
+                "Before retrying: grep the file for a unique fragment of old_text to confirm it exists, "
+                "then use the grep-matched content as old_text."
             )
-        return f"Error: old_text not found in {path}. No similar text found. Verify the file content."
+        return f"Error: old_text not found in {path}. No similar text found. Before retrying: grep for a unique fragment to verify the text exists."
 
     async def _edit_by_lines(
         self, path: str, new_text: str, first_line: int, last_line: int,
