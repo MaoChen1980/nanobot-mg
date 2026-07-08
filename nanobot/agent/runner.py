@@ -297,35 +297,43 @@ class AgentRunner:
             logger.exception("Proactive compression failed (session={})", spec.session_key or "default")
             return initial_msg_count, overflow_summary
 
-    async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 180) -> AssessResult:
-        """Run assess_me_callback with timeout protection.
+    async def _run_assess_callback(self, spec: AgentRunSpec, messages: list[dict], timeout: float = 100, retry_count: int = 2) -> AssessResult:
+        """Run assess_me_callback with timeout protection and retries.
 
         The callback returns evaluation data; this method strips stale
         assessment messages from *messages* before injecting new ones,
         keeping at most one assessment in the conversation at any time.
+
+        Retries on TimeoutError up to *retry_count* times; other exceptions
+        propagate immediately.
         """
         if spec.assess_me_callback is None:
             return AssessResult()
-        try:
-            logger.debug(
-                "assess_me_callback start (session_key={})",
-                spec.session_key,
-            )
-            result = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
-            if result.injection_messages:
-                messages[:] = [m for m in messages if not is_assessment_message(m)]
-                messages.extend(result.injection_messages)
-                logger.info(
-                    "assess_me_callback injected {} message(s) (session_key={})",
-                    len(result.injection_messages), spec.session_key,
+        for attempt in range(1 + retry_count):
+            try:
+                logger.debug(
+                    "assess_me_callback start (attempt={}/{}, session_key={})",
+                    attempt, 1 + retry_count, spec.session_key,
                 )
-            return result
-        except asyncio.TimeoutError:
-            logger.warning(
-                "assess_me_callback (assess_me + debug_root_cause) timed out after {}s (session_key={})",
-                timeout, spec.session_key,
-            )
-            return AssessResult()
+                result = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
+                if result.injection_messages:
+                    messages[:] = [m for m in messages if not is_assessment_message(m)]
+                    messages.extend(result.injection_messages)
+                    logger.info(
+                        "assess_me_callback injected {} message(s) (session_key={})",
+                        len(result.injection_messages), spec.session_key,
+                    )
+                return result
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "assess_me_callback attempt {}/{} timed out after {}s (session_key={})",
+                    attempt, 1 + retry_count, timeout, spec.session_key,
+                )
+        logger.warning(
+            "assess_me_callback exhausted all {} attempts (session_key={})",
+            1 + retry_count, spec.session_key,
+        )
+        return AssessResult()
 
     async def _assess_sent_messages(
         self,
@@ -1222,8 +1230,7 @@ class AgentRunner:
             # response. The original final_content always goes to the user.
             if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _end_assess_ran = True
-                _assess_msg_idx = len(messages) - 1  # position of this response
-                assess_result = await self._run_assess_callback(spec, messages, timeout=180)
+                assess_result = await self._run_assess_callback(spec, messages)
                 if assess_result.needs_revision or assess_result:
                     logger.info(
                         "End-of-loop assess {} (iter={}, session={}) — continuing",
@@ -1231,10 +1238,15 @@ class AgentRunner:
                         iteration, spec.session_key or "default",
                     )
                     had_injections = True
-                    # Response failed assessment — rollback so session history
-                    # stays clean. The assess callback appended guidance after
-                    # this index; keep that so the retry response is informed.
-                    messages.pop(_assess_msg_idx)
+                    # Response failed assessment — rollback the last assistant
+                    # response while keeping the newly injected guidance.
+                    # The callback modifies messages in-place (filters old
+                    # assessment messages, appends new ones), so the pre-call
+                    # index is stale. Search backward for the last assistant.
+                    for i in range(len(messages) - 1, -1, -1):
+                        if messages[i].get("role") == "assistant":
+                            messages.pop(i)
+                            break
                     _end_assess_ran = False
                     continue
 

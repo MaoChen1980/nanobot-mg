@@ -161,7 +161,7 @@ class AnthropicProvider(LLMProvider):
                 # No server-provided hint; use a conservative default for network stalls.
                 retry_after = 30.0
         return LLMResponse(
-            content=f"Error calling LLM: {err_str}" if err_str else "Error calling LLM: connection error (no detail)",
+            content=f"Error calling LLM: {err_str}" if err_str else f"Error calling LLM: {e.__class__.__name__}",
             finish_reason="error",
             error_kind=error_kind,
             retry_after=retry_after,

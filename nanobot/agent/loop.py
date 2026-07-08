@@ -344,6 +344,9 @@ class AgentLoop:
         self.extractor = MemoryExtractor(
             store=self.context.memory,
             timezone=self.context.timezone,
+            context_window_tokens=self.context_window_tokens,
+            history_token_limit=self._history_token_limit,
+            compress_trigger_tokens=self._compress_trigger_tokens,
         )
         self._register_default_tools()
         if _tc.my.enable:
@@ -1039,23 +1042,30 @@ class AgentLoop:
 
             # ── orthogonal actions (independent of status) ──
 
-            # Skill creation — always check if a reusable pattern was found
+            # Fix sub-agent — spawn when assess_me identified a reusable skill pattern.
+            # Sub-agent self-diagnoses root cause using file tools (Step 0).
             skill_pattern = parsed.get("skill_pattern")
+
             if skill_pattern and skill_pattern != "null":
-                if not isinstance(skill_pattern, str):
-                    skill_pattern = json.dumps(skill_pattern, ensure_ascii=False)
-                dedup_key = hashlib.md5(skill_pattern.encode()).hexdigest()
+                dedup_raw = json.dumps({"p": skill_pattern})
+                dedup_key = hashlib.md5(dedup_raw.encode()).hexdigest()
                 if dedup_key not in loop._skill_creation_inflight:
                     loop._skill_creation_inflight.add(dedup_key)
+                    # Pass assess_me finding context so sub-agent knows what to diagnose
+                    assess_content = parsed.get("content") or ""
                     task = asyncio.create_task(
-                        loop._spawn_skill_creator(skill_pattern, session_key=session.key if session else None),
+                        loop._spawn_skill_creator(
+                            skill_pattern=skill_pattern,
+                            assess_context=assess_content,
+                            session_key=session.key if session else None,
+                        ),
                     )
                     task.add_done_callback(
                         _make_skill_done_callback(loop, dedup_key)
                     )
-                    logger.info("assess_me detected reusable pattern — spawning skill creation")
+                    logger.info("assess_me: spawning fix sub-agent for skill_pattern=%s", skill_pattern)
                 else:
-                    logger.info("Skill creation already in-flight for this pattern — skipping")
+                    logger.info("assess_me: fix already in-flight for this item — skipping")
 
             # ── injection decision (gated by status or unused_skills) ──
 
@@ -1129,8 +1139,13 @@ class AgentLoop:
             )
         return _cb
 
-    async def _spawn_skill_creator(self, skill_pattern: str, session_key: str | None = None) -> None:
-        """Spawn a background agent to create/update skill from assess_me observation."""
+    async def _spawn_skill_creator(
+        self,
+        skill_pattern: str = "",
+        assess_context: str = "",
+        session_key: str | None = None,
+    ) -> None:
+        """Spawn a background agent to create skill from assess_me pattern."""
         from nanobot.agent.runner import AgentRunner, AgentRunSpec
         from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
         from nanobot.agent.tools.registry import ToolRegistry
@@ -1138,8 +1153,9 @@ class AgentLoop:
         from nanobot.agent.tools.shell import ExecTool
         from nanobot.agent.tools.skill_search import SkillSearchTool
         from nanobot.utils.prompt_templates import render_template
+        import nanobot
 
-        logger.info("Skill creation: building agent for assess_me observation")
+        logger.info("Fix sub-agent: building for skill_pattern=%s", skill_pattern)
 
         tools = ToolRegistry()
         tools.register(ReadFileTool(workspace=self.workspace))
@@ -1157,34 +1173,47 @@ class AgentLoop:
             "agent/_instructions/skill_creation.md",
             skill_pattern=skill_pattern,
             workspace_path=self.workspace.as_posix(),
+            nanobot_path=Path(nanobot.__file__).parent.as_posix(),
         )
+
+        # Include find context in user message so sub-agent knows what to work on
+        user_msg = "根据系统 prompt 中的指令处理。不要闲聊，直接执行步骤。"
+        if assess_context:
+            user_msg = f"## assess_me 发现\n\n{assess_context}\n\n{user_msg}"
 
         spec = AgentRunSpec(
             initial_messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "根据系统 prompt 中的 skill pattern 创建或更新 SKILL.md。不要闲聊，直接执行步骤。"},
+                {"role": "user", "content": user_msg},
             ],
             tools=tools,
             model=self.model,
-            max_iterations=50,
+            max_iterations=100,
             max_tool_result_chars=self.max_tool_result_chars,
             session_key=session_key,
+            context_window_tokens=self.context_window_tokens,
+            history_token_limit=self._history_token_limit,
+            compress_trigger_tokens=self._compress_trigger_tokens,
         )
 
         runner = AgentRunner(self.provider, db=self._db)
         result = await runner.run(spec)
 
         if result.final_content:
-            logger.info("Skill creation agent completed: {}", result.final_content[:200])
+            logger.info("Fix sub-agent completed: {}", result.final_content[:200])
         else:
-            logger.info("Skill creation agent completed with no output")
+            logger.info("Fix sub-agent completed with no output")
 
-        # Git commit any skills the sub-agent created or modified
+        # Only commit if sub-agent completed normally
+        if result.stop_reason != "completed":
+            logger.warning("Fix sub-agent {} — skipping commit to prevent partial fix", result.stop_reason)
+            return
+
         from nanobot.utils.gitstore import commit_workspace_changes
         commit_workspace_changes(
             self.workspace,
-            rel_dirs=["skills"],
-            message="skill: create/update from assess_me",
+            rel_dirs=["skills", "memory/system"],
+            message="fix: auto-fix from assess_me",
         )
 
     async def run(self) -> None:

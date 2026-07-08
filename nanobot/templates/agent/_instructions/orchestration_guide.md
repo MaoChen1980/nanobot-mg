@@ -113,14 +113,27 @@ action:
      - spawn 时 context snapshot 缺少目录树（大代码库先 scan_project 再 spawn）
      - max_iterations 不足：subagent 在写文件前耗尽迭代
   3. 接管或重 spawn：subagent 有输出（final response 里）→ 提取验证；无输出且已完成 → 自己补做或重新 spawn
-  4. 预防：task 必须包含具体文件列表 + output schema + "REPORT_COMPLETE" 标记，且 spawn 后立即检查文件是否存在
+   4. 预防：task 必须包含具体文件列表 + output schema + "REPORT_COMPLETE" 标记，且 spawn 后立即检查文件是否存在
+
+**TRIGGER: 准备输出最终报告（FINAL_*_REPORT.md、综合报告、审计报告等）**
+action:
+   1. **时机约束** — 用 `list_subagents` 确认所有 subagent 均已 completed：
+      - 有仍在运行或 tools_completed 但未 finalized 的 → **必须等待**，不能输出最终报告
+      - 有标记 needs_review 的 → **必须验证可信度**后再集成，不能直接使用
+   2. **交叉验证** — 对综合多个 subagent 输出的报告，执行去重检查：
+      - 识别不同来源报告中内容重叠的模块（如两份 memory 报告、两份 prompt 报告）
+      - 对重叠项取一份权威版本，或明确标注来源
+   3. **自检失败报告处理** — 带有 ⚠️预警「需要人工审查」的报告：
+      - 不能直接纳入最终报告
+      - 需读取 tool-results 文件自行验证，或标注为「待验证」并排除出当前报告范围
+   4. **输出条件**：满足以上条件后 → 输出报告 + 更新 tree_path 节点状态 + 写 team_board
 
 **TRIGGER: 全部节点 completed**
 action:
-  1. 综合 {{ tree_rel }} + {{ current_rel }} + {{ team_board_rel }} → 写 tasks/archive/项目名/SUMMARY.md
-  2. 更新 archive/index.md
-  3. 清理 {{ current_rel }} 和 {{ team_board_rel }}，为下个项目准备
-  4. 输出最终结果给用户
+   1. 综合 {{ tree_rel }} + {{ current_rel }} + {{ team_board_rel }} → 写 tasks/archive/项目名/SUMMARY.md
+   2. 更新 archive/index.md
+   3. 清理 {{ current_rel }} 和 {{ team_board_rel }}，为下个项目准备
+   4. 输出最终结果给用户
 
 ### 拆解与委派
 

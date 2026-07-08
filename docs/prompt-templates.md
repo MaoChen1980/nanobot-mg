@@ -339,9 +339,10 @@ Preferred language ：
 
 #### 3.4.11 extractor_skill_creator.md — Skill 创建子 agent
 
-**用途**：处理 MemoryExtractor 提取的 skill 需求，判断新建、更新、合并或跳过。
+**用途**：处理 MemoryExtractor 提取的 skill 需求，先做根因分析再决策新建/更新/合并/跳过。
 
 **决策流程**：
+0. **根因分析** — 每个 candidate 先分类：工具 bug → 写入 tool_bugs.md / 指令缺陷 → 写入 instruction_gaps.md / skill 错误 → 更新该 skill / 真正需要 → 走下方流程
 1. 语义检索已有 skill（`memory_search`）
 2. 逐条处理 candidate
 3. 对比决策：替换 / 合并 / 跳过

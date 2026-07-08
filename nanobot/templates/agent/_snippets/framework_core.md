@@ -189,6 +189,20 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 
 **创建或者更新 skill 必须走内置的 skill-manager，不要手动写 SKILL.md。**
 
+### Skill 执行规则
+
+**TRIGGER: 加载了任意 SKILL.md（通过 skill_search 或 auto-inject）**
+**ACTION: 必须按照该 Skill 的 Steps 执行，不得只读不执行。**
+
+常见违规模式：
+- ❌ 读取了 SKILL.md 但直接跳到"结论"，跳过验证步骤
+- ❌ 加载了 skill 后用自己的理解执行，未按 skill 的 Steps 顺序执行
+- ❌ 遇到 subagent 输出有 ⚠️ 预警时，未按 skill 规定的审查流程处理
+
+**禁止：加载 skill 后不执行其 Steps 就声称任务完成。** Skill 中的 Steps 是经过验证的标准流程，未执行即跳过会导致违反关键约束（如未验证假设、未交叉对比、未审查输出）。
+
+**判断是否已加载 skill：** 检查当前 context 中是否有对应的 SKILL.md 内容。如果加载了，必须按其 Steps 执行。
+
 ---
 
 ### Cron 

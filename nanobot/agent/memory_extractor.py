@@ -86,9 +86,15 @@ class MemoryExtractor:
         self,
         store: MemoryStore,
         timezone: str | None = None,
+        context_window_tokens: int = 128000,
+        history_token_limit: int = 60000,
+        compress_trigger_tokens: int = 110000,
     ):
         self.store = store
         self.timezone = timezone
+        self.context_window_tokens = context_window_tokens
+        self.history_token_limit = history_token_limit
+        self.compress_trigger_tokens = compress_trigger_tokens
         self.prompts_dir = ensure_dir(store.workspace / "prompts")
         self.failed_dir = ensure_dir(self.prompts_dir / "failed")
         self.processed_dir = ensure_dir(self.prompts_dir / "processed")
@@ -982,13 +988,19 @@ class MemoryExtractor:
 
         pending_text = "\n".join(e["content"] for e in self._pending_skill_entries)
 
-        # Snapshot skills dir before, to detect changes after
+        # Snapshot skills dir + system reports before, to detect changes after
         skills_dir = self.store.workspace / "skills"
-        dir_before: set[str] = set()
+        skills_before: dict[str, float] = {}
         if skills_dir.is_dir():
-            for child in skills_dir.iterdir():
-                if child.is_dir():
-                    dir_before.add(child.name)
+            for p in skills_dir.rglob("SKILL.md"):
+                skills_before[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
+
+        system_dir = self.store.workspace / "memory" / "system"
+        system_before: dict[str, float] = {}
+        if system_dir.is_dir():
+            for p in system_dir.rglob("*"):
+                if p.is_file():
+                    system_before[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
 
         # Get provider from ContextVar (set by AgentLoop at startup)
         from nanobot.agent.llm_context import _llm_model, _llm_provider
@@ -1024,10 +1036,13 @@ class MemoryExtractor:
             timeout=120,
         ))
 
+        import nanobot as _nb
+
         ws_path = self.store.workspace.expanduser().resolve().as_posix()
         system_prompt = render_template(
             "agent/extractor_skill_creator.md",
             workspace_path=ws_path,
+            nanobot_path=Path(_nb.__file__).parent.as_posix(),
         )
 
         user_content = (
@@ -1045,10 +1060,25 @@ class MemoryExtractor:
             model=model,
             max_iterations=150,
             max_tool_result_chars=30000,
+            context_window_tokens=self.context_window_tokens,
+            history_token_limit=self.history_token_limit,
+            compress_trigger_tokens=self.compress_trigger_tokens,
         )
 
         runner = AgentRunner(provider)
-        result = await runner.run(spec)
+        try:
+            result = await runner.run(spec)
+        finally:
+            # Always reset pending entries, even on exception
+            self._pending_skill_entries = []
+
+        # Only detect changes if sub-agent completed normally
+        if result.stop_reason != "completed":
+            logger.warning(
+                "Skill materialization sub-agent {} — skipping change detection",
+                result.stop_reason,
+            )
+            return False
 
         if result.final_content:
             logger.info(
@@ -1056,17 +1086,22 @@ class MemoryExtractor:
                 result.final_content[:200],
             )
 
-        # ── Done: reset for next cycle ──
-        self._pending_skill_entries = []
-
-        # Detect changes: new skill dirs
-        dir_after: set[str] = set()
+        # Detect changes: skills (new/modified SKILL.md) and system reports
+        skills_after: dict[str, float] = {}
         if skills_dir.is_dir():
-            for child in skills_dir.iterdir():
-                if child.is_dir():
-                    dir_after.add(child.name)
+            for p in skills_dir.rglob("SKILL.md"):
+                skills_after[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
 
-        return bool(dir_before ^ dir_after)
+        # Detect changes: system report files (tool_bugs.md, instruction_gaps.md)
+        system_after: dict[str, float] = {}
+        if system_dir.is_dir():
+            for p in system_dir.rglob("*"):
+                if p.is_file():
+                    system_after[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
+
+        skills_changed = skills_before != skills_after
+        reports_changed = system_before != system_after
+        return skills_changed or reports_changed
 
     @staticmethod
     def _extract_json_from_llm_output(text: str) -> str:

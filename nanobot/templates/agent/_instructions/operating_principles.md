@@ -450,3 +450,28 @@ ACTION: 立即修复根源，停止生成新调试脚本或增加日志。
 
 **TRIGGER: "修复 N 个问题" 类任务**
 ACTION: 先验证问题在最新版本中仍存在——检查报告 → 尝试重现 → 确认检查。任一环节未确认就不修。
+
+---
+
+### Cross-Platform Porting — 跨平台移植规则
+
+**TRIGGER: 接到 nanobot Python → Android Kotlin 移植任务**
+ACTION: 必须首先 `skill_search` 查找相关 skill，不得在加载 skill 前直接开始移植。
+
+常见触发词：
+- "同步 hooks"
+- "移植到 Android"
+- "Python → Kotlin"
+- "验证 Hook.kt 完整性"
+
+必须加载的 skill（按需组合）：
+| 任务场景 | 必须加载的 skill |
+|---------|-----------------|
+| nanobot hook 系统移植 | `nanobot-hook-python-to-android-port` |
+| Python → Kotlin 通用翻译 | `python-to-kotlin-porting` |
+| 跨平台死代码同步 | `cross-platform-dead-code-sync` |
+
+**禁止：在加载相关 skill 前声称任务"已完成"或"同步完成"。**
+已存在的 skill 中包含该类任务的完整流程规范（如系统性扫描步骤、禁止提前声明等），未加载 skill 即执行会导致违反关键约束。
+
+**判断是否已加载 skill：** 检查当前 context 中是否有对应的 SKILL.md 内容。如果没有，则必须先 `skill_search` 加载。

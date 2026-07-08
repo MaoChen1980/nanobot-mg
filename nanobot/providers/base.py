@@ -989,7 +989,7 @@ class LLMProvider(ABC):
         msg = str(e).lower()
         if "timeout" in msg or "timed out" in msg:
             return "timeout"
-        if "connection" in msg and ("refused" in msg or "fail" in msg or "reset" in msg):
+        if "connection" in msg:
             return "connection"
 
         return None
