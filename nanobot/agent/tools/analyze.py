@@ -31,6 +31,10 @@ class AnalyzeTool(_FsTool):
         "Analyze text content and return structured summary: line count, word count, "
         "section headings, keywords ranked by frequency, and keyword-filtered lines. "
         "Alternative to reading the full text into context."
+        "\n\nOutput example:\n"
+        "  # Analysis\n"
+        "  Lines: 42, Words: 150\n"
+        "  Top keywords: timeout(8), error(5), retry(3)"
     )
 
     MAX_TEXT_SIZE = 10_000_000

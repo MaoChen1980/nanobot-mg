@@ -130,6 +130,10 @@ class SpawnTool(Tool):
             "Wall-clock timeout in seconds (adjustable via max_timeout — subagent killed on expiry). "
             "Cannot nest spawn calls. Each subtask gets a snapshot of context at spawn time. "
             "Use check_subagent to query progress, tell_subagent to communicate with running subagents."
+            "\n\nOutput example:\n"
+            "  Spawned 2 subagent(s):\n"
+            "  task_abc (label=explore)\n"
+            "  task_def (label=analyze)"
         )
 
     async def execute(self, tasks: list[dict], team_context: str | None = None, **kwargs: Any) -> str:

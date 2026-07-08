@@ -58,6 +58,9 @@ class MemorySearchTool(Tool):
         "Understands concepts — 'deploy failure' finds 'rollback issues'. "
         "Returns source file, heading, score, text excerpt, and cross-references. "
         "For skill search, use skill_search instead."
+        "\n\nOutput example:\n"
+        "  **memory/events/deploy.md** [score=0.82] (lines 10-15)\n"
+        "  > Rollback procedure for failed deployments"
     )
 
     async def execute(self, query: str, k: int = 5, **kwargs: Any) -> str:

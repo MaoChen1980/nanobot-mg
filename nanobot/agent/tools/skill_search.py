@@ -41,6 +41,9 @@ class SkillSearchTool(Tool):
         "Understands concepts — 'market analysis' finds 'market-game-analysis'. "
         "Returns skill name, description, file path, and similarity score. "
         "Use to find applicable skills for the current task, or before creating/updating a skill."
+        "\n\nOutput example:\n"
+        "  **market-game-analysis** [score=0.91]\n"
+        "  > Market analysis for competitive strategy"
     )
 
     async def execute(self, query: str, k: int = 6, **kwargs: Any) -> str:

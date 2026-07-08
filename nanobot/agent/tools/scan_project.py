@@ -36,6 +36,11 @@ class ScanProjectTool(Tool):
             "Scan a project directory and generate a project card: "
             "language, build tools, test framework, and overall structure. "
             "Path must be the absolute project root."
+            "\n\nOutput example:\n"
+            "  Language: Python\n"
+            "  Build: Poetry\n"
+            "  Test: pytest\n"
+            "  Files: 42"
         )
 
     async def execute(self, path: str, **kwargs: Any) -> str:

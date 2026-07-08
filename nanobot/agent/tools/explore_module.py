@@ -87,6 +87,10 @@ class ExploreModuleTool(_FsTool):
         "and inline summaries of top-level symbols per file. "
         "Python uses AST parsing (precise), other languages use regex (may be incomplete). "
         "Supported: .py, .js, .ts, .go, .rs, .java, .kt."
+        "\n\nOutput example (file):\n"
+        "  main.py (123 lines)\n"
+        "    Classes: Foo (10-50)\n"
+        "    Functions: bar() -> str (55-60)"
     )
 
     async def execute(

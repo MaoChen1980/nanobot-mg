@@ -32,6 +32,12 @@ class CheckSubagentTool(Tool):
             "Query a subagent's execution status: phase, iteration count, "
             "tools executed, token usage, and any error. "
             "Use list_subagents first to get the task_id."
+            "\n\nOutput example:\n"
+            "  Subagent [explore] status:\n"
+            "    Phase: completed\n"
+            "    Iteration: 12\n"
+            "    Tools executed: read_file, grep\n"
+            "    Token usage: 500 prompt / 1000 completion"
         )
 
     async def execute(self, task_id: str, **kwargs: Any) -> str:

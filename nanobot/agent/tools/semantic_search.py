@@ -53,6 +53,10 @@ class SearchTextTool(Tool):
         "Understands concepts — 'timeout handling' finds 'retry logic' or 'deadline exceeded'. "
         "Not for substring/regex matching (use grep). "
         "Query tips: 2-5 specific words work better than full sentences."
+        "\n\nOutput example:\n"
+        "  **Passage** [score=0.85, offset=42, length=100]\n"
+        "  > def retry_on_timeout():\n"
+        '      """Retry logic for transient failures"""'
     )
 
     async def execute(

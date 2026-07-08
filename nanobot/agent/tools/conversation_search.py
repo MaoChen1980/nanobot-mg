@@ -50,6 +50,9 @@ class ConversationSearchTool(Tool):
         "conversation_search: Search past conversation history by character substring (SQL LIKE). "
         "Use | to OR multiple keywords (e.g. 'deploy|rollback'). "
         "Supports optional start/end date filters. Also searches MEMORY.md."
+        "\n\nOutput example:\n"
+        "  2026-07-08: Deploy strategy discussed\n"
+        "  memory: MEMORY.md -> project_nanobot.md (0.85)"
     )
 
     async def execute(

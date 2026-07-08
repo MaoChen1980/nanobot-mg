@@ -32,6 +32,9 @@ class AssessMeTool(Tool):
         "whether your debugging direction is sound, what assumptions need verification, "
         "and what you might have missed. Focus options: direction, gaps, assumptions, "
         "progress. Also supports verify= for pass/fail on specific claims."
+        "\n\nOutput example:\n"
+        "  Assessment: direction is sound.\n"
+        "  Verify assumption: DB is the bottleneck."
     )
     read_only = True
 

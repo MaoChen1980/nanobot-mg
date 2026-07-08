@@ -125,6 +125,11 @@ class WebSearchTool(WebToolBase, Tool):
         "Search the web. Supports Brave, Tavily, DuckDuckGo, SearXNG, Jina, "
         "and Kagi providers. Returns text results with title, URL, and snippet. "
         "Results from search engines — 100% accuracy is not guaranteed."
+        "\n\nOutput example:\n"
+        "  Results for: python async\n"
+        "  1. Async IO in Python\n"
+        "     https://docs.python.org/3/library/asyncio.html\n"
+        "     Python's built-in async/await framework"
     )
 
     def __init__(self, config: WebSearchConfig | None = None, proxy: str | None = None, user_agent: str | None = None):
@@ -321,6 +326,9 @@ class WebFetchTool(WebToolBase, Tool):
         "Fetch URL content and extract readable text (markdown or plain). "
         "Supports regex filtering (extract), truncated previews (max_chars), "
         "and image rendering. JS-heavy pages may not render completely."
+        "\n\nOutput example:\n"
+        "  # Page Title\n"
+        "  Extracted markdown content from the URL..."
     )
 
     def __init__(self, config: WebFetchConfig | None = None, proxy: str | None = None, user_agent: str | None = None, max_chars: int = 100000):

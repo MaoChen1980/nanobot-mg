@@ -127,6 +127,11 @@ class SelfTool(Tool):
             "check <dot-path> → inspect a specific attribute (e.g. 'max_iterations', 'subagents', 'exec_config.sandbox_enabled'). "
             "set <key, value> → modify a runtime setting or store scratchpad notes. "
             "Aliases: 'inspect' for check, 'modify' for set."
+            "\n\nOutput example (check):\n"
+            "  max_iterations: 50\n"
+            "  model: 'claude-sonnet-4-6'\n"
+            "  subagents: 2 subagent(s)\n"
+            "  hooks: none"
         )
         if self._modify_allowed:
             base = "IMPORTANT: modifying runtime state affects agent behavior.\n" + base

@@ -158,6 +158,10 @@ class GlobTool(_SearchTool):
             "Search for files matching a glob pattern by filename. "
             "Default max 250 results (up to 1000). "
             "Supports pagination via head_limit and offset, and entry_type filter (files/dirs/both)."
+            "\n\nOutput example:\n"
+            "  /path/to/app.py\n"
+            "  /path/to/util.py\n\n"
+            "  (matched: 2 files)"
         )
 
     @property
@@ -295,6 +299,10 @@ class GrepTool(_SearchTool):
             "Search file contents using a regex pattern. "
             "Output modes: content (with optional context), files_with_matches (default), count. "
             "Uses ripgrep when available for fast directory searches."
+            "\n\nOutput example (mode=content):\n"
+            "  /path/file.py:42\n"
+            "  > 42: def hello():\n"
+            "     43:     print('world')"
         )
 
     @property
@@ -405,7 +413,7 @@ class GrepTool(_SearchTool):
         block = [f"{display_path}:{match_line}"]
         for line_no in range(start, end + 1):
             marker = ">" if line_no == match_line else " "
-            block.append(f"{marker} {line_no}| {lines[line_no - 1]}")
+            block.append(f"{marker} {line_no}: {lines[line_no - 1]}")
         return "\n".join(block)
 
     @staticmethod
@@ -482,8 +490,8 @@ class GrepTool(_SearchTool):
         if output_mode == "files_with_matches":
             return text
 
-        # content mode: normalize rg "path:line:content" → "path:lineno| content"
-        # to match the existing nanobot grep output format
+        # content mode: normalize rg "path:line:content" → "path:lineno: content"
+        # to match the nanobot grep output format
         lines = text.split("\n")
         normalized: list[str] = []
         for ln in lines:
@@ -502,7 +510,7 @@ class GrepTool(_SearchTool):
             if second_colon != -1 and rest[:second_colon].isdigit():
                 lineno = rest[:second_colon]
                 content = rest[second_colon + 1:]
-                normalized.append(f"{ln[:colon]}:{lineno}| {content}")
+                normalized.append(f"{ln[:colon]}:{lineno}: {content}")
             else:
                 # Context line — preserve raw
                 normalized.append(ln)

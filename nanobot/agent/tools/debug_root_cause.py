@@ -125,6 +125,10 @@ class DebugRootCauseTool(Tool):
         "You decide which tools to use for the actual investigation. "
         "Different from assess_me: debug_root_cause is for fixing bugs/errors, "
         "assess_me is for cognitive auditing of agent reasoning."
+        "\n\nOutput example:\n"
+        "  1. Check the error logs: look for 'ConnectionError'\n"
+        "  2. If found, verify the DB host is reachable\n"
+        "  3. If not found, check network config"
     )
 
     read_only = True

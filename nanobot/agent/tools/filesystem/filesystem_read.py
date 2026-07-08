@@ -23,7 +23,7 @@ from loguru import logger
 from nanobot.agent.tools._section_utils import detect_sections, format_section_overview
 from nanobot.agent.tools.base import tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
-from .filesystem_base import _FsTool, _is_blocked_device, _line_tag, _parse_page_range
+from .filesystem_base import _FsTool, _is_blocked_device, _parse_page_range
 from nanobot.agent.tools import file_state
 from nanobot.utils.media_decode import build_image_content_blocks, detect_image_mime
 
@@ -58,6 +58,9 @@ class ReadFileTool(_FsTool):
         "Read file contents with optional line-based pagination, regex filtering, "
         "and mode selection (full/overview). "
         "Supports text, images, PDFs, and Office documents (.docx/.xlsx/.pptx)."
+        "\n\nOutput example:\n"
+        "  42: def hello():\n"
+        "  43:     print('world')"
     )
 
     read_only = True
@@ -125,7 +128,7 @@ class ReadFileTool(_FsTool):
 
             start = offset - 1
             end = min(start + (limit or self._DEFAULT_LIMIT), total)
-            numbered = [f"{start + i + 1}:{_line_tag(line)}| {line}" for i, line in enumerate(all_lines[start:end])]
+            numbered = [f"{start + i + 1}: {line}" for i, line in enumerate(all_lines[start:end])]
 
             # -- extract mode: filter to lines matching the regex + 1 line context --
             if extract:
@@ -134,9 +137,9 @@ class ReadFileTool(_FsTool):
                 except re.error as e:
                     return f"Error: invalid extract regex: {e}"
                 match_idx: set[int] = set()
-                for i, numbered_line in enumerate(numbered):
-                    content = numbered_line.split("|", 1)[1] if "|" in numbered_line else numbered_line
-                    if _safe_regex_search(extract_re, content):
+                segment = all_lines[start:end]
+                for i, line in enumerate(segment):
+                    if _safe_regex_search(extract_re, line):
                         if i > 0:
                             match_idx.add(i - 1)
                         match_idx.add(i)

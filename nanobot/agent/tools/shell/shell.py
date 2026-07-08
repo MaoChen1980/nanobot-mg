@@ -183,6 +183,11 @@ class ExecTool(Tool):
         "Execute shell commands for computation and scripting. "
         "Supports timeout, working directory, verification checks, "
         "output caching, grep/extract on output, and danger detection."
+        "\n\nOutput example:\n"
+        "  $ python test.py\n"
+        "  ... stdout ...\n"
+        "  [stderr]: ... errors ...\n"
+        "  (exited with code 0)"
     )
 
     exclusive = True

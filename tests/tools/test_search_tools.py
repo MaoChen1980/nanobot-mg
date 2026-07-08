@@ -74,9 +74,9 @@ async def test_grep_respects_glob_filter_and_context(tmp_path: Path) -> None:
     )
 
     assert (tmp_path / "src" / "main.py").resolve().as_posix() + ":3" in result
-    assert "  2| beta" in result
-    assert "> 3| match_here" in result
-    assert "  4| gamma" in result
+    assert "  2: beta" in result
+    assert "> 3: match_here" in result
+    assert "  4: gamma" in result
     assert "README.md" not in result
 
 
@@ -92,7 +92,7 @@ async def test_grep_defaults_to_files_with_matches(tmp_path: Path) -> None:
     )
 
     assert result.splitlines() == [(tmp_path / "src" / "main.py").resolve().as_posix()]
-    assert "1|" not in result
+    assert "1:" not in result
 
 
 @pytest.mark.asyncio

@@ -24,6 +24,10 @@ class ListSubagentsTool(Tool):
         return (
             "List all active subagents with their task_id, label, phase, "
             "and iteration count."
+            "\n\nOutput example:\n"
+            "  Running subagents (2):\n"
+            "    [task_abc] explore — phase: executing, iter: 5\n"
+            "    [task_def] analyze — phase: completed, iter: 12"
         )
 
     async def execute(self, **kwargs: Any) -> str:

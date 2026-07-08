@@ -36,6 +36,11 @@ class ToolCallLogTool(Tool):
         "Query tool call execution history from the database. "
         "Filter by session_key, tool_name, success status, and result size. "
         "Returns timestamp, params, result preview, and duration."
+        "\n\nOutput example:\n"
+        "  [OK][iter 5/turn 3] read_file 42ms\n"
+        "    params: {'path': '/main.py'}\n"
+        "    result: 1: def hello():\n"
+        "    2026-07-08 10:00:00"
     )
 
     read_only = True
