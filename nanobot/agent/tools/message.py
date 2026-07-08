@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -45,15 +44,13 @@ class MessageTool(Tool):
 
     def __init__(
         self,
-        send_callback: Callable[[OutboundMessage], Awaitable[None]] | None = None,
-        assess_callback: Callable[[str], Awaitable[str | None]] | None = None,
+        send_callback: Any | None = None,
         default_channel: str = "",
         default_chat_id: str = "",
         default_message_id: str | None = None,
         workspace: str | Path | None = None,
     ):
         self._send_callback = send_callback
-        self._assess_callback = assess_callback
         self._workspace = Path(workspace).expanduser() if workspace is not None else get_workspace_path()
         self._default_channel: ContextVar[str] = ContextVar("message_default_channel", default=default_channel)
         self._default_chat_id: ContextVar[str] = ContextVar("message_default_chat_id", default=default_chat_id)
@@ -83,18 +80,9 @@ class MessageTool(Tool):
         self._default_message_id.set(message_id)
         self._default_metadata.set(metadata or {})
 
-    def set_send_callback(self, callback: Callable[[OutboundMessage], Awaitable[None]]) -> None:
+    def set_send_callback(self, callback: Any) -> None:
         """Set the callback for sending messages."""
         self._send_callback = callback
-
-    def set_assess_callback(self, callback: Callable[[str], Awaitable[str | None]]) -> None:
-        """Set the callback for pre-send quality assessment.
-
-        The callback receives the message content and returns ``None`` if
-        the message is acceptable, or a feedback string explaining why it
-        should not be sent (which is returned to the LLM as the tool result).
-        """
-        self._assess_callback = callback
 
     def set_record_channel_delivery(self, active: bool):
         """Mark tool-sent messages as proactive channel deliveries."""
@@ -107,9 +95,7 @@ class MessageTool(Tool):
     instruction = (
         "Send text messages and buttons to the user. "
         "Use this tool to output ALL intermediate conclusions and final results — "
-        "do NOT output conclusions as plain text replies. "
-        "The framework runs quality assessment on content sent through this tool, "
-        "so ensure your output is complete, accurate, and user-ready."
+        "do NOT output conclusions as plain text replies."
     )
 
     name = "message"
@@ -154,12 +140,6 @@ class MessageTool(Tool):
 
         if not self._send_callback:
             return "Error: Message sending not configured"
-
-        # Quality assessment before send
-        if self._assess_callback:
-            feedback = await self._assess_callback(content)
-            if feedback:
-                return feedback
 
         metadata = dict(self._default_metadata.get()) if same_target else {}
         if message_id:

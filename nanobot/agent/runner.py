@@ -327,36 +327,43 @@ class AgentRunner:
             )
             return AssessResult()
 
-    def _make_message_assess_cb(self, messages: list[dict], spec: AgentRunSpec) -> Callable[[str], Awaitable[str | None]]:
-        """Build a pre-send quality check callback for the message tool.
+    async def _assess_sent_messages(
+        self,
+        tool_calls: list,
+        new_events: list[dict],
+        messages: list[dict],
+    ) -> None:
+        """Post-send quality check: assess sent message content and inject user-role feedback.
 
-        Uses an LLM-based assess call to evaluate message content quality before
-        sending. Catches: debug artifacts, empty content, incompleteness, factual
-        errors, safety issues. The LLM returns structured JSON; if issues are
-        found the tool returns the feedback as its result so the LLM revises.
-
-        On LLM failure (timeout, non-JSON, etc.) the message passes through —
-        a false-negative is better than a false-positive block.
+        Runs after the message tool has already sent content. If the assessment finds
+        quality issues, a user-role message is injected into the conversation so the
+        LLM can improve its output on the next turn.
         """
-
-        # Build context once (captures conversation up to this point)
-        _context = format_conversation(messages)
-
-        async def _check(content: str) -> str | None:
-            result = await assess_message_content(content, context=_context)
-            if result is None:
-                # LLM call failed — let the message through rather than block
-                return None
-            if result.get("status") == "ok":
-                return None
-            issues = result.get("issues", [])
-            summary = result.get("summary", "消息内容存在问题")
-            feedback = "消息未发送，存在以下问题：\n" + "\n".join(f"- {i}" for i in issues)
-            feedback += f"\n\n{summary}"
-            feedback += "\n\n请根据以上反馈修正内容后重新发送。"
-            return feedback
-
-        return _check
+        for i, tc in enumerate(tool_calls):
+            if tc.name != "message":
+                continue
+            ev = new_events[i] if i < len(new_events) else {}
+            if ev.get("status") != "ok":
+                continue
+            content = tc.arguments.get("content", "") or ""
+            if not content:
+                continue
+            try:
+                result = await assess_message_content(content, context=format_conversation(messages))
+                if result is None or result.get("status") == "ok":
+                    continue
+                issues = result.get("issues", [])
+                summary = result.get("summary", "消息内容质量存在问题")
+                inject_text = (
+                    f"消息质量评估 — 已发出的内容存在以下问题：\n"
+                    + "\n".join(f"- {i}" for i in issues)
+                    + f"\n\n{summary}"
+                    + "\n\n后续发送类似内容前请自查修正。"
+                )
+                messages.append(build_assessment_message(inject_text))
+                logger.info("Injected post-send quality assessment for message tool call")
+            except Exception:
+                logger.exception("Post-send message quality check failed")
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
         """Drain pending injections. Returns normalized user messages."""
@@ -775,17 +782,6 @@ class AgentRunner:
                     messages.pop()  # No tools to execute, remove assistant with stale tool_calls
                     continue
 
-                # Set up pre-send quality check on the message tool. The callback
-                # runs assess_me (or a lightweight equivalent) and returns feedback
-                # if the message content has quality issues — the tool then surfaces
-                # this as its tool result instead of sending.
-                if any(tc.name == "message" for tc in tool_calls):
-                    mt = spec.tools.get("message")
-                    if mt is not None and hasattr(mt, "set_assess_callback"):
-                        mt.set_assess_callback(
-                            self._make_message_assess_cb(messages, spec)
-                        )
-
                 (results, new_events, fatal_error, was_interrupted,
                  injection_cycles, executed_count, saved_injections) = await execute_tools(
                     self, spec, tool_calls, external_lookup_counts, messages,
@@ -864,6 +860,14 @@ class AgentRunner:
                     }
                     messages.append(tool_message)
                     completed_tool_results.append(tool_message)
+
+                # Post-send quality check: assess sent message content and inject
+                # user-role feedback if issues found. Runs after the message tool has
+                # already sent — the tool contract is preserved.
+                try:
+                    await self._assess_sent_messages(tool_calls, new_events, messages)
+                except Exception:
+                    logger.exception("Post-send message assessment failed")
 
                 if fatal_error is not None:
                     error = f"Error: {type(fatal_error).__name__}: {fatal_error}"
