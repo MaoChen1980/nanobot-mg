@@ -4,7 +4,7 @@ description: '从 ClawHub 社区仓库发现、搜索、安装、列出、更新
 
   当用户要求安装 skill、搜索 skill、查看可用 skill、升级 skill 时激活。'
 version: 0.1.0
-category: project-management
+category: agent
 ---
 
 # ClawHub — community skill registry

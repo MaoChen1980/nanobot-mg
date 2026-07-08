@@ -234,6 +234,16 @@ class SkillsLoader:
             grouped.setdefault(category, []).append(entry)
 
         lines: list[str] = []
+
+        # Warning banner for uncategorized skills
+        uncategorized = grouped.get("other")
+        if uncategorized:
+            lines.append(
+                "> ⚠️  **{} skill{} need category assignment** — use skill-manager to "
+                "set a ``category:`` in the frontmatter for each, or create a new "
+                "category.\n".format(len(uncategorized), "s" if len(uncategorized) != 1 else "")
+            )
+
         for cat in sorted(grouped):
             entries = grouped[cat]
             label = cat.replace("-", " ").title()

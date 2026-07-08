@@ -4,7 +4,7 @@ description: '股票深度分析：实时行情、基本面指标、技术指标
 
   当用户要求分析某只股票（A股/美股/港股）、查询估值指标、技术面信号、或生成投资报告时激活。'
 official: true
-category: domain-specific
+category: finance
 ---
 
 # Stock Deep Analyzer

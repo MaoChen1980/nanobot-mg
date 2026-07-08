@@ -8,7 +8,7 @@ platforms:
 - linux
 - macos
 - windows
-category: domain-specific
+category: project-management
 ---
 
 # GitHub Authentication Setup

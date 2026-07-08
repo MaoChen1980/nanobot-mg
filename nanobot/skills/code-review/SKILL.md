@@ -31,8 +31,9 @@ read_file the surrounding context (≥10 lines around match)
     ↓
 confirm: does the code actually do what the claim says?
     ↓
-IF YES → write finding with file:line reference
+IF YES → write finding with file:line reference + "✅ 已验证"
 IF NO  → discard or correct the claim
+IF ⚠️ boundary unclear → qualify ("仅当 XXX 时")
 ```
 
 If the finding involves a different file than the one currently being read, repeat the verification chain for that file before writing the claim.

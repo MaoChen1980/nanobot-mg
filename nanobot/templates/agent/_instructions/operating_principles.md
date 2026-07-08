@@ -419,6 +419,24 @@ ACTION:
 
 ---
 
+### Cron 条件执行 — 避免重复工作
+
+Cron 触发后，先检查任务是否已完成，避免重复执行。
+
+**TRIGGER: Cron 触发**
+ACTION:
+1. 确定状态文件路径模式：`~/.nanobot/workspace/memory/{task-name}-{date}.done` 或日志文件最新日期
+2. 检查完成状态：
+   - `.done` 文件存在 → 今日已完成，退出
+   - 日志最新日期 == 今天 → 今日已完成，退出
+3. 未完成 → 执行完整任务流程
+4. 完成后创建 `.done` 文件或追加日志条目
+
+**TRIGGER: cron 条件执行误判（重复执行了已完成的任务）**
+ACTION: 检查日期格式一致性（统一 `date +%Y-%m-%d`）、时区设置、文件路径是否存在。修正在 operating_principles 中的理解。
+
+---
+
 ### Tool Usage — 工具使用模式
 
 **TRIGGER: 批量替换脚本执行后**

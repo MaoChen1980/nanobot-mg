@@ -191,11 +191,18 @@ class MemoryStore:
         Scans workspace and built-in dirs independently so built-in skills are
         always indexed regardless of shadowing.
 
+        Also auto-classifies skills missing a ``category:`` field by embedding
+        their description against existing category centroids (threshold 0.55).
+        Only matches against *existing* categories — no generic catch-all bucket.
+        Skills that don't fit any existing category stay uncategorized, prompting
+        the LLM (via warning banner) to create a meaningful grouping.
+
         This supports two use cases:
         1. **skill_search tool** — LLM queries to find applicable skills for the task.
         2. **Dedup during skill creation** — detect existing coverage before creating.
         """
         file_texts: dict[str, str] = {}
+        skills_data: list[dict[str, Any]] = []
         for root in (self.skills_loader.workspace_skills, BUILTIN_SKILLS_DIR):
             if root.exists():
                 for d in sorted(root.iterdir()):
@@ -206,9 +213,133 @@ class MemoryStore:
                             content = skill_file.read_text(encoding="utf-8")
                             name = d.name
                             desc = _extract_frontmatter_field(content, "description") or name
+                            cat = _extract_frontmatter_field(content, "category")
+                            skills_data.append({
+                                "name": name, "desc": desc, "category": cat,
+                                "file": skill_file, "key": key, "content": content,
+                            })
                             file_texts[key] = f"{name}: {desc}  {skill_file}"
+        self._auto_classify_skills(skills_data)
+        # Auto-classification may have modified SKILL.md frontmatter — invalidate
+        # the skills-loader cache so downstream build_skills_summary() picks up
+        # the new category fields.
+        self.skills_loader._list_cache = None
         self.skills_index.build_from_files(file_texts)
         self._last_skills_rebuild = time.time()
+
+    def _auto_classify_skills(self, skills_data: list[dict[str, Any]]) -> None:
+        """Auto-classify uncategorized skills using embedding similarity.
+
+        Builds per-category centroids from already-categorized skills, then
+        assigns the nearest category to each uncategorized skill whose cosine
+        similarity meets the threshold.  Updates SKILL.md frontmatter in place.
+
+        Only matches against *existing* categories — skills that don't fit any
+        existing category remain uncategorized (shown as "Other" in the summary
+        for LLM attention).
+        """
+        categorized = [s for s in skills_data if s.get("category")]
+        uncategorized = [s for s in skills_data if not s.get("category")]
+        if not uncategorized:
+            return
+
+        cat_texts: dict[str, list[str]] = {}
+        for s in categorized:
+            cat = s["category"]
+            if cat:
+                cat_texts.setdefault(cat, []).append(s["desc"])
+
+        if not cat_texts:
+            logger.info("Auto-classify: no categorized skills to build centroids")
+            return
+
+        model = self.skills_index._model
+        if model is None:
+            if not self.skills_index._load_model():
+                logger.info("Auto-classify skipped: no embedding model")
+                return
+            model = self.skills_index._model
+
+        try:
+            import numpy as np
+        except ImportError:
+            logger.info("Auto-classify skipped: numpy not available")
+            return
+
+        # Only use categories with ≥3 skills — smaller categories produce
+        # sharp centroids that pull in unrelated skills (e.g. "subagent" with
+        # 1 skill attracting imessage/ocr-and-documents).
+        min_skills = 3
+        viable = {cat: texts for cat, texts in cat_texts.items() if len(texts) >= min_skills}
+        if len(viable) < len(cat_texts):
+            omitted = set(cat_texts) - set(viable)
+            logger.debug("Auto-classify: omitted small categories (n<{}): {}", min_skills, omitted)
+
+        if not viable:
+            logger.info("Auto-classify: no category has ≥{} skills for centroid building", min_skills)
+            return
+
+        cat_centroids: dict[str, np.ndarray] = {}
+        for cat, texts in viable.items():
+            embs = model.encode(texts, normalize_embeddings=True)
+            cat_centroids[cat] = embs.mean(axis=0)
+
+        if not cat_centroids:
+            return
+
+        # Single threshold for all categories.  No catch-all bucket —
+        # skills that don't match any existing category stay uncategorized
+        # so the warning banner prompts the LLM to create a meaningful label.
+        threshold = 0.55
+
+        modified = 0
+        for s in uncategorized:
+            desc = s.get("desc", "")
+            if not desc:
+                continue
+
+            emb = model.encode([desc], normalize_embeddings=True)[0]
+            scored = [(cat, float(np.dot(emb, centroid))) for cat, centroid in cat_centroids.items()]
+            scored.sort(key=lambda x: -x[1])
+
+            best_cat, best_score = scored[0]
+
+            if best_score >= threshold:
+                assign_cat = best_cat
+            else:
+                logger.debug("Auto-classify: '{}' best={}@{:.3f} < threshold={} — rejected",
+                             s["name"], best_cat, best_score, threshold)
+                continue
+
+            if self._set_skill_category(s["file"], s["content"], assign_cat):
+                modified += 1
+                s["category"] = assign_cat
+                logger.info("Auto-classified '{}' → {} (score={:.3f})", s["name"], assign_cat, best_score)
+
+        if modified:
+            logger.info("Auto-classified {} skills total", modified)
+
+    @staticmethod
+    def _set_skill_category(file_path: Path, content: str, category: str) -> bool:
+        """Add or update ``category:`` in SKILL.md frontmatter.  Returns True if file changed."""
+        m = _FRONTMATTER_RE.search(content)
+        if not m:
+            return False
+
+        fm_text = m.group(1)
+        cat_re = re.compile(r"^category:\s*(.*)$", re.MULTILINE)
+
+        if cat_re.search(fm_text):
+            new_fm = cat_re.sub(f"category: {category}", fm_text)
+        else:
+            new_fm = f"category: {category}\n" + fm_text
+
+        if new_fm == fm_text:
+            return False
+
+        new_content = content[:m.start(1)] + new_fm + content[m.end(1):]
+        file_path.write_text(new_content, encoding="utf-8")
+        return True
 
     def refresh_skills_index(self) -> bool:
         """Rebuild skills FAISS index if any workspace SKILL.md changed since last build.

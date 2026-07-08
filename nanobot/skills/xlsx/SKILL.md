@@ -5,7 +5,7 @@ description: '电子表格创建、编辑、分析：公式、格式、数据处
   当用户要求操作 .xlsx / .xlsm / .csv / .tsv 文件，包括创建、读取、修改、分析数据、计算公式时激活。'
 license: Proprietary. LICENSE.txt has complete terms
 official: true
-category: domain-specific
+category: document
 ---
 
 # Requirements for Outputs

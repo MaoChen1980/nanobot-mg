@@ -1,4 +1,5 @@
 ---
+category: document
 name: ocr-and-documents
 description: "Extract text from PDFs/scans (pymupdf, marker-pdf)."
 version: 2.3.0
@@ -164,3 +165,7 @@ No extra dependencies needed — pymupdf covers split, merge, search, and text e
 - marker-pdf downloads ~2.5GB of models to `~/.cache/huggingface/` on first use
 - For Word docs: `pip install python-docx` (better than OCR — parses actual structure)
 - For PowerPoint: see the `pptx` skill (uses python-pptx)
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
+  - **Always 审查**：如果此 skill 的行为已成为 LLM 自然倾向（不注入也会正确执行），将 frontmatter 的 `always: true` 改为 `false`，反之如果发现此 skill 值得每轮注入，改为 `always: true`

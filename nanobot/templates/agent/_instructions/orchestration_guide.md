@@ -105,6 +105,16 @@ action:
   3. 调整后重新 spawn 或自己补位，直到交付合格结果
   4. 把踩坑记到 {{ team_board_rel }}，避免其他 subagent 重复踩
 
+**TRIGGER: Subagent phase=tools_completed 但预期输出文件不存在**
+action:
+  1. `list_subagents` 确认是否真正完成，glob/read_file 验证 output path
+  2. 文件不存在时的常见根因：
+     - task 描述太泛：无具体文件路径、无 exit criteria、无 output schema
+     - spawn 时 context snapshot 缺少目录树（大代码库先 scan_project 再 spawn）
+     - max_iterations 不足：subagent 在写文件前耗尽迭代
+  3. 接管或重 spawn：subagent 有输出（final response 里）→ 提取验证；无输出且已完成 → 自己补做或重新 spawn
+  4. 预防：task 必须包含具体文件列表 + output schema + "REPORT_COMPLETE" 标记，且 spawn 后立即检查文件是否存在
+
 **TRIGGER: 全部节点 completed**
 action:
   1. 综合 {{ tree_rel }} + {{ current_rel }} + {{ team_board_rel }} → 写 tasks/archive/项目名/SUMMARY.md
@@ -235,3 +245,42 @@ action:
 - tell_subagent(recipient='subagent:<label>') — 一对一通知
 - cancel_subagent(label="...") — 终止跑偏的 Subagent
 - CronCreate — 长耗时任务设自循环监控
+
+### Keep vs Delegate — 什么自己做，什么委派
+
+**主 agent 保留：**
+- 理解用户的真实需求和约束
+- 架构、安全、产品、发布风险决策
+- 跨模块集成和冲突检测
+- 最终审查、测试解读、用户交付
+
+**委派给 subagent：**
+- 有界文件集上的只读探索
+- 有明确文件归属边界的机械性编辑
+- 聚焦的测试或 lint 运行
+- 从明确 spec 生成样板代码
+- 可独立运行的检查（主 agent 同时做其他事）
+
+**不委派：** 单步简单任务、模糊的产品决策、无明确验收标准的破坏性操作、最终验证。
+
+### Prompt Shape — 写好 task 描述
+
+强 prompt 结构：
+- 精确任务描述
+- 子 agent 拥有的文件和不能碰的文件
+- 预期输出格式
+- 验收标准
+
+弱 prompt（反面）：
+```text
+修复 settings 的 bug。
+```
+
+强 prompt：
+```text
+Own only crates/tui/src/settings.rs and its tests.
+Preserve existing config key names.
+Add a regression test showing that provider-specific API key changes
+do not restart DeepSeek onboarding.
+Return the changed paths and test command output.
+```

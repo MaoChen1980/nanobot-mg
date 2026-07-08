@@ -5,7 +5,7 @@ description: 'PDF 文件处理：提取文本/表格、创建、合并/拆分、
   当用户要求处理 PDF 文件、提取内容、创建新 PDF、合并拆分文档、或填写 PDF 表单时激活。'
 license: Proprietary. LICENSE.txt has complete terms
 official: true
-category: domain-specific
+category: document
 ---
 
 # PDF Processing Guide

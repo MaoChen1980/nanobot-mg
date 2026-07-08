@@ -22,7 +22,7 @@ metadata:
     - official-api
     homepage: https://github.com/xdevplatform/xurl
     upstream_skill: https://github.com/openclaw/openclaw/blob/main/skills/xurl/SKILL.md
-category: domain-specific
+category: communication
 ---
 
 # xurl — X (Twitter) API via the Official CLI

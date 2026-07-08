@@ -4,7 +4,7 @@ description: '总结 URL、网页、本地文件、YouTube 视频的内容，提
 
   当用户要求总结一个链接、网页、文件，或说"这个链接是什么"、"TLDR"时激活。'
 version: 0.1.0
-category: domain-specific
+category: content
 ---
 
 # Summarize Skill

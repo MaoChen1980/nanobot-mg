@@ -4,7 +4,7 @@ description: '查询天气信息。
 
   当用户询问天气、温度、降雨、降雪、风力、湿度、紫外线、空气质量、天气预报（今天/今晚/本周/周末）时激活。'
 version: 0.1.0
-category: domain-specific
+category: weather
 ---
 
 # Weather — current conditions and forecasts

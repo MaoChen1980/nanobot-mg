@@ -4,7 +4,7 @@ description: '浏览器自动化：导航、填表、截图、数据抓取、UI 
 
   当用户要求自动化浏览器操作、截取网页截图、抓取动态渲染数据、填写表单、或调试前端 UI 流程时激活。'
 official: true
-category: domain-specific
+category: automation
 ---
 
 # Playwright CLI Skill

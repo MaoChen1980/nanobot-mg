@@ -4,7 +4,7 @@ description: '今日热搜/热门话题：从 tophub.today 获取多平台热搜
 
   当用户问"今天热搜"、"微博热搜"、"热门话题"、"什么在 trending"、"今日热点"时激活。'
 official: true
-category: project-management
+category: content
 ---
 
 # Daily Trending

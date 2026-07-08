@@ -4,7 +4,7 @@ description: '管理 GitHub 仓库的 PR、Issue、CI、代码搜索。
 
   当用户要求查看 PR、检查 CI 状态、列出 Issue、搜索代码、运行 workflow、调用 GitHub API 时激活。'
 version: 0.1.0
-category: domain-specific
+category: project-management
 ---
 
 # GitHub Skill

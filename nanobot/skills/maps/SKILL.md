@@ -1,4 +1,5 @@
 ---
+category: maps
 name: maps
 description: "Geocode, POIs, routes, timezones via OpenStreetMap/OSRM."
 version: 1.2.0
@@ -32,12 +33,12 @@ functionality is covered by the `nearby` command below, with the same
 
 Python 3.8+ (stdlib only — no pip installs needed).
 
-Script path: `nanobot/skills/productivity/maps/scripts/maps_client.py`
+Script path: `nanobot/skills/maps/scripts/maps_client.py`
 
 ## Commands
 
 ```bash
-MAPS=nanobot/skills/productivity/maps/scripts/maps_client.py
+MAPS=nanobot/skills/maps/scripts/maps_client.py
 ```
 
 ### search — Geocode a place name
@@ -180,9 +181,13 @@ current.
 ## Verification
 
 ```bash
-python3 nanobot/skills/productivity/maps/scripts/maps_client.py search "Statue of Liberty"
+python3 nanobot/skills/maps/scripts/maps_client.py search "Statue of Liberty"
 # Should return lat ~40.689, lon ~-74.044
 
-python3 nanobot/skills/productivity/maps/scripts/maps_client.py nearby --near "Times Square" --category restaurant --limit 3
+python3 nanobot/skills/maps/scripts/maps_client.py nearby --near "Times Square" --category restaurant --limit 3
 # Should return a list of restaurants within ~500m of Times Square
 ```
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
+  - **Always 审查**：如果此 skill 的行为已成为 LLM 自然倾向（不注入也会正确执行），将 frontmatter 的 `always: true` 改为 `false`，反之如果发现此 skill 值得每轮注入，改为 `always: true`

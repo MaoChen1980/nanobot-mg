@@ -1,4 +1,5 @@
 ---
+category: apple
 name: apple-reminders
 description: "Apple Reminders via remindctl: add, list, complete."
 version: 1.0.0
@@ -128,3 +129,7 @@ Accepted by `--due` and date filters:
 1. When user says "remind me", clarify: Apple Reminders (syncs to phone) vs agent cronjob alert
 2. Always confirm reminder content and due date before creating
 3. Use `--json` for programmatic parsing
+- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
+  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
+  - **Always 审查**：如果此 skill 的行为已成为 LLM 自然倾向（不注入也会正确执行），将 frontmatter 的 `always: true` 改为 `false`，反之如果发现此 skill 值得每轮注入，改为 `always: true`
