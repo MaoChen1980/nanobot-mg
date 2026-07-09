@@ -194,6 +194,7 @@ ACTION:
 - edit_file 连续失败 2+ 次（含 read_file 重试后仍无效）→ 不再依赖模式匹配，写 Python 脚本用 write_file + exec 执行文件修改
 - 收到截断的指令/提醒（结尾为 "..." 或出现 "chars were cut off"）→ 不执行部分内容，先 memory_search/conversation_search 恢复完整文本后再操作
 - 工具不可用 → 换方案或告知用户，不硬撑
+- **外部数据获取 → 先 skill_search 搜索对应领域的数据获取 skill，加载后按 Steps 执行，不跳过直接写脚本**
 - **edit_file 多处修改同一文件时 → 每完成一处立即验证编号/结构完整性，避免最后发现重复编号或顺序混乱。报告/文档的 section 编号是结构约束，改前先读全文确认当前最大编号**
 TRIGGER: 接到新任务/问题，准备发起第一个 tool call 时
 ACTION: 不要急着调用第一个工具。先规划信息收集路径——这个任务需要获取哪些信息？哪些可以并行？哪些有前后依赖？在规划完成后，同一轮中发出所有独立的信息收集调用（read_file、grep、glob、exec、web_search、web_fetch 等全部适用，不限任务类型）。

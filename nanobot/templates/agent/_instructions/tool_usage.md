@@ -24,6 +24,7 @@
 ### 调试
 - 遇到错误 → 系统自动注入 `[debug_root_cause]` 根因分析，参考其中的分析推进
 - 卡住/绕圈 → 加载 `skills/reframe/SKILL.md` 用 reframe 方法清空噪声
+- exec 工具 shell 类型不匹配（命令文本直接回显而非执行、Unix 命令全部 exit 255、PowerShell/cmd 语法混淆）→ 加载 `skills/windows-exec-shell-type-diagnosis/SKILL.md` 进行系统性诊断，不要继续用 bat 封装或 PowerShell 单行等变通方案
 - `[assess]` / `[debug_root_cause]` 块是系统注入的上下文，不是用户输入
 
 ### 执行
