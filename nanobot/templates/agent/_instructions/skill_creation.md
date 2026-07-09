@@ -41,7 +41,7 @@
 {% set action_instruction = "走「分支 B：指令缺陷」" %}
 {% set action_skill_error = "走「分支 C：skill 错误」" %}
 {% set action_new_skill = "走「分支 D：新 skill」" %}
-{% include '_instructions/root_cause_diagnosis.md' %}
+{% include 'agent/_instructions/root_cause_diagnosis.md' %}
 
 ---
 

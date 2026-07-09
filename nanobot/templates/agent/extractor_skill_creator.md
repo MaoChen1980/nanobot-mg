@@ -26,7 +26,7 @@
 {% set action_instruction = "不要创建 skill，走指令缺陷修复流程（见下方报告格式和写入操作）" %}
 {% set action_skill_error = "更新该 SKILL.md 修正错误内容，不要新建 skill" %}
 {% set action_new_skill = "走下方的新建/合并/更新/跳过流程" %}
-{% include '_instructions/root_cause_diagnosis.md' %}
+{% include 'agent/_instructions/root_cause_diagnosis.md' %}
 
 ### 报告文件格式
 
