@@ -156,7 +156,7 @@ class LLMProvider(ABC):
         "out of credits",
         "out of quota",
         "exceeded your current quota",
-        # Chinese quota exhaustion markers
+        # Chinese quota exhaustion markers (需购买/升级，不可重试)
         "已达用量上限",
         "已达 token plan 用量上限",
         "用量上限",
@@ -165,6 +165,8 @@ class LLMProvider(ABC):
         "超出限额",
         "升级 token plan",
         "购买积分",
+        "购买积分补充",
+        "token plan 用量",
     )
     _RETRYABLE_429_TEXT_MARKERS = (
         "rate limit",

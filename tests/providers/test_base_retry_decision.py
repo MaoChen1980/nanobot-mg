@@ -37,6 +37,17 @@ class TestIsRetryable429Response:
         resp = LLMResponse(content="some unknown 429 error", finish_reason="error", error_status_code=429)
         assert LLMProvider._is_retryable_429_response(resp)
 
+    def test_anthropic_quota_exhaustion_not_retryable(self):
+        """Anthropic returns rate_limit_error for Token Plan quota exhaustion, but the
+        content indicates upgrade/credits needed - not a temporary rate limit."""
+        resp = LLMResponse(
+            content="已达到 Token Plan 用量上限：请升级 Token Plan 套餐或购买积分补充用量",
+            finish_reason="error",
+            error_status_code=429,
+            error_type="rate_limit_error",
+        )
+        assert not LLMProvider._is_retryable_429_response(resp)
+
 
 class TestIsTransientResponse:
     def test_error_should_retry_true(self):
