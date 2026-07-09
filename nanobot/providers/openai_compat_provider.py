@@ -555,7 +555,7 @@ class OpenAICompatProvider(LLMProvider):
         # top-level parameter — they use their own thinking mechanism
         # (reasoning_split in extra_body) instead.
         skip_reasoning_effort = bool(spec and spec.thinking_style == "reasoning_split")
-        if wire_effort and not skip_reasoning_effort:
+        if wire_effort and semantic_effort != "none" and not skip_reasoning_effort:
             kwargs["reasoning_effort"] = wire_effort
 
         # Provider-specific thinking parameters.
