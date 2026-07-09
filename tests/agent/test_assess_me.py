@@ -968,205 +968,130 @@ class TestAssessMeTemplate:
 
 
 # =========================================================================
-# Skill creation template -- integration check
+# Behavior optimization handler template -- integration check
 # =========================================================================
 
 
-class TestSkillCreationTemplate:
-    """Verify the skill_creation.md template renders correctly."""
-
-    def test_renders_with_skill_pattern(self) -> None:
-        """Template renders with skill pattern and workspace path."""
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern="verify-api-response",
-            workspace_path="/tmp/workspace",
-            nanobot_path="/tmp/nanobot",
-        )
-        assert "新 skill" in content
-        assert "分支 D" in content
-        assert "## When to Use" in content
-        assert "skills/" in content
-
-    def test_renders_with_empty_pattern(self) -> None:
-        """Template renders with empty skill pattern (edge case)."""
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern="",
-            workspace_path="/tmp/workspace",
-            nanobot_path="/tmp/nanobot",
-        )
-        assert "skills/" in content
-        assert "步骤 0" in content or "根因诊断" in content
-
-
-# ---------------------------------------------------------------------------
-# Extractor skill creation template -- integration check
-# ---------------------------------------------------------------------------
-
-
-class TestExtractorSkillCreatorTemplate:
-    """Verify the extractor_skill_creator.md template renders correctly."""
+class TestBehaviorOptimizationHandler:
+    """Verify the behavior_optimization_handler.md template renders correctly."""
 
     def test_renders_with_workspace_path(self) -> None:
-        """Template renders with workspace_path variable."""
+        """Template renders with workspace path and nanobot path."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
-            "agent/extractor_skill_creator.md",
+            "agent/behavior_optimization_handler.md",
             workspace_path="/tmp/workspace",
+            nanobot_path="/tmp/nanobot",
         )
-        assert "## 流程" in content
+        assert "## 可用工具" in content
         assert "glob" in content
         assert "exec" in content
         assert "grep" in content
         assert "read_file" in content
         assert "write_file" in content
         assert "edit_file" in content
-        assert "## Steps" in content or "步骤" in content
-        assert "## 决策指引" in content
-        assert "## Skill 格式" in content
-        assert "## Pitfalls" in content or "Pitfalls" in content
-        assert "**Self-optimization**" in content
+        assert "skill_search" in content
         assert "/tmp/workspace" in content
+        assert "/tmp/nanobot" in content
 
-    def test_contains_step0_root_cause_analysis(self) -> None:
-        """Template includes the root cause analysis section."""
+    def test_contains_root_cause_diagnosis(self) -> None:
+        """Template includes root_cause_diagnosis.md."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
-            "agent/extractor_skill_creator.md",
+            "agent/behavior_optimization_handler.md",
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
         assert "根因诊断" in content or "root cause" in content
-        assert "工具 bug" in content
-        assert "指令缺陷" in content
+        assert "步骤 0" in content
+        assert "框架/工具 bug" in content or "工具 bug" in content
+        assert "通用行为约束" in content or "行为约束" in content
         assert "skill 的错误" in content or "skill_error" in content
-        assert "真正需要新 skill" in content
+        assert "新 skill" in content
         assert "最高原则" in content
-        assert "tool_bugs.md" in content
-        assert "instruction_gaps.md" in content
+        assert "用工具读取实际文件" in content
+        assert "mkdir" in content
+        assert "memory/" in content
 
-    def test_contains_diagnosis_verification_instructions(self) -> None:
-        """Template instructs agent to verify by reading actual files."""
+    def test_contains_diagnosis_file_paths(self) -> None:
+        """Template includes diagnostic file paths from root_cause_diagnosis."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
-            "agent/extractor_skill_creator.md",
+            "agent/behavior_optimization_handler.md",
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
-        assert "用工具读取实际文件" in content
         assert "/tmp/nanobot/templates/agent/_instructions/" in content
         assert "/tmp/nanobot/templates/agent/system_prompt.md" in content
         assert "/tmp/nanobot/templates/agent/identity.md" in content
-        assert "/tmp/nanobot/templates/agent/" in content
         assert "prompts/" in content
         assert ".pt" in content
         assert "/tmp/nanobot/agent/tools/" in content
-        assert "mkdir" in content
-        assert "memory/system/" in content
 
-    def test_contains_seven_step_verification(self) -> None:
-        """extractor_skill_creator.md includes the 7-step verification section."""
+    def test_contains_processor_sections(self) -> None:
+        """Template includes processor sections (gates, search, decision, format)."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
-            "agent/extractor_skill_creator.md",
+            "agent/behavior_optimization_handler.md",
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
-        assert "7 步验证" in content
+        assert "门控检查" in content
+        assert "抽象门控" in content
+        assert "粒度门控" in content
+        assert "语义检索" in content
+        assert "对比决策" in content
+        assert "执行" in content
+        assert "验证输出" in content
+        assert "Skill 格式" in content
+        assert "Pitfalls" in content
+        assert "skills/" in content
+
+    def test_contains_self_optimization(self) -> None:
+        """Template includes Self-optimization footnote in skill format."""
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/behavior_optimization_handler.md",
+            workspace_path="/tmp/workspace",
+            nanobot_path="/tmp/nanobot",
+        )
+        assert "**Self-optimization**" in content
+
+    def test_contains_eight_step_verification(self) -> None:
+        """Template includes the 8-step verification section."""
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/behavior_optimization_handler.md",
+            workspace_path="/tmp/workspace",
+            nanobot_path="/tmp/nanobot",
+        )
+        assert "8 步验证" in content
         assert "git diff" in content
-        assert "Code review" in content or "code review" in content
-
-
-class TestSkillCreationTemplateStructure:
-    """Verify skill_creation.md structure with self-diagnosis flow."""
-
-    def test_contains_step0_diagnosis(self) -> None:
-        """Template includes Step 0 root cause diagnosis."""
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern="",
-            workspace_path="/tmp/workspace",
-            nanobot_path="/tmp/nanobot",
-        )
-        assert "步骤 0" in content
-        assert "根因诊断" in content
-        assert "工具 bug" in content
-        assert "指令缺陷" in content
-        assert "skill 错误" in content
-        assert "新 skill" in content
-
-    def test_contains_all_branches(self) -> None:
-        """Template defines all four branches."""
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern="",
-            workspace_path="/tmp/workspace",
-            nanobot_path="/tmp/nanobot",
-        )
-        assert "分支 A" in content
-        assert "分支 B" in content
-        assert "分支 C" in content
-        assert "分支 D" in content
-
-    def test_contains_false_positives_section(self) -> None:
-        """Template includes false_positives.md section."""
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern="",
-            workspace_path="/tmp/workspace",
-            nanobot_path="/tmp/nanobot",
-        )
-        assert "假阳性记录" in content
-        assert "false_positives.md" in content
-        assert "exec mkdir -p" in content
-        assert "memory/system" in content
-
-    def test_no_git_commit_instructions(self) -> None:
-        """Template should NOT contain executable git commit instructions."""
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern="test",
-            workspace_path="/tmp/workspace",
-            nanobot_path="/tmp/nanobot",
-        )
-        assert "exec git add" not in content
-        assert "exec git commit" not in content
-        assert "git commit -m" not in content
-
-    def test_contains_seven_step_verification(self) -> None:
-        """Template includes the 7-step verification section."""
-        from nanobot.utils.prompt_templates import render_template
-
-        content = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern="test",
-            workspace_path="/tmp/workspace",
-            nanobot_path="/tmp/nanobot",
-        )
-        assert "7 步验证" in content
-        assert "git diff" in content
+        assert "py_compile" in content or "语法检查" in content
         assert "Code review" in content or "code review" in content
         assert "数据流" in content or "控制流" in content
         assert "prompt 内容核验" in content
         assert "上下游" in content
         assert "设计目标" in content
         assert "更优方案" in content
+
+    def test_no_git_commit_instructions(self) -> None:
+        """Template should NOT contain executable git commit instructions."""
+        from nanobot.utils.prompt_templates import render_template
+
+        content = render_template(
+            "agent/behavior_optimization_handler.md",
+            workspace_path="/tmp/workspace",
+            nanobot_path="/tmp/nanobot",
+        )
+        assert "exec git add" not in content
+        assert "exec git commit" not in content
+        assert "git commit -m" not in content
 
 

@@ -7,59 +7,83 @@
 
 ### 诊断流程（按顺序检查）
 
-#### 1. 这是工具 bug 吗？
+#### 1. 这是框架/工具 bug 吗？
 
-**判断标准：** {{ problem_source or "描述" }}的行为问题，可以通过修改 nanobot 内置工具代码来修复？
+**判断标准：** {{ problem_source or "描述" }}的行为问题，可以通过修改 nanobot 框架代码（loop、runner、工具等）来修复？
 
 典型特征：
-- 工具返回错误格式（如 read_file 返回 hex 前缀而非行号）
-- 工具行为与文档/预期不一致
-- 工具缺少某个必要参数或功能
-- 工具之间的输出格式不兼容
+- 工具或框架返回错误格式
+- 行为与文档/预期不一致
+- 缺少某个必要参数或功能
+- 组件之间的输出格式不兼容
 
-**确认方法：** 用 `grep` 搜索相关工具代码，找到疑似 bug 的位置后用 `read_file` 读源码确认。工具代码在 `{{ nanobot_path }}/agent/tools/`。
+**确认方法：** 用工具查看相关代码，验证当前代码行为是否与预期一致。代码路径：`{{ nanobot_path }}/agent/`（框架）和 `{{ nanobot_path }}/agent/tools/`（工具）。
 
-**→ 如果是：** {{ action_tool_bug or "跳过" }}
+**→ 如果是：** {{ action_tool_bug or "修复框架代码" }}
 
-#### 2. 这是指令缺陷吗？
+#### 2. 这是通用行为约束吗？
 
-**判断标准：** {{ problem_source or "描述" }}的行为问题，是因为 system prompt 或框架指令块缺少某个规则/说明？
+**判断标准：** {{ problem_source or "描述" }}的行为模式，是否可以抽象为一条通用规则或流程，适用于所有任务？
+
+**优先用通用指令覆盖，避免为每个领域创建 skill。** 一条通用规则（如"先验证再修改"）可以覆盖多个领域场景，不需要每个写一个 skill。
 
 **你无法直接访问运行时动态构建的完整 system prompt。** 但它的源模板和框架指令块在以下路径，你可以用工具读取：
 - `{{ nanobot_path }}/templates/agent/_instructions/` — 框架指令块
+- `{{ nanobot_path }}/templates/agent/_snippets/` — 代码片段（通过 Jinja2 include 注入到 system prompt 中）
 - `{{ nanobot_path }}/templates/agent/system_prompt.md` — 系统 prompt 主模板
 - `{{ nanobot_path }}/templates/agent/identity.md` — agent 身份定义
-- `{{ nanobot_path }}/templates/agent/` — 其他模板文件
+- `{{ nanobot_path }}/templates/agent/` — 其他顶层模板（如 `assess_me.md`、`evaluator.md`、`extractor_analysis.md`、子 agent prompt 等）
 - `{{ workspace_path }}/prompts/` — **运行时渲染快照**（`.pt` 文件），包含每次 LLM 调用时实际发送的完整消息。用 `glob *.pt` 找到最近的文件，`read_file` 查看已渲染的系统 prompt 和指令块，比读源模板更准确
 
 典型特征：
-- LLM 的行为不对是因为没人告诉它"在这种情况下该怎么做"，而不是缺少领域知识
-- 问题的解决方案是一条规则（"当 X 时必须 Y"），而非一个流程
-- 修复方法是给框架指令增加一段话，而非创建一个 skill
+- 可以抽象为「当 X 时必须/禁止 Y」形式的通用规则，不依赖具体领域术语
+- 修复涉及增/删/改 `_instructions/`、`_snippets/` 或顶层模板中的内容
+- **如问题本身就是领域特化的**（只发生在特定场景）→ 不是通用约束，走下方 skill 判断
 
 **确认方法：**
-1. 用 `glob` 列出 `{{ nanobot_path }}/templates/agent/_instructions/` 下的所有指令文件
-2. 根据问题描述的场景，判断可能涉及哪个指令块
-3. 用 `read_file` 读该指令文件，确认是否确实缺少相关规则
-4. 如果所有指令块都有对应规则但 LLM 仍行为异常，则可能不是指令缺陷，重新考虑分类
+1. 用 `glob` 列出 `{{ nanobot_path }}/templates/agent/` 下的相关文件（包括 `_instructions/`、`_snippets/` 和顶层模板）
+2. 判断是否有已有规则覆盖，或是否可以新增一条通用规则替代
+3. 用 `read_file` 读相关文件，确认描述与当前内容是否一致（可能缺少、多余、或描述错误）
+4. 如果所有文件已有对应规则但 LLM 仍行为异常，则不是指令缺陷，重新考虑分类
 
-**→ 如果是：** {{ action_instruction or "跳过" }}
+**→ 如果是：** {{ action_instruction or "修复 prompt/指令" }}
 
 #### 3. 这是已有 skill 的错误吗？
 
-**判断标准：** 可以用 `skill_search` + `read_file` 找到某个具体 SKILL.md 包含错误指引。
+**判断标准：** {{ problem_source or "描述" }}描述的问题，与某个已有 SKILL.md 的指引不符——触发条件错、步骤错、或缺少必要内容。
 
 典型特征：
-- LLM 按照某个 skill 的步骤执行但走错了方向
-- 问题描述可以通过修正某个已有 skill 来解决
+- LLM 按照某个 skill 执行但走了错方向
+- 候选描述与已有 skill 的指引存在偏差（条件不对、步骤不对、缺内容）
 
 **确认方法：**
-1. 用 `skill_search` 语义检索相关功能，`k=6`
-2. 对召回的 skill，用 `read_file` 读 SKILL.md 全文
-3. 对比问题描述的错误行为与 skill 的步骤指引，确认不一致之处
+1. 用 `skill_search` 检索相关功能，`k=6`
+2. 对召回的 skill，用 `read_file` 读 SKILL.md 全文对比
+3. 确认问题描述与当前 skill 指引是否确实不一致
 
-**→ 如果是：** {{ action_skill_error or "跳过" }}
+**→ 如果是：** {{ action_skill_error or "更新该 SKILL.md" }}
 
-#### 4. 都不符合 → 真正需要新 skill
+#### 4. 这是需要新 skill 吗？
+
+**判断标准：** 1-3 都不符合，且 candidate 满足以下条件：
+
+- **抽象门控：** 描述的是流程/方法/决策逻辑，而非具体文件或代码位置
+- **粒度门控：** 场景级别（覆盖完整用例），而非操作级别（单一步骤）
+- **不重复：** skill_search 无相似结果
+
+满足以上条件 → 创建新 skill。否则进入 5。
 
 **→ 动作：** {{ action_new_skill or "创建新 skill" }}
+
+#### 5. 领域知识 → 记录到 memory
+
+以上都不符合，但 candidate 包含有价值的领域特化知识。
+
+**判断标准：**
+- 项目、框架、工具的特定经验
+- 操作级别的单一步骤
+- 不够抽象或不够场景级，但未来可能有用的信息
+
+**后续使用：** 记录到 memory 后，LLM 可在需要时通过 memory_search 自动检索，或在 context 中注入。
+
+**→ 动作：** {{ action_domain_knowledge or "写入 memory" }}

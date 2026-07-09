@@ -84,20 +84,16 @@ class _SubagentCheckState:
     chat_id: str
 
 
-def _make_skill_done_callback(loop: AgentLoop, dedup_key: str) -> Callable[[asyncio.Task], None]:
-    """Build a done-callback for _spawn_skill_creator tasks.
-
-    Using a named factory function avoids the lambda closure pitfalls:
-    ``dedup_key`` is captured by value, and ``CancelledError`` is handled.
-    """
+def _make_fix_done_callback(loop: AgentLoop, dedup_key: str) -> Callable[[asyncio.Task], None]:
+    """Build a done-callback for _spawn_behavior_fix tasks."""
     def _cb(t: asyncio.Task) -> None:
         try:
             exc = t.exception()
         except asyncio.CancelledError:
             exc = None
-        loop._skill_creation_inflight.discard(dedup_key)
+        loop._fix_inflight.discard(dedup_key)
         if exc is not None:
-            logger.error("Skill creation failed: {}", exc)
+            logger.error("Fix sub-agent failed: {}", exc)
     return _cb
 
 
@@ -279,7 +275,7 @@ class AgentLoop:
         )
         self.assess_interval = assess_interval if assess_interval is not None else defaults.assess_interval
         self.project_root = project_root
-        self._skill_creation_inflight: set[str] = set()
+        self._fix_inflight: set[str] = set()
         self._extra_hooks: list[AgentHook] = hooks or []
 
         self._init_framework_dir(workspace)
@@ -1042,28 +1038,32 @@ class AgentLoop:
 
             # ── orthogonal actions (independent of status) ──
 
-            # Fix sub-agent — spawn when assess_me identified a reusable skill pattern.
+            # Fix sub-agent — spawn when assess_me identified a behavior optimization.
             # Sub-agent self-diagnoses root cause using file tools (Step 0).
-            skill_pattern = parsed.get("skill_pattern")
+            bo = parsed.get("behavior_optimization")
+            skill_pattern = ""
+            if isinstance(bo, dict):
+                skill_pattern = bo.get("description") or ""
+            elif isinstance(bo, str):
+                skill_pattern = bo
 
             if skill_pattern and skill_pattern != "null":
                 dedup_raw = json.dumps({"p": skill_pattern})
                 dedup_key = hashlib.md5(dedup_raw.encode()).hexdigest()
-                if dedup_key not in loop._skill_creation_inflight:
-                    loop._skill_creation_inflight.add(dedup_key)
-                    # Pass assess_me finding context so sub-agent knows what to diagnose
+                if dedup_key not in loop._fix_inflight:
+                    loop._fix_inflight.add(dedup_key)
                     assess_content = parsed.get("content") or ""
                     task = asyncio.create_task(
-                        loop._spawn_skill_creator(
-                            skill_pattern=skill_pattern,
+                        loop._spawn_behavior_fix(
+                            behavior_pattern=skill_pattern,
                             assess_context=assess_content,
                             session_key=session.key if session else None,
                         ),
                     )
                     task.add_done_callback(
-                        _make_skill_done_callback(loop, dedup_key)
+                        _make_fix_done_callback(loop, dedup_key)
                     )
-                    logger.info("assess_me: spawning fix sub-agent for skill_pattern=%s", skill_pattern)
+                    logger.info("assess_me: spawning fix sub-agent for behavior_optimization=%s", skill_pattern)
                 else:
                     logger.info("assess_me: fix already in-flight for this item — skipping")
 
@@ -1139,55 +1139,43 @@ class AgentLoop:
             )
         return _cb
 
-    async def _spawn_skill_creator(
+    async def _spawn_behavior_fix(
         self,
-        skill_pattern: str = "",
+        behavior_pattern: str = "",
         assess_context: str = "",
         session_key: str | None = None,
     ) -> None:
-        """Spawn a background agent to create skill from assess_me pattern."""
-        from nanobot.agent.runner import AgentRunner, AgentRunSpec
-        from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
-        from nanobot.agent.tools.registry import ToolRegistry
-        from nanobot.agent.tools.search import GlobTool, GrepTool
-        from nanobot.agent.tools.shell import ExecTool
-        from nanobot.agent.tools.skill_search import SkillSearchTool
+        """Spawn a background agent to fix behavior_optimization candidates.
+        Sub-agent self-diagnoses root cause and executes any of the 3 fix paths
+        (skill, memory, framework/instruction) based on the handler prompt.
+        """
+        from nanobot.agent.runner import AgentRunner, build_fix_agent_spec
         from nanobot.utils.prompt_templates import render_template
+        from pathlib import Path
         import nanobot
 
-        logger.info("Fix sub-agent: building for skill_pattern=%s", skill_pattern)
-
-        tools = ToolRegistry()
-        tools.register(ReadFileTool(workspace=self.workspace))
-        tools.register(WriteFileTool(workspace=self.workspace))
-        tools.register(EditFileTool(workspace=self.workspace))
-        tools.register(GlobTool(workspace=self.workspace))
-        tools.register(GrepTool(workspace=self.workspace))
-        tools.register(ExecTool(
-            working_dir=str(self.workspace),
-            timeout=self.exec_config.timeout,
-        ))
-        tools.register(SkillSearchTool(store=self.context.memory))
+        logger.info("Fix sub-agent: building for behavior_pattern=%s", behavior_pattern)
 
         system_prompt = render_template(
-            "agent/_instructions/skill_creation.md",
-            skill_pattern=skill_pattern,
+            "agent/behavior_optimization_handler.md",
             workspace_path=self.workspace.as_posix(),
             nanobot_path=Path(nanobot.__file__).parent.as_posix(),
         )
 
-        # Include find context in user message so sub-agent knows what to work on
-        user_msg = "根据系统 prompt 中的指令处理。不要闲聊，直接执行步骤。"
+        parts = []
         if assess_context:
-            user_msg = f"## assess_me 发现\n\n{assess_context}\n\n{user_msg}"
+            parts.append(f"## assess_me 发现\n\n{assess_context}")
+        if behavior_pattern:
+            parts.append(f"## 行为优化候选\n\n{behavior_pattern}")
+        user_msg = "\n\n".join(parts + ["根据系统 prompt 中的指令处理。不要闲聊，直接执行步骤。"])
 
-        spec = AgentRunSpec(
-            initial_messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_msg},
-            ],
-            tools=tools,
+        spec = build_fix_agent_spec(
+            workspace=self.workspace,
+            memory_store=self.context.memory,
+            system_prompt=system_prompt,
+            user_message=user_msg,
             model=self.model,
+            exec_timeout=self.exec_config.timeout,
             max_iterations=100,
             max_tool_result_chars=self.max_tool_result_chars,
             session_key=session_key,
@@ -1212,7 +1200,7 @@ class AgentLoop:
         from nanobot.utils.gitstore import commit_workspace_changes
         commit_workspace_changes(
             self.workspace,
-            rel_dirs=["skills", "memory/system"],
+            rel_dirs=["skills", "memory"],
             message="fix: auto-fix from assess_me",
         )
 

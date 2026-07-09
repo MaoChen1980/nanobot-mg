@@ -357,7 +357,7 @@ class MemoryExtractor:
                     "content": paragraph, "ts": ts_num, "pinned": pinned,
                 })
 
-            elif ftype == "skill":
+            elif ftype in ("skill", "behavior_optimization"):
                 name = (finding.get("name") or "").strip()
                 if name and content:
                     skill_line = f"- **{name}**: {content}\n<!--ts:{ts_num}-->"
@@ -996,12 +996,12 @@ class MemoryExtractor:
             for p in skills_dir.rglob("SKILL.md"):
                 skills_before[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
 
-        system_dir = self.store.workspace / "memory" / "system"
-        system_before: dict[str, float] = {}
-        if system_dir.is_dir():
-            for p in system_dir.rglob("*"):
+        memory_dir = self.store.workspace / "memory"
+        memory_before: dict[str, float] = {}
+        if memory_dir.is_dir():
+            for p in memory_dir.rglob("*"):
                 if p.is_file():
-                    system_before[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
+                    memory_before[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
 
         # Get provider from ContextVar (set by AgentLoop at startup)
         from nanobot.agent.llm_context import _llm_model, _llm_provider
@@ -1016,33 +1016,14 @@ class MemoryExtractor:
             self._pending_skill_entries = []
             return False
 
-        from nanobot.agent.runner import AgentRunner, AgentRunSpec
-        from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
-        from nanobot.agent.tools.memory_search import MemorySearchTool
-        from nanobot.agent.tools.skill_search import SkillSearchTool
-        from nanobot.agent.tools.registry import ToolRegistry
-        from nanobot.agent.tools.search import GlobTool, GrepTool
-        from nanobot.agent.tools.shell.shell import ExecTool
-
-        tools = ToolRegistry()
-        tools.register(ReadFileTool(workspace=self.store.workspace))
-        tools.register(WriteFileTool(workspace=self.store.workspace))
-        tools.register(EditFileTool(workspace=self.store.workspace))
-        tools.register(GlobTool(workspace=self.store.workspace))
-        tools.register(GrepTool(workspace=self.store.workspace))
-        tools.register(MemorySearchTool(store=self.store))
-        tools.register(SkillSearchTool(store=self.store))
-        tools.register(ExecTool(
-            working_dir=str(self.store.workspace),
-            timeout=120,
-        ))
-
+        from nanobot.agent.runner import AgentRunner, build_fix_agent_spec
+        from nanobot.utils.prompt_templates import render_template
+        from pathlib import Path
         import nanobot as _nb
 
-        ws_path = self.store.workspace.expanduser().resolve().as_posix()
         system_prompt = render_template(
-            "agent/extractor_skill_creator.md",
-            workspace_path=ws_path,
+            "agent/behavior_optimization_handler.md",
+            workspace_path=self.store.workspace.expanduser().resolve().as_posix(),
             nanobot_path=Path(_nb.__file__).parent.as_posix(),
         )
 
@@ -1052,13 +1033,13 @@ class MemoryExtractor:
             "请按系统 prompt 的流程处理每个 candidate。"
         )
 
-        spec = AgentRunSpec(
-            initial_messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            tools=tools,
+        spec = build_fix_agent_spec(
+            workspace=self.store.workspace,
+            memory_store=self.store,
+            system_prompt=system_prompt,
+            user_message=user_content,
             model=model,
+            exec_timeout=120,
             max_iterations=150,
             max_tool_result_chars=30000,
             context_window_tokens=self.context_window_tokens,
@@ -1087,22 +1068,22 @@ class MemoryExtractor:
                 result.final_content[:200],
             )
 
-        # Detect changes: skills (new/modified SKILL.md) and system reports
+        # Detect changes: skills (new/modified SKILL.md) and memory files
         skills_after: dict[str, float] = {}
         if skills_dir.is_dir():
             for p in skills_dir.rglob("SKILL.md"):
                 skills_after[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
 
-        # Detect changes: system report files (tool_bugs.md, instruction_gaps.md)
-        system_after: dict[str, float] = {}
-        if system_dir.is_dir():
-            for p in system_dir.rglob("*"):
+        # Detect changes: memory files (e.g., domain knowledge written by handler path B)
+        memory_after: dict[str, float] = {}
+        if memory_dir.is_dir():
+            for p in memory_dir.rglob("*"):
                 if p.is_file():
-                    system_after[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
+                    memory_after[str(p.relative_to(self.store.workspace))] = p.stat().st_mtime_ns
 
         skills_changed = skills_before != skills_after
-        reports_changed = system_before != system_after
-        return skills_changed or reports_changed
+        memory_changed = memory_before != memory_after
+        return skills_changed or memory_changed
 
     @staticmethod
     def _extract_json_from_llm_output(text: str) -> str:

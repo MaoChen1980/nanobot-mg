@@ -12,7 +12,7 @@
 {
   "findings": [
     {
-      "type": "knowledge|pitfall|pattern|preference|skill|tool_script|instruction",
+      "type": "knowledge|pitfall|pattern|preference|behavior_optimization|tool_script|instruction",
       "content": "<自包含、具体、When: … → Do: … 格式的一句话>",
       "topic": "<broad topic path>",
       "name": "<kebab-case name — required for pattern and skill>",
@@ -32,7 +32,7 @@
   ]
 }
 
-`pattern` 和 `skill` 必须提供 `name`。`instruction` 不需要 `topic` 和 `name`。
+`pattern` 和 `behavior_optimization` 必须提供 `name`。`instruction` 不需要 `topic` 和 `name`。
 
 ## 提取门控（全部满足才提取）
 
@@ -140,45 +140,7 @@ Behavior Outcomes 都是**事后总结的优化**。LLM 走了某条路（可能
 
 ---
 
-## Skill Criteria — 进化门控
-
-Skill 的唯一目的：**让 LLM 下次表现更好。** 不改变行为就不该是 skill。
-
-**信息来源必须是外部输入，只可能来自以下三种之一：**
-- **踩坑修复** — 尝试→失败→排查→修复的全过程
-- **绕路后发现捷径** — 走通了但绕了远路，发现了更快的路径
-- **用户纠正/提示** — 用户明确说「不对」「应该这样」
-
-不是这三种来源产生的 → 不是 skill（如：按文档一步步做成的、LLM 自然就能推理出的）。
-
-**以下任一条件满足即可，满足越多越好：**
-
-1. **进化增量** — 没这个 skill，下次 LLM 表现明显更差（绕更多路、犯同样错误）。没区别就不写。
-2. **捷径推理** — 经历了 3+ 轮尝试才试对
-3. **有失败细节** — 不只写「做什么」，还写「不做什么」「哪里会失败」「为什么这个方式 work」。
-
-**附加条件（只对 skill 生效，pattern/pitfall 不要求）：**
-- **触发必须是外部信号** — 用户关键词、消息类型、工具返回、页面结构、cron 事件。不要用 LLM 认知状态做 trigger（不确定、矛盾、觉得太复杂——这些都是 LLM 自己感知的，不是外部信号，写了也触发不了）。
-- **粒度门控** — skill 必须是**场景级别**（覆盖一个完整用例），不是操作级别（单一步骤）。提取前问自己：这条模式是一个完整场景，还是只是某个场景中的一个操作步骤？如果是操作步骤 → 不要输出为 `skill`，改为 `pattern` 或 `knowledge`。
-- **命名规则** — skill 的 `name` 必须反映场景+功能（kebab-case），如 `android-ui-test`。不要用操作命名（如 `android-compose-performclick-touch-injection` 太细）。
-
-**好（场景级 name）：**
-- `android-ui-test`
-- `android-build`
-- `android-log-debug`
-- `android-e2e-test`
-
-**差（操作级 name — 太细，应合并到场景 skill）：**
-- `android-add-log`
-- `android-force-rebuild`
-- `android-launch-app`
-- `android-chat-verification`
-
-**启发式：**
-> 读完后觉得「本来就该这么干」→ 噪音
-> 读完后觉得「原来有个坑 / 原来可以这样」→ 进化
-
-一条记录有价值但不符合 skill 标准，用 `pattern`（单次技术操作）或 `knowledge`（事实性知识）。`pattern` 和 `pitfall` 也需要包含外部输入来源和失败细节，但不需要外部触发信号。
+{% include 'agent/_instructions/behavior_optimization_criteria.md' %}
 
 ---
 

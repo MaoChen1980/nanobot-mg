@@ -366,8 +366,8 @@ class AgentRunner:
                     f"消息质量评估 — 已发出的内容存在以下问题：\n"
                     + "\n".join(f"- {i}" for i in issues)
                     + f"\n\n{summary}"
-                    + "\n\n后续发送类似内容前请自查修正。"
                 )
+                messages[:] = [m for m in messages if not is_assessment_message(m)]
                 messages.append(build_assessment_message(inject_text))
                 logger.info("Injected post-send quality assessment for message tool call")
             except Exception:
@@ -1502,6 +1502,58 @@ def _force_final_response(messages: list[dict], text: str) -> str:
         messages.pop()
     messages.append({"role": "user", "content": text})
     return text
+
+
+def build_fix_agent_spec(
+    *,
+    workspace: Path,
+    memory_store,
+    system_prompt: str,
+    user_message: str,
+    model: str,
+    exec_timeout: int = 120,
+    max_iterations: int = 100,
+    max_tool_result_chars: int = 10000,
+    session_key: str | None = None,
+    context_window_tokens: int | None = None,
+    history_token_limit: int | None = None,
+    compress_trigger_tokens: int | None = None,
+) -> AgentRunSpec:
+    """Build an AgentRunSpec for the behavior optimization fix sub-agent.
+
+    Registers file/memory/search tools and returns a ready-to-run spec.
+    Both assess_me and MemoryExtractor paths use this.
+    """
+    from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
+    from nanobot.agent.tools.memory_search import MemorySearchTool
+    from nanobot.agent.tools.search import GlobTool, GrepTool
+    from nanobot.agent.tools.shell import ExecTool
+    from nanobot.agent.tools.skill_search import SkillSearchTool
+
+    tools = ToolRegistry()
+    tools.register(ReadFileTool(workspace=workspace))
+    tools.register(WriteFileTool(workspace=workspace))
+    tools.register(EditFileTool(workspace=workspace))
+    tools.register(GlobTool(workspace=workspace))
+    tools.register(GrepTool(workspace=workspace))
+    tools.register(ExecTool(working_dir=str(workspace), timeout=exec_timeout))
+    tools.register(SkillSearchTool(store=memory_store))
+    tools.register(MemorySearchTool(store=memory_store))
+
+    return AgentRunSpec(
+        initial_messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        tools=tools,
+        model=model,
+        max_iterations=max_iterations,
+        max_tool_result_chars=max_tool_result_chars,
+        session_key=session_key,
+        context_window_tokens=context_window_tokens,
+        history_token_limit=history_token_limit,
+        compress_trigger_tokens=compress_trigger_tokens,
+    )
 
 
 def _ensure_instructions(msgs: list[dict], spec: Any) -> None:

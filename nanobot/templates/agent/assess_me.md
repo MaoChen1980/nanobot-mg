@@ -6,7 +6,7 @@
 - status: "ok"（正常）或 "findings"（发现问题）
 - summary: 一句话总结
 - blocker: null 或阻塞描述（反复尝试3次无法推进/无替代路径/未知错误时填写）
-- skill_pattern: null 或可复用模式描述
+- behavior_optimization: null 或 { "name": "kebab-case-name", "description": "场景描述" }
 - needs_revision: true 或 false（回复不准确/论据不足时填 true）
 - unused_skills: [] 或技能名数组（存在与当前任务高度相关但 agent 未加载使用的 skill 时填写）
 - content: 详细分析
@@ -16,7 +16,7 @@
   "status": "ok",
   "summary": "任务进展顺利，逻辑验证通过",
   "blocker": null,
-  "skill_pattern": null,
+  "behavior_optimization": null,
   "needs_revision": false,
   "unused_skills": [],
   "content": "分析内容"
@@ -80,32 +80,11 @@ agent 陈述是否符合用户需求？
 
 如果发现信息缺失补充信息存在时,应该按顺序 memory_search, conversation_search, skill_search, read/grep工作相关文件，最后是web_search/web_fetch 获取信息。
 
-#### 可复用模式 — 进化门控
+#### 行为优化候选检测
 
 仅分析最后 20 次 iteration 内的行为。**目标是让 agent 进化，不是记录对话中做过的事。**
 
-**信息来源必须是外部输入，只可能来自以下三种之一：**
-- 踩坑修复（尝试→失败→排查→修复）
-- 绕路后发现捷径（走通了但绕远路，发现了更快的路径）
-- 用户纠正/提示（用户明确说「不对」「应该这样」）
-
-不是这三种来源产生的 → 不是 skill，不写。
-
-**以下任一条件满足即可，满足越多越好：**
-
-1. **进化增量** — 没这个 skill，下次 LLM 表现明显更差（绕更多路、犯同样错误）。没区别就不写。
-2. **不可推理** — 这个 pattern 从第一原理推不出来，或要 3+ 轮尝试才试对。标准做法不写。
-3. **有失败细节** — 不只写「做什么」，还写「不做什么」「哪里会失败」「为什么这个方式 work」。
-
-**粒度门控** — 检测到的 pattern 必须是**场景级别**，不是操作级别：
-- 场景级别（覆盖完整用例，如"android UI 测试策略"）→ 可以输出 skill_pattern
-- 操作级别（单一操作，如"添加 log"、"启动模拟器"）→ **不要输出 skill_pattern**
-  - 如果它属于某个已有场景 skill → 在 content 中提示"建议更新到 XXX skill"
-  - 如果找不到所属场景 → 不输出，让后续 consolidate 处理
-- 命名参考：`android-ui-test`（好）vs `android-add-log`（差，太细）
-
-**噪音的特征：** 读完后觉得「本来就该这么干」→ 不写。
-**进化的特征：** 读完后觉得「原来有个坑 / 原来可以这样」→ 写。
+{% include 'agent/_instructions/behavior_optimization_criteria.md' %}
 
 ### Skills 匹配
 

@@ -42,7 +42,7 @@ nanobot/templates/                          # 模板根目录（Jinja2 FileSyste
 │   ├── evaluator.md                        # 评估（notification判断）prompt
 │   ├── extractor_analysis.md               # 记忆提取与分析 prompt
 │   ├── extractor_cleanup.md               # 记忆质量检查与清理 prompt
-│   ├── extractor_skill_creator.md          # Skill 创建子 agent prompt
+│   ├── behavior_optimization_handler.md     # 行为优化处理子 agent prompt
 │   ├── resolver.md                         # 搜索工具选择器（search tool selector）
 │   ├── subagent_announce.md                # Subagent 结果公告模板
 │   ├── max_iterations_message.md           # 迭代次数上限通知
@@ -59,7 +59,7 @@ nanobot/templates/                          # 模板根目录（Jinja2 FileSyste
 │   │   ├── candidate_evaluation.md         #   候选结果评估规则
 │   │   ├── external_content_safety.md      #   外部内容安全规则
 │   │   ├── meta_learning.md                #   元学习规则
-│   │   ├── skill_creation.md               #   Skill 创建规则
+│   │   ├── root_cause_diagnosis.md              #   根因诊断（被 behavior_optimization_handler 引用）
 │   │   ├── skill_refinement.md             #   Skill 优化规则
 │   │   ├── subagent_escalation.md          #   Subagent 升级规则
 │   │   ├── task_tree.md                    #   任务树管理规则
@@ -257,7 +257,7 @@ Preferred language ：
 | `candidate_evaluation.md` | 候选结果评估规则 |
 | `external_content_safety.md` | 处理外部不可信内容的安全规则 |
 | `meta_learning.md` | 元学习：从反馈中学习改进 |
-| `skill_creation.md` | 创建新 skill 的规则和流程 |
+| `root_cause_diagnosis.md` | 根因诊断（被 behavior_optimization_handler 引用） |
 | `skill_refinement.md` | 优化已有 skill 的规则 |
 | `subagent_escalation.md` | Subagent 遇到问题时的升级规则 |
 | `task_tree.md` | 任务树管理规则 |
@@ -337,18 +337,18 @@ Preferred language ：
 
 **检查项**：矛盾（CONTRADICTION）、过时（OUTDATED）、重复（DUPLICATE）、模糊（VAGUE）、不相关（IRRELEVANT）、推测（SPECULATIVE）
 
-#### 3.4.11 extractor_skill_creator.md — Skill 创建子 agent
+#### 3.4.11 behavior_optimization_handler.md — 行为优化处理子 agent
 
-**用途**：处理 MemoryExtractor 提取的 skill 需求，先做根因分析再决策新建/更新/合并/跳过。
+**用途**：统一的 behavior_optimization 处理模板，被 assess_me 和 MemoryExtractor 同时使用。处理行为优化候选，先做根因分析再决策新建/更新/合并/跳过。
 
 **决策流程**：
-0. **根因分析** — 每个 candidate 先分类：工具 bug → 写入 tool_bugs.md / 指令缺陷 → 写入 instruction_gaps.md / skill 错误 → 更新该 skill / 真正需要 → 走下方流程
-1. 语义检索已有 skill（`memory_search`）
-2. 逐条处理 candidate
-3. 对比决策：替换 / 合并 / 跳过
+0. **根因分析**（通过 `root_cause_diagnosis.md`）— 分类异常：工具 bug/指令缺陷 → 记录假阳性；skill 错误 → 更新该 skill
+1. 门控检查：抽象门控 + 粒度门控
+2. 语义检索已有 skill（`skill_search`）
+3. 对比决策：新建 / 替换 / 合并 / 跳过
 4. 执行：新建 SKILL.md、替换内容、合并内容
 5. 验证输出
-6. 清理已处理的条目
+6. 额外：扫描合并已有 skill（consolidation scanning）
 
 #### 3.4.12 subagent_announce.md — Subagent 结果公告模板
 
