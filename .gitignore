@@ -72,6 +72,7 @@ dmypy.json
 ehthumbs.db
 htmlcov/
 logs/
+memory/.skills_index/
 nano.*.save
 nanobot/_commit.py
 pip-wheel-metadata/
