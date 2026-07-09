@@ -1718,7 +1718,8 @@ class MemoryExtractor:
                     if in_timeline:
                         if s.startswith("## ") or s.startswith("---"):
                             break
-                        if s.startswith("- ") and len(s) > 14:
+                        # Must start with "- YYYY" (date or quarterly summary like 2026-Q2)
+                        if s.startswith("- ") and len(s) > 14 and s[2].isdigit():
                             event_entries.append(s)
                 if len(event_entries) >= 20:
                     break
