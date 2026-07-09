@@ -2,7 +2,8 @@
 category: meta
 name: git-workflow
 description: Git workflow patterns including branching strategies, commit conventions, merge vs rebase, conflict resolution, and collaborative development best practices for teams of all sizes.
-origin: ECC
+metadata:
+  origin: ECC
 ---
 
 # Git Workflow Patterns
@@ -326,7 +327,8 @@ git checkout --theirs src/auth/login.ts  # Keep feature version
 
 # After resolving, stage and commit
 git add src/auth/login.ts
-git commit
+# ⚠️ Rebase场景：冲突解决后 → git rebase --continue，不是单独git commit
+git rebase --continue
 ```
 
 ### Conflict Prevention Strategies
@@ -342,6 +344,25 @@ git rebase origin/main
 # 4. Use feature flags instead of long-lived branches
 # 5. Review and merge PRs promptly
 ```
+
+### Non-Interactive Rebase (Headless / CI / tmux)
+**⚠️ Critical for headless environments (CI, tmux, agent):**
+
+Rebase operations internally execute `git commit` (for pick/edit steps), which triggers `$GIT_EDITOR`. If `$GIT_EDITOR` is an interactive editor (vim, nano) and the terminal has no TTY, the editor will **hang indefinitely**.
+
+**Prevention — set before any rebase operation:**
+```bash
+export GIT_EDITOR='cat'
+git pull --rebase origin main
+```
+
+**If already stuck in a hanging editor during rebase:**
+```bash
+# In another terminal, kill the hanging process, then:
+GIT_EDITOR='cat' git rebase --continue
+```
+
+**Why `git rebase --continue` itself can also hang:** `git rebase --continue` does not invoke an editor on its own — but if the previous rebase step's editor (triggered by that step's `git commit`) is still running, `--continue` waits for it to exit. Setting `GIT_EDITOR='cat'` before rebasing prevents all editors from blocking.
 
 ## Branch Management
 

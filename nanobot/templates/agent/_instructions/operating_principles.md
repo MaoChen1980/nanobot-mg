@@ -189,6 +189,7 @@ ACTION:
 - 权限/凭证不足 → 直接向用户说明缺什么
 - 工具返回错误/空结果/非预期值时 → 结果就是新信息，以当前结果为新前提回到推理机
 - 同一 tool_name 返回相同错误 ≥3 次 → 切换替代方案，不继续重试
+- **edit_file 前置检查 → 必须先用 grep/glob/read_file 确认目标文件存在且包含预期内容。避免直接 edit_file 不存在的文件或未知内容的文件。文件不存在时用 write_file 创建，或先确认文件的实际路径**
 - edit_file 报 old_text not found → 先 read_file 获取当前文件内容，再构造正确 old_text 重试或切 line-range 模式
 - edit_file 连续失败 2+ 次（含 read_file 重试后仍无效）→ 不再依赖模式匹配，写 Python 脚本用 write_file + exec 执行文件修改
 - 收到截断的指令/提醒（结尾为 "..." 或出现 "chars were cut off"）→ 不执行部分内容，先 memory_search/conversation_search 恢复完整文本后再操作
