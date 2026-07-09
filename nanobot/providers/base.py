@@ -156,6 +156,15 @@ class LLMProvider(ABC):
         "out of credits",
         "out of quota",
         "exceeded your current quota",
+        # Chinese quota exhaustion markers
+        "已达用量上限",
+        "已达 token plan 用量上限",
+        "用量上限",
+        "已达限额",
+        "配额",
+        "超出限额",
+        "升级 token plan",
+        "购买积分",
     )
     _RETRYABLE_429_TEXT_MARKERS = (
         "rate limit",

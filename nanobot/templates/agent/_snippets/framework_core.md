@@ -189,6 +189,31 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 
 **创建或者更新 skill 必须走内置的 skill-manager，不要手动写 SKILL.md。**
 
+### Skill 主动加载规则
+
+**TRIGGER: 任务匹配某个 Skill 的 trigger signals（在 Skill 的 "When to Use" 表中定义）**
+**ACTION: 在执行任务前，先用 `skill_search` 搜索并加载相关 Skill，再按其 Steps 执行。不要跳过 Skill 直接执行任务。**
+
+**为什么：**
+- Skill 的 Steps 是经过验证的标准流程，包含容易被忽略的检查清单（环境验证、错误处理、交叉验证）
+- 不加载 Skill 就执行 → 跳过关键步骤 → 假设未验证 → 根因分析不充分
+- 典型的失败模式：任务做完了但检查清单没执行，问题没发现就交付了
+
+**判断方法：** 当任务涉及以下模式时，主动搜索 Skill：
+- 执行/调试/测试类任务 → 搜索对应领域的 "test guide" / "workflow" / "best practice"
+- 自动化脚本/CLI 工具 → 搜索 "automation" / "script" / "runner"
+- 跨平台迁移/同步 → 搜索 "migration" / "sync" / "porting"
+- **测试执行类任务（如"跑测试"、"执行测试套件"、"模拟器测试"）→ 本质是 UI 自动化验证，搜索对应平台的 test guide / emulator workflow**。典型场景：Android 模拟器跑 UI 测试、CI 环境执行自动化测试。Skill 通常包含：环境预检、OOBE 绕过、UI dump 验证、错误检查清单。
+
+**⚠️ E2E 测试强制规则：** 当任务涉及 E2E 测试、UI 自动化验证、或在模拟器上执行测试时，**必须**先加载对应平台的 skill（如 `android-emulator`）。典型 trigger signals：`"E2E"`, `"UI automation"`, `"UI verification"`, `"send message test"`, `"APK install test"`, `"emulator test"`, `"on emulator"`。不加载 skill 直接执行 → 跳过关键检查清单（如 OOBE 绕过、进程存活验证、logcat 错误检查）→ 事后诊断轮次增加。
+
+**⚠️ 失败分析强制规则：** 当 E2E 测试执行完毕后分析失败原因时，**必须**按照已加载 skill 的 Verification Checklist 执行标准化验证。禁止凭猜测下结论。典型违规模式：
+- ❌ "可能是 API Key 不可用" → 未验证 logcat 中的错误信息
+- ❌ "大概是 UI 时序问题" → 未检查进程存活状态
+- ❌ "估计是网络问题" → 未查看 SettingsStore 或 SharedPreferences 实际值
+
+**验证标准：** Skill 加载后，检查当前 context 是否包含对应的 SKILL.md 内容。若包含但未按 Steps 执行，属于违规。
+
 ### Skill 执行规则
 
 **TRIGGER: 加载了任意 SKILL.md（通过 skill_search 或 auto-inject）**
