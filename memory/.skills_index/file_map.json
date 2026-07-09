@@ -1,0 +1,353 @@
+{
+  "next_id": 58,
+  "files": {
+    "skills/airtable.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        0
+      ]
+    },
+    "skills/apple-notes.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        1
+      ]
+    },
+    "skills/apple-reminders.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        2
+      ]
+    },
+    "skills/architecture-diagram.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        3
+      ]
+    },
+    "skills/canvas-design.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        4
+      ]
+    },
+    "skills/clawhub.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        5
+      ]
+    },
+    "skills/code-review.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        6
+      ]
+    },
+    "skills/codebase-inspection.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        7
+      ]
+    },
+    "skills/codegraph.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        8
+      ]
+    },
+    "skills/cron.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        9
+      ]
+    },
+    "skills/cron-conditional-delivery.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        10
+      ]
+    },
+    "skills/daily-trending.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        11
+      ]
+    },
+    "skills/delegate.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        12
+      ]
+    },
+    "skills/diagram-maker.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        13
+      ]
+    },
+    "skills/docx.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        14
+      ]
+    },
+    "skills/excalidraw.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        15
+      ]
+    },
+    "skills/findmy.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        16
+      ]
+    },
+    "skills/git-workflow.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        17
+      ]
+    },
+    "skills/github.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        18
+      ]
+    },
+    "skills/github-auth.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        19
+      ]
+    },
+    "skills/github-code-review.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        20
+      ]
+    },
+    "skills/github-issues.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        21
+      ]
+    },
+    "skills/github-pr-workflow.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        22
+      ]
+    },
+    "skills/github-repo-management.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        23
+      ]
+    },
+    "skills/google-workspace.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        24
+      ]
+    },
+    "skills/imap-smtp-email.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        25
+      ]
+    },
+    "skills/imessage.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        26
+      ]
+    },
+    "skills/improve-codebase-architecture.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        27
+      ]
+    },
+    "skills/macos-computer-use.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        28
+      ]
+    },
+    "skills/maps.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        29
+      ]
+    },
+    "skills/market-game-analysis.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        30
+      ]
+    },
+    "skills/my.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        31
+      ]
+    },
+    "skills/nano-pdf.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        32
+      ]
+    },
+    "skills/notion.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        33
+      ]
+    },
+    "skills/ocr-and-documents.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        34
+      ]
+    },
+    "skills/pdf.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        35
+      ]
+    },
+    "skills/plan.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        36
+      ]
+    },
+    "skills/playwright.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        37
+      ]
+    },
+    "skills/pptx.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        38
+      ]
+    },
+    "skills/python-debugpy.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        39
+      ]
+    },
+    "skills/reframe.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        40
+      ]
+    },
+    "skills/requesting-code-review.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        41
+      ]
+    },
+    "skills/search-first.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        42
+      ]
+    },
+    "skills/simplify-code.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        43
+      ]
+    },
+    "skills/skill-manager.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        44
+      ]
+    },
+    "skills/skill-vetter.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        45
+      ]
+    },
+    "skills/stock-analyzer.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        46
+      ]
+    },
+    "skills/structured-debugging.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        47
+      ]
+    },
+    "skills/subagent-echo-no-execution-detect.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        48
+      ]
+    },
+    "skills/summarize.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        49
+      ]
+    },
+    "skills/systematic-debugging.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        50
+      ]
+    },
+    "skills/teams-meeting-pipeline.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        51
+      ]
+    },
+    "skills/tmux.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        52
+      ]
+    },
+    "skills/verify-before-report-claim.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        53
+      ]
+    },
+    "skills/weather.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        54
+      ]
+    },
+    "skills/writing-great-skills.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        55
+      ]
+    },
+    "skills/xlsx.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        56
+      ]
+    },
+    "skills/xurl.md": {
+      "mtime_ns": 0,
+      "chunk_ids": [
+        57
+      ]
+    }
+  }
+}

@@ -1,0 +1,292 @@
+[
+  {
+    "text": "airtable: Airtable REST API via curl. Records CRUD, filters, upserts.  E:\\claude\\nanobot-mg\\nanobot\\skills\\airtable\\SKILL.md",
+    "source": "skills/airtable.md",
+    "heading": ""
+  },
+  {
+    "text": "apple-notes: Manage Apple Notes via memo CLI: create, search, edit.  E:\\claude\\nanobot-mg\\nanobot\\skills\\apple-notes\\SKILL.md",
+    "source": "skills/apple-notes.md",
+    "heading": ""
+  },
+  {
+    "text": "apple-reminders: Apple Reminders via remindctl: add, list, complete.  E:\\claude\\nanobot-mg\\nanobot\\skills\\apple-reminders\\SKILL.md",
+    "source": "skills/apple-reminders.md",
+    "heading": ""
+  },
+  {
+    "text": "architecture-diagram: 深色主题 SVG 架构图/云架构图/基础设施图，输出独立 HTML。\n当用户要求画软件架构图、云基础设施拓扑、系统部署图或技术架构展示时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\architecture-diagram\\SKILL.md",
+    "source": "skills/architecture-diagram.md",
+    "heading": ""
+  },
+  {
+    "text": "canvas-design: 视觉艺术设计：创建 .png / .pdf 格式的海报、艺术画、静态视觉作品。\n当用户要求设计海报、艺术画、视觉作品、或\"画一幅图\"、\"帮我设计\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\canvas-design\\SKILL.md",
+    "source": "skills/canvas-design.md",
+    "heading": ""
+  },
+  {
+    "text": "clawhub: 从 ClawHub 社区仓库发现、搜索、安装、列出、更新技能。\n当用户要求安装 skill、搜索 skill、查看可用 skill、升级 skill 时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\clawhub\\SKILL.md",
+    "source": "skills/clawhub.md",
+    "heading": ""
+  },
+  {
+    "text": "code-review: 代码审查：检查 Bug、安全问题、代码异味、可维护性。\n当用户说\"review this code\"、\"帮我看看代码\"、\"审查代码\"、\"code review\"、或在合并前审查变更时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\code-review\\SKILL.md",
+    "source": "skills/code-review.md",
+    "heading": ""
+  },
+  {
+    "text": "codebase-inspection: 代码库统计：pygount 分析 LOC、语言占比、代码/注释比例。\n当用户要求统计代码行数、了解项目语言组成、报告代码量或注释率时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\codebase-inspection\\SKILL.md",
+    "source": "skills/codebase-inspection.md",
+    "heading": ""
+  },
+  {
+    "text": "codegraph: 代码知识图谱分析：调用链、依赖、死代码、热点、架构分析、语义搜索、影响分析。\n当用户要求分析代码结构、查调用关系、找依赖、做架构报告、搜索相似函数、追溯 bug 根因、或评审 PR（风险评估、冲突检测）时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\codegraph\\SKILL.md",
+    "source": "skills/codegraph.md",
+    "heading": ""
+  },
+  {
+    "text": "cron: 管理定时任务和提醒。\n当用户要求设置提醒、定时任务、周期通知、一次性通知、或说\"每隔 X 分钟/小时/天\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\cron\\SKILL.md",
+    "source": "skills/cron.md",
+    "heading": ""
+  },
+  {
+    "text": "cron-conditional-delivery: 定时任务的条件执行模式。在 cron 触发后，先检查完成状态文件或日志时间戳，避免重复执行已完成的任务。\n当 cron 触发后需要判断任务是否已执行过、或需要检查完成状态再决定下一步时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\cron-conditional-delivery\\SKILL.md",
+    "source": "skills/cron-conditional-delivery.md",
+    "heading": ""
+  },
+  {
+    "text": "daily-trending: 今日热搜/热门话题：从 tophub.today 获取多平台热搜榜。\n当用户问\"今天热搜\"、\"微博热搜\"、\"热门话题\"、\"什么在 trending\"、\"今日热点\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\daily-trending\\SKILL.md",
+    "source": "skills/daily-trending.md",
+    "heading": ""
+  },
+  {
+    "text": "delegate: 任务委派：将编码、调研、验证等工作拆分子任务并行执行。\n当任务可以拆分为父级推理 + 子 Agent 专注执行、需要并行处理多路工作、或复杂任务需要分工时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\delegate\\SKILL.md",
+    "source": "skills/delegate.md",
+    "heading": ""
+  },
+  {
+    "text": "diagram-maker: 创建图表/图示：SVG/HTML 或 Excalidraw，支持概念图、架构图、流程图、白板。\n当用户要求画图、画架构图、画流程图、画概念图、或用白板方式草图时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\diagram-maker\\SKILL.md",
+    "source": "skills/diagram-maker.md",
+    "heading": ""
+  },
+  {
+    "text": "docx: Word 文档创建、编辑、分析：修订、批注、格式保留、文本提取。\n当用户要求创建/修改 .docx 文件、跟踪修订、添加评论、或提取文档内容时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\docx\\SKILL.md",
+    "source": "skills/docx.md",
+    "heading": ""
+  },
+  {
+    "text": "excalidraw: Excalidraw 手绘风格图表：架构图、流程图、序列图 JSON。\n当用户要求画手绘风格图表、流程图、架构草图、或导出 .excalidraw 文件时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\excalidraw\\SKILL.md",
+    "source": "skills/excalidraw.md",
+    "heading": ""
+  },
+  {
+    "text": "findmy: Track Apple devices/AirTags via FindMy.app on macOS.  E:\\claude\\nanobot-mg\\nanobot\\skills\\findmy\\SKILL.md",
+    "source": "skills/findmy.md",
+    "heading": ""
+  },
+  {
+    "text": "git-workflow: Git workflow patterns including branching strategies, commit conventions, merge vs rebase, conflict resolution, and collaborative development best practices for teams of all sizes.  E:\\claude\\nanobot-mg\\nanobot\\skills\\git-workflow\\SKILL.md",
+    "source": "skills/git-workflow.md",
+    "heading": ""
+  },
+  {
+    "text": "github: 管理 GitHub 仓库的 PR、Issue、CI、代码搜索。\n当用户要求查看 PR、检查 CI 状态、列出 Issue、搜索代码、运行 workflow、调用 GitHub API 时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\github\\SKILL.md",
+    "source": "skills/github.md",
+    "heading": ""
+  },
+  {
+    "text": "github-auth: GitHub 认证设置：HTTPS Token、SSH 密钥、gh CLI 登录。\n当用户需要配置 GitHub 访问权限、认证失败报错、或首次使用 GitHub 相关 skill 时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\github-auth\\SKILL.md",
+    "source": "skills/github-auth.md",
+    "heading": ""
+  },
+  {
+    "text": "github-code-review: GitHub PR 代码审查：本地 diff 审查、远程 PR inline 评论。\n当用户要求审查 PR 代码、在 PR 中添加 inline 评论、或审查本地变更后推送时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\github-code-review\\SKILL.md",
+    "source": "skills/github-code-review.md",
+    "heading": ""
+  },
+  {
+    "text": "github-issues: GitHub Issue 管理：创建、分类、打标、分配、搜索。\n当用户要求创建 Issue、查看 Issue 列表、给 Issue 打标签、分配负责人、或搜索 Issue 时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\github-issues\\SKILL.md",
+    "source": "skills/github-issues.md",
+    "heading": ""
+  },
+  {
+    "text": "github-pr-workflow: GitHub PR 流程全生命周期：分支、提交、开 PR、CI 检查、合并。\n当用户要求创建 PR、查看 PR 状态、处理合并冲突、触发 CI、或合入代码时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\github-pr-workflow\\SKILL.md",
+    "source": "skills/github-pr-workflow.md",
+    "heading": ""
+  },
+  {
+    "text": "github-repo-management: GitHub 仓库管理：克隆、创建、Fork、配置远程、管理 Release。\n当用户要求创建仓库、克隆代码、Fork 项目、管理 Release 版本时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\github-repo-management\\SKILL.md",
+    "source": "skills/github-repo-management.md",
+    "heading": ""
+  },
+  {
+    "text": "google-workspace: Gmail, Calendar, Drive, Docs, Sheets via gws CLI or Python.  E:\\claude\\nanobot-mg\\nanobot\\skills\\google-workspace\\SKILL.md",
+    "source": "skills/google-workspace.md",
+    "heading": ""
+  },
+  {
+    "text": "imap-smtp-email: 邮件收发：通过 IMAP/SMTP 读取、搜索、发送邮件，支持附件。\n当用户要求查邮件、发邮件、搜索收件箱、标记已读/未读时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\imap-smtp-email\\SKILL.md",
+    "source": "skills/imap-smtp-email.md",
+    "heading": ""
+  },
+  {
+    "text": "imessage: Send and receive iMessages/SMS via the imsg CLI on macOS.  E:\\claude\\nanobot-mg\\nanobot\\skills\\imessage\\SKILL.md",
+    "source": "skills/imessage.md",
+    "heading": ""
+  },
+  {
+    "text": "improve-codebase-architecture: 代码架构改进：发现重构机会、降低模块耦合、提升可测试性和 AI 可导航性。\n当用户要求改进架构、重构、整合紧耦合模块、或说\"让代码更好维护\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\improve-codebase-architecture\\SKILL.md",
+    "source": "skills/improve-codebase-architecture.md",
+    "heading": ""
+  },
+  {
+    "text": "macos-computer-use: Drive the macOS desktop in the background — screenshots, mouse, keyboard,\nscroll, drag — without stealing the user's cursor, keyboard focus, or\nSpace. Works with any tool-capable model. Load this skill whenever the\n`computer_use` tool is available.  E:\\claude\\nanobot-mg\\nanobot\\skills\\macos-computer-use\\SKILL.md",
+    "source": "skills/macos-computer-use.md",
+    "heading": ""
+  },
+  {
+    "text": "maps: Geocode, POIs, routes, timezones via OpenStreetMap/OSRM.  E:\\claude\\nanobot-mg\\nanobot\\skills\\maps\\SKILL.md",
+    "source": "skills/maps.md",
+    "heading": ""
+  },
+  {
+    "text": "market-game-analysis: MGA 市场博弈分析：穿透现象研究多空双方动机、实力、意图，输出可验证交易判断。\n当用户要求分析市场走势、多空博弈、资金动向、或说\"行情怎么看\"、\"主力意图\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\market-game-analysis\\SKILL.md",
+    "source": "skills/market-game-analysis.md",
+    "heading": ""
+  },
+  {
+    "text": "my: 检查 agent 自身状态：能力、模型、上下文窗口、迭代限制、运行时配置。\n当用户问\"你是谁\"、\"你有什么能力\"、\"你的配置\"时，或行为异常需要自检时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\my\\SKILL.md",
+    "source": "skills/my.md",
+    "heading": ""
+  },
+  {
+    "text": "nano-pdf: Edit PDF text/typos/titles via nano-pdf CLI (NL prompts).  E:\\claude\\nanobot-mg\\nanobot\\skills\\nano-pdf\\SKILL.md",
+    "source": "skills/nano-pdf.md",
+    "heading": ""
+  },
+  {
+    "text": "notion: Notion API + ntn CLI: pages, databases, markdown, Workers.  E:\\claude\\nanobot-mg\\nanobot\\skills\\notion\\SKILL.md",
+    "source": "skills/notion.md",
+    "heading": ""
+  },
+  {
+    "text": "ocr-and-documents: Extract text from PDFs/scans (pymupdf, marker-pdf).  E:\\claude\\nanobot-mg\\nanobot\\skills\\ocr-and-documents\\SKILL.md",
+    "source": "skills/ocr-and-documents.md",
+    "heading": ""
+  },
+  {
+    "text": "pdf: PDF 文件处理：提取文本/表格、创建、合并/拆分、填写表单。\n当用户要求处理 PDF 文件、提取内容、创建新 PDF、合并拆分文档、或填写 PDF 表单时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\pdf\\SKILL.md",
+    "source": "skills/pdf.md",
+    "heading": ""
+  },
+  {
+    "text": "plan: 规划模式：编写可执行的 Markdown 计划到 tasks/ 目录，不执行代码。\n当用户说\"先出方案\"、\"写个计划\"、\"plan it\"、\"规划一下\"、或要求制定实施步骤时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\plan\\SKILL.md",
+    "source": "skills/plan.md",
+    "heading": ""
+  },
+  {
+    "text": "playwright: 浏览器自动化：导航、填表、截图、数据抓取、UI 流程调试。\n当用户要求自动化浏览器操作、截取网页截图、抓取动态渲染数据、填写表单、或调试前端 UI 流程时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\playwright\\SKILL.md",
+    "source": "skills/playwright.md",
+    "heading": ""
+  },
+  {
+    "text": "pptx: PPT 演示文稿创建、编辑、分析：布局、评论、演讲者备注。\n当用户要求创建/修改 .pptx 文件、操作幻灯片布局、添加备注或批注时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\pptx\\SKILL.md",
+    "source": "skills/pptx.md",
+    "heading": ""
+  },
+  {
+    "text": "python-debugpy: Python 调试：pdb REPL + debugpy 远程调试 (DAP 协议)。\n当用户需要调试 Python 代码、设置断点、单步执行、检查变量、或进行 post-mortem 分析时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\python-debugpy\\SKILL.md",
+    "source": "skills/python-debugpy.md",
+    "heading": ""
+  },
+  {
+    "text": "reframe: 问题重构：压缩噪音、跳出循环、重新定义问题。\n当用户说\"换个角度\"、\"简单点\"、\"还有别的方法\"、\"重新想\"、 或方案越写越复杂、同一问题连续 3 次无进展时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\reframe\\SKILL.md",
+    "source": "skills/reframe.md",
+    "heading": ""
+  },
+  {
+    "text": "requesting-code-review: 提交前代码审查：安全扫描、质量门禁、自动修复。\n当用户说\"commit\"、\"push\"、\"ship\"、\"done\"、\"verify\"、\"review before merge\"、 或完成 2 个以上文件修改后准备提交时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\requesting-code-review\\SKILL.md",
+    "source": "skills/requesting-code-review.md",
+    "heading": ""
+  },
+  {
+    "text": "search-first: Research-before-coding workflow. Search for existing tools, libraries, and patterns before writing custom code. Invokes the researcher agent.  E:\\claude\\nanobot-mg\\nanobot\\skills\\search-first\\SKILL.md",
+    "source": "skills/search-first.md",
+    "heading": ""
+  },
+  {
+    "text": "simplify-code: 并行代码简化：三路 Agent 并行审查近期代码变更，聚合建议并自动修复。\n当用户要求清理代码、简化逻辑、减少重复、优化效率、或说\"帮我优化代码\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\simplify-code\\SKILL.md",
+    "source": "skills/simplify-code.md",
+    "heading": ""
+  },
+  {
+    "text": "skill-manager: 管理技能库的增删改查，是技能自我进化的核心工具。\n当以下情况发生时激活：刚执行完一个 skill 发现步骤有误、完成复杂任务后发现可复用模式、 用户要求创建/更新/删除 skill、或有待处理的候选 skill 未处理、 或发现 skill 描述或步骤过时。  E:\\claude\\nanobot-mg\\nanobot\\skills\\skill-manager\\SKILL.md",
+    "source": "skills/skill-manager.md",
+    "heading": ""
+  },
+  {
+    "text": "skill-vetter: Skill 安全审查：安装前检查红 flag、权限范围、可疑模式。\n当用户要求从 ClawdHub、GitHub 或其他来源安装 skill，或评估外部技能安全性时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\skill-vetter\\SKILL.md",
+    "source": "skills/skill-vetter.md",
+    "heading": ""
+  },
+  {
+    "text": "stock-analyzer: 股票深度分析：实时行情、基本面指标、技术指标、增长分析、投资建议。\n当用户要求分析某只股票（A股/美股/港股）、查询估值指标、技术面信号、或生成投资报告时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\stock-analyzer\\SKILL.md",
+    "source": "skills/stock-analyzer.md",
+    "heading": ""
+  },
+  {
+    "text": "structured-debugging: 假设驱动的结构化调试方法论，解决非平凡 Bug、不稳定测试、复杂系统追踪。\n当用户说\"debug\"、\"为什么不对\"、\"报错了\"、\"运行结果不符合预期\"、 或第一轮修复无效、行为看起来\"不可能\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\structured-debugging\\SKILL.md",
+    "source": "skills/structured-debugging.md",
+    "heading": ""
+  },
+  {
+    "text": "subagent-echo-no-execution-detect: Subagent 静默完成（phase=tools_completed 但无输出文件）检测模式。当 subagent 完成但文件未写时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\subagent-echo-no-execution-detect\\SKILL.md",
+    "source": "skills/subagent-echo-no-execution-detect.md",
+    "heading": ""
+  },
+  {
+    "text": "summarize: 总结 URL、网页、本地文件、YouTube 视频的内容，提取关键点。\n当用户要求总结一个链接、网页、文件，或说\"这个链接是什么\"、\"TLDR\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\summarize\\SKILL.md",
+    "source": "skills/summarize.md",
+    "heading": ""
+  },
+  {
+    "text": "systematic-debugging: 四阶段根因调试法：先理解再修复，替代随机试错。\n当用户报告 Bug、运行结果异常、测试失败、或说\"排查问题\"、\"root cause\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\systematic-debugging\\SKILL.md",
+    "source": "skills/systematic-debugging.md",
+    "heading": ""
+  },
+  {
+    "text": "teams-meeting-pipeline: Operate the Teams meeting summary pipeline — summarize meetings, inspect pipeline status, replay jobs, manage Microsoft Graph subscriptions.  E:\\claude\\nanobot-mg\\nanobot\\skills\\teams-meeting-pipeline\\SKILL.md",
+    "source": "skills/teams-meeting-pipeline.md",
+    "heading": ""
+  },
+  {
+    "text": "tmux: 管理交互式终端会话，支持 SSH、REPL、密码输入等需要持久终端的场景。\n当用户需要 SSH 连接、运行交互式程序、输入密码、启动 REPL、或要求\"在后台运行\"时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\tmux\\SKILL.md",
+    "source": "skills/tmux.md",
+    "heading": ""
+  },
+  {
+    "text": "verify-before-report-claim: Code review 中行为断言验证模式。当在 code review 中需要断言代码行为（如\"无重试/无超时/无校验\"等）时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\verify-before-report-claim\\SKILL.md",
+    "source": "skills/verify-before-report-claim.md",
+    "heading": ""
+  },
+  {
+    "text": "weather: 查询天气信息。\n当用户询问天气、温度、降雨、降雪、风力、湿度、紫外线、空气质量、天气预报（今天/今晚/本周/周末）时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\weather\\SKILL.md",
+    "source": "skills/weather.md",
+    "heading": ""
+  },
+  {
+    "text": "writing-great-skills: Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.  E:\\claude\\nanobot-mg\\nanobot\\skills\\writing-great-skills\\SKILL.md",
+    "source": "skills/writing-great-skills.md",
+    "heading": ""
+  },
+  {
+    "text": "xlsx: 电子表格创建、编辑、分析：公式、格式、数据处理、可视化。\n当用户要求操作 .xlsx / .xlsm / .csv / .tsv 文件，包括创建、读取、修改、分析数据、计算公式时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\xlsx\\SKILL.md",
+    "source": "skills/xlsx.md",
+    "heading": ""
+  },
+  {
+    "text": "xurl: X/Twitter API 操作：发帖、搜索、私信、媒体上传。\n当用户要求发布推文、搜索 X/Twitter 内容、发送 DM、上传媒体、或调用 X API v2 时激活。  E:\\claude\\nanobot-mg\\nanobot\\skills\\xurl\\SKILL.md",
+    "source": "skills/xurl.md",
+    "heading": ""
+  }
+]

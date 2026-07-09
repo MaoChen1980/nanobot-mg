@@ -1,6 +1,7 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-06-28T00:22:42+0800
+Last scanned: 2026-07-09T04:28:21+0800
+Project root: `E:\claude\nanobot-mg`
 
 ## Overview
 
@@ -10,38 +11,45 @@ Last scanned: 2026-06-28T00:22:42+0800
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~110,212
+- **Approx LOC**: ~102,419
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 417 | ~109,605 |
+| Python | 390 | ~101,812 |
 | Shell | 8 | ~607 |
 
 ## Directory Structure
 
-nanobot-mg/
+E:\claude\nanobot-mg/
   docs/
     ideas/
-      session-reset-after-task.md (1KB)
-    agent-social-network.md (622B)
-    AGENTS.md (16KB)
+    agent-social-network.md (7KB)
+    AGENTS.md (13KB)
     channel-plugin-guide.md (14KB)
-    chat-apps.md (14KB)
-    chat-commands.md (1KB)
-    cli-reference.md (1KB)
-    configuration.md (29KB)
+    chat-apps.md (4KB)
+    chat-commands.md (2KB)
+    cli-reference.md (8KB)
+    configuration.md (26KB)
+    cron.md (13KB)
     deployment.md (5KB)
-    memory.md (6KB)
-    multiple-instances.md (4KB)
-    my-tool.md (7KB)
-    openai-api.md (4KB)
-    project_card.md (11KB)
+    mcp.md (15KB)
+    memory.md (13KB)
+    multiple-instances.md (7KB)
+    my-tool.md (5KB)
+    openai-api.md (7KB)
+    prompt-templates.md (32KB)
     python-sdk.md (8KB)
-    quick-start.md (2KB)
+    quick-start.md (4KB)
     README.md (2KB)
-    websocket.md (12KB)
+    security.md (13KB)
+    skills-guide.md (17KB)
+    tools-reference.md (6KB)
+    transcription.md (2KB)
+    troubleshooting.md (25KB)
+    websocket.md (5KB)
+    webui.md (20KB)
   hooks/
     write_commit.py (1KB)
   images/
@@ -49,6 +57,7 @@ nanobot-mg/
     nanobot_arch.png (490KB)
     nanobot_logo.png (187KB)
     nanobot_webui.png (295KB)
+  memory/
   nanobot/
     agent/
       commands/
@@ -60,22 +69,22 @@ nanobot-mg/
         __init__.py (352B)
         _section_utils.py (9KB)
         _semantic_base.py (16KB)
-        analyze.py (7KB)
+        analyze.py (8KB)
         assess_me.py (3KB)
-        base.py (16KB)
+        base.py (15KB)
         cancel_subagent.py (1KB)
         check_subagent.py (2KB)
         checkpoint.py (15KB)
         conversation_search.py (5KB)
         cron.py (20KB)
         danger.py (2KB)
-        debug_root_cause.py (11KB)
+        debug_root_cause.py (12KB)
         explore_module.py (21KB)
         file_state.py (8KB)
         list_subagents.py (1KB)
         log_event.py (5KB)
         memory_search.py (6KB)
-        message.py (8KB)
+        message.py (6KB)
         notify_orchestrator.py (2KB)
         output_cache.py (3KB)
         reframe.py (5KB)
@@ -87,43 +96,46 @@ nanobot-mg/
         search.py (28KB)
         self.py (21KB)
         semantic_search.py (4KB)
+        send_file.py (6KB)
         shell_validators.py (7KB)
-        spawn.py (7KB)
+        skill_search.py (3KB)
+        spawn.py (9KB)
+        tell_subagent.py (2KB)
         tool_call_log.py (3KB)
-        web.py (22KB)
+        web.py (23KB)
       __init__.py (584B)
-      assess_me.py (6KB)
+      assess_me.py (8KB)
       compress.py (19KB)
       compressor.py (7KB)
-      context.py (55KB)
+      context.py (54KB)
       context_vars.py (985B)
-      db.py (23KB)
+      db.py (24KB)
       hook.py (9KB)
       llm_context.py (2KB)
-      loop.py (79KB)
+      loop.py (87KB)
       loop_checkpoint.py (6KB)
-      loop_constants.py (749B)
-      loop_dispatch.py (7KB)
+      loop_constants.py (1KB)
+      loop_dispatch.py (6KB)
       loop_hook.py (11KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (27KB)
+      loop_message_handlers.py (28KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (89KB)
-      memory_store.py (11KB)
+      memory_extractor.py (87KB)
+      memory_store.py (20KB)
       memory_vector.py (26KB)
       message_pipe.py (8KB)
       project_scanner.py (21KB)
-      runner.py (66KB)
+      runner.py (72KB)
       runner_constants.py (566B)
       runner_context.py (8KB)
       runner_execution.py (8KB)
       runner_injection.py (5KB)
       runner_llm.py (7KB)
       runner_retry.py (4KB)
-      skills.py (14KB)
-      subagent.py (21KB)
-      subagent_prompt.py (6KB)
+      skills.py (15KB)
+      subagent.py (32KB)
+      subagent_prompt.py (5KB)
       subagent_status.py (2KB)
       subagent_tools.py (4KB)
     api/
@@ -135,16 +147,9 @@ nanobot-mg/
       manager.py (4KB)
       queue.py (1KB)
     cli/
-      __init__.py (30B)
-      commands.py (43KB)
-      stream.py (4KB)
     command/
-      __init__.py (255B)
-      builtin.py (9KB)
-      router.py (3KB)
     config/
     cron/
-    docs/
     gateway/
     heartbeat/
     hooks/
@@ -164,15 +169,15 @@ nanobot-mg/
     _commit.py (56B)
     nanobot.py (8KB)
     project_card.md (4KB)
+  scripts/
   tasks/
   tests/
-  tmp/
   CONTRIBUTING.md (4KB)
-  docker-compose.yml (1KB)
+  docker-compose.yml (701B)
   Dockerfile (995B)
   entrypoint.sh (443B)
   LICENSE (1KB)
-  project_card.md (11KB)
+  project_card.md (10KB)
   pyproject.toml (4KB)
   README.md (8KB)
   README_en.md (5KB)
@@ -213,7 +218,7 @@ license-files = [
 
 dependencies = [
     "typer>=0.24.0,<1.0.0",
-    "anthropic>=0.45.0,<1.0.0",
+    "anthropic>=0.90.0,<1.0.0",
     "pydantic>=2.12.0,<3.0.0",
     "pydantic-settings>=2.12.0,<3.0.0",
     "websockets>=16.0,<17.0",
@@ -227,7 +232,7 @@ dependencies = [
     "rich>=14.0.0,<15.0.0",
     "croniter>=6.0.0,<7.0.0",
     "dingtalk-stream>=0.24.0,<1.0.0",
-... (125 more lines)
+... (127 more lines)
 ```
 
 ### .editorconfig
@@ -372,16 +377,14 @@ services:
           cpus: "0.25"
           memory: 256M
 
-  nanobot-api:
-    container_name: nanobot-api
+  nanobot-cli:
     <<: *common-config
-    command:
-      ["serve", "--host", "0.0.0.0", "-w", "/home/nanobot/.nanobot/api-workspace"]
-    restart: unless-stopped
-    ports:
-      - 127.0.0.1:8900:8900
-    deploy:
-... (15 more lines)
+    profiles:
+      - cli
+    command: ["status"]
+    stdin_open: true
+    tty: true
+
 ```
 
 ### CONTRIBUTING.md

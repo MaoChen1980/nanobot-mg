@@ -76,3 +76,5 @@ def test_anthropic_handle_error_marks_connection_kind() -> None:
 
     assert response.finish_reason == "error"
     assert response.error_kind == "connection"
+    assert response.error_should_retry is True
+    assert response.error_retry_after_s == 30.0

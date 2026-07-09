@@ -493,6 +493,18 @@ ACTION:
 4. **禁止**：在输出文件存在的情况下凭记忆制定后续方案
 5. **禁止**：因为 subagent 超时就认为所有信息丢失——输出文件是 subagent 的产物，超时不等于文件不存在
 
+#### 3.1 Subagent 产物验证 — tools_completed 不等于有产出
+
+**TRIGGER: subagent 返回 tools_completed 状态**
+ACTION:
+1. 用 `glob` 检查 workspace/tmp/ 目录下是否存在预期产出文件（如 .md 报告）
+2. 如果文件不存在，判定为「无产物 tools_completed」——这是 tools_completed 状态的合法变体，不代表失败
+3. 在继续下一步前，必须确认产物文件存在且内容完整
+4. **禁止**：假设 tools_completed = 有产物——tools_completed 只表示工具链执行完毕，不代表有可合入的文件变更
+5. **禁止**：在产物文件不存在时继续后续流程——应先确认是否需要重做或补充
+
+**典型失败模式**：subagent 5次迭代 tools_completed，但 workspace/tmp/ 无报告文件。计数在 loop A，检查在 loop B，永不触发。
+
 #### 4. 增量补扫 — 替代 subagent 的低成本方案
 
 **TRIGGER: subagent 超时，且输出文件也不存在某个模块的路线图**
