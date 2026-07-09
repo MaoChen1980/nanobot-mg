@@ -171,6 +171,7 @@ class MemoryExtractor:
         if not all_findings and not all_events:
             logger.info("MemoryExtractor: nothing to process")
             self._move_processed(processed)
+            self._generate_memory_index()
             return False
 
         # ── Step 2: write findings + events + cleanup, then flush ──
@@ -1721,8 +1722,6 @@ class MemoryExtractor:
                         # Must start with "- YYYY" (date or quarterly summary like 2026-Q2)
                         if s.startswith("- ") and len(s) > 14 and s[2].isdigit():
                             event_entries.append(s)
-                if len(event_entries) >= 20:
-                    break
         event_entries.sort(reverse=True)
         event_entries = event_entries[:20]
 
