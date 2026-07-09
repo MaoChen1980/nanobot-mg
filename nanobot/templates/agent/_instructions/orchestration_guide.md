@@ -93,6 +93,7 @@ action:
   2. 如果是真正的 blocker（信息不足导致结论不可靠）→ 分析缺失信息，调整 task 后重新 spawn
   3. subagent 的 self-assessment 指明了具体缺什么，作为重试的依据
   4. **不要直接使用 needs_review 的结果** — 必须验证后再集成
+  5. **显式验证（必须执行）：** `read_file` 验证 subagent 声称已生成的输出文件内容，确认与 final response summary 一致后再向用户报告。依赖 subagent 的 summary 而不验证会导致路线图数据不可信。
 
 **TRIGGER: Subagent 结果不达标或失败（内容质量低/安全审查拦截/超时）**
 action:
