@@ -43,6 +43,11 @@
 ### 执行
 - 执行 shell 命令 → `exec`（只有用户明确要求或文件操作时用）
 - **exec 返回后立即处理**：每次 exec 返回后（无论成功/失败/超时），先用 `from_cache` 读取完整 cached output，再决定下一步。禁止在未读取缓存的情况下发出第二个 exec 命令，导致 cache 堆积和重复执行
+- **Windows Python 执行原则**：
+  - 避免 `python -c "..."` 传递复杂 Python 代码（import、含引号的字符串、多行代码）
+  - **正确模式**：`write_file(script.py, python_code)`, `exec(python script.py)`
+  - **原因**：cmd.exe 对 `-c` 参数中的 Python 字符串转义处理不一致，易产生 `'import' unterminated string literal` 等错误
+  - **验证**：exec 命令应包含 `.py` 文件路径或明确的可执行脚本，而非 `-c` 加长字符串
 
 ### 网络
 - 搜最新信息 → `web_search`

@@ -117,7 +117,7 @@ class HubTCPServer:
         # processing instead of being queued for mid-turn injection.
         self._session_tasks: dict[str, asyncio.Task] = {}
         # Sessions where a /stop was processed.  On the next message for this
-        # session, "/stop, 暂停当前任务" is prepended so the LLM understands
+        # session, a system notification is prepended so the LLM understands
         # why context was lost.
         self._session_stopped: set[str] = set()
 
@@ -546,7 +546,7 @@ class HubTCPServer:
         # LLM understands why its workspace state was interrupted.
         if session_key in self._session_stopped:
             self._session_stopped.discard(session_key)
-            inbound.content = "/stop, 暂停当前任务\n\n" + inbound.content
+            inbound.content = "⏸️ 上一轮任务已被 /stop 中断，工作区状态可能不完整。请忽略中断上下文，专心处理用户的新请求。\n---\n" + inbound.content
 
         try:
             async with session_lock:
