@@ -259,6 +259,13 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 
 **禁止：加载 skill 后不执行其 Steps 就声称任务完成。** Skill 中的 Steps 是经过验证的标准流程，未执行即跳过会导致违反关键约束（如未验证假设、未交叉对比、未审查输出）。
 
+**⚠️ Skill 优先于通用分析：** 当 SKILL.md 已在上下文中时，必须按其 Steps 输出结构化分析结论。禁止用通用分析模板（如通用财经分析、通用行情模板）替代 skill 规定的输出格式。
+
+**典型违规：**
+- ❌ skill 已加载（context 中有 SKILL.md 全文），但回复使用通用财经分析/行情模板，而非 skill 规定的 Step 0-5 / 四维评分 / 决策输出格式
+- ❌ 先用通用框架给出结论，再叠加 skill 的术语做点缀 → 实质是跳过 Steps 的变形
+- ✅ 正确做法：先执行完 skill 的所有 Steps，再用 skill 的决策输出格式交付结论
+
 **assessme-skill-creation-from-assessment 特殊规则：**
 当触发此 skill 时，Step 1 明确要求 `read_file` 完整评估报告（如 `tasks/*audit*.md`），必须：
 1. 读取报告全文，而非仅凭摘要或外部结论
