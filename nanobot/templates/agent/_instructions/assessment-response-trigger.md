@@ -25,14 +25,29 @@
 
 **禁止：** 在 subagent 完成前输出「P0 仅剩 XXX」的确定性结论。即使 assess 尚未指出，只要 subagent 仍在运行，就不应输出覆盖其职责范围的 P0 锁定结论。
 
-### 规则 3：assess_me 发现未使用相关 skill 时 → 立即加载并执行
+### 规则 3：assess_me 指令加载 skill 时 → 第一行代码必须是 read_file
 
-**触发条件：** assess_me 在 `unused_skills` 中列出了与当前任务高度相关的 skill。
+**触发条件（满足任一即触发）：**
+- assess_me 结果（`[assess]`...`[/assess]` user 消息）出现在当前 session 中
+- assess_me 在 `unused_skills` 中列出了与当前任务高度相关的 skill
+- assess_me 的 assessment content 中包含「先加载 skill」「请加载 skill X」「先 read_file」「第一行代码」等显式 skill 加载指令
+- assess_me 明确标注「这是规则违反，不是信息不足」
 
 **动作：**
-1. 用 `read_file` 加载该 skill 的 SKILL.md 全文（仅获取内容，不执行任何探索）
+1. **本轮第一个 tool_call 必须是 `read_file`** — 读取该 skill 的 SKILL.md 全文（仅获取内容，不执行任何探索）
 2. **立即进入核心动作** — 不发出任何 read/glob/grep 探索，直接按 skill 的 `## Steps` 执行第一 tool_call
 3. 「已加载」≠「已执行」— skill 全文已在 context 中，不需要再读任何文件
+
+**典型违规模式（立即停止并执行 skill）：**
+- ❌ assess_me 结果出现 → agent 解读为"背景信息"，先去 grep/glob/exec 做原来的工作 → **最高优先级违规**（assess_me 结果就是本轮任务，不是背景）
+- ❌ assess_me 说「先加载 skill」→ agent 先输出 MGA 框架分析（跳过 read_file）→ 分析截断在 Q2 价位表中间，缺失 Step 3 四维评分
+- ❌ assess_me 说「先加载 skill」→ agent 用 grep 搜索关键词替代 read_file → 无法验证压缩后 skill 的 Steps 是否仍有可执行指令
+- ❌ 先 git push / git commit → 再 skill
+- ❌ 先 grep/read_file 调研 → 再 skill
+- ❌ 声称「已就绪/已理解」跳过 skill 加载
+
+**⚠️ 关于"继续推进原始任务"的语义澄清：**
+assess_me 消息末尾的"继续推进原始任务"意思是"在执行完 assess_me 指令后，用原始任务来验证修复是否有效"，**不是让你先做原始任务再来处理 assess_me**。assess_me 结果 = 新任务指令，优先级覆盖当前所有工作。
 
 **⚠️ 与 assessme-skill-creation-from-assessment 的特殊约定：**
 该 skill 的 Core Principle 明确要求「第一 tool_call 即为核心动作（write/edit），不发出 read/glob/grep 探索」。当触发该 skill 时，步骤 1 的 `read_file` 完成后，步骤 2 直接构造并执行 write/edit tool_call，跳过所有中间探索。
@@ -61,3 +76,39 @@
 **禁止：** 收到 FileNotFoundError 后跳过 skill_search 直接用 `glob` 手动搜索目录、或静默降级到 web_fetch 等替代方案而不说明 skill 不可用。静默降级会导致 assess_me 无法区分「skill 加载成功但效果不佳」和「skill 根本不存在」两种情况，延误根因诊断。
 
 **为什么：** assess_me 引用某个 skill 时，意味着该 skill 的 Steps 是任务的标准流程。跳过 skill 而不报告，assess_me 只会看到替代方案的效果不好，从而增加诊断轮次。明确报告「skill 不存在」让 assess_me 知道这是环境问题而非执行问题。
+
+### 规则 6：assess_me 指出具体问题后 → 必须执行 edit_file，不能输出文本摘要替代
+
+**触发条件：** assess_me 明确指出具体残留问题（如「X行是旧内容残留」「Y行和Z行内容重复」）后，agent 声称「已完成修复」或「所有编辑完成」。
+
+**问题本质：** agent 输出文本摘要（如「All edits complete」+ 修复清单）但 tool calls 历史记录中没有任何 `edit_file` 调用针对 assess_me 指出的问题。
+
+**动作序列：**
+1. **第一步（必须）：** `read_file` 确认问题在当前文件中是否仍存在
+2. **第二步（必须）：** 若问题存在 → 立即执行 `edit_file` 修复
+3. **第三步（必须）：** `read_file` 验证修复后文件内容
+4. **第四步：** 输出修复结果摘要
+
+**禁止行为：**
+- ❌ 用文本摘要（如「已修复 Layer 2.5 重复行」）替代 `edit_file` 调用
+- ❌ 用 `grep` 搜索旧内容 → 输出「问题仍存在」→ 声称「需手动修复」→ 结束
+- ❌ 用 `grep` 搜索旧内容 → 声称「已确认问题」→ 声称「All edits complete」→ 不执行 edit_file
+
+**典型违规模式：**
+```
+❌ assess_me: "191-192行重复，应删除192行"
+   agent: "All edits complete ✓"
+   tool_calls: []  ← 无 edit_file 调用
+   → 这是「输出结论先于工具验证」违规
+   
+✅ assess_me: "191-192行重复，应删除192行"
+   agent: (执行 edit_file 删除192行)
+   tool_calls: [read_file, edit_file, read_file]
+   → 验证后交付
+```
+
+**验证清单（verify 后交付）：**
+修复完成后必须确认：
+- [ ] edit_file 调用已执行（不是摘要）
+- [ ] read_file 验证修复后内容正确
+- [ ] 无其他 assess_me 指出但未修复的问题

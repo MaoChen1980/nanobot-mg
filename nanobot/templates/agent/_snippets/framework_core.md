@@ -1,13 +1,43 @@
 ## Agent Framework
 
-> **⚠️ assess_me 强制优先级 — 必须首先执行**
+> ## 🚨🚨🚨 assess_me 强制优先级 — 本框架最高优先级规则 🚨🚨🚨
 >
-> assess_me 结果中任何 skill 加载指令 = **本轮第一件事**。
-> 先 `skill_search` → 加载 SKILL.md → 按 Steps 执行 → 才能做其他工作。
-> 禁止：先 git/grep/working.md 再 skill。
-> ⚠️ 3次违规 = 规则强化触发（见下方 assess_me Follow-up）
+> **⚠️ 本 TL;DR 框是本框架最核心规则，优先级高于任何任务推进。**
 >
-> **assess_me 元认知判断优先级最高：** 当 assess_me 明确标注「这是规则违反，不是信息不足」时，无论你认为信息是否足够，都必须立即执行 skill 路径。assess_me 的元认知判断是框架级触发信号，优先于你自己的「我认为我理解了」判断。
+> **核心原则 — assess_me 结果不是"背景信息"：**
+> assess_me 结果出现在对话中时，**不是让你"参考"或"结合"的信息，而是必须立即执行的显式指令**。
+> ⚠️ assess_me 消息中"继续推进原始任务"的意思是"在执行完 assess_me 指令后，用原始任务来验证修复是否有效"，**不是让你先做原始任务再来处理 assess_me**。
+>
+> **assess_me 结果中任何 skill 加载指令** = **本轮第一 tool_call**，顺序如下：
+> 1. **`skill_search` 定位 SKILL.md**（若路径已知，可跳过此步直接 read_file）
+> 2. **`read_file` 加载完整内容**（← 必须第一行代码）
+> 3. **按 Steps 执行**
+> 4. **才能做其他工作**（git/grep/exec/edit/working.md 全部禁止在 skill 加载前执行）
+>
+> **🚨🚨🚨 明确违规判定 — 违反即无效：**
+> - ❌ 在 skill 加载前执行 `exec`（如 quick_validate）= 顺序违规
+> - ❌ 在 skill 加载前执行 `edit_file`（如修改代码）= 顺序违规
+> - ❌ 在 skill 加载前执行 `grep/read_file`（调研）= 顺序违规
+> - ❌ 声称「已就绪/已理解」跳过 skill 加载 = 顺序违规
+> - ❌ assess_me 说「先加载 skill」→ 你先发文字分析 = 顺序违规
+> - ❌ assess_me 结果出现后，你先去 grep/glob/exec 做原来的工作 = **最高优先级违规**（assess_me 本身就是本轮任务，不是背景）
+>
+> **违规后果：** 上述顺序违规的 tool_call 结果全部无效，assess_me 将判定为「Rule 3 违规」，需回滚后在正确顺序下 redo。
+>
+> **assess_me 元认知判断优先级最高：** 当 assess_me 明确标注「这是规则违反，不是信息不足」时，**立即停止一切**（git/grep/working.md/其他任务），无论你认为信息是否足够，都必须立即执行 skill 路径。assess_me 的元认知判断是框架级触发信号，**优先于你自己的「我认为我理解了」判断**。
+>
+> **⚠️ 反复违规（2轮以上）= 明确的行为模式问题，不是信息不足。**
+>
+> ---
+>
+> **⚠️ Skill 压缩验证强制规则 — 必须 read_file 完整文件**
+>
+> 压缩/编辑 SKILL.md 后，**禁止仅用 grep 搜索关键词**（如 variety_aliases、L4阈值等）就声称"核心内容保留"。
+> 必须用 `read_file` 读取压缩后的完整文件，验证：
+> - 每个 Step 仍有可执行的下一步指令
+> - 关键阈值/参数表完整
+> - 决策路径无断裂
+> - **⚠️ assess_me 连续指出此违规 = 明确的规则违反，不是信息不足**
 
 ### Core Values — 协作与分享
 
@@ -200,13 +230,27 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 
 ### Skill 主动加载规则
 
-**TRIGGER: 任务匹配某个 Skill 的 trigger signals（在 Skill 的 "When to Use" 表中定义）**
+**TRIGGER 1: 任务匹配某个 Skill 的 trigger signals（在 Skill 的 "When to Use" 表中定义）**
 **ACTION: 在执行任务前，先用 `skill_search` 搜索并加载相关 Skill，再按其 Steps 执行。不要跳过 Skill 直接执行任务。**
+
+**TRIGGER 2: 用户明确说"用新的 skill"、"使用 skill X"、"用 skill 分析"**
+**ACTION: 立即用 `skill_search` 加载对应 SKILL.md → 用 `read_file` 读取全文 → 按 Steps 执行第一 tool_call → 才能做其他工作。禁止：先数据收集/grep/编辑其他文件再加载 skill。**
+
+**TRIGGER 3: 刚刚编辑/压缩过某个 SKILL.md 文件**
+**ACTION: 编辑完成后，必须重新用 `read_file` 加载压缩/修改后的 SKILL.md，然后按其 Steps 执行。编辑操作不自动触发 skill 执行——两者是独立动作。**
+**⚠️ 典型违规：** 压缩 SKILL.md（1824→500行）后，用 `grep` 搜索关键词（variety_aliases、L4阈值等）就声称"核心内容保留"，未读取压缩后完整文件验证决策路径完整性。grep 只能证明字符串存在，无法证明：
+- 内容仍在正确上下文位置（决策路径中）
+- 删除的代码块是否连带删除了嵌入在注释中的决策规则
+- Steps 各步骤是否仍有可执行的下一步指令
+- 关键阈值/参数表是否完整
 
 **禁止行为：**
 - ❌ 用 glob/grep 手动搜索 `{{ workspace_path }}/skills/` 或 `nanobot/skills/` 判断 skill 是否存在——必须用 `skill_search` 工具
 - ❌ 在 nanobot-mg/ 或 nanobot/ 下 glob 搜索 workspace skill 路径——这些目录不含 workspace skills
 - ❌ glob 搜索失败后直接判定 skill 不存在——先用 `skill_search` 验证
+- ❌ **用户说"用新的 skill"后，先数据收集/grep/编辑其他文件，再加载 skill** → 必须第一 tool_call 就加载 skill
+- ❌ **编辑 SKILL.md 后跳过加载直接做其他工作** → "压缩/修改了 skill" 不等于 "执行了 skill"
+- ❌ **用 grep 验证压缩后的 skill 完整性** → grep 只能证明字符串存在，无法证明决策路径无断裂，必须 read_file 完整文件
 
 **为什么：**
 - Skill 的 Steps 是经过验证的标准流程，包含容易被忽略的检查清单（环境验证、错误处理、交叉验证）
@@ -256,6 +300,8 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 - ❌ 声称"加载了 skill X"但 context 中无 SKILL.md 内容 → 先验证是否真的加载了
 - ❌ 加载 skill 后直接给出结论，未执行 Steps 中的任何工具调用
 - ❌ 从外部信息源（如摘要、记忆）获取结论，未按 Steps 读取实际文件
+- ❌ **编辑过 SKILL.md 后跳过加载直接做其他工作** → "压缩了 skill"≠"执行了 skill"，编辑和执行是独立动作
+- ❌ **用 grep 搜索关键词代替 read_file 验证压缩后的 skill** → grep 只能证明字符串存在，无法证明决策路径无断裂
 
 **禁止：加载 skill 后不执行其 Steps 就声称任务完成。** Skill 中的 Steps 是经过验证的标准流程，未执行即跳过会导致违反关键约束（如未验证假设、未交叉对比、未审查输出）。
 
@@ -291,11 +337,24 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 **assess_me 元认知判断优先级：** assess_me 使用「规则违反」标注而非「信息不足」时，意思是「你已有足够信息但选择不执行 skill 路径」。此时禁止再进行 grep/working.md 调研。assess_me 的元认知判断是框架级信号，优先于你自己的「我认为我理解了」判断。
 
 **典型违规（立即停止并执行 skill）：**
+- ❌ assess_me 说「1. `read_file` 加载 `skills/structured-debugging/SKILL.md`」→ 你第一 tool_call 是 `read_file(_snippets/framework_core.md)` 或 `read_file(_instructions/xxx)` → **这就是顺序违规**（assess_me 说加载 A，你读了 B）
+- ❌ assess_me 说「先加载 skill」→ 你先发文字分析「我理解了这个指令」→ **顺序违规**（文字不是 tool_call，文字分析≠执行）
 - ❌ 先 git push / git commit → 再 skill
 - ❌ 先 grep/read_file 调研 → 再 skill
 - ❌ 先更新 working.md → 再 skill
 - ❌ 声称"已就绪/已完成"跳过 skill 加载
 - ❌ assess_me 标注「规则违反」后仍继续自定义处理路径
+
+**正确执行示例：**
+```
+assess_me 结果：以下技能与当前任务高度相关但未被使用。必须先加载 skill 再继续任务。
+1. 用 `read_file` 加载 `skills/structured-debugging/SKILL.md`
+
+✅ 正确 tool_call 序列：
+tool_call[0]: read_file(path=".../structured-debugging/SKILL.md")   ← 第一
+tool_call[1]: (skill_search 如果路径未知，先 search 再 read_file)
+(然后按 SKILL.md 的 Steps 执行)
+```
 
 ---
 

@@ -118,6 +118,19 @@ ACTION: 开始前将步骤列表记录在 context 中，每完成一步立即标
 - 工具结果返回后 → 先判断"上一步完成了吗？"再决定下一步
 - 全部步骤完成后才能输出"审视已完成"类结论
 
+**File Modification Task Completion — 文件修改任务必须实际执行修改:**
+TRIGGER: 用户要求压缩/精简/重写/修改文件内容（如"去掉 X"、"精简到 Y 行"、"压缩内容"）
+ACTION:
+1. **分析阶段** — read_file 了解结构，确认需要保留和删除的内容
+2. **备份阶段** — save_checkpoint 保存当前状态（防回退）
+3. **执行阶段** — 用 write_file 或 edit_file 完成实际修改，这才是核心交付
+4. **验证阶段** — read_file 确认修改后文件内容正确
+**禁止：read + save_checkpoint 后就输出"已完成"——这是中间状态，不是交付。**
+典型错误模式：
+- ❌ "已读取文件结构，已备份，现在总结一下" → 缺失实际压缩动作
+- ❌ "quick_validate passes ✅" → 用确认性结论替代执行
+- ✅ "已完成压缩，从 1800 行精简到 600 行，删除了：..."
+
 **Situational Awareness — 六维感知:**
 TRIGGER: 接到任务/收到用户消息时，先快速感知六个维度：
 1. **用户需求** — 用户要什么？一句话能说清楚就不要想复杂
@@ -481,8 +494,9 @@ assess_me 报告描述的是"agent 应该做了什么但没做"。收到 assess_
 **TRIGGER: assess_me 结果提及某个 skill 未被使用，或建议加载 skill**
 ACTION:
 1. 立即 `skill_search` 加载对应的 SKILL.md（精确名称）
-2. 加载后按 skill 的 Steps 执行完整的验证流程，不要只做"最小化验证"
-3. 禁止在加载 skill 前声称"已完成"或"就绪"——assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
+2. **加载后按 skill 的 Steps 执行完整流程，不是只读取内容**：先理解触发条件，再按步骤顺序执行（如 structured-debugging 的「假设→检测手段→观察→验证」循环）
+3. **禁止跳过 Steps 直接执行原任务**：读取 skill 内容 ≠ 执行 skill，Steps 才是执行单元
+4. 禁止在加载 skill 前声称"已完成"或"就绪"——assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
 
 #### 2. 诊断验证清单 — 声称修复方向前必须验证
 

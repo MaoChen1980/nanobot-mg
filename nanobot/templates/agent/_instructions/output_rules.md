@@ -190,3 +190,36 @@ ACTION:
 - ✅ 如果需要记录修正原因 → 写入 changelog 或工作日志，不混入用户消息
 
 **原则：发送给用户的文本是最终交付物，必须是干净的、面向读者的。内部处理过程的痕迹（如"我移除了 assess 标记"）不属于用户需要知道的信息。**
+
+---
+
+### Message Content Completeness — 内容完整性验证规则
+
+**⚠️ 消息发送成功 ≠ 内容完整送达**
+
+**TRIGGER: 使用 `message()` 发送长内容（>10,000 字符）后**
+
+当 `message()` 返回 `status: ok` 时，不能仅凭此判断内容已完整送达。必须交叉验证：
+
+1. **tool call log 截断标记长度** — 框架在 tool call 输出中标注的截断长度（如 `[...X characters truncated]`）
+2. **message() API 响应确认的实际发送长度** — 从 `message()` 返回结果中提取实际送达的字符数
+3. **对比两者** — 若 tool call log 截断长度 > message() 确认的实际发送长度，则存在内容丢失
+
+**验证公式：**
+```
+IF tool_call_log_chars > message_confirmed_chars:
+    内容丢失 = tool_call_log_chars - message_confirmed_chars
+    → 必须重新发送缺失内容
+```
+
+**典型错误：** 仅凭 `message()` 返回 `status: ok` 就声称"内容已完整交付"。`result_length` 字段可能指工具调用元数据长度，而非消息内容长度。
+
+**正确做法：**
+- 发送前记录预期发送的字符数（可通过 Python `len(content)` 或框架标注的截断长度）
+- `message()` 返回后，提取 API 响应中确认的实际发送字符数
+- 若两者不一致，在下一条消息中补发缺失内容
+
+**禁止行为：**
+- ❌ 仅凭 `status: ok` 判断内容完整
+- ❌ 将 tool call log 的截断长度误解为完整内容长度
+- ❌ 将 `result_length`（工具元数据长度）当作消息内容长度

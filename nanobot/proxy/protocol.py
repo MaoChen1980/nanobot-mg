@@ -59,12 +59,19 @@ class ProxyMessage:
         if not isinstance(metadata, dict):
             logger.warning("ProxyMessage metadata is not a dict: type={}, using empty dict", type(metadata).__name__)
             metadata = {}
+        content = d.get("content", "")
+        if isinstance(content, list):
+            # Join list elements with newlines (e.g., multi-part messages)
+            content = "\n".join(str(c) for c in content)
+        elif not isinstance(content, str):
+            logger.warning("ProxyMessage content is not a str: type={}, converting to str", type(content).__name__)
+            content = str(content)
         return cls(
             channel=d["channel"],
             bot=d["bot"],
             sender_id=d["sender_id"],
             chat_id=d["chat_id"],
-            content=d["content"],
+            content=content,
             message_id=d["message_id"],
             media=d.get("media", []),
             timestamp=d.get("timestamp", ""),
