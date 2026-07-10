@@ -1607,6 +1607,9 @@ class MemoryExtractor:
             referenced: set[str] = set()
             text_lower = text.lower()
             for term in sorted_terms:
+                # Fast pre-filter: ~99.9% of terms won't appear in this file
+                if term not in text_lower:
+                    continue
                 target_files = ref_index[term]
                 # Build word-boundary pattern for multi-word term
                 escaped = re.escape(term)
