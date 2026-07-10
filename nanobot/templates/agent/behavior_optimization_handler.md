@@ -258,8 +258,8 @@ description: >
 每个 SKILL.md 必须包含：`## When to Use`、`## Steps`、`## Verification`、`## Pitfalls` 以及末尾的 `**Self-optimization**` 脚注。
 
 **命名规则：** kebab-case，反映场景+功能。不要用操作命名。
-好：`android-ui-test`、`database-migration`
-差：`android-add-log`、`force-rebuild`
+好：`module-integration-test`、`data-migration`
+差：`add-log`、`force-rebuild`
 
 **触发条件：** 必须是外部信号（用户关键词、消息类型、工具返回、页面结构、cron 事件），不要依赖 LLM 认知状态做 trigger。
 

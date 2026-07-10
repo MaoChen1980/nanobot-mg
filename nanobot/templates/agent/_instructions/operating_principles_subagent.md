@@ -81,9 +81,9 @@ Subagent 无法阻塞等待 Orchestrator。如果遇到 blocker：
 - 涉及花钱/资源消费 → 上报 Orchestrator，不自行决定
 
 **Recoverability:**
-- 修改重要文件前 → 先确认有 git commit 快照可恢复
-- 完成一个自然阶段时 → git commit 保存一版
-- 对大量文件做同样操作时 → 先用单个文件验证方案正确，然后批量执行，最后统一验证结果
+- 修改重要内容前 → 先确认有版本快照可恢复（git commit 或 checkpoint）
+- 完成一个自然阶段时 → 保存一版版本快照
+- 对大量目标做同样操作时 → 先用单个目标验证方案正确，然后批量执行，最后统一验证结果
 
 **Signals:**
 - 完成一批改动后 → 在其他文件中 grep 同样的 pattern
@@ -170,9 +170,9 @@ ACTION:
 ### CLI
 **核心规则：任何需要连续交互、或有状态的 CLI 操作，用 tmux/psmux。**
 
-exec 的调用时机：执行无状态、非阻塞、能立即返回结果的单次命令（如 cat, ls, git commit）。
-**重要：exec 必须传 working_dir（绝对路径）**，否则会报错。临时脚本（`.py`/`.bat`/`.sh` 等）放在 `{{ workspace_path }}/tmp/` 下，不要直接放在 workspace 根目录。
-tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行或有交互式说明的长时任务（如 npm run dev, python train.py, vim）。
+**exec**：执行无状态、非阻塞、能立即返回结果的单次命令。
+**重要：exec 必须传 working_dir（绝对路径）**，否则会报错。临时脚本放在 `{{ workspace_path }}/tmp/` 下，不要直接放在 workspace 根目录。
+**tmux/psmux**：执行需要保持环境变量、后台持续运行或有交互式界面的长时任务。
 
 **tmux/psmux send-keys 是"发后即忘"的** — 命令发到终端后，路由器/服务器在后台执行，你不必等它完成就能做别的事。隔一会儿用 `capture-pane` 检查输出即可，这个检查也可以和其他工具调用一起发。
 | 场景 | exec | tmux/psmux |
@@ -184,54 +184,21 @@ tmux/psmux 的调用时机：执行需要保持环境变量、后台持续运行
 
 ### Version Management — 版本管理
 
-两套工具，按场景使用。
+系统提供两种版本管理工具，覆盖不同场景：
 
-#### 场景一：代码开发 — 用 `exec` 调 git
+**git（通过 exec 调用）** — 适用于需要版本追踪、多 worker 并行：
+- 分支隔离让多个 worker 并行互不干扰
+- 小颗粒提交让每步改动可追溯、可精准回退
+- 合入前 review 保证质量
 
-代码开发（尤其是多 subagent 并行）用 git 就够了——branch 隔离、小颗粒 commit、合并 review。
-
-**工作模式：**
-- **每个独立功能/修复/模块开一个分支** — `exec git checkout -b feat/xxx`
-- **分支内小颗粒提交** — 每完成一个逻辑单元就 `exec git commit -m "feat: ..."`
-- **合入主分支前 review** — `exec git diff main...HEAD` 检查改动，确认无误后 merge
-
-**多 subagent 并行：**
-- 每个 subagent 分配到独立分支，互不干扰
-- subagent 完成后，主 agent review diff，合入主分支
-- 小型 bug fix 或简单修改可以不走分支，直接在主分支 commit 后让 subagent review
-
-**常用命令：**
-| 场景 | 命令 |
-|------|------|
-| 新功能 | `git checkout -b feat/login` → 开发 → commit → `git merge feat/login` |
-| 修 bug | `git checkout -b fix/empty-email` → 修复 → commit → 合入主分支 |
-| 查历史 | `git log --oneline`、`git diff HEAD~2`、`git show <sha>` |
-| 回退 | `git revert <sha>`（保留历史）、`git reset --hard <sha>`（丢弃历史，慎用） |
-
-**为什么要这么做：**
-- 小颗粒 commit 让每步改动都可追溯、可精准回退
-- 分支隔离让多个 subagent 并行互不干扰
-- review 保证质量，问题合入前发现而不是合入后
-
-#### 场景二：非代码工作 / 快速保存 — 用 checkpoint
-
-处理 PPT、文档、配置实验等没有 git 仓库的场景，或不想开分支的快速实验：
-
-| 工具 | 用途 |
-|------|------|
-| `save_checkpoint(path, message)` | 保存当前阶段（新增/修改的文件全部记录） |
-| `list_checkpoints(path)` | 查看历史；传 `sha` 看具体改动（diff） |
-| `restore_checkpoint(path, sha)` | 回滚到之前某阶段 |
+**`save_checkpoint` / `list_checkpoints` / `restore_checkpoint`** — 适用于非 git 项目或快速实验：
+- `save_checkpoint(path, message)` — 保存当前阶段（记录所有新增/修改的文件）
+- `list_checkpoints(path)` — 查看历史，传 sha 看具体改动
+- `restore_checkpoint(path, sha)` — 回滚到之前某阶段
 
 **使用时机（必须遵守）：**
-- **完成一个自然阶段（如生成了 PPT、写完了一组文件）后** → 必须 `save_checkpoint` 保存一版
-- **重大修改前（重构、删除、覆盖等）** → 必须 `save_checkpoint` 保存当前状态
-- **换方案前** → 每条路径各打一个 checkpoint，方便对比回滚
+- 完成一个自然阶段后 → 保存一版
+- 重大修改前 → 保存当前状态
+- 换方案前 → 每条路径各打一个 checkpoint，方便对比回滚
 - 不确定时 → 那就保存。保存没有成本，不保存可能丢工作
-
-**最佳实践：**
-- `save_checkpoint` 会列出所有改动（新增/修改），你可以判断是否需要排除某些文件
-- 不需要的文件写到 `.gitignore` 再重新保存
-- 在 git 仓库内非代码文件也可用 checkpoint，与 git 不冲突
-- `restore_checkpoint` 只写文件，不删除文件（即使目标版本没有它）
 

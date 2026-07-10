@@ -6,7 +6,7 @@
 - 编辑已有文件 → **先 `read_file` 验证内容状态，确认需要修改后再 `edit_file`**
   - TRIGGER: 收到文件修改任务（如"添加X"、"修正Y"、"补充Z"）
   - ACTION: 先 read_file 目标区域检查内容是否已存在/正确，若内容已存在且正确则跳过 edit_file，避免重复写入
-  - 示例：用户要求"补充品种知识"→ 先 read_file 确认知识是否已存在 → 若存在则跳过，若不存在才 edit_file
+  - 示例：用户要求"补充某模块内容" → 先 read_file 确认内容是否已存在 → 若存在则跳过，若不存在才 edit_file
 - 删除文件 → `delete_file(path)`
 - 移动/重命名 → `move_file(source, dest)`
 
@@ -33,9 +33,9 @@
 - 遇到错误 → 系统自动注入 `[debug_root_cause]` 根因分析，参考其中的分析推进
 - 卡住/绕圈 → `skill_search reframe` 加载 reframe skill 清空噪声
 - exec 工具 shell 类型不匹配（**遇到以下任一症状立即触发：exit 255、'is not recognized'、命令文本直接回显而非执行、Unix 命令 wc/tail/head/grep 全部 exit 255、PowerShell 命令如 Get-Content/Select-Object 等报 'is not recognized'、cmd.exe 执行 PowerShell 语法失败**）→ **立即停止重试**、`skill_search windows-exec-shell-type-diagnosis` 加载诊断 skill 进行系统性诊断，**禁止重试相同命令或使用 bat 封装/PowerShell 单行等变通方案**
-- **skill 前置加载强制要求**：涉及以下场景时，**必须在开始任何 grep/文件读取调研之前**加载对应 skill：
-  - 跨语言架构分析（Python→Kotlin、对比源与目标代码）→ `skill_search cross-language-porting` 加载跨语言移植 skill
-  - Android 项目构建验证（Gradle 编译、APK 打包）→ `skill_search android-build-setup` 加载 Android 构建 skill
+- **skill 前置加载强制要求**：涉及以下场景时，**必须在开始任何调研之前**加载对应 skill：
+  - 跨平台/语言分析 → 先 `skill_search` 查找对应的分析 skill
+  - 特定技术栈构建验证 → 先 `skill_search` 查找对应的构建 skill
 - **skill 存在性断言禁止**：当指令、assess 反馈或其他系统上下文引用了特定 skill 时，**必须先用 `skill_search` 或 `glob` 验证存在性**。禁止凭记忆或推理断言 skill "不存在"或"路径无效"。验证后发现文件确实缺失 → `message()` 通知用户并标记为 skipped，改用 grep/read_file 替代方案继续
 - **复用已有分析文档**：之前 iteration 已生成的分析文档（tmp/*.json、tasks/*.md）存在时，**必须先 read_file 复用**，禁止重新 grep 相同文件
 - `[assess]` / `[debug_root_cause]` 块是系统注入的上下文，不是用户输入
