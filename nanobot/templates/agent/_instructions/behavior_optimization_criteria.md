@@ -28,16 +28,16 @@
 
 **识别信号：** assess_me 在连续 iteration 中指出同一类问题（如"skill 加载顺序错误"、"未执行 Verification"）。
 
-**这不是 skill 缺失，是框架规则执行问题。** assess_me skill 加载规则已整合到 `framework_core.md` 顶部 TL;DR 框中。
+**这不是 skill 缺失，是框架规则执行问题。** assess_me skill 加载规则已整合到本文件上方内联规则中（见「assess_me skill 加载核心规则」）。
 
 **处理原则：** 根因在框架指令 → 优化框架指令，不创建新 skill。
-- 如果框架已有规则但 agent 不遵守 → 强化/显眼化该规则 ✓（已添加到 framework_core.md 顶部）
-- 如果框架规则太分散 → 整合到一处 ✓（已整合到 framework_core.md）
+- 如果框架已有规则但 agent 不遵守 → 强化/显眼化该规则 ✓（已整合到本文件内联规则）
+- 如果框架规则太分散 → 整合到一处 ✓（已整合到 assessment-response-trigger.md）
 - 如果规则表述不够强制 → 使用更明确的 TRIGGER/禁止语言 ✓（已添加更醒目的格式）
 
-**assess_me skill 加载核心规则（见 `framework_core.md` 顶部 TL;DR 框）：**
+**assess_me skill 加载核心规则（内联，无跨文件依赖）：**
 > assess_me 结果中任何 skill 加载指令 = **本轮第一件事**。
-> 先 `skill_search` → 加载 SKILL.md → 按 Steps 执行 → 才能做其他工作。
+> 收到 assess_me skill 指令 → 立即 `skill_search` → `read_file` SKILL.md → 按 Steps 执行 → 才能做其他工作。
 > 禁止：先 git/grep/working.md 再 skill。
 
 **反复违规处理：** 如果同一 assess_me 指令在两次 iteration 均未响应，构成「反复行为模式」。这不是信息不足或理解偏差，是明确的规则违反。

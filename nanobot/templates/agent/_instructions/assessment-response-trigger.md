@@ -25,32 +25,36 @@
 
 **禁止：** 在 subagent 完成前输出「P0 仅剩 XXX」的确定性结论。即使 assess 尚未指出，只要 subagent 仍在运行，就不应输出覆盖其职责范围的 P0 锁定结论。
 
-### 规则 3：assess_me 指令加载 skill 时 → 第一行代码必须是 read_file
+### 规则 3：assess_me 触发 skill 加载时 → 第一行代码必须是 read_file
 
-**触发条件（满足任一即触发）：**
-- assess_me 结果（`[assess]`...`[/assess]` user 消息）出现在当前 session 中
-- assess_me 在 `unused_skills` 中列出了与当前任务高度相关的 skill
-- assess_me 的 assessment content 中包含「先加载 skill」「请加载 skill X」「先 read_file」「第一行代码」等显式 skill 加载指令
-- assess_me 明确标注「这是规则违反，不是信息不足」
+**TRIGGER（满足任一即触发）：**
+- assess_me 结果出现于当前 session
+- assess_me 输出 `status: "findings"` 或 `needs_revision: true`
+- assess_me 提及某个 skill 未被使用
+- assess_me 在 `unused_skills` 中列出 skill
+- assess_me 包含任何 skill 加载指令
 
-**动作：**
-1. **本轮第一个 tool_call 必须是 `read_file`** — 读取该 skill 的 SKILL.md 全文（仅获取内容，不执行任何探索）
-2. **立即进入核心动作** — 不发出任何 read/glob/grep 探索，直接按 skill 的 `## Steps` 执行第一 tool_call
-3. 「已加载」≠「已执行」— skill 全文已在 context 中，不需要再读任何文件
+**⚠️ 强制中断：收到以上任一触发条件后，立即停止一切当前工作（spawn subagent / 继续任务 / grep / exec 等），禁止先做其他任何操作。**
 
-**典型违规模式（立即停止并执行 skill）：**
-- ❌ assess_me 结果出现 → agent 解读为"背景信息"，先去 grep/glob/exec 做原来的工作 → **最高优先级违规**（assess_me 结果就是本轮任务，不是背景）
-- ❌ assess_me 说「先加载 skill」→ agent 先输出 MGA 框架分析（跳过 read_file）→ 分析截断在 Q2 价位表中间，缺失 Step 3 四维评分
-- ❌ assess_me 说「先加载 skill」→ agent 用 grep 搜索关键词替代 read_file → 无法验证压缩后 skill 的 Steps 是否仍有可执行指令
-- ❌ 先 git push / git commit → 再 skill
-- ❌ 先 grep/read_file 调研 → 再 skill
-- ❌ 声称「已就绪/已理解」跳过 skill 加载
+**ACTION:**
+1. 立即 `skill_search` 加载对应的 SKILL.md（精确名称）
+2. **第一 tool_call 必须是 `read_file`** 加载 SKILL.md 全文
+3. 加载后按 skill 的 Steps 执行完整的验证流程，不要只做"最小化验证"
+4. **禁止在 skill 加载前声称"已完成"或"就绪"**——assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
+5. **禁止在 skill 加载前 spawn subagent**——assess_me 结果不是背景信息，是本轮最高优先级任务
 
-**⚠️ 关于"继续推进原始任务"的语义澄清：**
-assess_me 消息末尾的"继续推进原始任务"意思是"在执行完 assess_me 指令后，用原始任务来验证修复是否有效"，**不是让你先做原始任务再来处理 assess_me**。assess_me 结果 = 新任务指令，优先级覆盖当前所有工作。
+**⚠️ assessme-skill-creation-from-assessment 特殊规则（内联，无跨文件依赖）：**
 
-**⚠️ 与 assessme-skill-creation-from-assessment 的特殊约定：**
-该 skill 的 Core Principle 明确要求「第一 tool_call 即为核心动作（write/edit），不发出 read/glob/grep 探索」。当触发该 skill 时，步骤 1 的 `read_file` 完成后，步骤 2 直接构造并执行 write/edit tool_call，跳过所有中间探索。
+当评估报告触发 skill 创建流程时：
+1. `read_file` 评估报告全文，从报告数据提取 skill pattern
+2. **第一 tool_call 即为核心动作（write/edit），跳过所有 read/glob/grep 探索**
+3. 报告中的具体数据必须与原文一致
+
+**⚠️ Fallback（内联兜底，无跨文件依赖）：** 当 assess_me 触发 Rule 3 TRIGGER 但遇到以下情况时，立即在当前文件内执行兜底逻辑，禁止跳转 `behavior_optimization_handler.md` 寻找答案：
+- **skill 路径无效（FileNotFoundError）** → 立即用 `skill_search` 验证 → 若 `skill_search` 无结果则报告「skill 不存在」→ 继续替代方案
+- **assess_me 指定路径与 agent 搜索路径不一致** → 立即用 `skill_search` 重新定位 → 拒绝用 `grep` 替代
+- **assess_me 触发 skill 加载但 agent 第一步不是 read_file** → 立即停止当前操作，重新从 `read_file` SKILL.md 开始
+- **以上三种情况均不需要跳转到 `behavior_optimization_handler.md` 查找答案**，答案已在 Rule 3、Rule 5 和本 Fallback 中完整覆盖
 
 ### 规则 4：assess_me 反馈必须按序列执行，第一步先确认 deliverable 状态
 
@@ -112,3 +116,17 @@ assess_me 消息末尾的"继续推进原始任务"意思是"在执行完 assess
 - [ ] edit_file 调用已执行（不是摘要）
 - [ ] read_file 验证修复后内容正确
 - [ ] 无其他 assess_me 指出但未修复的问题
+
+---
+
+### 规则 7：assess_me 压制指令 — 统一行为
+
+> ⚠️ **权威定义** — assess_me 压制指令的完整动作规范，详见 `behavior_optimization_handler.md` 的「#### 6. Rule 7：assess_me 压制指令 — 所有标记统一行为」。
+
+**所有标记（四个）统一压制输出：**
+- 「无需回应此消息」
+- 「无需再回复」
+- 「请据此继续推进原始任务」
+- 「直接推进任务即可」
+
+**效果等价：** assess_me 说"继续推进"和说"无需回应"的实际效果完全相同——都是"闭嘴工作"的信号。

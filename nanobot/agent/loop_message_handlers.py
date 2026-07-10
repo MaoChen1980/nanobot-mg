@@ -13,7 +13,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
-from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message
+from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message, contains_suppress_output_marker
 from nanobot.agent.context import ContextState, _sanitize_session_key
 
 from nanobot.bus.events import OutboundMessage
@@ -537,7 +537,21 @@ class UserMessageHandler:
         self._loop.lifecycle.finalize(session)
 
     def _build_outbound(self, msg, final_content, stop_reason, all_msgs, had_injections, on_stream):
-        """Format the final OutboundMessage for the user."""
+        """Format the final OutboundMessage for the user.
+
+        Suppression: all four assess_me markers suppress text output (but tool_calls run).
+        "继续推进原始任务" and "无需回应此消息" have identical effect — both mean
+        "stop arguing/explaining, just work". assess_me re-evaluates on the next turn.
+        """
+        if had_injections and all_msgs:
+            for m in reversed(all_msgs):
+                if is_assessment_message(m):
+                    content = m.get("content", "")
+                    if contains_suppress_output_marker(content):
+                        logger.info("Suppressing response: assess_me marked as无需回应")
+                        final_content = ""
+                        break
+
         if final_content is None:
             final_content = ""
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content

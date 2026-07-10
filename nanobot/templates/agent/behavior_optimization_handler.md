@@ -41,14 +41,23 @@
 
 assess_me 报告描述的是"agent 应该做了什么但没做"。收到 assess_me 结果后，按以下规则执行，禁止凭记忆猜测或跳过任何步骤。
 
-#### 1. Skill 加载 — 对应 assess_me 提及的 skill
+#### 1. Skill 加载 — assess_me 触发时必须优先执行
 
-**TRIGGER: assess_me 结果提及某个 skill 未被使用，或在 unused_skills 中列出**
+**TRIGGER（满足任一即触发）：**
+- assess_me 结果出现于当前 session
+- assess_me 输出 `status: "findings"` 或 `needs_revision: true`
+- assess_me 提及某个 skill 未被使用
+- assess_me 在 `unused_skills` 中列出 skill
+- assess_me 包含任何 skill 加载指令
+
+**⚠️ 强制中断：立即停止一切当前工作，禁止先做其他任何操作。**
 
 **ACTION:**
 1. 立即 `skill_search` 加载对应的 SKILL.md（精确名称）
-2. 加载后按 skill 的 Steps 执行完整的验证流程，不要只做"最小化验证"
-3. 禁止在加载 skill 前声称"已完成"或"就绪"——assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
+2. **第一 tool_call 必须是 `read_file`** 加载 SKILL.md 全文
+3. 加载后按 skill 的 Steps 执行完整的验证流程
+4. **禁止在 skill 加载前声称"已完成"或"就绪"**
+5. **禁止在 skill 加载前 spawn subagent**
 
 #### 2. 诊断验证清单 — 声称修复方向前必须验证
 
@@ -107,6 +116,30 @@ assess_me 报告描述的是"agent 应该做了什么但没做"。收到 assess_
 - 修复执行完成后，**必须明确列出已落地的修复项**（如「Layer 2 描述已修正」「新增席位数据处理规范 section」）
 - 禁止笼统宣告「任务完结」而不说明具体修复内容
 - 交付给用户的 response 应让用户清楚了解：哪些已修复、修复了什么、优先级如何
+
+#### 6. Rule 7：assess_me 压制指令 — 所有标记统一行为
+
+**TRIGGER：** assess_me 的 `content` 中明确包含以下任一表述：
+- 「无需回应此消息」
+- 「无需再回复」
+- 「请据此继续推进原始任务」
+- 「直接推进任务即可」
+
+**行为：以上四个标记效果完全相同——统一压制输出。**
+
+> assess_me 说"继续推进"和说"无需回应"的实际效果完全等价：assess_me 不想看到 agent 的辩护/解释/终稿文字。两者都是"闭嘴工作"的信号。
+
+**动作：**
+1. 立即执行验证和修复（tool_calls 正常执行）
+2. **零文字输出** — assistant content 必须为空
+3. assess_me 在下一轮自动重新评估
+
+**禁止：**
+- ❌ 输出辩护文字（如「承认违规」「已修复清单」「剩余风险」）
+- ❌ 输出终稿结论
+- ❌ 用文字「请求 assess_me 基于当前状态重新评估」
+
+**为什么：** assess_me 不是用户，不需要汇报。assess_me 会在下一轮自动读取对话历史，发现修复已落地，自行更新判定。
 
 ---
 

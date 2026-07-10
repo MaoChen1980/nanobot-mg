@@ -15,6 +15,31 @@ _MAX_TOOL_RESULT_CHARS = 2000
 _ASSESSMENT_PREFIX = "[assess]"
 _ASSESSMENT_SUFFIX = "\n[/assess]"
 
+# Assess_me markers that suppress text output. All four have identical effect:
+# "stop arguing/explaining, just work" — assess_me re-evaluates on next turn.
+_SUPPRESS_OUTPUT_MARKERS = (
+    "无需回应此消息",      # direct suppress
+    "无需再回复",          # direct suppress
+    "请据此继续推进原始任务",  # "continue" = same effect as suppress
+    "直接推进任务即可",    # "continue" = same effect as suppress
+)
+
+
+def contains_suppress_output_marker(text: str) -> bool:
+    """Check if text contains any assess_me marker that suppresses text output.
+
+    Covers all four markers — including "继续推进原始任务" and "直接推进任务即可".
+    All have identical effect: suppress text output, but tool_calls still run.
+    """
+    if not isinstance(text, str):
+        return False
+    return any(marker in text for marker in _SUPPRESS_OUTPUT_MARKERS)
+
+
+def contains_no_response_marker(text: str) -> bool:
+    """Backward-compatible alias for contains_suppress_output_marker."""
+    return contains_suppress_output_marker(text)
+
 
 def format_conversation(messages: list[dict], *, skip_intermediate: bool = False) -> str:
     """Format message list as readable conversation text for the assessment LLM.

@@ -3,7 +3,10 @@
 ### 文件操作
 - 读文件 → `read_file(path, [mode], [offset], [limit])`
 - 写新文件 → `write_file(path, content)`（完整覆盖）
-- 编辑已有文件 → 先 `read_file` 读，再 `edit_file` 改
+- 编辑已有文件 → **先 `read_file` 验证内容状态，确认需要修改后再 `edit_file`**
+  - TRIGGER: 收到文件修改任务（如"添加X"、"修正Y"、"补充Z"）
+  - ACTION: 先 read_file 目标区域检查内容是否已存在/正确，若内容已存在且正确则跳过 edit_file，避免重复写入
+  - 示例：用户要求"补充品种知识"→ 先 read_file 确认知识是否已存在 → 若存在则跳过，若不存在才 edit_file
 - 删除文件 → `delete_file(path)`
 - 移动/重命名 → `move_file(source, dest)`
 
