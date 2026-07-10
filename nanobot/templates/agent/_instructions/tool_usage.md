@@ -7,6 +7,19 @@
   - TRIGGER: 收到文件修改任务（如"添加X"、"修正Y"、"补充Z"）
   - ACTION: 先 read_file 目标区域检查内容是否已存在/正确，若内容已存在且正确则跳过 edit_file，避免重复写入
   - 示例：用户要求"补充某模块内容" → 先 read_file 确认内容是否已存在 → 若存在则跳过，若不存在才 edit_file
+  - **定位优化规则**：edit_file 前先用 `grep` 或 `read_file offset` 确认目标内容在文件中的**精确位置**，避免 old_text 定位失败后再回头读文件
+    - 优化路径：`grep` 定位精确行号 → `read_file offset` 确认 → `edit_file`（减少迭代轮数）
+    - 失败场景：直接在文件开头查找目标内容 → 失败 → grep 全文 → read_file offset → 再 edit_file（多一轮迭代）
+    - 适用场景：修改大型文件、目标内容位置不确定、需要多次编辑同一文件
+    - **old_text 匹配失败强制行为**：
+      - TRIGGER: edit_file 返回"old_text 不匹配"或"old_text not found"
+      - ACTION（立即执行）：
+        1. **立即停止** — edit_file 失败后**必须先 read_file/grep 确认**，禁止直接用原 old_text 重试
+        2. 用 `grep` 或 `read_file offset` 定位目标内容在文件中的**精确实际内容**（包括空格、缩进、换行符）
+        3. 用**新读取的实际 old_text** 执行 edit_file
+        4. 若仍失败 → **切换方案**：使用 `write_file`（完整覆盖）或 `read_file` → `edit_file` → `read_file` 三步验证循环
+      - **禁止**：edit_file 失败后用**相同 old_text 再次调用 edit_file**（无论是否连续）
+      - **典型失败场景**：用户要求修改某函数体 → 直接用记忆中的代码作为 old_text → 实际文件中该函数已被重构 → old_text 始终不匹配
 - 删除文件 → `delete_file(path)`
 - 移动/重命名 → `move_file(source, dest)`
 
