@@ -48,3 +48,16 @@
 4. **验证：** 修复后重新读取文件，确认修改已落地，再进入下一轮
 
 **典型失败模式：** assess 指出「某 skill 步骤过时」→ agent 不读 SKILL.md 直接 grep 关键词修改 → 修改位置错误或遗漏 → assess 再指出 → 循环迭代
+
+### 规则 5：assess_me 指定 skill 路径无效时 → 立即上报而非静默降级
+
+**触发条件：** assess_me 指定了 skill 路径（如 `nanobot/skills/xxx/SKILL.md`），agent 用 `read_file` 加载时收到 FileNotFoundError。
+
+**动作：**
+1. **立即用 `skill_search` 验证** — 用 skill 的目录名（或 assess_me 描述中的关键名）做语义检索，确认 skill 是否实际存在于 workspace 或 builtin 路径中
+2. **若 `skill_search` 有结果** → 用返回的 path 执行 `read_file`，继续该 skill 的 Steps
+3. **若 `skill_search` 无结果（skill 真不存在）→ 立即报告 skill 不存在** — 输出「[assess_me] 指定 skill `xxx` 在 workspace 和 builtin 路径中均不存在，跳过 skill 加载」并附上搜索结果截图，然后继续执行替代方案（如 web_fetch）；禁止静默降级到替代方案而不说明 skill 加载失败
+
+**禁止：** 收到 FileNotFoundError 后跳过 skill_search 直接用 `glob` 手动搜索目录、或静默降级到 web_fetch 等替代方案而不说明 skill 不可用。静默降级会导致 assess_me 无法区分「skill 加载成功但效果不佳」和「skill 根本不存在」两种情况，延误根因诊断。
+
+**为什么：** assess_me 引用某个 skill 时，意味着该 skill 的 Steps 是任务的标准流程。跳过 skill 而不报告，assess_me 只会看到替代方案的效果不好，从而增加诊断轮次。明确报告「skill 不存在」让 assess_me 知道这是环境问题而非执行问题。
