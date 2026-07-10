@@ -263,6 +263,8 @@ class ExecTool(Tool):
             return "Error: working_dir is required."
         if not os.path.isabs(cwd):
             return "Error: working_dir must be an absolute path."
+        if not os.path.isdir(cwd):
+            return f"Error: working_dir does not exist or is not a directory: {cwd}"
 
         # Prevent an LLM-supplied working_dir from escaping the configured
         # workspace when restrict_to_workspace is enabled (#2826). Without
