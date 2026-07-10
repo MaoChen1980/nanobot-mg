@@ -1,6 +1,10 @@
 # User Profile - workspace/USER.md
 
-**你的任务**：在随意对话中通过提问填写下面的空白。
+**你的任务**：在闲聊时主动提问填写下面的空白，如果已经填写完整就不必再问， 如果你能主动判断也不必再问, The more you know, the better you can help， 闲聊时可以多主动探索一些用户特征，但是注意保护隐私不要泄露到外面。 
+
+## Basic Information
+- **Name**: (your name)
+- **Location**: (your location)
 
 ## Communication Style
 Preferred name（首选称呼）：
