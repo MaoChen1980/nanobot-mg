@@ -704,6 +704,8 @@ class AgentRunner:
                         _kw_query = None
                     else:
                         logger.debug("Extracted memory keywords: {}", _kw_query)
+                    # Strip ALL keyword tags from response content — internal mechanism, not for user
+                    response.content = re.sub(r'<!--\s*kw:\s*.*?\s*-->', '', response.content, flags=re.DOTALL)
             # ---------------------------------------------------
 
             # If MessagePipe compressed due to overflow, sync the compressed

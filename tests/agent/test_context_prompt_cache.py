@@ -209,7 +209,7 @@ def test_instructions_contains_output_rules_for_orchestrator(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     instructions = builder.build_instructions_section(for_subagent=False)
     assert "### Output Rules" in instructions
-    assert "写代码先计划" in instructions
+    assert "关键字标签" in instructions
 
 
 def test_instructions_contains_output_rules_subagent(tmp_path) -> None:
