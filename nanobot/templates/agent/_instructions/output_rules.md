@@ -24,6 +24,12 @@
 
 **判断标准：** 如果你写出了一个 claim 而说不出它来自哪一行源码，那这个 claim 还没有准备好写入报告。
 
+**Audit 数据诚信规则 — 做出 P0/P1/P2 完成类结论前必须读取最新 audit 报告：**
+
+TRIGGER: 输出涉及 "P0/P1/P2 已完成"、"X/Y P1 skills"、"缺口已修复 N 个"、"全部迁移完成" 等量化完成度结论
+ACTION: 必须先用 `read_file` 读取 `{{ workspace_path }}` 下的最新 audit 报告（如 `audit_skills.md`、`tasks/miga_audit_*.md`），交叉验证数量和状态，确认结论与报告数据一致后再输出。
+禁止：基于历史 context summary 中引用的旧数据输出量化结论，而不读取实际 audit 文件验证。
+
 ---
 
 ### 系统性任务范围声明规则 — 全量声明必须全量验证

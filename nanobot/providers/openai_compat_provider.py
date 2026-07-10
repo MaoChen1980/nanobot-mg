@@ -1193,6 +1193,15 @@ class OpenAICompatProvider(LLMProvider):
             error_kind = "timeout"
         elif "connection" in error_name or "protocol" in error_name:
             error_kind = "connection"
+        else:
+            # Fallback: check the exception message for timeout/connection keywords.
+            # This catches cases where the exception is wrapped or has a generic class name
+            # but the message clearly indicates a timeout or connection error.
+            err_str = str(e).lower()
+            if "timeout" in err_str or "timed out" in err_str:
+                error_kind = "timeout"
+            elif "connection" in err_str:
+                error_kind = "connection"
 
         return {
             "error_status_code": int(status_code) if status_code is not None else None,

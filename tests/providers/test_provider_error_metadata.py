@@ -53,6 +53,20 @@ def test_openai_handle_error_marks_timeout_kind() -> None:
     assert response.error_kind == "timeout"
 
 
+def test_openai_handle_error_marks_connection_kind_from_message() -> None:
+    """error_kind is inferred from exception message when class name is generic."""
+
+    class FakeGenericError(Exception):
+        pass
+
+    response = OpenAICompatProvider._handle_error(
+        FakeGenericError("Connection error.")
+    )
+
+    assert response.finish_reason == "error"
+    assert response.error_kind == "connection"
+
+
 def test_anthropic_handle_error_extracts_structured_metadata() -> None:
     err = MagicMock(spec=APIStatusError)
     err.status_code = 408

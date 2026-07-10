@@ -86,6 +86,8 @@ agent 陈述是否符合用户需求？
 
 {% include 'agent/_instructions/behavior_optimization_criteria.md' %}
 
+{% include 'agent/_instructions/assessment-response-trigger.md' %}
+
 ### Skills 匹配
 
 {% if skills_summary %}

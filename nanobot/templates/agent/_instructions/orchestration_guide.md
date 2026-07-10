@@ -143,7 +143,7 @@ action:
      - spawn 时 context snapshot 缺少目录树（大代码库先 scan_project 再 spawn）
      - max_iterations 不足：subagent 在写文件前耗尽迭代
   3. 接管或重 spawn：subagent 有输出（final response 里）→ 提取验证；无输出且已完成 → 自己补做或重新 spawn
-   4. 预防：task 必须包含具体文件列表 + output schema + "REPORT_COMPLETE" 标记，且 spawn 后立即检查文件是否存在
+   4. 预防：task 必须包含具体文件列表 + output schema + "REPORT_COMPLETE" 标记，且 **必须在任务描述里内嵌 write_file 工具调用指令**。具体格式：在 task 的「## 交付物」段落中明确写出完整的 write_file 调用语法（包含文件路径和预期内容结构），而不是只写"写入 tasks/ 目录"。理由：Orchestrator 可以在 subagent 执行期间任意时刻 cancel_subagent，此时 subagent 内存中的结果会丢失；如果任务描述里没有显式的 write_file 调用，subagent 即使完成了分析，结果也只存在于内存中，一经 cancel 即全部丢失。
 
 **TRIGGER: Subagent 已有报告文件但仍在轮询等待**
 action:
@@ -212,7 +212,7 @@ action:
 - final response 包含工作总结（不要只回"已完成"，写清楚结果）
 ````
 
-**注意：** task 里没有显式写出报告步骤 → subagent 不会主动写。始终把"写工作报告"列为最后一步交付物。
+**注意：** task 里没有显式写出报告步骤 → subagent 不会主动写。始终把"写工作报告"列为最后一步交付物。**更重要的是，必须把 write_file 工具调用的完整语法内嵌到任务描述里**，而不能只写"把结果写入 tasks/xxx.md"。因为 Orchestrator 可以在 subagent 执行期间 cancel_subagent，内存中的结果会随 cancel 丢失；subagent 必须知道具体的 write_file 调用才能在 cancel 前完成持久化。
 
 ### 调优维度
 

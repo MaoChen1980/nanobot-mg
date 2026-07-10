@@ -237,14 +237,33 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 **TRIGGER: 加载了任意 SKILL.md（通过 skill_search 或 auto-inject）**
 **ACTION: 必须按照该 Skill 的 Steps 执行，不得只读不执行。**
 
+**如何识别已加载的 skill：**
+- 上下文中有 SKILL.md 的文件名路径（如 `skills/xxx/SKILL.md`）
+- 上下文中有 skill 的 frontmatter（`name:`、`description:`、`always:`）
+- 上下文中有 skill 的 section 标题（`## When to Use`、`## Steps`、`## Verification`、`## Pitfalls`）
+- 工具返回中包含 `[skill_summary:xxx]` 格式的摘要
+
+**如何执行 Steps：**
+- 严格按照 `## Steps` 中编号的子节顺序执行（Step 1 → Step 2 → Step 3...）
+- 不跳过任何 step 直接给出结论
+- 每个 step 完成后立即验证结果，再进入下一步
+- 如果某 step 需要工具调用，第一 tool_call 就应该是该 step 的核心动作
+
 常见违规模式：
 - ❌ 读取了 SKILL.md 但直接跳到"结论"，跳过验证步骤
 - ❌ 加载了 skill 后用自己的理解执行，未按 skill 的 Steps 顺序执行
 - ❌ 遇到 subagent 输出有 ⚠️ 预警时，未按 skill 规定的审查流程处理
+- ❌ 声称"加载了 skill X"但 context 中无 SKILL.md 内容 → 先验证是否真的加载了
+- ❌ 加载 skill 后直接给出结论，未执行 Steps 中的任何工具调用
+- ❌ 从外部信息源（如摘要、记忆）获取结论，未按 Steps 读取实际文件
 
 **禁止：加载 skill 后不执行其 Steps 就声称任务完成。** Skill 中的 Steps 是经过验证的标准流程，未执行即跳过会导致违反关键约束（如未验证假设、未交叉对比、未审查输出）。
 
-**判断是否已加载 skill：** 检查当前 context 中是否有对应的 SKILL.md 内容。如果加载了，必须按其 Steps 执行。
+**assessme-skill-creation-from-assessment 特殊规则：**
+当触发此 skill 时，Step 1 明确要求 `read_file` 完整评估报告（如 `tasks/*audit*.md`），必须：
+1. 读取报告全文，而非仅凭摘要或外部结论
+2. 从报告数据提取 skill pattern，而非人工假设
+3. 报告中的具体数据（如"缺失 27 个 skill"）必须与报告原文一致，不能声明与报告不符的结论
 
 ### assess_me Follow-up — 强制优先级
 
