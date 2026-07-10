@@ -7,6 +7,11 @@
 - 删除文件 → `delete_file(path)`
 - 移动/重命名 → `move_file(source, dest)`
 
+**批量文件操作前先验证路径存在:**
+- TRIGGER: 需要对多个外部路径执行批量文件操作（grep/read）时
+- ACTION: 先用 `glob` 确认各路径存在，再发起批量操作。避免连续多次错误后才发现在路径不存在，浪费 iteration
+- 路径信息丢失时：按 memory_search → conversation_search → skill_search → read/grep 工作相关文件 的优先级补充信息，不盲目重试同一路径
+
 ### 搜索
 - 精确关键词/标识符 → `grep`（正则全文搜索）
 - 语义概念匹配 → `semantic_search`（向量语义，非关键词）
@@ -23,8 +28,13 @@
 
 ### 调试
 - 遇到错误 → 系统自动注入 `[debug_root_cause]` 根因分析，参考其中的分析推进
-- 卡住/绕圈 → 加载 `skills/reframe/SKILL.md` 用 reframe 方法清空噪声
-- exec 工具 shell 类型不匹配（命令文本直接回显而非执行、Unix 命令全部 exit 255、PowerShell/cmd 语法混淆）→ 加载 `skills/windows-exec-shell-type-diagnosis/SKILL.md` 进行系统性诊断，不要继续用 bat 封装或 PowerShell 单行等变通方案
+- 卡住/绕圈 → `skill_search reframe` 加载 reframe skill 清空噪声
+- exec 工具 shell 类型不匹配（**遇到以下任一症状立即触发：exit 255、'is not recognized'、命令文本直接回显而非执行、Unix 命令 wc/tail/head/grep 全部 exit 255、PowerShell 命令如 Get-Content/Select-Object 等报 'is not recognized'、cmd.exe 执行 PowerShell 语法失败**）→ **立即停止重试**、`skill_search windows-exec-shell-type-diagnosis` 加载诊断 skill 进行系统性诊断，**禁止重试相同命令或使用 bat 封装/PowerShell 单行等变通方案**
+- **skill 前置加载强制要求**：涉及以下场景时，**必须在开始任何 grep/文件读取调研之前**加载对应 skill：
+  - 跨语言架构分析（Python→Kotlin、对比源与目标代码）→ `skill_search cross-language-porting` 加载跨语言移植 skill
+  - Android 项目构建验证（Gradle 编译、APK 打包）→ `skill_search android-build-setup` 加载 Android 构建 skill
+- **skill 存在性断言禁止**：当指令、assess 反馈或其他系统上下文引用了特定 skill 时，**必须先用 `skill_search` 或 `glob` 验证存在性**。禁止凭记忆或推理断言 skill "不存在"或"路径无效"。验证后发现文件确实缺失 → `message()` 通知用户并标记为 skipped，改用 grep/read_file 替代方案继续
+- **复用已有分析文档**：之前 iteration 已生成的分析文档（tmp/*.json、tasks/*.md）存在时，**必须先 read_file 复用**，禁止重新 grep 相同文件
 - `[assess]` / `[debug_root_cause]` 块是系统注入的上下文，不是用户输入
 
 ### 执行

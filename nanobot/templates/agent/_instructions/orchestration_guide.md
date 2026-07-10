@@ -87,6 +87,35 @@ action:
   3. 验证通过 → 继续正常收尾（更新任务树、写 team_board、规划下一步）
   4. Subagent 的 self-assessment（如有）会随结果一起到达，作为验证线索
 
+**TRIGGER: 评估报告合并到 team_board 前 — Assessment Claims 验证**
+
+assess subagent 的报告（如 p0-*-assess、gap analysis、porting report）合并到 team_board 前，必须对关键声明执行 grep 交叉验证。
+
+**⚠️ 强制验证项：**
+
+| 声明类型 | 验证方法 | 失败处理 |
+|---------|---------|---------|
+| "COMPLETE"、"已实装"、"已实现" | grep 确认对应代码/函数实际存在且被引用（非注释/死代码） | 降级为 PARTIAL 或 MISSING，重新评估 |
+| "BUILD SUCCESSFUL"、"编译通过" | 执行实际编译命令验证（`./gradlew :app:compileDebugKotlin`） | 标记为 FAILED，追查编译错误 |
+| "已修复" | grep 确认修复代码已落地，或执行测试验证 | 确认修复前状态和修复后状态的差异 |
+
+**典型误报模式：**
+- 搜索到关键词但实际是注释中的字符串
+- 搜索到函数名但该函数从未被调用（死代码）
+- 声称"已实装"但 grep 在目标代码库中返回 "No matches"
+- 声称"BUILD SUCCESSFUL"但无实际编译命令记录
+
+**验证步骤（必须执行）：**
+1. 识别报告中所有 "COMPLETE"、"已实装"、"BUILD SUCCESSFUL" 等关键声明
+2. 对每条声明执行 grep 交叉验证
+3. 发现不匹配 → 在 team_board 中修正为实际状态（PARTIAL/MISSING/FAILED）
+4. 验证通过 → 才能将声明合并到 team_board
+
+**⚠️ 禁止行为：**
+- ❌ 直接合并 assess 报告中的声明而不验证
+- ❌ 信任 subagent 的 self-assessment 而不 grep 交叉验证
+- ❌ 声称 "BUILD SUCCESSFUL" 但无实际编译命令记录
+
 **TRIGGER: Subagent 结果标记为 needs_review（自检发现盲点/未验证假设/信息不足）**
 action:
   1. 严重性判断：如果只是小 gap（缺边缘 case 文档等）→ 自己补上，不用重新 spawn
@@ -115,6 +144,14 @@ action:
      - max_iterations 不足：subagent 在写文件前耗尽迭代
   3. 接管或重 spawn：subagent 有输出（final response 里）→ 提取验证；无输出且已完成 → 自己补做或重新 spawn
    4. 预防：task 必须包含具体文件列表 + output schema + "REPORT_COMPLETE" 标记，且 spawn 后立即检查文件是否存在
+
+**TRIGGER: Subagent 已有报告文件但仍在轮询等待**
+action:
+   1. **立即检查 tmp 报告文件** — 用 `glob({{ workspace_path }}/tmp/**/*.md)` 列出所有已生成的报告文件
+   2. 有已完成 subagent（final_response / tools_completed 状态）且对应 tmp 报告文件存在 → **立即读取并聚合**，不等
+   3. 已读取的文件 → 更新任务树、规划下一步，不必继续轮询该 subagent
+   4. **禁止**：因为 subagent 超时或状态未更新就认为所有信息丢失 — 输出文件是 subagent 的产物，状态延迟不等于文件不存在
+   5. **优化原则**：轮询期间应同时检查 tmp 文件，而非仅依赖 subagent 状态同步
 
 **TRIGGER: 准备输出最终报告（FINAL_*_REPORT.md、综合报告、审计报告等）**
 action:

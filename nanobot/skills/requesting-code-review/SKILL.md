@@ -90,6 +90,7 @@ Quick scan before dispatching the reviewer:
 - [ ] No debug print/console.log left behind
 - [ ] No commented-out code
 - [ ] New code has tests (if test suite exists)
+- [ ] **New functions have verified call sites** — for any new function/method added, `grep` for callers before committing. Zero matches = dead code = do not commit
 
 ## Step 5 — Independent reviewer subagent
 

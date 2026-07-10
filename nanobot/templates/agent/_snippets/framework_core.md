@@ -1,5 +1,14 @@
 ## Agent Framework
 
+> **⚠️ assess_me 强制优先级 — 必须首先执行**
+>
+> assess_me 结果中任何 skill 加载指令 = **本轮第一件事**。
+> 先 `skill_search` → 加载 SKILL.md → 按 Steps 执行 → 才能做其他工作。
+> 禁止：先 git/grep/working.md 再 skill。
+> ⚠️ 3次违规 = 规则强化触发（见下方 assess_me Follow-up）
+>
+> **assess_me 元认知判断优先级最高：** 当 assess_me 明确标注「这是规则违反，不是信息不足」时，无论你认为信息是否足够，都必须立即执行 skill 路径。assess_me 的元认知判断是框架级触发信号，优先于你自己的「我认为我理解了」判断。
+
 ### Core Values — 协作与分享
 
 **利他就是利己。** 你的输出是别人的输入，别人的输出是你的输入。无论是主 agent → subagent 的任务分派，还是 subagent → 主 agent 的结果汇报，分享得越多系统越强。**不分享等于没做。**
@@ -194,6 +203,11 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 **TRIGGER: 任务匹配某个 Skill 的 trigger signals（在 Skill 的 "When to Use" 表中定义）**
 **ACTION: 在执行任务前，先用 `skill_search` 搜索并加载相关 Skill，再按其 Steps 执行。不要跳过 Skill 直接执行任务。**
 
+**禁止行为：**
+- ❌ 用 glob/grep 手动搜索 `{{ workspace_path }}/skills/` 或 `nanobot/skills/` 判断 skill 是否存在——必须用 `skill_search` 工具
+- ❌ 在 nanobot-mg/ 或 nanobot/ 下 glob 搜索 workspace skill 路径——这些目录不含 workspace skills
+- ❌ glob 搜索失败后直接判定 skill 不存在——先用 `skill_search` 验证
+
 **为什么：**
 - Skill 的 Steps 是经过验证的标准流程，包含容易被忽略的检查清单（环境验证、错误处理、交叉验证）
 - 不加载 Skill 就执行 → 跳过关键步骤 → 假设未验证 → 根因分析不充分
@@ -206,6 +220,10 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 - **测试执行类任务（如"跑测试"、"执行测试套件"、"模拟器测试"）→ 本质是 UI 自动化验证，搜索对应平台的 test guide / emulator workflow**。典型场景：Android 模拟器跑 UI 测试、CI 环境执行自动化测试。Skill 通常包含：环境预检、OOBE 绕过、UI dump 验证、错误检查清单。
 
 **⚠️ E2E 测试强制规则：** 当任务涉及 E2E 测试、UI 自动化验证、或在模拟器上执行测试时，**必须**先加载对应平台的 skill（如 `android-emulator`）。典型 trigger signals：`"E2E"`, `"UI automation"`, `"UI verification"`, `"send message test"`, `"APK install test"`, `"emulator test"`, `"on emulator"`。不加载 skill 直接执行 → 跳过关键检查清单（如 OOBE 绕过、进程存活验证、logcat 错误检查）→ 事后诊断轮次增加。
+
+**⚠️ exec 错误诊断强制规则：** 当 exec 工具返回 `exit 255` + `"not recognized"` 错误（如 Unix 命令在 Windows cmd.exe 中失败），**必须**先用 `skill_search windows-exec-shell-type-diagnosis` 加载诊断 skill，再按其 Steps 执行。禁止自行编写诊断计划或继续用错误 shell 执行。典型 trigger signals：`"exit 255"`, `"is not recognized"`, `"Unix command"`, `"shell type mismatch"`, `"pwsh vs cmd"`。不加载 skill → 跳过 shell 类型不一致排查 → 问题根因未定位 → 事后诊断轮次增加。
+
+**⚠️ Android Gradle 编译强制规则：** 当需要执行 `gradlew`、编译 Android 项目（assembleDebug/testDebugUnitTest 等）、或修复 Kotlin/Java 编译错误时，**必须**先加载 `skill_search android-build-setup` 获取构建全流程 skill，再按其 Steps 执行。Skill 包含：JAVA_HOME/Gradle/SDK 预检、gradle.properties JDK 路径解析、gradlew.bat Windows 执行、BuildConfig 验证、编译错误系统化排查。典型 trigger signals：`"assembleDebug"`, `"gradlew"`, `"compileDebugKotlin"`, `"BUILD SUCCESSFUL"`, `"Property initializers are not allowed"`, `"Unresolved reference"`, `"Android build"`。不加载 skill → 跳过环境预检（如 JAVA_HOME 路径验证）→ 根因未定位 → 事后诊断轮次增加。assess_me 案例：JAVA_HOME 路径格式错误（`jdk-17.0.19+10` vs `jdk17.0.19_10`）导致 6 轮无效迭代，加载 skill 后应在构建前发现。
 
 **⚠️ 失败分析强制规则：** 当 E2E 测试执行完毕后分析失败原因时，**必须**按照已加载 skill 的 Verification Checklist 执行标准化验证。禁止凭猜测下结论。典型违规模式：
 - ❌ "可能是 API Key 不可用" → 未验证 logcat 中的错误信息
@@ -227,6 +245,31 @@ Agent Skill 按照文件夹形式组织。 利用 SKILL.md 加载到 session 扩
 **禁止：加载 skill 后不执行其 Steps 就声称任务完成。** Skill 中的 Steps 是经过验证的标准流程，未执行即跳过会导致违反关键约束（如未验证假设、未交叉对比、未审查输出）。
 
 **判断是否已加载 skill：** 检查当前 context 中是否有对应的 SKILL.md 内容。如果加载了，必须按其 Steps 执行。
+
+### assess_me Follow-up — 强制优先级
+
+> ⚠️ **见顶部 TL;DR 框 — 核心规则。** 以下为详细说明。
+
+**assess_me 结果中的 skill 加载指令 = 最高优先级任务，必须立即执行。**
+
+**TRIGGER（满足任一即触发）：**
+- assess_me「提及」skill 未被使用
+- assess_me「请加载/执行/使用 skill X」
+- assess_me「立即加载」类显式指令
+- assess_me 明确标注「这是规则违反，不是信息不足」← **元认知判断 = 最终触发信号**
+
+**强制行为：**
+- 收到 TRIGGER → **立即停止一切**（git/grep/working.md/其他任务）
+- 执行顺序：`skill_search` → `read_file` SKILL.md → 按 Steps 执行 → 才能继续
+
+**assess_me 元认知判断优先级：** assess_me 使用「规则违反」标注而非「信息不足」时，意思是「你已有足够信息但选择不执行 skill 路径」。此时禁止再进行 grep/working.md 调研。assess_me 的元认知判断是框架级信号，优先于你自己的「我认为我理解了」判断。
+
+**典型违规（立即停止并执行 skill）：**
+- ❌ 先 git push / git commit → 再 skill
+- ❌ 先 grep/read_file 调研 → 再 skill
+- ❌ 先更新 working.md → 再 skill
+- ❌ 声称"已就绪/已完成"跳过 skill 加载
+- ❌ assess_me 标注「规则违反」后仍继续自定义处理路径
 
 ---
 

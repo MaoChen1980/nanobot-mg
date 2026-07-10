@@ -1096,15 +1096,18 @@ class AgentLoop:
                 )
 
             # Unused skills — inject specific read_file instructions
+            # NOTE: This is a mandatory directive, not a suggestion.
+            # Agent must load and execute before continuing other tasks.
             if unused_skills:
                 skill_instruction = (
                     "\n\n---\n"
-                    "**发现未使用的相关技能，请立即加载并执行：**\n"
+                    "**⚠️ assess_me 强制指令 — 必须立即执行：**\n"
+                    "以下技能与当前任务高度相关但未被使用。**必须先加载 skill 再继续任务，禁止跳过。**\n"
                 )
                 for i, s in enumerate(unused_skills, 1):
                     skill_instruction += f"\n{i}. 用 `read_file` 加载 `{s}`"
                 skill_instruction += (
-                    "\n\n按 SKILL.md 中的步骤执行。"
+                    "\n\n加载后按 SKILL.md 中的 Steps 执行。**禁止继续当前任务直到 skill 加载完成。**"
                 )
                 injection_text += skill_instruction
 
