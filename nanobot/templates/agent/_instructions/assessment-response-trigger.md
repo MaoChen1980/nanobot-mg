@@ -36,12 +36,37 @@
 
 **⚠️ 强制中断：收到以上任一触发条件后，立即停止一切当前工作（spawn subagent / 继续任务 / grep / exec 等），禁止先做其他任何操作。**
 
+**⚠️ 强制执行链（缺一不可）：**
+```
+skill_search → read_file SKILL.md → 按 Steps 执行 → 才能做其他工作
+   ↑ 步骤1        ↑ 步骤2            ↑ 步骤3        ↑ 步骤4
+```
+**skill_search ≠ skill 加载完成。** skill_search 只是检索，read_file 加载 + 按 Steps 执行才是完整流程。
+
+**禁止行为：**
+- ❌ 执行 skill_search 后直接改脚本/写代码 → **这是跳过了 skill 加载步骤**
+- ❌ 执行 skill_search 后直接 grep/grep→edit_file → **这是跳过了 skill 加载步骤**
+- ❌ 声称"已找到 skill"就跳过 read_file → skill 内容没有被加载到 context，等于没加载
+- ❌ 声称"已理解 skill"就跳过 Steps 执行 → skill 的验证流程没走，输出质量无法保证
+- ❌ 在 skill 加载前声称"已完成"或"就绪" → assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
+- ❌ 在 skill 加载前 spawn subagent → assess_me 结果不是背景信息，是本轮最高优先级任务
+
+**典型违规模式：**
+```
+❌ assess_me: "market-game-analysis skill 未被使用"
+   agent: skill_search("market-game-analysis") → edit_file(修改脚本)
+   → 违规：跳过了 read_file 加载 + 按 Steps 执行
+   
+✅ assess_me: "market-game-analysis skill 未被使用"
+   agent: skill_search → read_file(SKILL.md) → 按 Steps 执行 MGA 分析
+   → 合规：完整执行了 skill 加载链
+```
+
 **ACTION:**
 1. 立即 `skill_search` 加载对应的 SKILL.md（精确名称）
 2. **第一 tool_call 必须是 `read_file`** 加载 SKILL.md 全文
 3. 加载后按 skill 的 Steps 执行完整的验证流程，不要只做"最小化验证"
-4. **禁止在 skill 加载前声称"已完成"或"就绪"**——assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
-5. **禁止在 skill 加载前 spawn subagent**——assess_me 结果不是背景信息，是本轮最高优先级任务
+4. 只有 Steps 全部执行完毕，才能进行其他工作（修改脚本、提交代码等）
 
 **⚠️ assessme-skill-creation-from-assessment 特殊规则（内联，无跨文件依赖）：**
 
@@ -117,9 +142,38 @@
 - [ ] read_file 验证修复后内容正确
 - [ ] 无其他 assess_me 指出但未修复的问题
 
+### 规则 7：脚本修复验证 — 主脚本必须独立验证
+
+**触发条件：** assess_me 明确指出脚本存在错误（如 `KeyError: '涨跌幅%%'`），agent 声称「脚本运行正常」或「已修复」。
+
+**问题本质：** agent 用临时隔离脚本（如 `mga_step0.py`）的输出作为「主脚本已修复」的证据，但临时脚本与主脚本是两套独立代码。临时脚本正常 ≠ 主脚本正常。
+
+**动作序列：**
+1. **第一步（必须）：** 用 `exec python3 <主脚本路径>` 验证主脚本本身运行无报错（exit code 0，输出完整数据）
+2. **禁止：** 仅用临时脚本输出作为主脚本正常的证据
+3. **第二步：** 若主脚本仍有报错 → 用 `read_file` + `grep` 精确定位错误位置并 `edit_file` 修复
+4. **第三步：** 修复后重新 `exec` 主脚本本身验证无报错
+
+**典型成功模式：**
+```
+✅ 主脚本验证: exec python3 /path/to/mga_realtime_analysis.py
+   exit_code=0, 输出包含 CZCE/DCE/SHFE/INE 席位数据
+   → 主脚本正常，临时脚本输出可作为参考补充
+```
+
+**典型失败模式：**
+```
+❌ 只执行了临时脚本验证: exec python3 /path/to/mga_step0.py
+   exit_code=0, 输出锡/白银/燃料油
+   → 临时脚本正常 ≠ 主脚本正常
+   assess_me 正确指出「混淆了修复证据」
+```
+
+**Python heredoc 中的特殊陷阱：** 在 `python3 -c "..."` heredoc 中，`r['涨跌幅%%']` 在 f-string `{}` 内被解释为 `r['涨跌幅%']`。若 akshare DataFrame 无此列则触发 KeyError。解决方案：用变量中转 `chg_col = '涨跌幅%'; chg = r[chg_col]` 或避免 f-string 包裹含 `%` 列名。
+
 ---
 
-### 规则 7：assess_me 压制指令 — 零文字输出
+### 规则 8：assess_me 压制指令 — 零文字输出
 
 > ⚠️ **这是最高优先级的输出规则。违反此规则是 assess_me 反复指出的行为问题。**
 
