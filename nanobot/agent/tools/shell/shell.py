@@ -314,6 +314,21 @@ class ExecTool(Tool):
                     "Error: 'mkdir -p' is bash syntax. Windows mkdir creates parent "
                     "directories automatically; use 'mkdir' without '-p'."
                 )
+            # Windows cmd.exe does NOT strip outer quotes from arguments passed via
+            # `cmd /c "command"`.  This means `python "C:/path/script.py"` causes Python
+            # to receive a literal `"C:/path/script.py"` (with quotes) as sys.argv[1],
+            # resulting in "can't open file 'C:\\...\\"C:\\...'" — Invalid argument.
+            # Correct form on Windows: `python C:/path/script.py` (no quotes).
+            # Detect quoted absolute paths used as script arguments.
+            if re.search(r'python\s+"[A-Za-z]:[/\\]', command, re.IGNORECASE):
+                return (
+                    "Error: Python script path is quoted in a Windows cmd.exe command. "
+                    "On Windows, `cmd /c` does not strip outer quotes from arguments, "
+                    "so `python \"C:/path/to/script.py\"` causes Python to receive "
+                    "a literal quoted path (Invalid argument). "
+                    "Correct form: `python C:/path/to/script.py` (forward-slash paths do not need quotes on Windows). "
+                    "If the path contains spaces, use: python \"\"C:/path with spaces/script.py\"\" (double outer quotes to survive cmd.exe stripping)."
+                )
 
         if self.path_append:
             if _IS_WINDOWS:

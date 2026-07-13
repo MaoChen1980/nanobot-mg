@@ -65,12 +65,18 @@
 
 ### 规则 3：assess_me 触发 skill 加载时 → 先判断问题类型再选 skill
 
-**TRIGGER（满足任一即触发）：**
-- assess_me 结果出现于当前 session
-- assess_me 输出 `status: "findings"` 或 `needs_revision: true`
-- assess_me 提及某个 skill 未被使用
-- assess_me 在 `unused_skills` 中列出 skill
-- assess_me 包含任何 skill 加载指令
+**⚠️ TRIGGER 精确化（skill 加载 vs 零文字输出必须区分）：**
+
+| assess_me 输出类型 | 正确行为 |
+|------------------|---------|
+| assess_me **明确要求加载 skill**（「必须先加载 skill X」「请使用 skill X」「以下技能高度相关但未被使用」） | → 按 Rule 3 执行 skill_search → read_file → Steps |
+| assess_me **输出 findings + 压制指令**（「无需回应此消息」「请据此继续推进」） | → 按 Rule 8 执行零文字输出（不加载 skill，除非原任务确实需要该 skill） |
+| assess_me **仅输出 findings**（无压制指令） | → 正常响应，按 findings 描述执行修复或加载 skill |
+
+**Rule 3 TRIGGER（满足任一即触发 skill 加载）：**
+- assess_me **明确要求**「加载/使用/执行 skill X」
+- assess_me **明确指出**「skill 未被使用」「unused_skills 中列出 skill」
+- assess_me **明确标注**「这是规则违反，不是信息不足」且要求执行某 skill 的 Steps
 
 **⚠️ 强制中断：收到以上任一触发条件后，立即停止一切当前工作（spawn subagent / 继续任务 / grep / exec 等），禁止先做其他任何操作。**
 
@@ -360,6 +366,21 @@ STEP 3: 识别到配对信号 = 必须零文字输出
 
 **行为：配对信号出现 = 统一压制输出。**
 
+**⚠️ Feishu 消息发送禁令：**
+收到压制指令后，在零文字输出期间：
+- ❌ **禁止调用 `message()` 发送飞书消息**（Feishu/飞书/钉钉等外部通知）
+- ❌ **禁止调用任何消息推送工具**
+- ✅ 压制期间的修复动作（edit_file/read_file 等）正常执行，但不发送任何外部通知
+- ✅ assess_me 收敛后（下一轮无 findings），恢复正常消息发送
+
+**⚠️ 典型违规模式：**
+```
+assess_me: findings + "无需回应此消息"
+agent: edit_file(...) → message("修复已完成，详情如下...")
+→ 违规：edit_file 合规，但 message() 发送飞书消息 = 违反 Feishu 消息发送禁令
+→ 正确做法：edit_file(...) + content = ""（无任何外部消息）
+```
+
 #### 8.3 动作
 
 1. **识别配对信号** — 先判断 assess_me 是否同时输出了 findings 和压制指令
@@ -386,7 +407,8 @@ agent: 「原始任务已完成，等待用户下一条消息」
 
 #### 8.4 禁止（收到压制指令后 assistant content 必须为空，不得有以下任何内容）
 
-- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」）
+- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「飞书消息已发送」「零文字输出期已结束」）
+- ❌ **任何飞书/外部消息推送**（`message()` 调用或任何飞书/钉钉/企微等外部通知工具）
 - ❌ **任何完成摘要**（如「修复了两处」「按 SKILL.md 步骤执行完毕」「脚本修复总结（已验证）」）
 - ❌ **任何解释/辩护文字**（如「承认违规」「已按要求修复」「剩余风险如下」）
 - ❌ **任何终稿/结论文字**（即使看起来是"自然结束"也不行）
@@ -446,7 +468,12 @@ agent: 「原始任务已完成，等待用户下一条消息」
    tool_calls: [read_file, edit_file, exec]
    content: ""
    → 合规：即使执行了三步工具调用，assistant content 仍为空
-```
+
+❌ assess_me: "请据此继续推进原始任务，无需回应此消息"
+   agent: (执行 edit_file 修复 BUG)
+   agent: "完成。BUG修复记录"
+   → 违规：tool_calls 正常执行合规，但输出了文字摘要「完成。BUG修复记录」
+   → 正确做法：tool_calls 正常执行，assistant content 严格为空字符串，assess_me 在下一轮自动重新评估，无需人工汇报
 
 **⚠️ 关键区分：**
 - tool_calls 执行完整 ≠ 可以输出文字摘要
