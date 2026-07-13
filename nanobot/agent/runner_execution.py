@@ -55,6 +55,20 @@ def partition_tool_batches(
     return [[tool_call] for tool_call in tool_calls]
 
 
+def _is_suppress_active(spec: Any, messages: list[dict[str, Any]]) -> bool:
+    """Check if assess_me suppress output marker is active in recent messages."""
+    try:
+        from nanobot.agent.assess_me import contains_suppress_output_marker
+        # Check last few messages for suppress marker (user role = assess_me inject)
+        for m in reversed(messages[-6:]):
+            if m.get("role") == "user" and isinstance(m.get("content"), str):
+                if contains_suppress_output_marker(m.get("content", "")):
+                    return True
+        return False
+    except Exception:
+        return False
+
+
 async def execute_tools(
     self_ref: Any,
     spec: Any,
@@ -69,6 +83,28 @@ async def execute_tools(
     Returns (results, events, fatal_error, was_interrupted,
     new_injection_cycles, executed_count, saved_injections).
     """
+    # Check if assess_me suppress phase is active
+    suppress_tool_names: tuple = getattr(spec, "suppress_tool_names", ())
+    suppressed_tool_results: list = []
+    tool_calls_to_run: list = []
+
+    if suppress_tool_names and _is_suppress_active(spec, messages):
+        for tc in tool_calls:
+            if tc.name in suppress_tool_names:
+                # Return a suppressed result for blocked tools
+                suppressed_result = (
+                    "[suppressed] Tool blocked by assess_me suppress phase — "
+                    f"'{tc.name}' may not be called during zero-output suppression.",
+                    {"name": tc.name, "status": "suppressed", "detail": "blocked by suppress phase", "duration_ms": 0},
+                    None,
+                )
+                suppressed_tool_results.append(suppressed_result)
+            else:
+                tool_calls_to_run.append(tc)
+        logger.info("Assess_me suppress active: {} tool(s) blocked, {} tool(s) allowed",
+                    len(suppressed_tool_results), len(tool_calls_to_run))
+        tool_calls = tool_calls_to_run
+
     batches = partition_tool_batches(spec, tool_calls)
     tool_results: list = []
     interrupted = False
@@ -116,15 +152,17 @@ async def execute_tools(
                 interrupted = True
                 break
 
+    # Prepend any suppressed tool results so the full tool_calls list matches in runner.py
+    all_tool_results = suppressed_tool_results + tool_results
     results: list = []
     events: list = []
     fatal_error: BaseException | None = None
-    for result, event, error in tool_results:
+    for result, event, error in all_tool_results:
         results.append(result)
         events.append(event)
         if error is not None and fatal_error is None:
             fatal_error = error
-    return results, events, fatal_error, interrupted, injection_cycles, len(tool_results), saved_injections
+    return results, events, fatal_error, interrupted, injection_cycles, len(all_tool_results), saved_injections
 
 
 async def _run_tool(

@@ -385,16 +385,11 @@ agent: edit_file(...) → message("修复已完成，详情如下...")
 
 1. **识别配对信号** — 先判断 assess_me 是否同时输出了 findings 和压制指令
 2. **立即执行验证和修复**（tool_calls 正常执行）
-3. **⚠️ 零文字输出 — assistant content 必须为空**
-4. assess_me 在下一轮自动重新评估
+3. **⚠️ 零文字输出 — assistant content = ""（严格空字符串）**
 
-**⚠️ tool_calls 完成后强制检查点：**
+   **step 3 的含义：tool_calls 执行完毕后，生成 assistant response 时，content 字段直接赋值为 `""`。不是"输出说明零文字状态"，而是"output 就是空字符串"。禁止做任何文字性响应，包括状态确认、修复总结、解释、道歉、承诺、等待下一轮等任何文字。**
 
-执行完 tool_calls 后，在生成 assistant content **之前**，必须再次确认：
-- 上一条消息是 assess_me 输出吗？
-- assess_me 同时包含了 findings + 压制指令吗？
-- 如果两个答案都是「是」→ **必须零文字输出，content = ""**
-- **禁止在 tool_calls 完成后输出任何文字摘要**（如「已完成」「修复总结」「任务完成」「等待下一轮」）
+   assess_me 在下一轮自动重新评估，不需要汇报。
 
 **典型失败场景（已在本 session 多次出现）：**
 ```
@@ -406,6 +401,8 @@ agent: 「原始任务已完成，等待用户下一条消息」
 ```
 
 #### 8.4 禁止（收到压制指令后 assistant content 必须为空，不得有以下任何内容）
+
+**⚠️ 最常见的违规根因：混淆「tool_calls 执行完毕」与「可输出文字」。即使所有修复 tool_calls 都已执行完毕，生成 assistant response 时 content 仍必须为 `""`。禁止在 tool_calls 完成后输出任何文字。**
 
 - ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「飞书消息已发送」「零文字输出期已结束」）
 - ❌ **任何飞书/外部消息推送**（`message()` 调用或任何飞书/钉钉/企微等外部通知工具）
@@ -457,6 +454,12 @@ agent: 「原始任务已完成，等待用户下一条消息」
    agent: "已验证所有修改，任务收敛。"
    → 违规：输出确认性文字
 
+❌ assess_me: findings + 压制指令
+   agent: (执行 tool_calls)
+   agent: message("飞书消息已发送")  ← 压制期内调用 message() 发送飞书消息
+   → 双重违规：Rule 8.2 Feishu 禁令 + Rule 8.4 禁止输出终稿
+   → 正确做法：tool_calls + content = ""（assess_me 收敛后下一轮自然发送）
+
 ✅ assess_me findings + "无需回应此消息"
    agent: (执行 edit_file 删除死代码)
    tool_calls: [read_file, edit_file, read_file]
@@ -479,6 +482,7 @@ agent: 「原始任务已完成，等待用户下一条消息」
 - tool_calls 执行完整 ≠ 可以输出文字摘要
 - 已完成所有修复 ≠ 可以输出确认文字
 - 下一轮会重新评估 ≠ 需要输出"等待评估"
+- 压制期内 tool_calls 执行完毕 ≠ 可以调用 message() 发送飞书消息
 
 #### 8.6 收敛性说明
 

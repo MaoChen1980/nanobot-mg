@@ -134,6 +134,9 @@ class AgentRunSpec:
     # Keyword-based automatic memory search: called when LLM outputs <!-- kw: ... --> tag.
     # Receives the keyword string, returns list of memory search result dicts.
     keyword_search_callback: Callable[[str], list[dict]] | None = None
+    # Tool names to suppress/block during assess_me suppress phases (e.g. message/notify).
+    # When set, execute_tools will skip these tools and return a suppressed result.
+    suppress_tool_names: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)

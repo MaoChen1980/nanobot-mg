@@ -362,10 +362,16 @@ tool_call[1]: (skill_search 如果路径未知，先 search 再 read_file)
 **动作：**
 1. **识别配对信号** — 先判断 assess_me 是否同时输出了 findings 和压制指令
 2. **立即执行验证和修复**（tool_calls 正常执行）
-3. **零文字输出** — assistant content 必须为空
-4. assess_me 在下一轮自动重新评估
+3. **⚠️ 零文字输出 — assistant content = ""（严格空字符串）**
+
+   **step 3 的含义：tool_calls 执行完毕后，生成 assistant response 时，content 字段直接赋值为 `""`。不是"输出说明零文字状态"，而是"output 就是空字符串"。禁止做任何文字性响应，包括状态确认、修复总结、解释、道歉、承诺、等待下一轮等任何文字。**
+
+   assess_me 在下一轮自动重新评估，不需要汇报。
 
 **禁止（收到压制指令后 assistant content 必须为空，不得有以下任何内容）：**
+
+**⚠️ 最常见的违规根因：混淆「tool_calls 执行完毕」与「可输出文字」。即使所有修复 tool_calls 都已执行完毕，生成 assistant response 时 content 仍必须为 `""`。禁止在 tool_calls 完成后输出任何文字。**
+
 - ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」）
 - ❌ **任何完成摘要**（如「修复了两处」「按 SKILL.md 步骤执行完毕」「脚本修复总结（已验证）」）
 - ❌ **任何解释/辩护文字**（如「承认违规」「已按要求修复」「剩余风险如下」）
