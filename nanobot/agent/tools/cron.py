@@ -448,12 +448,21 @@ class CronTool(Tool):
 
                 steps.append("")  # blank line before result
                 if isinstance(result, str):
-                    steps.append("✅ Test completed successfully")
+                    if dry_run:
+                        steps.append("✅ Dry-run test completed (no actual delivery)")
+                    else:
+                        steps.append("✅ Test completed successfully")
                     steps.append(f"Result preview: {result[:200]}{'...' if len(result) > 200 else ''}")
                 elif result:
-                    steps.append("✅ Test completed successfully")
+                    if dry_run:
+                        steps.append("✅ Dry-run test completed (no actual delivery)")
+                    else:
+                        steps.append("✅ Test completed successfully")
                 else:
-                    steps.append("⚠️  Test completed but returned empty result")
+                    if dry_run:
+                        steps.append("⚠️  Dry-run test completed but returned empty result (no actual delivery)")
+                    else:
+                        steps.append("⚠️  Test completed but returned empty result")
 
                 return "\n".join(steps)
 
