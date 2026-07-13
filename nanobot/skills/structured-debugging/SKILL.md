@@ -183,6 +183,34 @@ Fix: [what you're changing and why it addresses the root cause]
 
 Then apply the fix, remove instrumentation, and verify with a clean run.
 
+## Debug Script Data Schema Consistency
+
+When creating diagnostic scripts to reproduce or investigate bugs, **always replicate the data preprocessing pipeline** from the main script before accessing any derived columns.
+
+**The Problem**:
+- Main script computes derived columns (e.g., `df['涨跌幅%'] = (df['涨跌额'] / df['上日结算价'] * 100).round(2)`)
+- Debug script uses raw DataFrame directly without preprocessing
+- KeyError in debug script misleads you into thinking the main script is broken
+- Main script actually runs fine — the error is in the diagnostic code
+
+**The Rule**:
+```
+Before accessing a column in a debug script:
+1. Check if the main script creates this column via preprocessing
+2. If yes, replicate the same transformation at the top of your debug script
+3. If no, verify the column exists in the raw data source first
+```
+
+**Verification Checklist**:
+- [ ] Debug script has identical data preprocessing as main script
+- [ ] Column access fails because column is missing, not because of typo
+- [ ] Error can be reproduced in main script context (not just in debug code)
+
+**Common Traps**:
+- Creating ad-hoc exec/heredoc scripts that bypass main script's setup
+- Assuming raw DataFrame from API has same columns as processed DataFrame
+- Confusing errors in diagnostic code with errors in production code
+
 ## **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
   - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
   - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准

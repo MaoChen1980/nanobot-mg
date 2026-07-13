@@ -221,6 +221,25 @@ grep(pattern="similar_pattern", path="src/")
 
 ### 3. Verify Before Continuing
 
+**CRITICAL — Runtime vs Code Verification:**
+
+When verifying a fix, you MUST prove the runtime behavior changed, not just that code text changed:
+
+| What You Did | What This Proves | What This Does NOT Prove |
+|-------------|------------------|-------------------------|
+| `grep "DEBUG" src/` | Code contains no DEBUG string | Runtime has no DEBUG output |
+| `edit_file` removed DEBUG | Code no longer has DEBUG | Program doesn't output DEBUG |
+| `exec` main script → check stdout | **Runtime output verified** | — |
+
+**Correct verification sequence:**
+1. `edit_file` to remove DEBUG → Code changed
+2. `exec` main script → Run the actual program
+3. Check stdout for DEBUG lines → **Runtime verified**
+
+**Wrong approach (false positive):**
+- `grep` source → "No DEBUG found" → Claim "verification complete"
+- This only proves code text, not runtime output
+
 - Did it work? → Phase 4
 - Didn't work? → Form NEW hypothesis
 - DON'T add more fixes on top

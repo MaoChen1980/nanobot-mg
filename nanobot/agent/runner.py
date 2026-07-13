@@ -1222,14 +1222,10 @@ class AgentRunner:
                     "pending_tool_calls": [],
                 },
             )
-            final_content = clean
-            context.final_content = final_content
-            context.stop_reason = stop_reason
-            await hook.after_iteration(context)
-
-            # End-of-loop self-assessment — inject assessment context for the
-            # next turn (if assess_me finds issues) without overriding the current
-            # response. The original final_content always goes to the user.
+            # Run end-of-loop assess BEFORE final_content is set.
+            # This ensures that if assess_me injects a suppress marker,
+            # we can skip setting final_content entirely (tool_calls still run).
+            _suppress_response = False
             if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _end_assess_ran = True
                 assess_result = await self._run_assess_callback(spec, messages)
@@ -1251,6 +1247,22 @@ class AgentRunner:
                             break
                     _end_assess_ran = False
                     continue
+                # Check if assess injected a suppress marker — if so, skip
+                # setting final_content so the framework suppresses the text.
+                for m in reversed(messages):
+                    if m.get("role") == "user" and isinstance(m.get("content"), str):
+                        from nanobot.agent.assess_me import contains_suppress_output_marker
+                        if contains_suppress_output_marker(m.get("content", "")):
+                            _suppress_response = True
+                            logger.info("Suppressing response: assess_me inject contained suppress marker")
+                            break
+
+            # Only set final_content if not suppressed by assess_me
+            if not _suppress_response:
+                final_content = clean
+                context.final_content = final_content
+                context.stop_reason = stop_reason
+                await hook.after_iteration(context)
 
             # Before breaking: check for pending subagents. If any are still
             # running, wait for them (no LLM calls during wait). Subagent

@@ -336,6 +336,19 @@ tool_call[1]: (skill_search 如果路径未知，先 search 再 read_file)
 
 ### assess_me 压制指令 — 统一行为
 
+#### 配对信号识别（必须先识别再执行）
+
+**⚠️ 关键识别规则：**
+当 assess_me 的输出同时满足以下两个条件时，必须执行零文字输出：
+1. assess_me 输出了 `status: "findings"` 或 `needs_revision: true`（包含 findings 内容）
+2. assess_me 的 `content` 中包含以下任一压制指令：
+   - 「无需回应此消息」
+   - 「无需再回复」
+   - 「请据此继续推进原始任务」
+   - 「直接推进任务即可」
+
+**这两个信号是配对出现的。** 压制指令不是单独出现的——它是附在 findings 后面的指令。识别到配对信号后，必须立即执行零文字输出。
+
 **TRIGGER：** assess_me 的 `content` 中明确包含以下任一表述：
 - 「无需回应此消息」
 - 「无需再回复」
@@ -347,16 +360,62 @@ tool_call[1]: (skill_search 如果路径未知，先 search 再 read_file)
 > assess_me 说"继续推进"和说"无需回应"的实际效果完全等价：assess_me 不想看到 agent 的辩护/解释/终稿文字。两者都是"闭嘴工作"的信号。
 
 **动作：**
-1. 立即执行验证和修复（tool_calls 正常执行）
-2. **零文字输出** — assistant content 必须为空
-3. assess_me 在下一轮自动重新评估
+1. **识别配对信号** — 先判断 assess_me 是否同时输出了 findings 和压制指令
+2. **立即执行验证和修复**（tool_calls 正常执行）
+3. **零文字输出** — assistant content 必须为空
+4. assess_me 在下一轮自动重新评估
 
-**禁止：**
-- ❌ 输出辩护文字（如「承认违规」「已修复清单」「剩余风险」）
-- ❌ 输出终稿结论
-- ❌ 用文字「请求 assess_me 基于当前状态重新评估」
+**禁止（收到压制指令后 assistant content 必须为空，不得有以下任何内容）：**
+- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」）
+- ❌ **任何完成摘要**（如「修复了两处」「按 SKILL.md 步骤执行完毕」「脚本修复总结（已验证）」）
+- ❌ **任何解释/辩护文字**（如「承认违规」「已按要求修复」「剩余风险如下」）
+- ❌ **任何终稿/结论文字**（即使看起来是"自然结束"也不行）
+- ❌ **用文字「请求 assess_me 重新评估」**（assess_me 会自动重新评估，不需要请求）
+- ❌ **输出空行也算内容** — content 必须是严格空字符串 `""`，不是空格、不是换行
+
+**收敛性说明：**
+assess_me 在下一轮会读取对话历史，判断：
+- 如果上一轮 agent 输出了文字 → assess_me 继续输出相同 findings（因为 agent 没有"闭嘴"执行）
+- 如果上一轮 agent 执行了 tool_calls 且零文字 → assess_me 重新评估，确认修复已落地
+
+**违规输出文字摘要会导致迭代不收敛：** assess_me 下一轮看到 agent 没有执行修复（因为上一轮在输出摘要），继续输出相同 findings。
+
+**正确模式 → 收敛：**
+```
+Round N: assess_me findings + 压制指令 → agent tool_calls + 零文字
+Round N+1: assess_me 读取对话历史 → 发现修复已落地 → 收敛（无 findings 或新 findings）
+```
 
 **为什么：** assess_me 不是用户，不需要汇报。assess_me 会在下一轮自动读取对话历史，发现修复已落地，自行更新判定。
+
+**典型违规模式（收到压制指令后，以下行为全部违规）：**
+```
+❌ assess_me: "无需回应此消息"
+   agent: "完成。修改了两处：1) 删除了死代码 2) 更新了配置"
+   → 违规：输出了文字摘要
+
+❌ assess_me: "请据此继续推进原始任务"
+   agent: "The Feishu message already sent. No further tool_calls needed - awaiting next cron trigger."
+   → 违规：输出了状态确认文字
+
+❌ assess_me: "无需再回复"
+   agent: "DEBUG残留已清除，脚本运行正常。原始任务已完成，无需进一步操作，等待下一轮cron触发。"
+   → 违规：输出了完整的状态确认文字
+
+❌ assess_me findings + "无需回应此消息"
+   agent: "任务完成。脚本修复总结（已验证）"
+   → 违规：输出了完整的状态确认文字（这是 assess_me 反复指出的违规模式）
+
+❌ assess_me: "无需回应此消息"
+   agent: "技能类型与任务不匹配，当前场景不适用此skill流程"
+   → 违规：输出了判断/解释文字
+
+✅ assess_me findings + "无需回应此消息"
+   agent: (执行 edit_file 删除死代码)
+   tool_calls: [read_file, edit_file, read_file]
+   content: ""
+   → 合规：零文字输出，仅执行 tool_calls
+```
 
 ---
 

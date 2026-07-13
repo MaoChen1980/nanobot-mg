@@ -543,7 +543,11 @@ class UserMessageHandler:
         "继续推进原始任务" and "无需回应此消息" have identical effect — both mean
         "stop arguing/explaining, just work". assess_me re-evaluates on the next turn.
         """
-        if had_injections and all_msgs:
+        # Suppress check: unconditionally check ALL messages for assessment+marker.
+        # The had_injections flag is not a precondition — suppress must apply
+        # whenever an assessment message with a suppress marker is present,
+        # regardless of whether other injections exist.
+        if all_msgs:
             for m in reversed(all_msgs):
                 if is_assessment_message(m):
                     content = m.get("content", "")
