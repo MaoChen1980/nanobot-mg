@@ -54,7 +54,7 @@ assess_me 报告描述的是"agent 应该做了什么但没做"。收到 assess_
 
 **ACTION:**
 1. 立即 `skill_search` 加载对应的 SKILL.md（精确名称）
-2. **第一 tool_call 必须是 `read_file`** 加载 SKILL.md 全文
+2. **第二 tool_call 必须是 `read_file` SKILL.md 全文**（skill_search 是第一 tool_call，read_file 是第二——两者在同一轮发出是合规的，它们是 skill 加载链的前两步）
 3. 加载后按 skill 的 Steps 执行完整的验证流程
 4. **禁止在 skill 加载前声称"已完成"或"就绪"**
 5. **禁止在 skill 加载前 spawn subagent**

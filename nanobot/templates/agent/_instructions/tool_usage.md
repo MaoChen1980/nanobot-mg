@@ -16,10 +16,12 @@
       - ACTION（立即执行）：
         1. **立即停止** — edit_file 失败后**必须先 read_file/grep 确认**，禁止直接用原 old_text 重试
         2. 用 `grep` 或 `read_file offset` 定位目标内容在文件中的**精确实际内容**（包括空格、缩进、换行符）
-        3. 用**新读取的实际 old_text** 执行 edit_file
-        4. 若仍失败 → **切换方案**：使用 `write_file`（完整覆盖）或 `read_file` → `edit_file` → `read_file` 三步验证循环
+        3. **确认后的分支决策**：
+           - **若文件已是目标状态**（包含预期的逻辑/内容）→ **结束本轮 edit 操作**，无需任何修改
+           - **若文件与预期不符** → 用新读取的实际 old_text 执行 edit_file
+           - **若仍失败** → 切换方案：`write_file`（完整覆盖）或 `read_file` → `edit_file` → `read_file` 三步验证循环
       - **禁止**：edit_file 失败后用**相同 old_text 再次调用 edit_file**（无论是否连续）
-      - **典型失败场景**：用户要求修改某函数体 → 直接用记忆中的代码作为 old_text → 实际文件中该函数已被重构 → old_text 始终不匹配
+      - **典型失败场景**：用户要求修改某函数体 → 直接用记忆中的代码作为 old_text → 实际文件中该函数已被重构 → old_text 始终不匹配 → read_file 确认已重构 → 应结束 edit 操作而非继续尝试
 - 删除文件 → `delete_file(path)`
 - 移动/重命名 → `move_file(source, dest)`
 
@@ -56,11 +58,29 @@
 ### 执行
 - 执行 shell 命令 → `exec`（只有用户明确要求或文件操作时用）
 - **exec 返回后立即处理**：每次 exec 返回后（无论成功/失败/超时），先用 `from_cache` 读取完整 cached output，再决定下一步。禁止在未读取缓存的情况下发出第二个 exec 命令，导致 cache 堆积和重复执行
-- **Windows Python 执行原则**：
-  - 避免 `python -c "..."` 传递复杂 Python 代码（import、含引号的字符串、多行代码）
-  - **正确模式**：`write_file(script.py, python_code)`, `exec(python script.py)`
-  - **原因**：cmd.exe 对 `-c` 参数中的 Python 字符串转义处理不一致，易产生 `'import' unterminated string literal` 等错误
-  - **验证**：exec 命令应包含 `.py` 文件路径或明确的可执行脚本，而非 `-c` 加长字符串
+---
+
+**⚠️ Python 代码执行强制规则 — assess_me 反复违规，最高优先级**
+
+**TRIGGER: 需要执行 Python 代码（任何场景，含数据分析、文件处理、计算、JSON 解析等）**
+
+**禁止行为（连续多轮 assess_me 指出同一 SyntaxError 根因）：**
+- ❌ 在 exec 命令字符串中直接传递 Python 代码：`exec('import json...')`
+- ❌ 用 `python -c "..."` 传递复杂代码
+- ❌ 在同一行 write_file + exec 导致字符串未闭合触发 `SyntaxError: unterminated string literal`
+
+**强制执行路径（两条独立 tool_call）：**
+1. `write_file(path/to/script.py, python_code)` — 将 Python 代码写入 .py 文件
+2. `exec(python path/to/script.py, working_dir="...")` — 执行文件路径
+
+**正确模式：**
+```
+tool_calls:
+  - write_file(path/to/script.py, "import json\\n\\ndata = { ... }")
+  - exec(python path/to/script.py, working_dir="...")
+```
+
+**验证标准：** exec 命令的 command 参数必须包含 `.py` 文件路径，禁止包含 `-c` 参数或裸露的 Python 语句。
 
 ### 网络
 - 搜最新信息 → `web_search`

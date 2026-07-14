@@ -35,6 +35,51 @@ DANGEROUS_PATTERNS: list[str] = [
 ]
 
 
+# Patterns that detect inline Python code passed to exec.
+# These patterns catch the root cause of SyntaxError: unterminated string literal
+# and force the LLM to use write_file + exec(path.py) instead.
+_PYTHON_INLINE_PATTERNS: list[tuple[str, str]] = [
+    # python -c "import ..." or python -c 'import ...'
+    # Catches bare import statements, function defs, class defs, try/except blocks.
+    # Uses keyword[\s\w] so the keyword must be followed by whitespace or a word char —
+    # this prevents `[^'"]*` from greedily consuming the space and leaving \s unsatisfied.
+    # NOTE: "with" is NOT included because "python -c 'with open(x)'" is valid standalone Python.
+    (r"^python\s+-[c]\s+[\"'][^'\"]*(?:import[\s\w]|def[\s\w]|class[\s\w]|try:|except\s|async\s+def\s|async\s+for\s)",
+     "Use write_file(path.py, ...) + exec(python path.py) instead of python -c '...'"),
+    # py -c "..." (common Windows launcher)
+    (r"^py\s+-[c]\s+[\"'][^'\"]*(?:import[\s\w]|def[\s\w]|class[\s\w]|try:|except\s|async\s+def\s|async\s+for\s)",
+     "Use write_file(path.py, ...) + exec(python path.py) instead of py -c '...'"),
+    # python3 -c "import ..."
+    (r"^python3\s+-[c]\s+[\"'][^'\"]*(?:import[\s\w]|def[\s\w]|class[\s\w]|try:|except\s|async\s+def\s|async\s+for\s)",
+     "Use write_file(path.py, ...) + exec(python path.py) instead of python3 -c '...'"),
+    # Bare Python code passed to exec (starts with import, def, class, try, etc.)
+    # after any amount of leading whitespace — catches 'def foo(): pass' style calls.
+    # NOTE: "with" is excluded because "with open(...)" is valid standalone Python.
+    (r"^\s*(?:import[\s\w]|def\s+\w|class\s+\w|try:|except\s|async\s+def\s|async\s+for\s|if\s+__name__)",
+     "Inline Python code in exec causes SyntaxError. Use write_file(path.py, ...) + exec(python path.py)."),
+    # exec('import json') style — exec( at command start, then quoted Python code
+    # Catches: exec('import json'), exec("def foo():"), exec('try:')
+    # Does NOT catch: exec('echo hello'), exec('python script.py'), exec(some_var)
+    (r"^exec\s*\(\s*[\"'][^\"']*(?:import[\s\w]|def\s+\w|class\s+\w|try:|except\s|with\s|async\s+def\s|async\s+for\s|if\s+__name__)",
+     "exec() with inline Python code causes SyntaxError. Use write_file(path.py, ...) + exec(python path.py)."),
+]
+
+
+def _check_python_inline(command: str) -> str | None:
+    """Detect inline Python code passed to exec (root cause of SyntaxError: unterminated string literal).
+
+    Returns an error message if prohibited patterns are detected, or None if the command is allowed.
+    """
+    cmd = command.strip()
+    for pattern, suggestion in _PYTHON_INLINE_PATTERNS:
+        if re.search(pattern, cmd, re.IGNORECASE):
+            return (
+                "Error: Inline Python code in exec detected.\n"
+                f"{suggestion}"
+            )
+    return None
+
+
 def _check_dangerous_patterns(command: str, deny_patterns: list[str]) -> str | None:
     """Check for dangerous command patterns. Returns error message or None."""
     lower = command.strip().lower()
@@ -77,9 +122,9 @@ def _check_workspace_boundary(
     cwd_path = Path(cwd).resolve()
     workspace = Path(workspace_root).resolve()
 
-    win_paths = re.findall(r"[A-Za-z]:\\[^\s\"'|><;]*", command)
-    posix_paths = re.findall(r"(?:^|[\s|>'\"])(/[^\s\"'>;|<]+)", command)
-    home_paths = re.findall(r"(?:^|[\s|>'\"])(~[^\s\"'>;|<]*)", command)
+    win_paths = re.findall(r"[A-Za-z]:\\/[^\s\"'|><;]*", command)
+    posix_paths = re.findall(r"(?:^|[\s|>'\\\"])(/[^\s\"'>;|<]+)", command)
+    home_paths = re.findall(r"(?:^|[\s|>'\\\"])(~[^\s\"'>;|<]*)", command)
 
     media_path = Path(os.environ.get("MEDIA_DIR", tempfile.gettempdir())).resolve()
 
@@ -132,7 +177,16 @@ def check_command_safety(
             problem=f"Command matches a dangerous pattern: {command.strip()[:120]}",
             risk="Potential data loss, system damage, or security breach",
             suggestion="Consider using dedicated file/edit/delete tools instead of raw shell commands. "
-                       "If you must proceed, ensure you have a rollback plan (e.g., git commit first)",
+                       "If you must proceed, ensure you have a rollback plan (e.g. git commit first)",
+            tool_name="exec",
+        )
+
+    error = _check_python_inline(cmd)
+    if error:
+        return danger_warning(
+            problem=f"Inline Python code in exec: {command.strip()[:120]}",
+            risk="SyntaxError: unterminated string literal — exec cannot reliably handle inline Python strings",
+            suggestion="Use write_file(path.py, python_code) + exec(python path.py) instead",
             tool_name="exec",
         )
 

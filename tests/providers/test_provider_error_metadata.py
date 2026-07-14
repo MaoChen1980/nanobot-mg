@@ -65,6 +65,8 @@ def test_openai_handle_error_marks_connection_kind_from_message() -> None:
 
     assert response.finish_reason == "error"
     assert response.error_kind == "connection"
+    # Connection errors are always retried (transient network/server issue).
+    assert response.error_should_retry is True
 
 
 def test_anthropic_handle_error_extracts_structured_metadata() -> None:

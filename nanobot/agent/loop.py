@@ -276,6 +276,9 @@ class AgentLoop:
         self.assess_interval = assess_interval if assess_interval is not None else defaults.assess_interval
         self.project_root = project_root
         self._fix_inflight: set[str] = set()
+        # Track consecutive suppress-phase iterations to detect assess-me non-convergence loops.
+        # Key: session_key, Value: count of consecutive suppress-phase iterations.
+        self._suppress_phase_count: dict[str, int] = {}
         self._extra_hooks: list[AgentHook] = hooks or []
 
         self._init_framework_dir(workspace)
@@ -893,7 +896,7 @@ class AgentLoop:
                 lambda sk=session.key: self.subagents.get_running_count_by_session(sk)
             ) if session else None,
             keyword_search_callback=self.context.memory.vector_index.search,
-            suppress_tool_names=("message",),
+            suppress_tool_names=("message", "notify_orchestrator"),
         ))
         _runner_elapsed = time.time() - _t0
         if _runner_elapsed > 15:
@@ -974,6 +977,7 @@ class AgentLoop:
         if session is None:
             return None
         loop = self  # capture loop ref for inner use
+        _session_key = session.key if session else "default"
 
         async def _cb(messages: list[dict]) -> "AssessResult":
             from nanobot.agent.assess_me import (
@@ -1073,6 +1077,43 @@ class AgentLoop:
             unused_skills = parsed.get("unused_skills", [])
             if not isinstance(unused_skills, list):
                 unused_skills = []
+
+            # ── suppress-phase convergence guard ─────────────────────────────────
+            # Detect when assess_me is outputting the same findings + suppress
+            # marker in consecutive iterations — this is the assess loop itself
+            # blocking task progress (blocker condition).
+            # Check assess_me's raw output (`result`) since `injection_text` is
+            # built after this guard and may not be available on early returns.
+            _is_suppress = (
+                "无需回应" in (result or "")
+                or "无需再回复" in (result or "")
+                or "继续推进原始任务" in (result or "")
+                or "直接推进任务即可" in (result or "")
+            )
+            if _is_suppress:
+                loop._suppress_phase_count[_session_key] = (
+                    loop._suppress_phase_count.get(_session_key, 0) + 1
+                )
+                if loop._suppress_phase_count[_session_key] >= 2:
+                    blocker = parsed.get("blocker")
+                    # Only inject blocker if assess didn't already fill it
+                    if not blocker or blocker == "null":
+                        logger.warning(
+                            "assess_me suppress-loop detected (session=%s, count=%d): "
+                            "injecting blocker to break convergence loop",
+                            _session_key, loop._suppress_phase_count[_session_key],
+                        )
+                        # Force blocker into parsed so the DRC path fires below
+                        parsed["blocker"] = (
+                            "assess_me 循环不收敛：连续 %d 轮输出相同 findings + 压制指令，"
+                            "agent 已执行零内容+tool_calls 修复但 assess 持续重复相同结论。"
+                            "原始任务被元评估循环阻塞，用户需求未满足。"
+                            % loop._suppress_phase_count[_session_key]
+                        )
+            else:
+                # Non-suppress assessment — reset counter
+                loop._suppress_phase_count[_session_key] = 0
+            # ── end suppress-phase convergence guard ────────────────────────────
 
             if status == "ok" and not needs_revision and not unused_skills:
                 logger.info("assess_me: all clear, no action needed")

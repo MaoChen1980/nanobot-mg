@@ -732,7 +732,13 @@ class OpenAICompatProvider(LLMProvider):
 
     @staticmethod
     def _should_fallback_from_responses_error(e: Exception) -> bool:
-        """Fallback only for likely Responses API compatibility errors."""
+        """Fallback for Responses API compatibility errors, connection errors, and timeouts."""
+        # Connection errors (network blips, server restarts) and timeouts are
+        # transient — fall back to /chat/completions which may succeed.
+        err_str = str(e).lower()
+        if "connection" in err_str or "timeout" in err_str or "timed out" in err_str:
+            return True
+
         response = getattr(e, "response", None)
         status_code = getattr(e, "status_code", None)
         if status_code is None and response is not None:
@@ -1203,12 +1209,23 @@ class OpenAICompatProvider(LLMProvider):
             elif "connection" in err_str:
                 error_kind = "connection"
 
+        # Connection errors are almost always transient (network blip, server restart).
+        # Set error_should_retry=True so the retry loop picks them up without
+        # having to fall back to content-based heuristics.
+        if should_retry is None and error_kind == "connection":
+            should_retry = True
+
+        retry_after_s = cls._extract_retry_after_from_headers(headers)
+        # Provide a conservative default for connection errors (no server hint).
+        if retry_after_s is None and error_kind == "connection":
+            retry_after_s = 30.0
+
         return {
             "error_status_code": int(status_code) if status_code is not None else None,
             "error_kind": error_kind,
             "error_type": error_type,
             "error_code": error_code,
-            "error_retry_after_s": cls._extract_retry_after_from_headers(headers),
+            "error_retry_after_s": retry_after_s,
             "error_should_retry": should_retry,
         }
 
@@ -1254,6 +1271,13 @@ class OpenAICompatProvider(LLMProvider):
             error_type = (error_meta.get("error_type") or "").lower()
             if "rate_limit" in error_type or "rate_limit" in msg:
                 retry_after = LLMProvider._RATE_LIMIT_RETRY_SECONDS
+
+        # Connection errors carry no HTTP response / headers, so retry_after is
+        # always None here.  Match the behaviour of anthropic_provider.py which
+        # sets a 30 s conservative default for network stalls so callers receive
+        # a meaningful back-off hint instead of falling through to no delay.
+        if retry_after is None and error_meta.get("error_kind") == "connection":
+            retry_after = 30.0
 
         logger.exception(
             "OpenAI-compat API error: status={}, type={}, code={}, msg={}",
@@ -1304,6 +1328,7 @@ class OpenAICompatProvider(LLMProvider):
                         raise
                     self._record_responses_failure(model, reasoning_effort)
 
+            # --- chat/completions path ---
             kwargs = self._build_kwargs(
                 messages, tools, model, max_tokens, temperature,
                 reasoning_effort, tool_choice,
@@ -1390,6 +1415,7 @@ class OpenAICompatProvider(LLMProvider):
                         raise
                     self._record_responses_failure(model, reasoning_effort)
 
+            # --- chat/completions fallback path (only reached after Responses API failure) ---
             kwargs = self._build_kwargs(
                 messages, tools, model, max_tokens, temperature,
                 reasoning_effort, tool_choice,

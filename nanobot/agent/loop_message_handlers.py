@@ -13,7 +13,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from nanobot.bus.events import OutboundMessage
 
-from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message, contains_suppress_output_marker
+from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message, contains_suppress_output_marker  # noqa: F401
 from nanobot.agent.context import ContextState, _sanitize_session_key
 
 from nanobot.bus.events import OutboundMessage
@@ -543,16 +543,15 @@ class UserMessageHandler:
         "继续推进原始任务" and "无需回应此消息" have identical effect — both mean
         "stop arguing/explaining, just work". assess_me re-evaluates on the next turn.
         """
-        # Suppress check: unconditionally check ALL messages for assessment+marker.
-        # The had_injections flag is not a precondition — suppress must apply
-        # whenever an assessment message with a suppress marker is present,
-        # regardless of whether other injections exist.
+        # Suppress check: check ALL user messages for suppress markers, matching
+        # runner.py's suppress logic (lines 1253-1261). Unlike the old
+        # is_assessment_message guard, this covers [debug_root_cause] messages
+        # and any other assess_me injection type that carries a suppress marker.
         if all_msgs:
             for m in reversed(all_msgs):
-                if is_assessment_message(m):
-                    content = m.get("content", "")
-                    if contains_suppress_output_marker(content):
-                        logger.info("Suppressing response: assess_me marked as无需回应")
+                if m.get("role") == "user" and isinstance(m.get("content"), str):
+                    if contains_suppress_output_marker(m.get("content", "")):
+                        logger.info("Suppressing response: assess_me inject contained suppress marker")
                         final_content = ""
                         break
 

@@ -434,8 +434,49 @@ ACTION:
 2. 检查完成状态：
    - `.done` 文件存在 → 今日已完成，退出
    - 日志最新日期 == 今天 → 今日已完成，退出
-3. 未完成 → 执行完整任务流程
+3. 未完成 → **执行完整任务流程（含 skill 加载）**
 4. 完成后创建 `.done` 文件或追加日志条目
+
+**⚠️ MGA Cron Reminder 特殊规则（skill 加载强制前置）**
+
+当 cron reminder payload 明确要求「先用 skill_search 加载 market-game-analysis skill」时，**skill_search 是硬性第一步，不能跳过：**
+
+```
+1. skill_search("market-game-analysis") → read_file(SKILL.md 全文) → 按 Steps 执行
+   ↑ 步骤1必须先执行           ↑ 必须全文加载      ↑ 加载后才能执行其他操作
+2. 只有 skill Steps 全部走完（tool_calls 中有 Steps 规定的验证操作），才能 exec 脚本
+3. 禁止：read_file 后直接 exec 脚本 → 跳过 Steps 执行（即使 exec 成功也算违规）
+```
+
+**判断标准：** reminder 第一条指令是否为 skill 加载？
+- 是 → **必须先完成 skill 加载链**，才能执行后续 exec/数据获取/消息发送
+- 否 → 按正常 Cron 流程执行
+
+**典型违规（连续多轮同一模式）：**
+
+**违规模式 A — 完全跳过 skill_search/read_file：**
+```
+❌ reminder: "先用 skill_search 加载 market-game-analysis skill"
+   tool_calls: [exec(python workspace/tmp/mga_full_analysis.py)]  ← 无 skill_search/read_file
+   → 违规：跳过了 skill 加载，script 输出替代了 skill Steps
+```
+
+**违规模式 B — 执行了 skill_search 但跳过 Steps 直接 exec 脚本：**
+```
+❌ reminder: "先用 skill_search 加载 market-game-analysis skill"
+   tool_calls: [skill_search("market-game-analysis") → exec(python workspace/tmp/mga_full_analysis.py)]
+   → 违规：skill_search 只是检索，read_file 加载 + 按 Steps 执行才是完整流程
+   → skill_search 成功 ≠ skill 已激活
+   → 脚本输出替代了 skill Steps，即使脚本逻辑正确也属于违规
+
+✅ 合规链：
+   tool_calls: [skill_search("market-game-analysis") → read_file(SKILL.md 全文) → 按 Steps 执行 → exec 脚本]
+   → 合规：Steps 执行证明在 tool_calls 中可见
+```
+
+**⚠️ skill_search ≠ skill 加载完成：** skill_search 只是检索，read_file 加载 + 按 Steps 执行才是完整流程。执行 skill_search 后跳过 read_file 直接 exec 脚本，属于「虚假 skill 加载」，即使 skill_search 返回了正确结果，skill 仍未正式激活到 context 中。
+
+**相关规则：** skill 加载链的详细执行规范（Rule 3 强制链、禁止行为、典型违规模式）见 `assessment-response-trigger.md`。
 
 **TRIGGER: cron 条件执行误判（重复执行了已完成的任务）**
 ACTION: 检查日期格式一致性（统一 `date +%Y-%m-%d`）、时区设置、文件路径是否存在。修正在 operating_principles 中的理解。

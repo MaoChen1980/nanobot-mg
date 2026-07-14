@@ -870,7 +870,8 @@ class LLMProvider(ABC):
 
             if should_retry_guard is not None and not should_retry_guard():
                 is_timeout = (response.error_kind or "").lower() == "timeout"
-                if is_timeout:
+                is_connection = (response.error_kind or "").lower() == "connection"
+                if is_timeout or is_connection:
                     if on_stream_recover:
                         logger.warning(
                             "LLM stream stalled after content was emitted; "
@@ -885,7 +886,7 @@ class LLMProvider(ABC):
                         kw.setdefault("on_content_delta", None)
                         kw["on_content_delta"] = None
                         kw["on_reasoning_delta"] = None
-                        should_retry_guard = None
+                    should_retry_guard = None
                 else:
                     logger.warning(
                         "LLM stream failed after content was emitted; skipping retry"

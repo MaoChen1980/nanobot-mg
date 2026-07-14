@@ -127,6 +127,42 @@ Output as a bullet list in `content`. Be factual — base each mark only on what
 - 一切正常则 `status` 填 `"ok"`
 - `blocker` 条件（检查最近 10 次 iteration）：同一 tool_name 返回相同 error ≥3 次 / 无替代路径 / 工具全失败 / 未知错误
 
+## 收敛检测（assess_me 循环不收敛的根因防护）
+
+assess_me 每轮独立评估，但 agent 的修复动作可能已被正确执行。**在输出 findings 前必须先做以下检查**，避免对已修复问题反复输出 findings：
+
+### 规则 A：识别"零内容响应 + 压制指令"模式
+
+**检查条件：** 如果最近一条 assistant 消息满足以下全部条件，则该 findings 可能已被 agent 执行：
+
+1. assistant 消息 `content == ""`（零文字）
+2. 且 assistant 有 tool_calls（包含 `read_file`、`edit_file`、`exec` 等）
+3. 且上一轮 assess_me 输出了相同的 findings 内容 + 压制指令
+
+**动作：** 标记为「已收敛」，**禁止重复输出相同 findings**。即使 conversation 中仍有残留的不规范文字（如状态摘要），只要 tool_calls 证明 agent 在执行修复，应判定为收敛。
+
+### 规则 B：blocker 上报条件扩展
+
+当发现以下情况时，`blocker` 字段必须填写（禁止静默继续迭代）：
+
+1. **assess_me 输出相同 findings + 压制指令 ≥ 2 次**（同一问题被反复标记为新发现）
+2. **同一 Rule 违规（assess_me 原文引用）在连续 iteration 中出现 ≥ 2 次**
+
+填写格式：
+```json
+"blocker": "assess_me 循环不收敛：Rule 8 违规已被 agent 执行零内容+tool_calls 修复（iter N 已验证），但 assess_me 连续 2+ 轮仍输出相同 findings，未识别修复完成状态"
+```
+
+**禁止：** 连续 2+ 轮输出相同 findings 而不填写 blocker。blocker 触发后，框架会将问题上报给用户，避免 agent 陷入静默循环。
+
+### 规则 C：状态评估优先于内容评估
+
+当 agent 的最近一条响应是**零内容 + tool_calls** 时：
+1. **先判断** agent 是否正确执行了上一轮 assess_me 的修复要求
+2. **如果 tool_calls 覆盖了 findings 要求** → status = "ok"，content 说明「修复已执行，等待下一轮验证」
+3. **只有当 tool_calls 不足以覆盖 findings 时** → status = "findings"，指出具体缺口
+4. **禁止：** 在 agent 零内容+tool_calls 响应后，仍输出与上一轮相同的 findings 内容
+
 ## Conversation
 
 {{ conversation }}
