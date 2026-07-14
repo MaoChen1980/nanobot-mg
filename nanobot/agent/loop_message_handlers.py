@@ -547,16 +547,28 @@ class UserMessageHandler:
         # The had_injections flag is not a precondition — suppress must apply
         # whenever an assessment message with a suppress marker is present,
         # regardless of whether other injections exist.
+        _suppress_detected = False
         if all_msgs:
             for m in reversed(all_msgs):
                 if is_assessment_message(m):
                     content = m.get("content", "")
                     if contains_suppress_output_marker(content):
                         logger.info("Suppressing response: assess_me marked as无需回应")
-                        final_content = ""
+                        _suppress_detected = True
                         break
+            # Fallback: when had_injections is True, check all messages for suppress marker
+            # This handles cases where is_assessment_message may not recognize the message format.
+            if not _suppress_detected and had_injections:
+                for m in reversed(all_msgs):
+                    if m.get("role") == "user" and isinstance(m.get("content"), str):
+                        if contains_suppress_output_marker(m.get("content", "")):
+                            logger.info("Suppressing response: had_injections + suppress marker found")
+                            _suppress_detected = True
+                            break
 
-        if final_content is None:
+        if _suppress_detected:
+            final_content = ""
+        elif final_content is None:
             final_content = ""
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)

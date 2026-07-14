@@ -1248,7 +1248,25 @@ class AgentRunner:
                         if messages[i].get("role") == "assistant":
                             messages.pop(i)
                             break
-                    _end_assess_ran = False
+                    # needs_revision implies suppress — check the newly injected assessment message.
+                    # When needs_revision is True, injection_messages contain findings + suppress marker.
+                    # Conditional: if suppress marker found → continue (active suppress); otherwise → continue
+                    # (normal doubt/retry, LLM re-runs with injected content). The key fix: always continue
+                    # (never break), preventing _suppress_response reset on next iteration that would allow
+                    # text output. The suppress marker in the injected message is still present on the next
+                    # iteration's suppress check, where _suppress_response=True triggers continue again.
+                    _suppress_found = False
+                    for m in reversed(messages):
+                        if m.get("role") == "user" and isinstance(m.get("content"), str):
+                            from nanobot.agent.assess_me import contains_suppress_output_marker
+                            if contains_suppress_output_marker(m.get("content", "")):
+                                _suppress_response = True
+                                _suppress_found = True
+                                logger.info("Suppressing response: needs_revision with suppress marker")
+                                break
+                    # Always continue — suppress marker present (continue with suppress) or absent
+                    # (normal doubt/retry, LLM re-runs with injected content). Never break here;
+                    # _suppress_response=True is carried forward and prevents final_content on next turn.
                     continue
                 # Check if assess injected a suppress marker — if so, skip
                 # setting final_content so the framework suppresses the text.
