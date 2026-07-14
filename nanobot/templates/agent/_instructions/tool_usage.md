@@ -46,6 +46,11 @@
 
 ### 调试
 - 遇到错误 → 系统自动注入 `[debug_root_cause]` 根因分析，参考其中的分析推进
+- **脚本错误（KeyError/IndexError/ImportError/TypeError 等）调试规范：**
+  - **禁止并行执行多个验证脚本** — 这会导致错误信息交叉干扰，难以定位根因
+  - **正确顺序：** 1) 用 `read_file` 定位错误位置（读取报错行及其上下文）→ 2) 用 `grep` 定位相关代码（搜索函数定义、列名引用等）→ 3) 确认根因后再执行修复
+  - **典型失败模式：** 同时执行 `python validate1.py`、`python validate2.py`、`python validate3.py` → 三个错误混在一起无法分析
+  - **典型成功模式：** read_file 定位 `line 654: r['V/OI']` KeyError → grep 搜索 `'V/OI'` 在 DataFrame 定义中的实际列名 → 确认列名后修复
 - 卡住/绕圈 → `skill_search reframe` 加载 reframe skill 清空噪声
 - exec 工具 shell 类型不匹配（**遇到以下任一症状立即触发：exit 255、'is not recognized'、命令文本直接回显而非执行、Unix 命令 wc/tail/head/grep 全部 exit 255、PowerShell 命令如 Get-Content/Select-Object 等报 'is not recognized'、cmd.exe 执行 PowerShell 语法失败**）→ **立即停止重试**、`skill_search windows-exec-shell-type-diagnosis` 加载诊断 skill 进行系统性诊断，**禁止重试相同命令或使用 bat 封装/PowerShell 单行等变通方案**
 - **skill 前置加载强制要求**：涉及以下场景时，**必须在开始任何调研之前**加载对应 skill：

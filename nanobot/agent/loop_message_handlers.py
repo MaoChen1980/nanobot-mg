@@ -543,19 +543,28 @@ class UserMessageHandler:
         "继续推进原始任务" and "无需回应此消息" have identical effect — both mean
         "stop arguing/explaining, just work". assess_me re-evaluates on the next turn.
         """
-        # Suppress check: check ALL user messages for suppress markers, matching
-        # runner.py's suppress logic (lines 1253-1261). Unlike the old
-        # is_assessment_message guard, this covers [debug_root_cause] messages
-        # and any other assess_me injection type that carries a suppress marker.
+        _suppress_detected = False
         if all_msgs:
             for m in reversed(all_msgs):
-                if m.get("role") == "user" and isinstance(m.get("content"), str):
-                    if contains_suppress_output_marker(m.get("content", "")):
-                        logger.info("Suppressing response: assess_me inject contained suppress marker")
-                        final_content = ""
+                if is_assessment_message(m):
+                    content = m.get("content", "")
+                    if contains_suppress_output_marker(content):
+                        logger.info("Suppressing response: assess_me marked as无需回应")
+                        _suppress_detected = True
                         break
+            # Fallback: when had_injections is True, check all messages for suppress marker
+            # This handles cases where is_assessment_message may not recognize the message format.
+            if not _suppress_detected and had_injections:
+                for m in reversed(all_msgs):
+                    if m.get("role") == "user" and isinstance(m.get("content"), str):
+                        if contains_suppress_output_marker(m.get("content", "")):
+                            logger.info("Suppressing response: had_injections + suppress marker found")
+                            _suppress_detected = True
+                            break
 
-        if final_content is None:
+        if _suppress_detected:
+            final_content = ""
+        elif final_content is None:
             final_content = ""
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
