@@ -59,12 +59,32 @@ Use the `cron` tool to schedule reminders or recurring tasks.
    cron(action="add", message="Morning standup", cron_expr="0 9 * * 1-5", tz="America/Vancouver")
    ```
 
-4. **List or remove existing jobs**:
+4. **List, update, or remove existing jobs**:
 
    ```
    cron(action="list")
    cron(action="remove", job_id="abc123")
    ```
+
+   **Update an existing job** — change message, schedule, or both:
+   ```
+   cron(action="update", job_id="abc123", message="New reminder text")
+   ```
+   ```
+   cron(action="update", job_id="abc123", every_seconds=3600)
+   ```
+   ```
+   cron(action="update", job_id="abc123", message="New message", every_seconds=1800)
+   ```
+   ```
+   cron(action="update", job_id="abc123", cron_expr="0 9 * * 1-5", tz="America/Vancouver")
+   ```
+   **Parameters for `update`**:
+   - `job_id` — REQUIRED (or run inside a cron job where it defaults to current job)
+   - `message` — new instruction text (omit to keep existing)
+   - `every_seconds` — new interval (omit to keep existing)
+   - `cron_expr` + `tz` — new cron schedule (omit to keep existing)
+   - `deliver` — whether to deliver result to user channel (default true)
 
 5. **验证**: 对照 Verification 章节逐条检查。全部通过则完成；不通过则加载 skill-manager 修复此 skill。
 

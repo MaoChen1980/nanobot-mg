@@ -395,11 +395,25 @@ tool_call[1]: (skill_search 如果路径未知，先 search 再 read_file)
 - 「已完成并发送飞书」「飞书消息已发送」等完成确认
 - 强势/弱势品种列表、可持做多品种汇总
 - 任何包含「已完成」「发送飞书」字样的状态摘要
+- 任何状态确认文字（如「skill已加载」「修复已完成」「零文字输出」「跳过本次分析」「数据无变化」「压制收敛中」等）
 
-**适用场景：** 此禁令在所有轮次均生效，无论是否处于 assess 压制收敛期：
-- 正常 cron 轮次：exec + message() 成功后 → assistant content = `""`
-- assess 压制收敛期：exec + message() 成功后 → assistant content = `""`
-- 数据未变化跳过（_skipped=true）：message() 发送简短说明后 → assistant content = `""`
+> ⚠️ **【通用禁令 — 无例外】assistant content = `""` 的强制场景**
+>
+> 以下场景**无论是否处于 assess 压制收敛期**，生成 assistant response 时 content 必须严格为空字符串 `""`：
+>
+> | 场景 | 条件 | assistant content |
+> |------|------|-------------------|
+> | 正常 cron 轮次 | exec + message() 成功后 | `""` |
+> | Branch 1 跳过 | `_skipped=true` + `_skip_reason=数据未变化` + message() 发送简短说明后 | `""` |
+> | assess 压制收敛 | skill 加载完成后 | `""` |
+>
+> **⚠️ 典型误解导致违规：agent 以为"Branch 1 允许发 message() = 可以输出文字说明"。这是错误的——message() 是通知工具，assistant response 的作用是触发工具，不是广播结果。Branch 1 执行 message() 后仍必须 content = `""`。**
+>
+> **禁止的输出示例（即使 message() 已成功）：**
+> - ❌ 「数据无变化，跳过本次分析」
+> - ❌ 「数据未变化，已发送通知」
+> - ❌ 「已完成并发送飞书」
+> - ❌ 任何状态确认文字
 
 **核心原则：** `message()` 是飞书通知的唯一合法渠道。assistant response 的作用是触发工具，不是广播结果。
 

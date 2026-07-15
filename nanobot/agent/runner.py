@@ -1228,7 +1228,14 @@ class AgentRunner:
             # Run end-of-loop assess BEFORE final_content is set.
             # This ensures that if assess_me injects a suppress marker,
             # we can skip setting final_content entirely (tool_calls still run).
-            _suppress_response = False
+            # Preserve suppress state across iterations: if a suppress marker is
+            # already in messages (from a prior assess_me inject), keep it active.
+            from nanobot.agent.assess_me import contains_suppress_output_marker
+            _suppress_response = any(
+                m.get("role") == "user" and isinstance(m.get("content"), str)
+                and contains_suppress_output_marker(m.get("content", ""))
+                for m in reversed(messages)
+            )
             if not _end_assess_ran and response.finish_reason != "error" and iteration + 1 < spec.max_iterations:
                 _end_assess_ran = True
                 assess_result = await self._run_assess_callback(spec, messages)

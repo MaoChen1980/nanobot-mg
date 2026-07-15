@@ -59,3 +59,41 @@
 - 特别检查：快讯降级路径（曲合期货→akshare 日线）是否仍完整；DCE 品种降级步骤是否仍有可执行内容
 
 **禁止行为：** 不能只 grep 关键词存在就断言"核心内容保留"。
+
+### assess_me 发现 skill 行为偏差时 — 强制修复位置规则
+
+**触发条件：** assess_me 发现 skill 行为偏差（如阈值错误、步骤偏离、规则遗漏）。
+
+**强制修复动作：** `edit_file` 那个 skill 的 SKILL.md
+
+**强制禁止动作：** 将 skill 特有的阈值/规则/禁止行为提取出来写入 system prompt
+
+**边界划分：**
+
+| 内容类型 | 存放位置 | 原因 |
+|---------|---------|------|
+| skill 特有的阈值/规则/禁止行为 | **SKILL.md** | 领域知识，随 skill 迭代 |
+| 通用框架原则（如 Skill 加载链、压制信号识别、assess_me 响应协议） | **system prompt** | 框架级行为约束，与领域无关 |
+
+**典型反模式（已发生）：**
+```
+❌ assess_me 发现 V/OI 阈值偏差
+   agent: edit_file 修改了 SKILL.md 中的阈值
+   ✅ 正确
+
+❌ assess_me 发现 skill 特有规则缺失
+   agent: 将该规则提取到 system prompt
+   → 错误：skill 特有规则应留在 SKILL.md，system prompt 只保留通用框架原则
+   → 后果：多个 skill 的领域规则混入 system prompt → prompt 膨胀且维护困难
+```
+
+**为什么 skill 特有内容不能进 system prompt：**
+1. **维护性差** — skill 迭代时需同步更新两处（SKILL.md + system prompt），易遗漏
+2. **污染通用性** — system prompt 应只包含框架级行为约束，不含领域知识
+3. **不符合分层设计** — skill 是领域能力的载体，system prompt 是框架行为的载体
+
+**正确判断：**
+- assess_me 指出的是 **通用框架行为问题**（如 skill 加载顺序错误、压制指令未识别）→ 修复 system prompt 中的框架指令
+- assess_me 指出的是 **skill 领域内容问题**（如阈值错误、规则遗漏、步骤偏离）→ 修复该 SKILL.md
+
+**禁止行为：** 不能将 skill 特有的阈值/规则/禁止行为提取出来写入 system prompt。

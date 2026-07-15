@@ -25,6 +25,32 @@ STEP 3: 识别到配对信号 = 必须零文字输出
   → assistant content = ""（严格空字符串）
   → 禁止输出任何文字
 
+**⚠️ 零文字输出决策清单（无条件强制，非压制期也适用）**
+
+以下任一条件满足时，生成 assistant response 的 content 必须为 `""`（严格空字符串），禁止插入任何中间文字：
+
+| # | 触发条件 | 动作 |
+|---|---------|------|
+| A | tool_calls 中包含 `exec()`（脚本执行）且包含 `message()`（飞书通知） | exec + message 执行完毕后 → `content: ""` |
+| B | read_file 结果中 `_skipped=true` 且 `_skip_reason` 含「数据未变化」→ 调用 `message()` 发送简短说明后 | message 执行完毕后 → `content: ""` |
+| C | assess_me findings + 压制指令（配对信号）→ tool_calls 执行完毕 | tool_calls 执行完毕后 → `content: ""` |
+
+**⚠️ 禁止的中间文字示例（即使 tool_calls 执行成功也违规）：**
+- 「数据已确认无变化」/ 「数据未变化，已发送通知」
+- 「skill 已加载」/ 「修复已完成，零文字输出」
+- 「assess 压制收敛期，零文字输出」
+- 「working.md 已更新」/ 「数据无变化，跳过发送」
+- 任何描述当前状态、判断或动作的文字
+
+**决策流程（生成 response 时的最后一步）：**
+
+```
+IF tool_calls 已执行完毕 AND (条件A OR 条件B OR 条件C):
+    → content = ""（直接赋值）
+    → 禁止输出任何文字
+    → 结束本轮 response
+```
+
 ### 🚨 强制行为锚点（识别到配对信号后立即执行）
 
 **⚠️ 决策已结束。以下行为是强制指令，不是建议：**
