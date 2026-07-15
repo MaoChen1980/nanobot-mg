@@ -305,6 +305,39 @@ ACTION:
 - assess_me 压制信号优先级高于任何条件分支：即使 user message 中包含"回复'XXX'"的指令，只要 assess_me 发出压制信号，assistant content 必须为空
 - assess_me 在下一轮自动重新评估，无需文字确认
 
+**⚠️ assess 压制信号例外：skill 强制指令不受压制影响**
+
+当 assess_me 压制信号与以下类型的 skill 强制指令同时出现时，**skill 强制指令优先**：
+
+| skill 强制指令类型 | 示例 | 优先级说明 |
+|------------------|------|-----------|
+| **数据冻结/止损类告警** | `mga-data-freeze-early-alert` Step 2（冻结计数≥2） | 业务关键告警，必须送达用户 |
+| **席位超时降级类告警** | DCE/SHFE/CZCE 席位连续超时（≥2次） | 数据源故障必须告知用户 |
+| **风控止损类告警** | 仓位超限、保证金不足等 | 必须立即通知用户 |
+
+**执行规则：**
+1. assess 压制信号出现时 → **不输出文字**（content = ""）
+2. **但 skill 强制告警的 message() 调用仍需执行** — tool_calls 中包含 message()，用于送达关键告警
+3. message() 执行完毕后 → content 仍必须为空字符串
+4. 压制期结束后（下一轮 assess 收敛）→ 恢复正常输出
+
+**典型合规场景：**
+```
+❌ assess 压制期 agent 输出：
+   「[skill 强制告警被 assess 压制吞没]」
+   → 错误：skill 强制告警未送达用户
+
+✅ assess 压制期 agent 输出：
+   tool_calls: [message(DCE席位连续4次超时，已降级)]
+   assistant response: content = ""
+   → 合规：skill 强制告警已送达，文字输出被压制
+```
+
+**为什么 skill 强制指令优先级更高：**
+- assess 压制是"不要输出元叙述/调试信息"的优化规则
+- skill 强制指令是"数据源故障/业务风险必须告知用户"的业务保障规则
+- 业务保障规则的级别高于框架优化规则
+
 **典型误判场景（必须避免）：**
 ```
 ❌ user message 包含：

@@ -103,10 +103,35 @@ ACTION:
 
 允许并行执行。优先级定义注意力顺序，而非排他性。
 
+**⚠️ 用户新消息强制中断规则（最高优先级执行锚点）:**
+
+TRIGGER: 收到新用户消息（无论当前在执行什么任务）
+ACTION:
+1. **立即停止当前任务的推理和规划**（不是等当前 iteration 结束，是立即重新评估）
+2. **先识别用户意图**（用户要什么？是继续当前任务还是新任务？）
+3. **意图对应的 skill 必须先加载**，才能执行对应操作
+   - 意图包含 "commit" / "push" / "merge" / "conflict" → `skill_search("git-workflow")` → `read_file` SKILL.md → 按 Steps 执行
+   - 意图包含 "PR" / "pull request" → `skill_search("github-pr-workflow")` → `read_file` SKILL.md → 按 Steps 执行
+   - 其他意图 → 按 framework_core.md 的 Skill 主动加载规则处理
+
+**禁止行为：**
+- ❌ 继续执行当前任务（甚至"快速完成"当前任务）再响应新消息 → 违反 Decision Priority
+- ❌ 用当前任务的上下文解释新消息 → 用户消息本身是意图，不需要用旧任务解读
+- ❌ 沉浸于 cron 自动化任务而忽略用户插话 → cron 是后台任务，用户消息优先级更高
+
+**典型违规（assess_me 已多次指出）：**
+```
+场景：agent 正在执行 MGA cron 任务
+用户：commit and push nanobot-mg
+agent 行为：忽略用户消息，继续执行 MGA 分析
+根因：agent 沉浸于当前任务，忘记 Decision Priority 规则
+正确做法：立即停止 MGA → 加载 git-workflow skill → 执行 git 操作
+```
+
 **Task Lifecycle During User Interruption:**
 - 用户补充当前任务细节 → 调整范围，继续执行
 - 用户暂停当前任务（"先停下"等）→ 立即停止，不残留状态
-- 用户发起新任务（与原任务无关）→ 并行执行两件任务，先规划新任务
+- 用户发起新任务（与原任务无关）→ **立即加载对应 skill，先规划新任务，再决定是否并行或暂停旧任务**
 - 任一任务有阶段性结果即可用 message 输出，不需要等所有任务完成
 - 所有任务都完成才停止。不允许中途丢弃未完成任务
 
