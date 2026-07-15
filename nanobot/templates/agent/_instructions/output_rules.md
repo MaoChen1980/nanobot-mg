@@ -406,6 +406,41 @@ ACTION:
 
 ---
 
+### Rule 8.4 — assess 压制期零文字输出规范
+
+**TRIGGER: assess_me 输出 findings + 压制指令（「无需回应此消息」「请据此继续推进」等）后**
+
+**⚠️ 强制行为：tool_calls 执行完毕后，assistant response content 必须置为严格空字符串 `""`**
+
+**禁止输出内容（严格列举）：**
+- ❌ **括号notation**：`[assess findings 已记录...]`、`[tool_calls 执行完毕]`、`[压制期内零文字输出]` 等任何以 `[...]` 包裹的状态描述
+- ❌ **任何状态确认文字**：「已记录」「已执行」「已完成」「已发送」「修复完成」等包含"已"字样的完成时态描述
+- ❌ **任何元描述文字**：对自身输出行为的描述，如「tool_calls 执行完毕，content = ""」「5项条件验证完毕」「_skipped=true」等对内部状态的说明
+- ❌ **任何等待下一轮的说明**：「等待下一轮 assess 验证」「压制期内零文字输出」等
+- ❌ **任何分析摘要**：如「归因推断问题已记录」等对 findings 的二次描述
+
+**✅ 合规标准：**
+- `message()` 返回 `Message sent` 即为发送成功的证明，不需要任何文字确认
+- `exec` 工具返回 `exit code 0` 即为执行成功的证明，不需要任何文字确认
+- assess_me 在下一轮自动重新评估，不需要汇报
+
+**典型违规模式（本次 assess_me 指出的问题）：**
+```
+❌ assess 压制期 agent 输出：
+   「[assess findings 已记录：未来地缘声明需注明快讯来源，消息已发送无法撤回。
+     tool_calls 执行完毕，content = ""]」
+   → 违规：括号notation + 状态确认文字 + 元描述文字，三项全部违反
+
+✅ assess 压制期 agent 输出：
+   （tool_calls 正常执行完毕后）
+   assistant response: content = ""（严格空字符串）
+   → 合规：无任何文字输出
+```
+
+**⚠️ 核心原则：tool_calls 执行完毕 ≠ 可输出文字。** 即使所有修复动作都已完成，生成 assistant response 时 content 仍必须为 `""`。禁止在零文字之前或之后附加任何说明。
+
+---
+
 ### Message Cleanliness — 消息清洁规则
 
 **TRIGGER: 使用 `message()` 工具向用户/下游发送消息前**
