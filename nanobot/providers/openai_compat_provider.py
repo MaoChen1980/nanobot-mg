@@ -1215,9 +1215,19 @@ class OpenAICompatProvider(LLMProvider):
         if should_retry is None and error_kind == "connection":
             should_retry = True
 
+        # 5xx server-side errors (overload, gateway timeout, etc.) are transient;
+        # the cluster will recover. Set should_retry=True and provide a
+        # conservative back-off hint if the server didn't give a Retry-After.
+        status_code_val = int(status_code) if status_code is not None else None
+        if should_retry is None and status_code_val is not None and status_code_val >= 500:
+            should_retry = True
+
         retry_after_s = cls._extract_retry_after_from_headers(headers)
         # Provide a conservative default for connection errors (no server hint).
         if retry_after_s is None and error_kind == "connection":
+            retry_after_s = 30.0
+        # 5xx overload errors get a 30 s default if no server hint is present.
+        if retry_after_s is None and status_code_val is not None and status_code_val >= 500:
             retry_after_s = 30.0
 
         return {
@@ -1291,7 +1301,12 @@ class OpenAICompatProvider(LLMProvider):
             content=msg,
             finish_reason="error",
             retry_after=retry_after,
-            **error_meta,
+            error_kind=error_meta.get("error_kind"),
+            error_type=error_meta.get("error_type"),
+            error_code=error_meta.get("error_code"),
+            error_status_code=error_meta.get("error_status_code"),
+            error_retry_after_s=error_meta.get("error_retry_after_s"),
+            error_should_retry=error_meta.get("error_should_retry"),
         )
 
     # ------------------------------------------------------------------

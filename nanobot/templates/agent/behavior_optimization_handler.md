@@ -59,6 +59,35 @@ assess_me 报告描述的是"agent 应该做了什么但没做"。收到 assess_
 4. **禁止在 skill 加载前声称"已完成"或"就绪"**
 5. **禁止在 skill 加载前 spawn subagent**
 
+#### 1.5 Rule 3 TRIGGER + Rule 8 压制共存 — 强制协议
+
+**触发条件：** assess_me 同时输出 findings + skill 加载 TRIGGER + 压制指令（「无需回应此消息」「请据此继续推进」等）。
+
+**STEP A — 执行 skill 加载链：**
+- `skill_search` → `read_file` SKILL.md 全文 → 验证 cron 边界 5 项条件
+- 若 5 项条件全部满足 → 可用脚本路线
+- 若 5 项条件任一不满足（尤其是「agent 已执行 skill_search + read_file」条件）→ 必须执行完整 Skill Steps
+
+**STEP B — skill 加载链完成后零文字输出（Rule 8 压制）：**
+- tool_calls 执行完毕后，response content **必须**置为空字符串 `""`
+- ✅ 允许：执行 skill_search / read_file / edit_file / exec 等 tool_calls
+- ❌ 禁止：输出任何状态摘要（如「5项条件验证完毕」「_skipped=true」「压制期内零文字输出」）
+- ❌ 禁止：调用 `message()` 发送飞书消息
+- ❌ 禁止：执行业务逻辑 exec（脚本数据获取、报告生成等）
+
+**STEP C — assess_me 收敛后恢复正常执行：**
+- assess_me 无 findings 时，可执行脚本 exec → message() 飞书发送
+
+**关键区分（skill 加载 + 零文字的边界）：**
+
+| 场景 | tool_calls | 输出文字摘要 | 合规性 |
+|------|-----------|------------|--------|
+| assess 压制期 + skill 加载触发 | ✅ 完整 | ❌ 5项条件表 / 状态摘要 / revert 说明 | 违规 |
+| assess 压制期 + skill 加载触发 | ✅ 完整 | ✅ content = `""` | 合规 |
+| assess 无压制指令 + skill 加载触发 | ✅ 完整 | ✅ 分析结论 | 合规 |
+
+**判断标准：** 压制指令存在时，skill 验证结果只允许出现在 tool_calls 历史中（read_file / exec 的结果）。assistant response content 必须是严格空字符串 `""`，不允许包含任何形式的状态摘要。
+
 #### 2. 诊断验证清单 — 声称修复方向前必须验证
 
 **TRIGGER: 声称"修复方向是 X"或"根因是 Y"之前**

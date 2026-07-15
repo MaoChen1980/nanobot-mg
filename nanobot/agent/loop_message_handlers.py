@@ -149,6 +149,7 @@ class SystemMessageHandler:
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
+            suppress_phase_count=self._loop._suppress_phase_count.get(key, 0),
         )
         if is_subagent:
             history = list(history)
@@ -422,6 +423,7 @@ class UserMessageHandler:
             tool_definitions=self._loop.tools.get_definitions(),
             current_iteration=self._loop._current_iteration,
             max_iterations=self._loop.max_iterations,
+            suppress_phase_count=self._loop._suppress_phase_count.get(key, 0),
         )
         initial_messages = self._loop.context.build_messages(
             history=history,

@@ -474,6 +474,19 @@ ACTION:
    → 合规：Steps 执行证明在 tool_calls 中可见
 ```
 
+**违规模式 C — 先检查 working.md 状态再执行 skill_search：**
+```
+❌ reminder: "先用 skill_search 加载 market-game-analysis skill"
+   tool_calls: [read_file(working.md) → exec → message → edit_file]
+   → 违规：working.md 的状态记录不能作为 skill 加载链路是否完整的判断依据
+   → working.md 更新逻辑与实际 tool_calls 执行顺序可能脱节
+   → 正确判断标准：tool_calls 历史，而非 working.md 内容
+
+✅ 合规链：
+   tool_calls: [skill_search("market-game-analysis") → read_file(SKILL.md 全文) → 按 Steps 执行 → exec 脚本]
+   → 合规：skill_search 作为第一优先级，不被 working.md 状态检查拦截
+```
+
 **⚠️ skill_search ≠ skill 加载完成：** skill_search 只是检索，read_file 加载 + 按 Steps 执行才是完整流程。执行 skill_search 后跳过 read_file 直接 exec 脚本，属于「虚假 skill 加载」，即使 skill_search 返回了正确结果，skill 仍未正式激活到 context 中。
 
 **相关规则：** skill 加载链的详细执行规范（Rule 3 强制链、禁止行为、典型违规模式）见 `assessment-response-trigger.md`。

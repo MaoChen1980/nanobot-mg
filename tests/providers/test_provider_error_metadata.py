@@ -94,3 +94,48 @@ def test_anthropic_handle_error_marks_connection_kind() -> None:
     assert response.error_kind == "connection"
     assert response.error_should_retry is True
     assert response.error_retry_after_s == 30.0
+
+
+def test_openai_handle_error_5xx_overload_error_is_transient() -> None:
+    """HTTP 529 overloaded_error from OpenAI-compat provider is transient — should retry."""
+
+    class FakeServerError(Exception):
+        pass
+
+    err = FakeServerError("overloaded")
+    err.status_code = 529
+    err.response = SimpleNamespace(
+        status_code=529,
+        headers={},
+        text='{"type": "overloaded_error", "message": "当前服务集群负载较高"}',
+    )
+    err.body = {"type": "overloaded_error", "message": "当前服务集群负载较高"}
+
+    response = OpenAICompatProvider._handle_error(err)
+
+    assert response.finish_reason == "error"
+    assert response.error_status_code == 529
+    assert response.error_type == "overloaded_error"
+    # 5xx should trigger retry
+    assert response.error_should_retry is True
+    # Conservative 30 s back-off when no Retry-After header
+    assert response.error_retry_after_s == 30.0
+
+
+def test_openai_handle_error_500_internal_error_is_transient() -> None:
+    """HTTP 500 from OpenAI-compat provider is transient — should retry."""
+
+    class FakeServerError(Exception):
+        pass
+
+    err = FakeServerError("internal server error")
+    err.status_code = 500
+    err.response = SimpleNamespace(status_code=500, headers={}, text="Internal Server Error")
+    err.body = {"error": {"type": "internal_server_error"}}
+
+    response = OpenAICompatProvider._handle_error(err)
+
+    assert response.finish_reason == "error"
+    assert response.error_status_code == 500
+    assert response.error_should_retry is True
+    assert response.error_retry_after_s == 30.0

@@ -71,6 +71,7 @@ class ContextState:
     max_iterations: int | None = None
     context_window_tokens: int | None = None
     history_budget_tokens: int | None = None
+    suppress_phase_count: int | None = None
 
 
 def parse_task_tree(raw: str) -> list[dict]:
@@ -1017,6 +1018,8 @@ class ContextBuilder:
             runtime_lines.append(f"Context Window: {cs.context_window_tokens} tokens")
         if cs.history_budget_tokens is not None:
             runtime_lines.append(f"History Budget: ~{cs.history_budget_tokens} tokens available")
+        if cs.suppress_phase_count is not None and cs.suppress_phase_count > 0:
+            runtime_lines.append(f"Suppress Phase Count: {cs.suppress_phase_count}")
 
         # Use explicit session_key when available; fall back to channel:chat_id
         # for callers that don't have one (e.g. thread-scoped override).

@@ -100,8 +100,8 @@
 | assess_me **明确要求加载 skill**（「必须先加载 skill X」「请使用 skill X」「以下技能高度相关但未被使用」） | → 按 Rule 3 执行 skill_search → read_file → Steps |
 | assess_me **输出 findings + 压制指令**（「无需回应此消息」「请据此继续推进」）且 findings **不包含** skill 加载需求（不提及 Steps/技能名称/unused_skills/未执行等关键词） | → 按 Rule 8 执行零文字输出（**不加载 skill**） |
 | assess_me **仅输出 findings**（无压制指令） | → 正常响应，按 findings 描述执行修复或加载 skill |
-| assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述） | → **识别为 Rule 3 TRIGGER**：强制执行 skill_search → read_file 完整加载 → 按 Steps 执行 |
-| assess_me **同时输出 findings + 压制指令 AND findings 明确提及 skill 名称或 unused_skills** | → **识别为 Rule 3 TRIGGER**：强制执行 skill_search → read_file 完整加载 → 按 Steps 执行 |
+| assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述） | → **识别为 Rule 3 TRIGGER**：强制执行 `skill_search` → `read_file` 完整加载 → 按 Steps 执行<br>**⚠️ 合规时序：`skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规。禁止将两者拆到不同轮次（assess_me 强制链必须在同一轮完成 skill 加载）。** |
+| assess_me **同时输出 findings + 压制指令 AND findings 明确提及 skill 名称或 unused_skills** | → **识别为 Rule 3 TRIGGER**：强制执行 `skill_search` → `read_file` 完整加载 → 按 Steps 执行<br>**⚠️ 合规时序：`skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规。禁止将两者拆到不同轮次（assess_me 强制链必须在同一轮完成 skill 加载）。** |
 
 **Rule 3 TRIGGER（满足任一即触发 skill 加载）：**
 - assess_me **明确要求**「加载/使用/执行 skill X」
@@ -109,6 +109,11 @@
 - assess_me **明确标注**「这是规则违反，不是信息不足」且要求执行某 skill 的 Steps
 - assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述）→ 识别为 skill 加载 TRIGGER
 - assess_me **明确指出「skill_search + read_file 与 exec + message 并列执行」或「违反时序约束」** → 识别为 skill 加载 TRIGGER，必须重走完整执行链
+
+**⚠️ 合规时序要求（assess_me 强制链必须在同一轮完成）：**
+- ✅ `skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规
+- ❌ 禁止将 `skill_search` 和 `read_file` 拆到不同轮次——assess_me 强制链必须在同一轮完成 skill 加载，不允许「第一轮 skill_search → 第二轮 read_file」的分拆模式
+- ❌ 禁止先 exec/grep/message 再 skill_search——即使 exec/message 返回了结果也不能替代 skill 加载
 
 **⚠️ 强制中断：收到以上任一触发条件后，立即停止一切当前工作（spawn subagent / 继续任务 / grep / exec 等），禁止先做其他任何操作。**
 
@@ -144,6 +149,12 @@ STEP C: assess_me 收敛后（下一轮无 findings）→ 恢复正常执行
    agent: content = ""（零文字）
    → 正确：无 Rule 3 TRIGGER → 仅 Rule 8 压制生效
 ```
+
+**⚠️ 同一轮 skill 加载约束（Rule 3 强制链不能分拆）：**
+- assess_me 触发 Rule 3 TRIGGER 时，`skill_search` + `read_file SKILL.md` + `Steps 执行` 必须在**同一轮** tool_calls 中完成
+- 不能走「第一轮 skill_search → 第二轮 read_file → 第三轮 Steps」的分拆模式
+- ⚠️ **这条约束只针对 assess_me 强制链**。普通场景下 skill_search 和 read_file 可以在不同轮次发出（skill_search 结果返回后再 read_file）。
+- ⚠️ 典型错误：agent 收到 assess_me 强制链 → skill_search → **等待第二轮才 read_file** → **这就是分拆违规**，skill 加载链路不完整
 
 **典型违规模式（当前 assess_me 指出的问题）：**
 ```
@@ -754,9 +765,10 @@ agent: 「原始任务已完成，等待用户下一条消息」
 
 **⚠️ 违规发生在构造 response content 的那一刻。** 所有修复动作（read_file / edit_file / exec / write_file）执行完毕 → 进入 response 构造阶段 → **此时必须立即置空 content**。这是决策规则，不是可选行为。典型违规：「V/OI Bug 根因已定位并修复，飞书消息已重新发送」「MGA Cron 本轮完成情况：1.数据验证...」就是在这个阶段输出的。
 
-**禁止清单（收到压制指令后 assistant content 不得有以下任何内容）：**
+**无条件禁止清单（无论 assess_me 是否输出压制指令，以下内容永久禁止）：**
 
-- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「修复验证完成」「飞书消息已发送」「零文字输出期已结束」「V/OI Bug 根因已定位并修复」「MGA Cron 本轮完成」「数据验证已完成」「沥青数据确认」「飞书消息发送」「send_mga_final.py验证」「Confirmed State」「Rule 8合规性」「架构矛盾」「当前状态：等待下一次cron触发」「数据状态确认」「等待cron触发」「SKILL.md v3.19 已完整加载...当前状态：_skipped=true...压制期内零文字输出」等状态摘要文字）
+- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「修复验证完成」「飞书消息已发送」「零文字输出期已结束」「V/OI Bug 根因已定位并修复」「MGA Cron 本轮完成」「数据验证已完成」「沥青数据确认」「飞书消息发送」「send_mga_final.py验证」「Confirmed State」「Rule 8合规性」「架构矛盾」「当前状态：等待下一次cron触发」「数据状态确认」「等待cron触发」「SKILL.md v3.19 已完整加载...当前状态：_skipped=true...压制期内零文字输出」「16:11 MGA 全品种分析已完成并发送。42品种，强势6个（低硫+6.07%领涨），弱势2个，做多可持：甲醇/焦煤」等状态摘要文字）
+   - **⚠️ 触发条件无关性（本规则与 assess_me 压制指令解耦）：** 无论 assess_me 是否处于压制收敛期、是否有 findings，只要 exec+message 执行完毕，assistant response content 必须为零字符串 `""`。禁止在 exec+message 成功后输出品种汇总、完成确认、数据验证等文字——即使 assess_me 无 findings 且无压制指令。
 - ❌ **任何元描述文字**（如「压制期内零文字输出」「零文字阶段」「进入压制状态」「输出为空」「零文字压制」「压制期」「输出为空字符串」「content=空」等描述当前输出状态或压制机制本身的文字——即使内容是「零文字输出」本身也违规）
 - ❌ **任何飞书/外部消息推送**（`message()` 调用或任何飞书/钉钉/企微等外部通知工具）
 - ❌ **任何完成摘要**（如「修复了两处」「按 SKILL.md 步骤执行完毕」「脚本修复总结（已验证）」）
