@@ -364,6 +364,109 @@ GIT_EDITOR='cat' git rebase --continue
 
 **Why `git rebase --continue` itself can also hang:** `git rebase --continue` does not invoke an editor on its own — but if the previous rebase step's editor (triggered by that step's `git commit`) is still running, `--continue` waits for it to exit. Setting `GIT_EDITOR='cat'` before rebasing prevents all editors from blocking.
 
+## Push Failure Handling
+
+### When `git push` is Rejected (non-fast-forward)
+
+**Common Error:**
+```
+! [rejected] main -> main (non-fast-forward)
+error: failed to push some refs
+hint: Updates were rejected because the tip of your current branch is behind
+```
+
+**Root Cause:** Remote has new commits that your local branch doesn't have.
+
+**⚠️ CRITICAL: Do NOT alternate between rebase and merge.** This creates diverged branch history and detached HEAD states. Pick ONE strategy and stick with it.
+
+### Strategy A: `git pull --rebase` (Preserve Local Changes) — **Preferred**
+
+Use when you want to keep your local commits on top of remote changes.
+
+```bash
+# Step 1: Fetch latest remote state
+git fetch origin
+
+# Step 2: Rebase your local commits onto remote's latest
+git pull --rebase origin main
+
+# Step 3: If conflicts, resolve and continue
+# (GIT_EDITOR='cat' if in headless environment)
+git add <resolved_files>
+git rebase --continue
+
+# Step 4: Push when rebase is complete
+git push origin main
+```
+
+### Strategy B: `git pull --no-rebase --ff-only` (Ensure Fast-Forward)
+
+Use when you want to ensure your push only succeeds if it's a pure fast-forward.
+
+```bash
+# Step 1: Fetch latest remote state
+git fetch origin
+
+# Step 2: Attempt fast-forward merge only
+git pull --no-rebase --ff-only origin main
+
+# Step 3: If "refusing to merge unrelated histories" or non-ff, this fails
+# → Fall back to Strategy A
+
+# Step 4: Push
+git push origin main
+```
+
+### If Rebase Gets Messy (Stuck in Rebase Loop)
+
+**Symptoms:** `git rebase` produces conflicts, alternating between rebase/merge creates diverged history, HEAD is detached.
+
+**Recovery Steps:**
+```bash
+# Step 1: Abort any ongoing rebase
+git rebase --abort
+
+# Step 2: Clean up rebase state if needed
+rm -rf .git/rebase-merge .git/rebase-apply
+
+# Step 3: Reset to clean state (remote is source of truth)
+git reset --hard origin/main
+
+# Step 4: If you have local changes to preserve, use patch
+git format-patch -1 <commit_sha> -o /tmp/patches/
+# Then reset and apply manually
+
+# Step 5: Re-apply your changes and push
+git push origin main
+```
+
+### Why NOT to Alternate Between Rebase and Merge
+
+```
+❌ WRONG PATTERN (creates diverged history):
+   git pull --rebase  → conflict → git merge origin/main → push fail → git rebase ...
+   Result: ae2b308d detached HEAD, main has 3 local commits + 1 remote commit
+
+✅ CORRECT PATTERN:
+   git pull --rebase  → conflict → resolve → git rebase --continue → git push
+   Result: linear history, all commits on top of remote
+```
+
+### Decision Flowchart
+
+```
+git push rejected?
+│
+├─ Yes: Remote has new commits
+│   ├─ Keep local commits? → Strategy A: git pull --rebase
+│   └─ Discard local commits? → git reset --hard origin/main
+│
+├─ No: Branch already up-to-date
+│   └─ Just push: git push origin main
+│
+└─ Other error: Check error message, fix accordingly
+```
+
 ## Branch Management
 
 ### Naming Conventions
