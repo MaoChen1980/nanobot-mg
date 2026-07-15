@@ -539,3 +539,49 @@ IF tool_call_log_chars > message_confirmed_chars:
    tool_calls: [read_file(tool-result), message()]
    → 有工具级验证，assess_me 可直接采信
 ```
+
+---
+
+### 消息去重检查规则 — 迭代内防止重复发送
+
+**TRIGGER: 准备在当前 iteration 中多次调用 `message()` 发送消息**
+
+**问题背景：** assess_me 多次发现 agent 在同一 iteration 内调用 `message()` 两次发送完全相同内容（`result_length:75`），用户收到重复消息。
+
+**核心规则：**
+
+1. **迭代内内容摘要追踪** — 每次调用 `message()` 前，检查本轮已发送的消息摘要
+   - 记录每条消息的关键标识（品种摘要、内容哈希、或前100字符）
+   - 若本轮已发送过相同内容 → **跳过发送**，不重复投递
+
+2. **去重判断标准：**
+   - 完全相同内容（逐字相同）→ 跳过
+   - 仅品种摘要相同但关键数据不同 → 可发送（需人工判断）
+   - 不同品种/不同数据 → 可发送
+
+3. **实现方式：**
+   - 在发送前用简短变量/注释记录本轮已发内容
+   - 或通过 `grep` 搜索当前 iteration 的 tool_calls 历史确认是否已发送
+
+**典型错误模式：**
+```python
+# ❌ 错误：在同一 iteration 内多次调用 message() 发送相同内容
+exec(获取数据A) → message(品种A摘要) → exec(获取数据B) → message(品种A摘要)  # 重复！
+```
+
+```python
+# ✅ 正确：先收集所有数据，一次性发送或按品种去重后发送
+exec(获取数据A) → exec(获取数据B) → message(汇总报告)
+# 或
+exec(获取数据A) → message(品种A摘要) → exec(获取数据B) → message(品种B摘要)
+```
+
+**禁止行为：**
+- ❌ 在未确认本轮未发送过相同内容的情况下直接调用 `message()`
+- ❌ 以「数据更新了」为由发送实际上完全相同的消息文本
+- ❌ 用 `result_length` 是否为 0 作为判断标准（result_length:75 表示有内容发送）
+
+**验证方法：**
+发送前自问：「本轮 iteration 中是否已发送过这条消息？」
+- 若不确定 → 先检查 tool_calls 历史记录
+- 若确认已发送 → 跳过或合并到已有消息

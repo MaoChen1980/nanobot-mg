@@ -79,7 +79,43 @@
 ❌ 禁止：「伊朗发动攻击」（原文无此归因主体）
 ```
 
-### 规则 2：assess_me 指出结论时机问题时 → 等待 subagent 完成
+**席位数据归因验证（Rule 1.5 增强 — 席位方向专项）：**
+
+当输出涉及席位方向变化归因（如「净多翻净空」「净空增仓」）时，**必须**在输出前完成以下三重核验：
+
+1. **品种存在性核验**：确认该品种在已返回的席位数据集中
+   - CZCE 席位数据含 22 品种（以 exec 输出返回的品种列表为准）
+   - SHFE/DCE/INE 席位数据各自独立，需确认品种属于对应的交易所席位数据集
+   - 若品种不在已返回的席位数据中（如燃料油在 INE 而非 CZCE），**禁止**以 CZCE 席位数据为依据输出该品种的席位方向结论
+
+2. **置信度数值核验**：归因结论中引用的置信度百分比必须存在于可见的 exec 输出中
+   - 置信度必须来自数据本身（席位数据中计算的 NetPositionRatio），不是外部推断
+   - 若 exec 输出可见的置信度区间为 23%–35%，**禁止**输出「46%置信度」——该数值在数据中不存在
+   - 置信度来源不明时，**禁止**输出具体百分比，可表述为「席位方向变化」（不标注置信度）
+
+3. **价格信号一致性核验**：席位方向结论必须与价格涨幅/OI 变化方向逻辑自洽
+   - 涨幅 +4.19% 配合「净多翻净空」存在逻辑矛盾（价格大涨说明多头力量强，与净空方向相反）
+   - 输出席位方向归因前，交叉核对：价格涨幅方向 + OI 变化方向 + 席位净持仓方向是否一致
+   - 若三者矛盾，**禁止**直接输出席位方向归因；可表述为「席位数据与价格走势存在分歧，需进一步观察」
+
+**禁止示例：**
+```
+❌ 燃料油：涨幅 +4.19% + 「净多翻净空，46%置信度」
+→ 违规：「46%」不在可见置信度区间（23%-35%）中；涨幅 +4.19% 与「净空」逻辑矛盾
+
+❌ 某品种不在 CZCE 席位 22 品种列表中 → 输出「CZCE 席位数据显示净空增仓」
+→ 违规：品种不在该交易所席位数据集中
+
+❌ 引用置信度 38%，但 exec 输出可见的最高置信度为 35%
+→ 违规：置信度数值不存在于数据中
+```
+
+**正确做法：**
+```
+✅ 涨幅 +4.19%，席位数据显示多方力量增强（可验证的数据范围内）
+✅ 置信度 28%（与 exec 输出中可见的 23%-35% 区间一致）
+✅ 品种在 CZCE 席位 22 品种列表中，席位方向与价格涨幅逻辑自洽
+```
 
 **触发条件：** assess_me 指出 agent 在 subagent 尚未完成时就输出了最终/锁定性结论（如「P0 仅剩 streaming SSE」这类确定性判断）。
 
@@ -100,8 +136,8 @@
 | assess_me **明确要求加载 skill**（「必须先加载 skill X」「请使用 skill X」「以下技能高度相关但未被使用」） | → 按 Rule 3 执行 skill_search → read_file → Steps |
 | assess_me **输出 findings + 压制指令**（「无需回应此消息」「请据此继续推进」）且 findings **不包含** skill 加载需求（不提及 Steps/技能名称/unused_skills/未执行等关键词） | → 按 Rule 8 执行零文字输出（**不加载 skill**） |
 | assess_me **仅输出 findings**（无压制指令） | → 正常响应，按 findings 描述执行修复或加载 skill |
-| assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述） | → **识别为 Rule 3 TRIGGER**：强制执行 `skill_search` → `read_file` 完整加载 → 按 Steps 执行<br>**⚠️ 合规时序：`skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规。禁止将两者拆到不同轮次（assess_me 强制链必须在同一轮完成 skill 加载）。** |
-| assess_me **同时输出 findings + 压制指令 AND findings 明确提及 skill 名称或 unused_skills** | → **识别为 Rule 3 TRIGGER**：强制执行 `skill_search` → `read_file` 完整加载 → 按 Steps 执行<br>**⚠️ 合规时序：`skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规。禁止将两者拆到不同轮次（assess_me 强制链必须在同一轮完成 skill 加载）。** |
+| assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述） | → **识别为 Rule 3 TRIGGER**：强制执行 skill_search → read_file 完整加载 → 按 Steps 执行 |
+| assess_me **同时输出 findings + 压制指令 AND findings 明确提及 skill 名称或 unused_skills** | → **识别为 Rule 3 TRIGGER**：强制执行 skill_search → read_file 完整加载 → 按 Steps 执行 |
 
 **Rule 3 TRIGGER（满足任一即触发 skill 加载）：**
 - assess_me **明确要求**「加载/使用/执行 skill X」
@@ -109,11 +145,6 @@
 - assess_me **明确标注**「这是规则违反，不是信息不足」且要求执行某 skill 的 Steps
 - assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述）→ 识别为 skill 加载 TRIGGER
 - assess_me **明确指出「skill_search + read_file 与 exec + message 并列执行」或「违反时序约束」** → 识别为 skill 加载 TRIGGER，必须重走完整执行链
-
-**⚠️ 合规时序要求（assess_me 强制链必须在同一轮完成）：**
-- ✅ `skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规
-- ❌ 禁止将 `skill_search` 和 `read_file` 拆到不同轮次——assess_me 强制链必须在同一轮完成 skill 加载，不允许「第一轮 skill_search → 第二轮 read_file」的分拆模式
-- ❌ 禁止先 exec/grep/message 再 skill_search——即使 exec/message 返回了结果也不能替代 skill 加载
 
 **⚠️ 强制中断：收到以上任一触发条件后，立即停止一切当前工作（spawn subagent / 继续任务 / grep / exec 等），禁止先做其他任何操作。**
 
@@ -150,12 +181,6 @@ STEP C: assess_me 收敛后（下一轮无 findings）→ 恢复正常执行
    → 正确：无 Rule 3 TRIGGER → 仅 Rule 8 压制生效
 ```
 
-**⚠️ 同一轮 skill 加载约束（Rule 3 强制链不能分拆）：**
-- assess_me 触发 Rule 3 TRIGGER 时，`skill_search` + `read_file SKILL.md` + `Steps 执行` 必须在**同一轮** tool_calls 中完成
-- 不能走「第一轮 skill_search → 第二轮 read_file → 第三轮 Steps」的分拆模式
-- ⚠️ **这条约束只针对 assess_me 强制链**。普通场景下 skill_search 和 read_file 可以在不同轮次发出（skill_search 结果返回后再 read_file）。
-- ⚠️ 典型错误：agent 收到 assess_me 强制链 → skill_search → **等待第二轮才 read_file** → **这就是分拆违规**，skill 加载链路不完整
-
 **典型违规模式（当前 assess_me 指出的问题）：**
 ```
 ❌ assess_me: findings + "必须先加载 skill" + 压制指令
@@ -167,6 +192,12 @@ STEP C: assess_me 收敛后（下一轮无 findings）→ 恢复正常执行
 ❌ assess_me: findings + "skill 未被使用" + 压制指令
    agent: 声称"skill 已加载"但无 skill_search/read_file tool_calls
    → 违规：虚假声明，skill 加载链路不可追踪
+   
+❌ assess_me: findings + "必须先加载 skill" + 压制指令 + "SKILL.md 仅读前50行"
+   agent: read_file 只显示 lines 1-50（文件共 N 行）→ 跳过 Steps 1-4 → grep → edit_file 直接修改代码
+   → 违规：skill 内容未完整加载（只读部分内容）
+   → 违规：跳过 Steps 直接执行业务逻辑修改
+   → 正确做法：read_file 全文（验证总行数）→ 执行 Steps 1-4 → 按 skill 定义的流程处理 → edit_file 修改
 ```
 
 **cron 边界 5 项条件验证（skill 加载链内必须执行）：**
@@ -765,10 +796,9 @@ agent: 「原始任务已完成，等待用户下一条消息」
 
 **⚠️ 违规发生在构造 response content 的那一刻。** 所有修复动作（read_file / edit_file / exec / write_file）执行完毕 → 进入 response 构造阶段 → **此时必须立即置空 content**。这是决策规则，不是可选行为。典型违规：「V/OI Bug 根因已定位并修复，飞书消息已重新发送」「MGA Cron 本轮完成情况：1.数据验证...」就是在这个阶段输出的。
 
-**无条件禁止清单（无论 assess_me 是否输出压制指令，以下内容永久禁止）：**
+**禁止清单（收到压制指令后 assistant content 不得有以下任何内容）：**
 
-- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「修复验证完成」「飞书消息已发送」「零文字输出期已结束」「V/OI Bug 根因已定位并修复」「MGA Cron 本轮完成」「数据验证已完成」「沥青数据确认」「飞书消息发送」「send_mga_final.py验证」「Confirmed State」「Rule 8合规性」「架构矛盾」「当前状态：等待下一次cron触发」「数据状态确认」「等待cron触发」「SKILL.md v3.19 已完整加载...当前状态：_skipped=true...压制期内零文字输出」「16:11 MGA 全品种分析已完成并发送。42品种，强势6个（低硫+6.07%领涨），弱势2个，做多可持：甲醇/焦煤」等状态摘要文字）
-   - **⚠️ 触发条件无关性（本规则与 assess_me 压制指令解耦）：** 无论 assess_me 是否处于压制收敛期、是否有 findings，只要 exec+message 执行完毕，assistant response content 必须为零字符串 `""`。禁止在 exec+message 成功后输出品种汇总、完成确认、数据验证等文字——即使 assess_me 无 findings 且无压制指令。
+- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「修复验证完成」「飞书消息已发送」「零文字输出期已结束」「V/OI Bug 根因已定位并修复」「MGA Cron 本轮完成」「MGA cron 执行完毕」「数据验证已完成」「数据无显著变化」「沥青数据确认」「飞书消息发送」「send_mga_final.py验证」「Confirmed State」「Rule 8合规性」「架构矛盾」「当前状态：等待下一次cron触发」「数据状态确认」「等待cron触发」「assess 压制活跃」「SKILL.md v3.19 已完整加载...当前状态：_skipped=true...压制期内零文字输出」「午盘终报已发出」「夜盘速报已发出」「早盘速报已发出」「午盘速报已发出」「消息已发送（飞书/飞书通知已发出/发送成功）」「下次触发约XX时」「下次触发时间：XX时XX分」「下一轮 cron 约XX时触发」「等待下次 cron 触发（下次触发约XX时）」「iteration 完成，本轮摘要」等状态摘要文字）
 - ❌ **任何元描述文字**（如「压制期内零文字输出」「零文字阶段」「进入压制状态」「输出为空」「零文字压制」「压制期」「输出为空字符串」「content=空」等描述当前输出状态或压制机制本身的文字——即使内容是「零文字输出」本身也违规）
 - ❌ **任何飞书/外部消息推送**（`message()` 调用或任何飞书/钉钉/企微等外部通知工具）
 - ❌ **任何完成摘要**（如「修复了两处」「按 SKILL.md 步骤执行完毕」「脚本修复总结（已验证）」）
@@ -777,6 +807,8 @@ agent: 「原始任务已完成，等待用户下一条消息」
 - ❌ 用文字「请求 assess_me 重新评估」（assess_me 会自动重新评估，不需要请求）
 - ❌ **输出空行也算内容** — content 必须是严格空字符串 `"`"，不是空格、不是换行
 - ❌ **用户 reminder 触发后输出状态确认文字而非执行 Skill Steps**（如「SKILL.md 已完整加载...当前状态：_skipped=true...压制期内零文字输出」）
+- ❌ **用方括号「[]」或圆括号「()」包裹状态标记组合**（如「[assess 压制活跃，MGA cron 执行完毕，数据无显著变化，零文字输出]」或「(assess 压制活跃/MGA cron 执行完毕/数据无显著变化)」或「[No assess suppression, closed session frozen, no message needed]」）——括号包裹不能改变违规本质，无论内容是否看似"中性标记"，任何文字描述都违规
+  - ❌ **解释性描述文字**（如「[tool_calls executed, assess suppression pending, content = ""]」或「零文字输出（tool_calls执行完毕，content=""）」或「[assess压制中，tool_calls完成，content已置空]」）——即使内容看起来是描述「即将零文字输出」而非直接输出文字，**在 response content 中描述自身压制状态的文字本身仍违规**，因为这不是零文字输出，而是对零文字输出的元注释；压制期 assistant content 必须严格为空字符串，不允许出现任何形式的解释、状态报告或内容说明
 
 #### 8.5 典型违规模式（收到压制指令后，以下行为全部违规）
 
@@ -809,6 +841,17 @@ agent: 「原始任务已完成，等待用户下一条消息」
    agent: "The earlier exec run...脚本本身无bug...所有修复已完成"
    → 违规：输出了三段状态摘要（assess_me 反复指出的高频违规）
    → 即使 tool_calls 完整执行，输出文字摘要仍违规
+
+❌ assess_me findings + 压制指令（连续 iteration 模式）
+   agent: exec(席位数据) → message("午盘终报已发出...") → content = "午盘终报已发出，下次触发约14:55"
+   → 违规：message() 成功后，assistant content 输出了状态摘要「午盘终报已发出」+「下次触发约XX时」
+   → 违规：message() 是工具调用，其成功返回已证明消息已发出，不需要在 assistant content 中再次确认
+   → 正确做法：message() 成功后 → content = ""（严格空字符串）
+
+❌ assess_me findings + 压制指令（iteration 模式，message() 成功后输出确认文字）
+   agent: exec(业务脚本) → message("飞书报告已发送") → assistant content = "夜盘速报已发出，下次触发约08:55"
+   → 违规：message() 成功返回即为「消息已发送」的证明，assistant content 的确认文字属于冗余状态摘要
+   → 正确做法：message() 成功 → content = ""（不是零文字——message() 是显式通知；assistant content 必须为空）
 
 ❌ assess_me findings + 压制指令（含 skill 加载触发）
    agent: skill_search → read_file SKILL.md → exec → read_file JSON

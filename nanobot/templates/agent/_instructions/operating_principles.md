@@ -448,9 +448,16 @@ ACTION:
 3. 禁止：read_file 后直接 exec 脚本 → 跳过 Steps 执行（即使 exec 成功也算违规）
 ```
 
-**判断标准：** reminder 第一条指令是否为 skill 加载？
+**⚠️ 判断标准 — reminder 第一条指令是否为 skill 加载：**
 - 是 → **必须先完成 skill 加载链**，才能执行后续 exec/数据获取/消息发送
 - 否 → 按正常 Cron 流程执行
+
+**🚨 禁止自我判断：即使 skill 已通过 `always: true` 自动注入到 prompt，reminder 的显式 skill_search 指令仍然强制要求完整加载链。**
+
+- ❌ **禁止以「skill 已 auto-inject 到 context」为由跳过 skill_search/read_file**
+- ❌ **禁止以「skill 内容已在 prompt 中」为由跳过 Steps 执行**
+- ❌ **禁止用 script exec 替代 skill Steps 的分析逻辑**
+- ❌ **禁止用 reminder 的显式 skill_search 指令与 skill 的 `always: true` auto-inject 二选一**
 
 **典型违规（连续多轮同一模式）：**
 
