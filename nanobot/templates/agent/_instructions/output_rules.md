@@ -361,12 +361,29 @@ ACTION:
 
 **⚠️ 强制行为：tool_calls 执行完毕后，assistant response content 必须置为严格空字符串 `""`**
 
+#### Rule 8.1 — 配对信号识别
+
+**assess_me findings + 压制指令是配对出现的信号，必须同时识别：**
+
+1. **assess_me 输出 `status: "findings"` 或 `needs_revision: true`** → 这是 findings 信号
+2. **同一消息中包含「无需回应此消息」「请据此继续推进」等压制指令** → 这是压制信号
+
+**两者同时出现 = 触发压制行为，不是两个独立事件。**
+
+**⚠️ 常见误判：**
+- ❌ 只看到 findings，忽略压制指令 → 继续正常输出文字
+- ❌ 只看到压制指令，不执行修复动作 → 零文字但无 tool_calls
+- ✅ 同时识别 → 执行 tool_calls + 零文字输出
+
+**判断标准：** 只要同一 user message 中同时出现 findings 和压制指令，即触发本规则，与两者在消息中的位置无关。
+
 **禁止输出内容（严格列举）：**
 - ❌ **括号notation**：`[assess findings 已记录...]`、`[tool_calls 执行完毕]`、`[压制期内零文字输出]` 等任何以 `[...]` 包裹的状态描述
 - ❌ **任何状态确认文字**：「已记录」「已执行」「已完成」「已发送」「修复完成」等包含"已"字样的完成时态描述
 - ❌ **任何元描述文字**：对自身输出行为的描述，如「tool_calls 执行完毕，content = ""」「5项条件验证完毕」「_skipped=true」等对内部状态的说明
 - ❌ **任何等待下一轮的说明**：「等待下一轮 assess 验证」「压制期内零文字输出」等
 - ❌ **任何分析摘要**：如「归因推断问题已记录」等对 findings 的二次描述
+- ❌ **任何状态描述文字**：「已知状态」「跳过」「数据冻结」「休市」「Closed盘」等对脚本执行状态的描述，即使不包含"已"字样也禁止输出
 
 **✅ 合规标准：**
 - `message()` 返回 `Message sent` 即为发送成功的证明，不需要任何文字确认
@@ -387,6 +404,38 @@ ACTION:
 ```
 
 **⚠️ 核心原则：tool_calls 执行完毕 ≠ 可输出文字。** 即使所有修复动作都已完成，生成 assistant response 时 content 仍必须为 `""`。禁止在零文字之前或之后附加任何说明。
+
+#### Rule 8.6 — 收敛性说明
+
+**为什么零文字输出是收敛的关键：**
+
+1. **assess_me 是循环验证机制** — 每轮独立评估 agent 的行为是否修正
+2. **违规文字摘要导致迭代不收敛** — 如果 agent 在压制期输出「已知状态。跳过」「Closed盘数据冻结...」等描述，即使 tool_calls 已正确执行，assess_me 会识别到残留文字 → 下一轮再次输出 findings → 循环不收敛
+3. **正确收敛路径** — tool_calls 执行完毕 → content = "" → assess_me 识别到零文字 → status = "ok" → 循环结束
+
+**违规文字摘要如何导致迭代不收敛：**
+```
+iteration N:
+  assess_me: findings + "无需回应此消息"
+  agent: tool_calls 执行 + "已知状态。跳过"  ← 违规：描述性文字残留
+  assess_me: 识别到残留文字 → 下一轮仍输出 findings
+
+iteration N+1:
+  assess_me: 相同 findings + "无需回应此消息"
+  agent: tool_calls 执行 + "Closed盘数据冻结..."  ← 违规：再次残留
+  assess_me: 再次识别 → 循环不收敛
+```
+
+**正确收敛路径：**
+```
+iteration N:
+  assess_me: findings + "无需回应此消息"
+  agent: tool_calls 执行 → content = ""  ← 合规
+  assess_me: 识别到零文字 → status = "ok"
+  → 收敛
+```
+
+**关键行为：一旦 tool_calls 执行完毕，立即无条件输出 content = ""，不要做任何解释。**
 
 ---
 
