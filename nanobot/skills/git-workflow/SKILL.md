@@ -509,14 +509,53 @@ git push origin main
    Result: linear history, all commits on top of remote
 ```
 
+### Protected Branch Rejection (GH006)
+
+**Common Error:**
+```
+! [remote rejected] main -> main (refusing to force-push to protected branch)
+error: GH006: Protected branch update failed
+```
+
+**Root Cause:** The target branch is protected — force-push is blocked by repository rules.
+
+**When it Happens:**
+- Pushing to `main`, `master`, or any branch with protection rules enabled
+- Attempting `git push --force` or `git push --force-with-lease`
+
+**⚠️ CRITICAL: Do NOT retry force push.** Repeating the command will keep failing. Switch to the PR workflow immediately.
+
+### Strategy C: Feature Branch + PR (Protected Branches) — **Required**
+
+```bash
+# Step 1: Create a feature branch from your current state
+git checkout -b feature/your-feature-name
+
+# Step 2: Push the feature branch (no force needed)
+git push origin feature/your-feature-name
+
+# Step 3: Open a Pull Request on GitHub
+# (Use GitHub CLI or web UI)
+gh pr create --title "feat(scope): description" --body "## What ... ## Why ..."
+
+# Step 4: After PR is reviewed and merged, delete the feature branch
+git checkout main
+git pull origin main
+git branch -d feature/your-feature-name
+git push origin --delete feature/your-feature-name
+```
+
 ### Decision Flowchart
 
 ```
 git push rejected?
 │
-├─ Yes: Remote has new commits
+├─ non-fast-forward (remote has new commits)
 │   ├─ Keep local commits? → Strategy A: git pull --rebase
 │   └─ Discard local commits? → git reset --hard origin/main
+│
+├─ GH006 (protected branch, force push denied)
+│   └─ Strategy C: Create feature branch → Push → Open PR
 │
 ├─ No: Branch already up-to-date
 │   └─ Just push: git push origin main
