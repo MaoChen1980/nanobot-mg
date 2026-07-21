@@ -429,16 +429,30 @@ tool_call[1]: (skill_search 如果路径未知，先 search 再 read_file)
 **判断逻辑（按顺序检查）：**
 
 1. **若 `_skipped == true` 且 `_skip_reason` 包含「数据未变化」「数据无变化」「hash 一致」等关键词**
-   → 当前轮次为新 cron 触发，数据无变化而非 assess 收敛导致
-   → ✅ **允许调用 `message()` 发送简短说明**：数据未变化，跳过本次分析（或等效表述）
+   → **⚠️ 关键前提：必须验证数据时间戳与当前轮次是否一致**
+   → 检查数据文件中的 `meta.timestamp` 或 `latest_update` 字段
+   → **若数据时间戳与当前轮次一致**（如 cron 10:00 触发，数据也是 10:00）：
+     → ✅ 允许调用 `message()` 发送简短说明：数据未变化，跳过本次分析
+     → ✅ 输出 `content = ""`
+     → ⚠️ **必须与 Scene 1.5/2 区分**：看到「数据未变化」就发 message，不要套用 Scene 1.5/2 的零文字压制逻辑
+   → **⚠️ 禁止行为：仅凭「上一轮已完成」就判定「当前轮次无需执行」**
+     → cron reminder 是定时触发器，不是「已完成后跳过」的信号
+     → 必须验证数据时间戳是否与当前轮次一致，再决定是否 skip
+     → **若数据时间戳早于当前轮次（如数据是 09:59，但 cron 10:00 触发）→ 不应 skip，应执行新任务**
+     → 错误示例：「MGA 质量监控已在上一轮完成，当前轮次无需重复执行」→ 违规：未验证数据时间戳
+
+1.5. **若 `_skipped == true` 且 `_skip_reason` 包含「closed盘」「冻结」「trading=closed」「休市」等关键词，或数据文件显示 `trading == "closed"` 且 `freshness == "updated"`**
+   → 当前为 closed盘 数据冻结场景，非 assess 收敛导致
+   → ✅ **允许调用 `message()` 发送简短说明**：日盘收盘，数据定格（或等效表述）
    → ✅ 输出 `content = ""`
-   → ⚠️ **必须与 Scene 2 区分**：看到「数据未变化」就发 message，不要套用 Scene 2 的零文字压制逻辑
+   → ⚠️ **注意**：即使上一轮发送过冻结通知，本轮 closed盘 数据冻结仍应发送简短通知。不得声称「已连续X次发送冻结通知」——该数字必须从对话历史中实际统计，不得虚构
 
 2. **若 `_skipped == true` 且 assess_me 处于压制收敛期（上一轮有 findings + 压制指令）**
    → 当前为 assess 收敛压制，_skipped 由修复收敛导致
    → ❌ **禁止调用 `message()`** — 保持零文字压制
+   → ❌ **停止 exec 执行** — 数据已 SKIP，重复执行无意义（数据不变，结果必然仍是 SKIP）
    → ✅ **必须输出零文字**（`content = ""`）
-   → ⚠️ **注意区分**：Scene 1 的「_skipped=true + 数据未变化」走 message()，Scene 2 的「_skipped=true + assess压制」走零文字压制
+   → ⚠️ **注意区分**：Scene 1 的「_skipped=true + 数据未变化」走 message()，Scene 1.5 的「_skipped=true + closed盘冻结」走 message()，Scene 2 的「_skipped=true + assess压制」走零文字压制
 
 3. **若 `_skipped == false`**
    → ✅ 仅当 `_skipped == false` 时，才允许调用 `message()` 发送完整报告

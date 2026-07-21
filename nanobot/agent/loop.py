@@ -1079,22 +1079,51 @@ class AgentLoop:
                 unused_skills = []
 
             # ── suppress-phase convergence guard ─────────────────────────────────
-            # Detect when assess_me is outputting the same findings + suppress
-            # marker in consecutive iterations — this is the assess loop itself
-            # blocking task progress (blocker condition).
-            # Check assess_me's raw output (`result`) since `injection_text` is
-            # built after this guard and may not be available on early returns.
-            _is_suppress = (
+            # Detect when assess_me is outputting findings + suppress marker in
+            # consecutive iterations — this is the assess loop itself blocking
+            # task progress (blocker condition).
+            #
+            # Use structural assessment state instead of keyword matching to avoid
+            # false negatives when assess_me uses different phrasing for suppress
+            # signals. The key insight: suppress-phase = findings requiring agent
+            # action + framework-level signal to收敛.
+            #
+            # Detection logic: count consecutive iterations where:
+            #   1. status == "findings" (there are findings to address)
+            #   2. Content contains a suppress directive (either from keyword match
+            #      OR from the pattern "zero content" mentioned in findings itself)
+            #
+            # This detects the deadlock pattern where agent outputs meta-text
+            # repeatedly instead of true zero-content, while assess_me keeps
+            # outputting findings + suppress signal.
+            _suppress_keywords = (
                 "无需回应" in (result or "")
                 or "无需再回复" in (result or "")
                 or "继续推进原始任务" in (result or "")
                 or "直接推进任务即可" in (result or "")
             )
+            # Also detect if assess output itself contains meta-text patterns
+            # (indicating assess is also stuck describing the problem rather than
+            # resolving it)
+            _assess_meta_text_patterns = (
+                ("零文字" in (result or "") or "zero text" in (result or "").lower())
+                and status == "findings"
+            )
+            _is_suppress = _suppress_keywords or _assess_meta_text_patterns
+            # Track whether convergence guard confirmed deadlock (1+ consecutive suppress rounds).
+            # When True, the runner injects a sentinel and forces the next LLM response
+            # to have content = "", breaking the meta-text deadlock loop.
+            #
+            # NOTE: Changed from >= 2 to >= 1 to handle first-round suppress correctly.
+            # The first suppress round should also trigger zero-content output to prevent
+            # the LLM from outputting meta-descriptive text like "(Zero text per assess suppress.)".
+            _force_zero_content = False
             if _is_suppress:
                 loop._suppress_phase_count[_session_key] = (
                     loop._suppress_phase_count.get(_session_key, 0) + 1
                 )
-                if loop._suppress_phase_count[_session_key] >= 2:
+                if loop._suppress_phase_count[_session_key] >= 1:
+                    _force_zero_content = True
                     blocker = parsed.get("blocker")
                     # Only inject blocker if assess didn't already fill it
                     if not blocker or blocker == "null":
@@ -1109,6 +1138,12 @@ class AgentLoop:
                             "agent 已执行零内容+tool_calls 修复但 assess 持续重复相同结论。"
                             "原始任务被元评估循环阻塞，用户需求未满足。"
                             % loop._suppress_phase_count[_session_key]
+                        )
+                    else:
+                        logger.info(
+                            "assess_me suppress-loop detected (session=%s, count=%d): "
+                            "Rule E blocker already present, skipping injection",
+                            _session_key, loop._suppress_phase_count[_session_key],
                         )
             else:
                 # Non-suppress assessment — reset counter
@@ -1181,6 +1216,7 @@ class AgentLoop:
                 injected=True,
                 needs_revision=needs_revision,
                 injection_messages=injection_msgs,
+                force_zero_content=_force_zero_content,
             )
         return _cb
 

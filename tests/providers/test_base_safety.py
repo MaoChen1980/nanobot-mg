@@ -72,6 +72,21 @@ async def test_safe_chat_stream_wraps_exception():
     result = await provider._safe_chat_stream()
     assert result.finish_reason == "error"
     assert "Error calling LLM" in (result.content or "")
+    # Error metadata should be set for retry decisions
+    assert result.error_kind == "timeout"
+    assert result.error_should_retry is True
+    assert result.retry_after == 30.0
+
+
+@pytest.mark.asyncio
+async def test_safe_chat_stream_connection_error_sets_retry_metadata():
+    """Verify connection errors get proper retry metadata set."""
+    provider = _TestProvider(chat_stream_result=RuntimeError("Connection refused"))
+    result = await provider._safe_chat_stream()
+    assert result.finish_reason == "error"
+    assert result.error_kind == "connection"
+    assert result.error_should_retry is True
+    assert result.retry_after == 30.0
 
 
 @pytest.mark.asyncio
