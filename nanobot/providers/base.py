@@ -569,7 +569,18 @@ class LLMProvider(ABC):
             raise
         except Exception as exc:
             logger.exception("Unhandled exception in chat_stream()")
-            return LLMResponse(content=f"Error calling LLM: {exc}", finish_reason="error")
+            # Classify the exception so retry logic can make informed decisions.
+            error_kind = self._classify_error(exc)
+            should_retry = error_kind in ("timeout", "connection")
+            retry_after: float | None = 30.0 if should_retry else None
+            return LLMResponse(
+                content=f"Error calling LLM: {exc}",
+                finish_reason="error",
+                error_kind=error_kind,
+                error_should_retry=should_retry,
+                retry_after=retry_after,
+                error_retry_after_s=retry_after,
+            )
 
     async def chat_stream_with_retry(
         self,

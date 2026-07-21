@@ -14,6 +14,8 @@ from nanobot.utils.prompt_templates import render_template
 _MAX_TOOL_RESULT_CHARS = 2000
 _ASSESSMENT_PREFIX = "[assess]"
 _ASSESSMENT_SUFFIX = "\n[/assess]"
+# Only keep the last N assess messages to prevent repeated findings about historical violations
+_MAX_ASSESS_MESSAGES_TO_KEEP = 2
 
 # Assess_me markers that suppress text output. All four have identical effect:
 # "stop arguing/explaining, just work" — assess_me re-evaluates on next turn.
@@ -47,6 +49,11 @@ def format_conversation(messages: list[dict], *, skip_intermediate: bool = False
     Skips system prompt. Truncates long tool results. Collapses tool-call-only
     assistant messages into a single line.
 
+    **Assess message filtering**: Only the last N assess messages (identified by
+    ``_ASSESSMENT_PREFIX``) are kept to prevent repeated findings about historical
+    violations. This solves the convergence detection issue where assess_me
+    continuously references old violation descriptions from multiple iterations ago.
+
     When ``skip_intermediate`` is True, assistant messages that contain both
     content AND tool_calls are omitted — these are intermediate thoughts that
     the LLM "says to itself" while planning tool calls. The assessment should
@@ -54,7 +61,10 @@ def format_conversation(messages: list[dict], *, skip_intermediate: bool = False
     progress utterances.
     """
     parts: list[str] = []
-    for msg in messages:
+    # Track assess messages to keep only the last N
+    assess_messages: list[tuple[int, str]] = []  # (index, formatted_content)
+
+    for idx, msg in enumerate(messages):
         role = msg.get("role", "")
         content = msg.get("content", "")
 
@@ -98,7 +108,17 @@ def format_conversation(messages: list[dict], *, skip_intermediate: bool = False
                 f"... (truncated, {len(content)} chars)"
 
         if content:
-            parts.append(f"[{role}] {content}")
+            # Check if this is an assess message (prefixed with _ASSESSMENT_PREFIX)
+            if role == "user" and content.startswith(_ASSESSMENT_PREFIX):
+                assess_messages.append((idx, f"[{role}] {content}"))
+            else:
+                parts.append(f"[{role}] {content}")
+
+    # Only keep the last N assess messages to prevent repeated findings
+    if assess_messages:
+        recent_assess = assess_messages[-_MAX_ASSESS_MESSAGES_TO_KEEP:]
+        for _, assess_content in recent_assess:
+            parts.append(assess_content)
 
     return "\n\n".join(parts)
 

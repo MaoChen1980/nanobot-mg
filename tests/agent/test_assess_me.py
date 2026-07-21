@@ -658,6 +658,7 @@ class TestMakeRetryAssessCallback:
         loop = MagicMock(spec=AgentLoop)
         loop.provider = MagicMock()
         loop.model = "test-model"
+        loop._suppress_phase_count = {}  # Required by convergence guard
 
         loop._make_retry_assess_callback = (
             AgentLoop._make_retry_assess_callback.__get__(loop, AgentLoop)
@@ -959,12 +960,18 @@ class TestAssessMeTemplate:
         assert "事实合规" in content
 
     def test_no_root_cause_fields(self) -> None:
-        """Template no longer includes root_cause/fix_action/fix_target."""
+        """Template no longer includes fix_action/fix_target/根因分析 as instruction fields.
+
+        Note: 'root_cause' substring in 'debug_root_cause' is allowed as a tool name
+        in descriptive examples (e.g., violation descriptions). The test checks for
+        the actual instruction fields that were removed from assess_me.md.
+        """
         content = self._render(conversation="user: hi")
-        assert "root_cause" not in content
+        # Check for instruction fields that were removed
         assert "fix_action" not in content
         assert "fix_target" not in content
         assert "根因分析" not in content
+        # debug_root_cause is allowed as a tool name in descriptive references
 
 
 # =========================================================================
@@ -1062,8 +1069,8 @@ class TestBehaviorOptimizationHandler:
         )
         assert "**Self-optimization**" in content
 
-    def test_contains_eight_step_verification(self) -> None:
-        """Template includes the 8-step verification section."""
+    def test_contains_ten_step_verification(self) -> None:
+        """Template includes the 10-step verification section."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
@@ -1071,7 +1078,7 @@ class TestBehaviorOptimizationHandler:
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
-        assert "8 步验证" in content
+        assert "10 步验证" in content
         assert "git diff" in content
         assert "py_compile" in content or "语法检查" in content
         assert "Code review" in content or "code review" in content

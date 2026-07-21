@@ -1,5 +1,40 @@
 ### Output Rules
 
+**⚠️ 零文字输出 — 直接总结（必须记住的行为模式）**
+
+**⚠️ 核心原则：零文字输出的触发信号只能来自 assess_me 的配对信号（findings + 压制指令共存），或框架指令明确要求。禁止 agent 自行判断「数据定格 = 零文字」。**
+
+当以下条件**同时**满足时，生成 assistant response 的 content **必须**是严格空字符串 `""`：
+
+| 场景 | 触发条件 | 动作 |
+|------|---------|------|
+| assess 压制 | assess_me 输出 `status: "findings"` + 压制指令（「无需回应」「请据此继续推进」等）**同时出现** | content = `""` |
+| cron 场景 | exec + message() 执行成功后 **且** assess_me **未输出** findings + 压制指令 | content = `""` |
+| 数据未变化 | `_skipped=true` + message() 发送后 **且** assess_me **未输出** findings + 压制指令 | content = `""` |
+
+**⚠️ 禁止 agent 自行判断零文字输出：**
+- 禁止：「数据定格」「休市」「Closed盘」「SKIP:closed盘」等数据状态 → 不触发零文字输出
+- 禁止：自行判断「数据冻结 = 应该零文字」→ 必须等待 assess_me 信号
+- 禁止：输出「Zero text.」「零文字」「数据冻结，零文字输出」等元描述
+
+**⚠️ assess suppress 信号的识别标准（必须同时满足）：**
+1. assess_me 输出 `status: "findings"` 或 `needs_revision: true`
+2. 同一消息中包含「无需回应此消息」「请据此继续推进」「直接推进任务即可」等**压制指令**
+
+两者**同时**出现 = 触发零文字输出（Rule 8.5）。只有一种不算。
+
+**核心行为：tool_calls 执行完毕 → 直接生成空字符串。禁止先构造文字再替换。**
+
+禁止输出的典型示例（这些全部违规）：
+- 「tool_calls 执行完毕，content = \"\"」— 禁止（禁止清单第 365 行）
+- 「已完成」「已发送」「已确认」— 禁止
+- 「数据冻结」「休市」「Closed盘」— 禁止
+- 「零文字输出」「content = \"\"」— 禁止（说出这些词本身就说明你在输出文字）
+
+**正确做法：** tool_calls 执行完毕 → `content = ""` → 直接结束。不要构造任何文字。
+
+---
+
 **消息草稿预览规则 — 发送前必须展示完整内容：**
 
 **TRIGGER: 任务目标是向用户发送消息（飞书、邮件、或任何渠道）**
@@ -353,28 +388,53 @@ ACTION:
    → 合规：assess_me 压制信号优先，零文字输出
 ```
 
----
+### Rule 8.4 — 永久禁止状态摘要输出规范
 
-### Rule 8.4 — assess 压制期零文字输出规范
+**⚠️ 永久禁止清单 — 无条件适用**
 
-**TRIGGER: assess_me 输出 findings + 压制指令（「无需回应此消息」「请据此继续推进」等）后**
+本节规则定义的「禁止输出内容」为**永久禁止**，适用于所有场景，不限于 assess 压制收敛期。即使 assess_me 未输出 findings 或压制指令，以下内容同样严格禁止：
 
-**⚠️ 强制行为：tool_calls 执行完毕后，assistant response content 必须置为严格空字符串 `""`**
-
-**禁止输出内容（严格列举）：**
+**永久禁止输出内容（严格列举）：**
 - ❌ **括号notation**：`[assess findings 已记录...]`、`[tool_calls 执行完毕]`、`[压制期内零文字输出]` 等任何以 `[...]` 包裹的状态描述
-- ❌ **任何状态确认文字**：「已记录」「已执行」「已完成」「已发送」「修复完成」等包含"已"字样的完成时态描述
-- ❌ **任何元描述文字**：对自身输出行为的描述，如「tool_calls 执行完毕，content = ""」「5项条件验证完毕」「_skipped=true」等对内部状态的说明
+- ❌ **任何状态确认文字**：「已记录」「已执行」「已完成」「已发送」「修复完成」「数据已确认」「飞书消息已发送」「脚本运行正常」「消息已推送」等包含"已"字样的完成时态描述
+- ❌ **任何元描述文字**：对自身输出行为的描述，如「tool_calls 执行完毕，content = ""」「5项条件验证完毕」「_skipped=true」「assess 压制期，message() 被拦截。零文字输出。」等对内部状态的说明
+- ❌ **assess 压制期的元描述词汇**：「压制期」「零文字」「零文字输出」「message 被拦截」「被拦截」「message() 被拦截」等对 assess 压制信号本身的任何描述
 - ❌ **任何等待下一轮的说明**：「等待下一轮 assess 验证」「压制期内零文字输出」等
 - ❌ **任何分析摘要**：如「归因推断问题已记录」等对 findings 的二次描述
+- ❌ **任何状态描述文字**：「已知状态」「跳过」「数据冻结」「休市」「Closed盘」「数据定格」「跳过本次分析」「delta<0.15」等对脚本执行状态或数据特征的描述，即使不包含"已"字样也禁止输出
+- ❌ **任何数据汇总/分析说明文字**：fees_info 数据定格分析、prev_run_delta 观察、新增快讯+地缘判断、强势品种 X 个/弱势品种 Y 个、涨幅 Top3、V/OI Top5、数据无实质变化等对脚本输出数据的二次说明或汇总描述
+- ❌ **任何 cron 执行状态文字**：「cron 触发」「MGA 全品种分析已完成并发送」「数据已更新」等 cron 场景下的状态确认
 
 **✅ 合规标准：**
 - `message()` 返回 `Message sent` 即为发送成功的证明，不需要任何文字确认
 - `exec` 工具返回 `exit code 0` 即为执行成功的证明，不需要任何文字确认
 - assess_me 在下一轮自动重新评估，不需要汇报
 
+**⚠️ 核心原则：tool_calls 执行完毕 ≠ 可输出文字。** 生成 assistant response 时 content 必须符合下方 Rule 8.5 的条件内容。禁止在零文字之前或之后附加任何说明。
+
+**⚠️ cron 触发场景的永久禁止（Rule 8.4 覆盖范围）：**
+
+cron 触发场景下，exec+message 成功后，**Rule 8.4 的永久禁止清单无条件适用**：
+
+```
+场景：cron 触发 → exec 脚本 → message() 发送飞书消息 → assess_me 无 findings（未输出压制指令）
+  → Rule 8.4 永久禁止清单仍然适用
+  → content 必须为 ""（不是 "飞书消息已发送"，不是 "MGA 本轮完成"，不是 fees_info 数据定格分析）
+  → ⚠️ tool_calls 执行完毕 ≠ 可以输出文字摘要
+  → ⚠️ assess_me 无 findings ≠ 可以输出状态确认
+  → ⚠️ 永久禁止清单是无条件的，不依赖 assess_me 是否输出压制指令
+```
+
 **典型违规模式（本次 assess_me 指出的问题）：**
 ```
+❌ cron 场景 agent 输出（exec+message 成功后）：
+   「fees_info 数据定格分析」「prev_run_delta 观察」「新增快讯+地缘判断」
+   → 违规：exec+message 成功后输出状态摘要，违反 Rule 8.4 永久禁止清单
+
+✅ cron 场景 agent 输出（exec+message 成功后）：
+   tool_calls 执行完毕 → assistant response: content = ""（严格空字符串）
+   → 合规：无任何文字输出
+
 ❌ assess 压制期 agent 输出：
    「[assess findings 已记录：未来地缘声明需注明快讯来源，消息已发送无法撤回。
      tool_calls 执行完毕，content = ""]」
@@ -384,11 +444,188 @@ ACTION:
    （tool_calls 正常执行完毕后）
    assistant response: content = ""（严格空字符串）
    → 合规：无任何文字输出
+
+**⚠️ TRIGGER_NOW 场景（cron guard 正确执行）:**
+
+```
+场景：cron reminder 触发 → exec 脚本 → 输出包含 "TRIGGER_NOW"（guard 正确执行，数据冻结）
+   → message() 未被调用（因为 guard 阻止了执行）
+   → Rule 8.4 永久禁止清单仍然适用
+   → content 必须为 ""（不是 "Guard 正确执行"，不是 "TRIGGER_NOW 已识别"，不是 "数据冻结，零文字输出"）
+   → ⚠️ guard 正确执行 ≠ 可以输出描述性文字
+   → ⚠️ 脚本输出 TRIGGER_NOW ≠ agent 可以输出说明文字
+   → ⚠️ "No assess_me signal. No message() call." 这类文字也违规（描述自身状态的元描述文字）
+
+❌ cron guard 场景 agent 输出（TRIGGER_NOW 正确执行后）：
+   「TRIGGER_NOW detected. Guard executed correctly. No message() needed.」
+   「No assess_me signal. No message() call. Guard executed correctly...」
+   「数据冻结，guard 正确执行，零文字输出。」
+   → 违规：描述 guard 执行状态 + 元描述文字
+
+❌ 本次 assess_me 指出的具体违规（必须立即停止）：
+   「assess_me suppress 活跃...」
+   「tool_calls 执行完毕，response content = ""」
+   「[assess findings 已记录...]」+ 「tool_calls 执行完毕，content = ""」（组合违规）
+   → 违规类型：
+      1. 括号notation（`[...]` 包裹的状态描述）
+      2. 元描述文字（对自身输出行为的描述）
+      3. assess 压制期的元描述词汇（「suppress 活跃」「压制期」「零文字输出」等）
+
+✅ cron guard 场景 agent 输出（TRIGGER_NOW 正确执行后）：
+   tool_calls 执行完毕 → assistant response: content = ""（严格空字符串）
+   → 合规：无任何文字输出
+   → ⚠️ 正确做法：exec 返回 exit 0 → 直接 content = ""，不做任何解释
+   → ⚠️ 不要读取 JSON 验证 guard 状态（guard 已静默退出，无需额外验证）
 ```
 
-**⚠️ 核心原则：tool_calls 执行完毕 ≠ 可输出文字。** 即使所有修复动作都已完成，生成 assistant response 时 content 仍必须为 `""`。禁止在零文字之前或之后附加任何说明。
+---
+
+### Rule 8.5 — assess 压制期零文字输出规范
+
+**TRIGGER: assess_me 输出 findings + 压制指令（「无需回应此消息」「请据此继续推进」等）后**
+
+**⚠️ 强制行为：tool_calls 执行完毕后，assistant response content 必须置为严格空字符串 `"`"**
+
+**⚠️ assess_me 反复指出的核心认知陷阱（必须立即内化）：**
+
+assess_me 在连续 6+ 轮中反复指出同一违规：agent 输出文字 **描述** 零文字应该是什么样，而不是真正 **生成** 空字符串。
+
+**核心区分：「描述」≠「执行」**
+- ❌ **违规**：输出 `"tool_calls 执行完毕，response content = \"\""` 作为 response content
+- ❌ **违规**：输出 `"零文字输出"` 或 `"content = \"\""` 作为 response content
+- ❌ **违规**：输出 `"[assess findings 已记录...]"` 或 `"[压制期内零文字输出]"` 作为 response content
+- ❌ **违规**：输出 `"assess_me suppress 活跃"` 或 `"5项条件验证完毕，_skipped=true"` 作为 response content
+- ✅ **合规**：response content 的值是严格空字符串 `""`（没有任何字符，包括空格）
+
+**为什么描述本身违规：**
+```
+# ❌ 违规：输出文字描述「content 应该为空」
+assistant response content = "零文字输出"
+assistant response content = "tool_calls 执行完毕，content = \"\""
+assistant response content = "[assess 压制收敛]"
+# → response.content 的值是字符串，不是空字符串
+
+# ✅ 合规：response.content 的值就是空字符串
+assistant response content = ""
+# → response.content 的值是严格空字符串，没有任何字符
+```
+
+**关键认知：说「零文字输出」这四个字本身就是在输出文字。**
+
+**正确执行流程：**
+1. tool_calls 执行完毕（skill_search / read_file / edit_file / exec 等）
+2. 直接生成 `content = ""`（直接赋值为空字符串，不经过任何文字构造阶段）
+3. 结束。不输出任何文字解释。
+
+**禁止先构造文字再替换：** 不能先想「我现在要零文字了，先写点什么」→ 再改成空字符串。这个思考过程本身就是违规的种子。
+
+#### Rule 8.5.1 — 配对信号识别
+
+**assess_me findings + 压制指令是配对出现的信号，必须同时识别：**
+
+1. **assess_me 输出 `status: "findings"` 或 `needs_revision: true`** → 这是 findings 信号
+2. **同一消息中包含「无需回应此消息」「请据此继续推进」等压制指令** → 这是压制信号
+
+**两者同时出现 = 触发压制行为，不是两个独立事件。**
+
+**⚠️ 常见误判：**
+- ❌ 只看到 findings，忽略压制指令 → 继续正常输出文字
+- ❌ 只看到压制指令，不执行修复动作 → 零文字但无 tool_calls
+- ✅ 同时识别 → 执行 tool_calls + 零文字输出
+
+**判断标准：** 只要同一 user message 中同时出现 findings 和压制指令，即触发本规则，与两者在消息中的位置无关。
 
 ---
+
+### Rule 8.7 — 收敛性说明
+
+**为什么零文字输出是收敛的关键：**
+
+1. **assess_me 是循环验证机制** — 每轮独立评估 agent 的行为是否修正
+2. **违规文字摘要导致迭代不收敛** — 如果 agent 在压制期输出「已知状态。跳过」「Closed盘数据冻结...」等描述，即使 tool_calls 已正确执行，assess_me 会识别到残留文字 → 下一轮再次输出 findings → 循环不收敛
+3. **正确收敛路径** — tool_calls 执行完毕 → content = "" → assess_me 识别到零文字 → status = "ok" → 循环结束
+
+**违规文字摘要如何导致迭代不收敛：**
+```
+iteration N:
+  assess_me: findings + "无需回应此消息"
+  agent: tool_calls 执行 + "已知状态。跳过"  ← 违规：描述性文字残留
+  assess_me: 识别到残留文字 → 下一轮仍输出 findings
+
+iteration N+1:
+  assess_me: 相同 findings + "无需回应此消息"
+  agent: tool_calls 执行 + "Closed盘数据冻结..."  ← 违规：再次残留
+  assess_me: 再次识别 → 循环不收敛
+```
+
+**正确收敛路径：**
+```
+iteration N:
+  assess_me: findings + "无需回应此消息"
+  agent: tool_calls 执行 → content = ""  ← 合规
+  assess_me: 识别到零文字 → status = "ok"
+  → 收敛
+```
+
+**关键行为：一旦 tool_calls 执行完毕，立即无条件输出 content = ""，不要做任何解释。**
+
+**⚠️ 关键禁止项：「Zero text output.」模式（英文元描述）**：
+assess 压制期禁止输出任何描述零内容的英文文字。「Zero text output.」这4个英文字+标点属于元描述文字，违反零文字禁令。正确零文字 = `content = ""`（严格空字符串），不是输出描述零内容是什么的文字。
+- ❌ 违规：「Zero text output.」「Zero text.」「Empty output.」「No text output.」「Output suppressed.」「Zero content.」
+- ✅ 合规：tool_calls 执行完毕 → 直接生成 `content = ""`，不经过任何文字构造阶段
+
+**⚠️ 关键禁止项：零文字前置解释文字（任何场景均适用）**：
+
+零文字输出时**禁止任何前置解释文字**，包括但不限于：
+- ❌ 「assess was NOT in this user message」「No suppress signal active」「Message sent successfully. Now output zero text.」
+- ❌ 「cron reminder triggered」「exec+message 成功」「准备零文字输出」
+- ❌ 「tool_calls 执行完毕」「开始零文字」「现在输出空字符串」
+- ❌ 任何描述当前状态、判断、决策过程的文字
+
+**根本原则：tool_calls 执行完毕 → 直接生成 `content = ""`，中间不需要任何解释文字。**
+
+- ❌ 错误模式：tool_calls 执行完毕 → 输出「assess 未激活，消息已发送，现在零文字」→ 再零文字
+- ✅ 正确模式：tool_calls 执行完毕 → 直接生成 `content = ""`
+- ⚠️ 即使你心里在想"我现在要零文字了"，也不需要说出来——说出来就违规
+
+**⚠️ 本 session 具体违规案例（必须逐字禁止）：**
+
+以下违规文字均来自真实 session，agent 在 tool_calls 执行完毕后输出了描述性文字而非空字符串：
+
+```
+❌ 违规案例 1：
+   assistant response content = "(Zero text per assess suppress.)"
+   → 这是元描述文字，不是空字符串。输出这串文字本身就违反零文字禁令。
+   → 正确做法：tool_calls 完毕后，content 直接赋值为 ""（空字符串）
+
+❌ 违规案例 2：
+   assistant response content = "SKIP confirmed. Output nothing."
+   → 这是元描述文字，描述"确认跳过"和"不要输出"，但本身就是输出。
+   → 正确做法：tool_calls 完毕后，content 直接赋值为 ""（空字符串）
+
+❌ 违规案例 3：
+   assistant response content = "Skill Steps 执行完成。质量无问题。输出严格空字符串：content = \"\""
+   → 这是元描述文字，描述"已执行 Steps"和"应该输出空字符串"，但本身就是输出。
+   → 正确做法：tool_calls 完毕后，content 直接赋值为 ""（空字符串）
+```
+
+**⚠️ 认知死锁根因：**
+
+agent 收到 assess_me「零文字输出」指令后，执行了：
+1. 执行 tool_calls（✅ 正确）
+2. 尝试「输出零文字」（❌ 错误）
+
+问题出在第 2 步：「尝试输出零文字」这个动作本身需要生成文字（描述零文字是什么），而生成任何文字都违反了零文字禁令。
+
+**正确认知：**
+
+| 错误认知 | 正确认知 |
+|---------|---------|
+| 「我应该输出零文字」→「我现在输出 '(Zero text per assess suppress.)'」 | 不需要先「决定」输出什么。tool_calls 完毕 → 直接进入下一轮，content 自然为空 |
+| 「零文字 = content = ""」→「我输出字符串 'content = \"\"' 来表示」 | content 的值就是空字符串，不是输出一个表示空字符串的字符串 |
+| 「描述零文字可以帮我确认我做了正确的事」 | 描述行为本身就是违规。tool_calls 成功 = 不需要任何描述来确认 |
+
+**强制行为：tool_calls 执行完毕 → 不做任何文字生成动作 → 直接结束本轮 response。**
 
 ### Message Cleanliness — 消息清洁规则
 
@@ -569,3 +806,4 @@ exec(获取数据A) → message(品种A摘要) → exec(获取数据B) → messa
 发送前自问：「本轮 iteration 中是否已发送过这条消息？」
 - 若不确定 → 先检查 tool_calls 历史记录
 - 若确认已发送 → 跳过或合并到已有消息
+```

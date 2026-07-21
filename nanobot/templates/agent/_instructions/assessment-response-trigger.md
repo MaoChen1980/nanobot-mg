@@ -131,6 +131,7 @@ STEP A: 识别到 Rule 3 TRIGGER → 立即执行 skill 加载链
 
 STEP B: skill 加载链完成后 → 执行零文字输出（Rule 8 压制）
   → tool_calls 执行完毕后，response content 必须置为空字符串 ""
+  → ⚠️ **⚠️⚠️ 关键：禁止输出任何描述零内容的文字（如"Zero text output."、"零文字输出。"、"Zero text."等）。零文字输出 = 直接生成严格空字符串 `content = ""`，而不是输出描述"零文字"是什么的文字。**
   → ⚠️ 禁止在 skill 加载链完成后输出任何状态摘要
   → ⚠️ 禁止在 skill 加载链完成后调用 message() 发送飞书消息
   → ⚠️ 禁止在 skill 加载链完成后执行任何 exec 业务逻辑
@@ -268,6 +269,7 @@ skill_search → read_file SKILL.md 全文 → 按 Steps 执行 → 才能做其
 - ❌ 执行 skill_search 后直接改脚本/写代码 → **这是跳过了 skill 加载步骤**
 - ❌ 执行 skill_search 后直接 grep/grep→edit_file → **这是跳过了 skill 加载步骤**
 - ❌ 声称"已找到 skill"就跳过 read_file → skill 内容没有被加载到 context，等于没加载
+- ❌ assess_me findings 出现后，**已识别问题修复方向 → 直接 edit_file 修改脚本/代码 → 跳过 skill_search → 跳过 read_file SKILL.md** → 「诊断正确」≠「可以跳过 skill 加载链」。即使已精准定位问题，也必须先完成 skill_search → read_file SKILL.md → 按 Steps 执行，skill 加载链是强制路径不是可选路径
 - ❌ **read_file 局部读取后跳过 Steps 执行直接做其他工作** → assess_me 反复指出这是虚假 skill 加载——读取了 SKILL.md 但未执行 Steps 验证流程就跳到业务逻辑，属于跳过 Steps 的行为违反。**必须在 read_file 完整加载后立即按 Steps 执行，只有 Steps 全部走完才能继续业务操作（exec/数据获取/报告生成等）**
 - ❌ 在 skill 加载前声称"已完成"或"就绪" → assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
 - ❌ 在 skill 加载前 spawn subagent → assess_me 结果不是背景信息，是本轮最高优先级任务
@@ -542,7 +544,7 @@ STEP 2: 识别到配对信号 = 执行零文字输出
   → ⚠️ **禁止在 tool_calls 完成后构造任何文字**（包括但不限于以下任何形式）：
      - 状态确认：「已完成」「修复成功」「Bug 已修复」「验证通过」
      - 完成摘要：「消息已发送」「等待下一轮」「本轮执行完毕」
-     - 元描述文字：「压制期内零文字输出」「零文字阶段」「进入压制状态」「输出为空」
+     - 元描述文字：「压制期内零文字输出」「零文字阶段」「进入压制状态」「输出为空」「content = ""」「压制收敛期」「tool_calls 执行完毕，content = ""」「tool_calls 已完成，零文字输出」「修正已完成，当前 iteration 输出 content = ""」
      - 解释说明：「根据 Rule 8 压制」「assess_me 收敛中」「无需输出任何文字」
   → assess_me 在下一轮自动重新评估
 ```
@@ -586,6 +588,10 @@ STEP 2: 识别到配对信号 = 执行零文字输出
 
 **禁止的输出类型（完整清单）：**
 - 任何状态确认文字（「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「DEBUG残留已清除」「任务完成」「V/OI Bug 根因已定位」「MGA Cron 本轮完成」「数据验证已完成」「skill已加载」「修复已完成」「零文字输出」「跳过本次分析」「数据无变化」「压制收敛中」「5项条件验证完毕」「revert逻辑」「压制期内零文字输出」等）
+- **⚠️ "Zero text output." 模式（英文元描述）**：assess 压制期禁止输出任何描述零内容的文字，包括但不限于「Zero text output.」「Zero text.」「Empty output.」「No text output.」「Output suppressed.」等英文状态描述。正确做法：tool_calls 执行完毕 → 直接生成 `content = ""`，不经过文字构造阶段
+- **任何描述自身输出行为的文字**（如「content = ""」「零文字阶段」「进入压制状态」「输出为空」「压制收敛期」等）
+- **任何解释性元描述**（如「tool_calls 执行完毕」「压制期内，tool_calls 执行完毕，content = ""」「working.md 已更新，永久行为准则已记录。压制收敛期」）
+- **任何数据状态描述**（如「数据定格」「数据冻结」「无新信号」「prev_run_delta <0.15」等与本次修复无关的描述）
 - 任何飞书/外部消息推送
 - 任何完成摘要或解释/辩护文字
 - 任何终稿/结论文字
@@ -701,9 +707,19 @@ STEP 2: 识别到配对信号 = 执行零文字输出
       - 检查 `summary.errors` 非空或 `summary.total` 变化 → 仍需发送简短提示
 
 2. **若 `_skipped == true` 且 assess_me 处于压制收敛期（上一轮有 findings + 压制指令）**
-   → 当前为 assess 收敛压制，_skipped 由修复收敛导致
-   → ❌ **禁止调用 `message()`** — 保持零文字压制
-   → ✅ **必须输出零文字**（`content = ""`）
+   → 当前为 assess 收敛压制，需进一步区分 skip 原因：
+   
+   **(a) 若 `_skip_reason` 包含「数据未变化」「数据定格」「数据无变化」「hash 一致」「时间戳一致」等关键词**
+      → skip 原因是数据定格而非修复收敛，用户设置了 cron reminder 期望执行分析
+      → ✅ **允许调用 `message()` 发送简短说明**：数据定格，跳过本次分析（或等效表述）
+      → ✅ 输出 `content = ""`（零文字，message() 是通知工具不是广播工具）
+      → **目的：打破静默循环——数据定格期间 assess 收敛后连续零文字输出，用户无感知**
+   
+   **(b) 若 `_skip_reason` 无数据定格关键词（表明是修复收敛导致 skip）**
+      → 当前为 assess 收敛压制，_skipped 由修复收敛导致
+      → ❌ **禁止调用 `message()`** — 保持零文字压制
+      → ❌ **停止 exec 执行** — 数据已 SKIP，重复执行无意义（数据不变，结果必然仍是 SKIP）
+      → ✅ **必须输出零文字**（`content = ""`）
 
 3. **若 `_skipped == false`**
    → ✅ 仅当 `_skipped == false` 时，才允许调用 `message()` 发送完整报告
@@ -821,9 +837,9 @@ agent: 「原始任务已完成，等待用户下一条消息」
 
 **无条件禁止清单（无论 assess_me 是否输出压制指令，以下内容永久禁止）：**
 
-- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「修复验证完成」「飞书消息已发送」「零文字输出期已结束」「V/OI Bug 根因已定位并修复」「MGA Cron 本轮完成」「数据验证已完成」「沥青数据确认」「飞书消息发送」「send_mga_final.py验证」「Confirmed State」「Rule 8合规性」「架构矛盾」「当前状态：等待下一次cron触发」「数据状态确认」「等待cron触发」「SKILL.md v3.19 已完整加载...当前状态：_skipped=true...压制期内零文字输出」「16:11 MGA 全品种分析已完成并发送。42品种，强势6个（低硫+6.07%领涨），弱势2个，做多可持：甲醇/焦煤」等状态摘要文字）
+- ❌ **任何状态确认文字**（如「已完成」「已修复 N 处」「脚本运行正常」「消息已发送」「等待下次 cron 触发」「无需进一步 tool_calls」「DEBUG残留已清除」「任务完成」「修复总结」「验证完成」「修复验证完成」「飞书消息已发送」「零文字输出期已结束」「V/OI Bug 根因已定位并修复」「MGA Cron 本轮完成」「数据验证已完成」「沥青数据确认」「飞书消息发送」「send_mga_final.py验证」「Confirmed State」「Rule 8合规性」「架构矛盾」「当前状态：等待下一次cron触发」「数据状态确认」「等待cron触发」「SKILL.md v3.19 已完整加载...当前状态：_skipped=true...压制期内零文字输出」「16:11 MGA 全品种分析已完成并发送。42品种，强势6个（低硫+6.07%领涨），弱势2个，做多可持：甲醇/焦煤」「数据定格」「无信号」「零文字」（即使只是「零文字」两个字也违规——tool_calls 执行完毕 ≠ 可以输出文字）等状态摘要文字）
    - **⚠️ 触发条件无关性（本规则与 assess_me 压制指令解耦）：** 无论 assess_me 是否处于压制收敛期、是否有 findings，只要 exec+message 执行完毕，assistant response content 必须为零字符串 `""`。禁止在 exec+message 成功后输出品种汇总、完成确认、数据验证等文字——即使 assess_me 无 findings 且无压制指令。
-- ❌ **任何元描述文字**（如「压制期内零文字输出」「零文字阶段」「进入压制状态」「输出为空」「零文字压制」「压制期」「输出为空字符串」「content=空」等描述当前输出状态或压制机制本身的文字——即使内容是「零文字输出」本身也违规）
+- ❌ **任何元描述文字**（如「压制期内零文字输出」「零文字阶段」「进入压制状态」「输出为空」「零文字压制」「压制期」「输出为空字符串」「content=空」「content = ""」「压制收敛期」「tool_calls 执行完毕，content = ""」「tool_calls 已完成，零文字输出」「修正已完成，当前 iteration 输出 content = ""」「working.md 已更新，永久行为准则已记录。压制收敛期」等描述当前输出状态或压制机制本身的文字——即使内容是「零文字输出」本身也违规）
 - ❌ **任何飞书/外部消息推送**（`message()` 调用或任何飞书/钉钉/企微等外部通知工具）
 - ❌ **任何完成摘要**（如「修复了两处」「按 SKILL.md 步骤执行完毕」「脚本修复总结（已验证）」）
 - ❌ **任何解释/辩护文字**（如「承认违规」「已按要求修复」「剩余风险如下」）
@@ -899,7 +915,7 @@ agent: 「原始任务已完成，等待用户下一条消息」
 ❌ assess_me findings + 压制指令 + debug_root_cause 分析块
    agent: (执行 read_file → edit_file → exec)
    agent: "Confirmed State: ... Rule 8合规性: ... 架构矛盾: ... 当前状态：等待下一次cron触发"
-   → 违规：assess_me 压制期内执行了根因分析（debug_root_cause），输出了包含 Confirmed State / Rule 8合规性 / 架构矛盾 / 当前状态 等状态确认文字。即使先执行了 tool_calls 修复，仍违规。
+   → 违规：assess_me 压制期内执行了 DCR（debug_root_cause）分析，输出了包含 Confirmed State / Rule 8合规性 / 架构矛盾 / 当前状态 等状态确认文字。即使先执行了 tool_calls 修复，仍违规。
    → 正确做法：tool_calls 正常执行 → response content 严格为空字符串 `""` → 不得混入任何状态摘要、架构分析、合规性确认等文字
 
 ❌ assess_me: findings + 压制指令
@@ -925,6 +941,50 @@ agent: 「原始任务已完成，等待用户下一条消息」
    agent: "完成。BUG修复记录"
    → 违规：tool_calls 正常执行合规，但输出了文字摘要「完成。BUG修复记录」
    → 正确做法：tool_calls 正常执行，assistant content 严格为空字符串，assess_me 在下一轮自动重新评估，无需人工汇报
+
+**⚠️ 以下案例来自 assess_me 2026-07-18 实际报告（数据冻结场景，10+ 轮反复违规）：**
+
+❌ assess_me findings + 压制指令
+   agent: "压制收敛期，tool_calls 执行完毕，content = \"\""
+   → 违规：「压制收敛期」「tool_calls 执行完毕」「content = \"\"」全部是元描述文字
+   → 正确做法：直接输出空字符串 `""`，不描述自己的输出行为
+
+❌ assess_me findings + 压制指令
+   agent: "working.md 已更新，永久行为准则已记录。压制收敛期，tool_calls 执行完毕，content = \"\""
+   → 违规：元描述文字 + 状态确认文字 + 解释说明
+   → 正确做法：直接输出空字符串 `""`
+
+❌ assess_me findings + 压制指令
+   agent: "22:00 数据状态与 21:30 完全相同（02:36:43 时间戳未刷新）。prev_run_delta 全部 <0.15，无新信号。数据定格。零文字输出。"
+   → 违规：数据状态描述 + delta 分析 + 「零文字输出」描述
+   → 正确做法：直接输出空字符串 `""`
+
+❌ assess_me findings + 压制指令
+   agent: "assess_me findings + 压制指令已识别。exec 成功，数据冻结，message() 未调用。tool_calls 已完成。修正已完成，当前 iteration 输出 content = \"\""
+   → 违规：完整的状态确认 + 元描述文字 + 修正声明
+   → 正确做法：直接输出空字符串 `""`
+
+❌ assess_me findings + 压制指令
+   agent: "数据定格，fees_info 在夜盘时段不更新（结算价口径），prev_run_delta 无变化，无推送信号。零文字输出。"
+   → 违规：数据状态分析 + 「零文字输出」描述
+   → 正确做法：直接输出空字符串 `""`
+
+❌ assess_me findings + 压制指令
+   agent: "数据定格，无信号。零文字。"
+   → 违规：「零文字」是元描述文字，即使只有两个字也违规
+   → 正确做法：直接输出空字符串 `""`
+
+❌ assess_me findings + 压制指令（script guard 生效后的描述性文字）
+   agent: "assess_me findings + 压制指令已识别。修复确认：1. prev_run_delta bug 已修复...
+          当前 iteration 正确行为：tool_calls 已完成，response content = \"\""
+   → 违规：输出「修复确认」「正确行为」「当前 iteration 正确行为」「response content = ""」等元描述文字
+   → 注意：script 层 guard（frozen + no_signal 时输出 minimal JSON）与 agent 层零文字输出是两个独立层——script 输出 JSON 不影响 agent 必须输出空字符串
+   → 正确做法：tool_calls 执行完毕 → response.content = ""（严格空字符串，不输出任何描述）
+
+**⚠️ 根因：agent 把「描述零文字输出」当成了一种替代方案，而不是真正输出空字符串。**
+- 「零文字输出」本身就是在输出文字
+- 禁止描述自己的输出行为
+- 正确认知：压制期内，assistant response content 必须严格为空字符串 `""`，不包含任何文字（包括「零文字」「content = ""」等描述性文字）
 
 #### 8.6 收敛性说明
 

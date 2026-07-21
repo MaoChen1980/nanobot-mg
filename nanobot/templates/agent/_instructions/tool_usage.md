@@ -2,6 +2,10 @@
 
 ### 文件操作
 - 读文件 → `read_file(path, [mode], [offset], [limit])`
+  - **读取 JSON/配置文件内容 → 必须用 `read_file`**，禁止用 `exec python3 -c "import json..."` 或 `exec("python -c ...")`
+    - 典型违规：`exec("python -c \"import json; print(json.load(open('data.json')))\"")` → 应改为 `read_file("data.json")`
+    - 原因：inline Python 在 heredoc 中易触发语法陷阱（引号嵌套、`%` 符号转义等），且违反「读文件用 read_file」的原则
+    - **尤其禁止在压制期内（assess_me 压制收敛期）用 exec python3 -c 读取 JSON** — 压制期应仅执行 read_file 验证，exec python3 -c 属于数据获取而非修复验证
 - 写新文件 → `write_file(path, content)`（完整覆盖）
 - 编辑已有文件 → **先 `read_file` 验证内容状态，确认需要修改后再 `edit_file`**
   - TRIGGER: 收到文件修改任务（如"添加X"、"修正Y"、"补充Z"）

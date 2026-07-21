@@ -183,9 +183,48 @@ class AssessResult:
     # Pre-built assessment / DRC messages to inject into the conversation.
     # Applied by _run_assess_callback — the callback returns data, the runner mutates.
     injection_messages: list[dict] | None = None
+    # When True, the runner injects a FRAMEWORK_SENTINEL into messages and forces
+    # the next LLM response to have content = "". Used by the convergence guard
+    # to break deadlock loops where the agent repeatedly outputs meta-text.
+    force_zero_content: bool = False
 
     def __bool__(self) -> bool:
         return self.injected
+
+
+# Sentinel marker for framework-forced zero content.
+# Injected into messages when convergence guard confirms deadlock, signalling
+# the LLM to output content = "" on the next response.
+_FRAMEWORK_SENTINEL_PREFIX = "[FRAMEWORK: FORCE_ZERO_CONTENT]"
+_FRAMEWORK_SENTINEL_SUFFIX = "[/FRAMEWORK_SENTINEL]"
+
+
+def _is_framework_sentinel(msg: dict) -> bool:
+    content = msg.get("content", "") or ""
+    return (
+        content.startswith(_FRAMEWORK_SENTINEL_PREFIX)
+        and _FRAMEWORK_SENTINEL_SUFFIX in content
+    )
+
+
+def _inject_framework_sentinel(messages: list[dict]) -> None:
+    """Inject a framework sentinel into messages to force zero content on next LLM call.
+
+    The sentinel is a user-role message that the LLM is already instructed (via
+    the system prompt) to interpret as a signal to output content = "".
+    The runner additionally overrides response.content when building assistant_message
+    if spec.force_zero_content is True.
+    """
+    sentinel_msg = {
+        "role": "user",
+        "content": (
+            f"{_FRAMEWORK_SENTINEL_PREFIX}\n"
+            f"你必须输出严格空字符串 content = \"\"。不要输出任何文字。\n"
+            f"这条消息是框架级收敛指令，用于打破评估死锁。\n"
+            f"{_FRAMEWORK_SENTINEL_SUFFIX}\n"
+        ),
+    }
+    messages.append(sentinel_msg)
 
 
 @dataclass(slots=True)
@@ -319,8 +358,12 @@ class AgentRunner:
                     attempt, 1 + retry_count, spec.session_key,
                 )
                 result = await asyncio.wait_for(spec.assess_me_callback(messages), timeout=timeout)
+                # Always clean stale assessment messages — this ensures suppress state is
+                # lifted when assess_me converges (no new injection). Without this cleanup,
+                # old assessment messages with suppress markers block message/notify tools
+                # on subsequent turns even after assess_me has returned "all clear".
+                messages[:] = [m for m in messages if not is_assessment_message(m)]
                 if result.injection_messages:
-                    messages[:] = [m for m in messages if not is_assessment_message(m)]
                     messages.extend(result.injection_messages)
                     logger.info(
                         "assess_me_callback injected {} message(s) (session_key={})",
@@ -751,7 +794,17 @@ class AgentRunner:
                 self._assess_responses += 1
                 if self._assess_responses >= spec.assess_interval:
                     self._assess_responses = 0
-                    await self._run_assess_callback(spec, messages)
+                    assess_result = await self._run_assess_callback(spec, messages)
+                    # Convergence guard sets force_zero_content when deadlock is confirmed.
+                    # Inject sentinel into messages so the next LLM call sees it and outputs
+                    # zero content, breaking the meta-text deadlock loop.
+                    if assess_result.force_zero_content:
+                        spec.force_zero_content = True
+                        _inject_framework_sentinel(messages)
+                        logger.info(
+                            "Convergence guard: force_zero_content=True, sentinel injected "
+                            "(session_key={})", spec.session_key,
+                        )
             _now = time.monotonic()
             logger.info("RUN_Timing: post_llm={:.0f}ms", (_now - _run_t0) * 1000)
             raw_usage = usage_dict(response.usage)
@@ -767,27 +820,53 @@ class AgentRunner:
                     await hook.on_stream(context, response.content)
                 await hook.on_stream_end(context, resuming=True)
 
-                assistant_message = build_assistant_message(
-                    response.content or "",
-                    tool_calls=[tc.to_openai_tool_call() for tc in tool_calls],
-                    reasoning_content=response.reasoning_content,
-                    reasoning_details=response.reasoning_details,
-                    thinking_blocks=response.thinking_blocks,
-                    model=spec.model,
-                )
-                messages.append(assistant_message)
-                tools_used.extend(tc.name for tc in tool_calls)
-                await self._emit_checkpoint(
-                    spec,
-                    {
-                        "phase": "awaiting_tools",
-                        "iteration": iteration,
-                        "model": spec.model,
-                        "assistant_message": assistant_message,
-                        "completed_tool_results": [],
-                        "pending_tool_calls": [tc.to_openai_tool_call() for tc in tool_calls],
-                    },
-                )
+                # Framework-forced zero content: if convergence guard confirmed deadlock
+                # and injected sentinel, skip creating the assistant_message entirely.
+                # This breaks the meta-text deadlock loop by not creating a conversation
+                # structure that triggers the agent to output meta-descriptions.
+                _force_zero = getattr(spec, "force_zero_content", False)
+                if _force_zero:
+                    # Clear the flag and sentinel, but do NOT create assistant_message
+                    spec.force_zero_content = False
+                    messages[:] = [m for m in messages if not _is_framework_sentinel(m)]
+                    tools_used.extend(tc.name for tc in tool_calls)
+                    logger.info(
+                        "force_zero_content=True: skipped assistant_message creation "
+                        "(session_key={})", spec.session_key,
+                    )
+                    await self._emit_checkpoint(
+                        spec,
+                        {
+                            "phase": "awaiting_tools",
+                            "iteration": iteration,
+                            "model": spec.model,
+                            "assistant_message": None,  # Skipped creation
+                            "completed_tool_results": [],
+                            "pending_tool_calls": [tc.to_openai_tool_call() for tc in tool_calls],
+                        },
+                    )
+                else:
+                    assistant_message = build_assistant_message(
+                        response.content or "",
+                        tool_calls=[tc.to_openai_tool_call() for tc in tool_calls],
+                        reasoning_content=response.reasoning_content,
+                        reasoning_details=response.reasoning_details,
+                        thinking_blocks=response.thinking_blocks,
+                        model=spec.model,
+                    )
+                    messages.append(assistant_message)
+                    tools_used.extend(tc.name for tc in tool_calls)
+                    await self._emit_checkpoint(
+                        spec,
+                        {
+                            "phase": "awaiting_tools",
+                            "iteration": iteration,
+                            "model": spec.model,
+                            "assistant_message": assistant_message,
+                            "completed_tool_results": [],
+                            "pending_tool_calls": [tc.to_openai_tool_call() for tc in tool_calls],
+                        },
+                    )
 
                 await hook.before_execute_tools(context)
                 tool_calls = hook.filter_tool_calls(context, tool_calls)
@@ -1077,13 +1156,20 @@ class AgentRunner:
 
             assistant_message: dict[str, Any] | None = None
             if response.finish_reason != "error" and not is_blank_text(clean):
+                # Framework-forced zero content: if convergence guard confirmed deadlock,
+                # override to "" instead of the LLM's (meta-text) response.
+                _content_for_msg = "" if getattr(spec, "force_zero_content", False) else clean
                 assistant_message = build_assistant_message(
-                    clean,
+                    _content_for_msg,
                     reasoning_content=response.reasoning_content,
                     reasoning_details=response.reasoning_details,
                     thinking_blocks=response.thinking_blocks,
                     model=spec.model,
                 )
+                # Clear the sentinel from messages now that the response has been built
+                if getattr(spec, "force_zero_content", False):
+                    spec.force_zero_content = False
+                    messages[:] = [m for m in messages if not _is_framework_sentinel(m)]
 
             should_continue, injection_cycles = await self._drain_injections_and_should_continue(
                 spec, messages, assistant_message, injection_cycles,

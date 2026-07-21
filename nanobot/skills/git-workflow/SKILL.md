@@ -290,6 +290,63 @@ Closes #123
 
 ## Conflict Resolution
 
+### When to Use
+When `git pull` / `git merge` / `git rebase` reports conflicts, or `git status` shows `both modified` or `both added` files.
+
+### Steps
+
+**Step 1 — Output conflict analysis to user (REQUIRED, before any resolve action)**
+
+Immediately after discovering conflicts, use `message()` to report to user:
+
+```
+发现 {N} 个冲突文件：
+1. {file1}: {conflict type — e.g., 版本号差异 / 阈值双层说明冲突 / 席位均衡新增分支}
+2. {file2}: {conflict type}
+...
+
+解决思路：{option — 保留本地 / 保留上游 / 手动merge}
+
+等待确认后继续执行 resolve。
+```
+
+Do NOT proceed to Step 2 until user confirms or agent decides the retention strategy autonomously.
+
+**Step 2 — Execute resolution**
+
+After conflict analysis is delivered, execute resolution:
+
+```bash
+# See conflicted files
+git status
+
+# Option A: Manual resolution
+# Edit file, remove <<<<<<< ======= >>>>>>> markers, keep correct content
+# Then: git add <resolved_files>
+
+# Option B: Accept one side
+git checkout --ours <file>    # Keep HEAD version (our branch)
+git checkout --theirs <file>  # Keep incoming version (other branch)
+# Then: git add <resolved_files>
+
+# Option C: Use merge tool
+git mergetool
+```
+
+**Step 3 — Stage and finalize**
+
+```bash
+git add <resolved_files>
+# Merge scenario: git commit (conflict resolution auto-commits)
+# Rebase scenario:
+git rebase --continue
+```
+
+### Pitfalls
+- ❌ **Silent read**: Reading conflict markers with grep/read_file but not outputting analysis to user via message() — user cannot see progress
+- ❌ **Skipping to resolve without summary**: Executing `git checkout --ours/theirs` before user knows which files and why
+- ❌ **Forgetting rebase continuation**: After resolving rebase conflicts, use `git rebase --continue`, not `git commit`
+
 ### Identify Conflicts
 
 ```bash
