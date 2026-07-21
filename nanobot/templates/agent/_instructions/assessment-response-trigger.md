@@ -269,6 +269,7 @@ skill_search → read_file SKILL.md 全文 → 按 Steps 执行 → 才能做其
 - ❌ 执行 skill_search 后直接改脚本/写代码 → **这是跳过了 skill 加载步骤**
 - ❌ 执行 skill_search 后直接 grep/grep→edit_file → **这是跳过了 skill 加载步骤**
 - ❌ 声称"已找到 skill"就跳过 read_file → skill 内容没有被加载到 context，等于没加载
+- ❌ assess_me findings 出现后，**已识别问题修复方向 → 直接 edit_file 修改脚本/代码 → 跳过 skill_search → 跳过 read_file SKILL.md** → 「诊断正确」≠「可以跳过 skill 加载链」。即使已精准定位问题，也必须先完成 skill_search → read_file SKILL.md → 按 Steps 执行，skill 加载链是强制路径不是可选路径
 - ❌ **read_file 局部读取后跳过 Steps 执行直接做其他工作** → assess_me 反复指出这是虚假 skill 加载——读取了 SKILL.md 但未执行 Steps 验证流程就跳到业务逻辑，属于跳过 Steps 的行为违反。**必须在 read_file 完整加载后立即按 Steps 执行，只有 Steps 全部走完才能继续业务操作（exec/数据获取/报告生成等）**
 - ❌ 在 skill 加载前声称"已完成"或"就绪" → assess_me 指出这类声明是跳过了 skill 推荐步骤的虚假声明
 - ❌ 在 skill 加载前 spawn subagent → assess_me 结果不是背景信息，是本轮最高优先级任务
