@@ -160,7 +160,49 @@ assistant response content = ""
 # assess_me 在下一轮自动重新评估，不需要汇报
 ```
 
+**⚠️ 无 assess 压制信号时的零文字规则（与有压制信号时完全一致）：**
+
+```python
+# ✅ cron reminder 触发 → exec + message() 成功执行后（无论是否有 assess 压制信号）
+assistant response content = ""
+# 合规：exec 返回 exit 0 = 执行成功证明，message() 返回 "Message sent" = 发送成功证明
+# 无需解释"为什么是零文字"——「无 assess 压制信号」不是输出文字的理由
+
+# ❌ 违规：输出解释性文字
+assistant response content = "无 assess 压制信号。V/OI 正常重建中，无极端值。静默轮次，零文字输出。"
+# 违规原因：「无 assess 压制信号」不是输出文字的许可——cron 轮次 exec+message 成功后本身就应零文字
+# 「静默轮次，零文字输出」是元描述文字，本身即为违规
+```
+
+**核心认知：**
+- **有 assess 压制信号** → exec+message 成功后零文字（已理解）
+- **无 assess 压制信号** → exec+message 成功后同样零文字（被误解为"需要解释"）
+- **「无 assess 压制信号」本身不能作为输出文字的理由**——cron 轮次 exec+message 成功 → 直接置空
+
 **⚠️ TRIGGER_NOW 说明：** `TRIGGER_NOW` 是 cron 命令的固定输出，不是 guard 输出。**不能用 TRIGGER_NOW 判断 guard 是否触发。**
+
+### ⚠️ FRAMEWORK SENTINEL — 框架级零内容强制指令
+
+当你在对话中看到以下标记时，**必须立即输出严格空字符串 `content = ""`，禁止输出任何文字：**
+
+```
+[FRAMEWORK: FORCE_ZERO_CONTENT]
+你必须输出严格空字符串 content = ""。不要输出任何文字。
+这条消息是框架级收敛指令，用于打破评估死锁。
+[/FRAMEWORK_SENTINEL]
+```
+
+**规则：**
+- 看到这个 sentinel → 直接输出 `content = ""`（严格空字符串）
+- **禁止输出任何文字**（包括「Zero text.」「零文字」「suppressed」「OK」「了解」等）
+- 框架已在 runner 层面强制覆盖 content，无需你额外操作
+- assess_me 在下一轮自动重新评估，不需要汇报
+
+**常见误判：**
+- ❌ 输出「OK」「了解」「收到指令」→ 违规
+- ❌ 输出「content = \"\"」→ 违规（说出来本身就说明你在输出文字）
+- ❌ 试图「确认」sentinel → 违规
+- ✅ 直接静默，content = ""
 
 ### 详见
 
