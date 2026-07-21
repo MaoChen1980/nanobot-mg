@@ -436,6 +436,57 @@ hint: Updates were rejected because the tip of your current branch is behind
 
 **⚠️ CRITICAL: Do NOT alternate between rebase and merge.** This creates diverged branch history and detached HEAD states. Pick ONE strategy and stick with it.
 
+### When `git push --force` is Rejected (GH006: Protected Branch)
+
+**Common Error:**
+```
+! [remote rejected] main -> main (pre-receive hook declined)
+error: denied by custom hook/policy
+# OR
+remote: error: GH006: Protected branch update failed
+```
+
+**Root Cause:** The target branch is protected — force push is blocked by branch protection rules.
+
+**⚠️ CRITICAL: Do NOT retry force push.** Repeated force push attempts against a protected branch will not succeed and waste iterations. Recognize this error immediately and switch to an alternative path.
+
+**Alternative Path A — Preserve Local Commits (Preferred):**
+```bash
+# Step 1: Fetch latest remote state
+git fetch origin
+
+# Step 2: Rebase your local commits onto remote's latest
+git pull --rebase origin main
+
+# Step 3: If conflicts, resolve and continue
+git add <resolved_files>
+git rebase --continue
+
+# Step 4: Push when rebase is complete (no --force needed)
+git push origin main
+```
+
+**Alternative Path B — Feature Branch + PR:**
+```bash
+# Create a new feature branch from current HEAD
+git checkout -b feature/your-feature-name
+
+# Push to remote and set upstream
+git push -u origin feature/your-feature-name
+
+# Then create PR via GitHub web UI or gh CLI
+gh pr create --base main --title "feat: your feature"
+```
+
+**⚠️ Force Push Loop Prevention:**
+```
+❌ WRONG: push fail → force push fail → commit again → force push fail → ...
+   Result: infinite loop, GH006 never resolves
+
+✅ CORRECT: detect GH006 → immediately choose Alternative Path A or B
+   Result: single iteration to alternative, push succeeds
+```
+
 ### Strategy A: `git pull --rebase` (Preserve Local Changes) — **Preferred**
 
 Use when you want to keep your local commits on top of remote changes.
