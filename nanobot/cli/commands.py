@@ -731,6 +731,15 @@ def agent(
                 cron_token = cron.set_cron_context(True)
                 cron_job_token = cron.set_current_job_id(job.id)
 
+            # Check dispatch policy
+            policy = getattr(job.payload, "policy", "queue")
+            if policy not in ("queue", "idle", "interrupt"):
+                policy = "queue"
+
+            target_channel = job.payload.channel or cli_channel
+            target_chat_id = job.payload.to or cli_chat_id
+            target_session = job.payload.session_key or f"{target_channel}:{target_chat_id}"
+
             reminder_note = (
                 "The scheduled time has arrived. Deliver this reminder to the user now, "
                 "as a brief and natural message in their language. Speak directly to them — "
@@ -742,12 +751,26 @@ def agent(
                 f"- `cron action=list` — check job status\n"
                 f"- `cron action=remove job_id={job.id}` — cancel this job"
             )
+
+            # "idle" policy: skip if session is busy
+            if policy == "idle" and agent_loop.is_session_busy(target_session):
+                console.print(f"[dim]⏰ Cron: job '{job.name}' skipped (idle policy, session busy)[/dim]")
+                if isinstance(cron, CronTool) and cron_token is not None:
+                    cron.reset_cron_context(cron_token)
+                return None
+
+            # "interrupt" policy: cancel current tasks
+            if policy == "interrupt":
+                cancelled = await agent_loop.cancel_session_tasks(target_session)
+                if cancelled > 0:
+                    console.print(f"[dim]⏰ Cron: interrupted {cancelled} active task(s)[/dim]")
+
             try:
                 resp = await agent_loop.process_direct(
                     reminder_note,
                     session_key=f"cron:{job.id}",
-                    channel=job.payload.channel or cli_channel,
-                    chat_id=job.payload.to or cli_chat_id,
+                    channel=target_channel,
+                    chat_id=target_chat_id,
                 )
             finally:
                 if isinstance(cron, CronTool) and cron_token is not None:

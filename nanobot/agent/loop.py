@@ -387,6 +387,21 @@ class AgentLoop:
     def _active_tasks(self) -> dict[str, list[asyncio.Task]]:
         return {k: v.tasks for k, v in self._session_dispatch.items()}
 
+    def is_session_busy(self, session_key: str) -> bool:
+        """Check if a session has any active (non-done) tasks running.
+
+        Note: This is approximate — tasks may complete or be cancelled between
+        this check and actual dispatch. Use for advisory decisions only.
+        """
+        state = self._session_dispatch.get(session_key)
+        if not state:
+            return False
+        return any(not t.done() for t in state.tasks)
+
+    async def cancel_session_tasks(self, session_key: str) -> int:
+        """Cancel all active tasks for a session. Returns number of tasks cancelled."""
+        return await self._cancel_active_tasks(session_key)
+
     # -- Public API for command handlers -----------------------------------
 
     @property

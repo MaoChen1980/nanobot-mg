@@ -29,6 +29,11 @@ class CronPayload:
     to: Optional[str] = None  # e.g. phone number
     channel_meta: dict = field(default_factory=dict)  # channel-specific routing (e.g. Slack thread_ts)
     session_key: Optional[str] = None  # original session key for correct session recording
+    # Dispatch policy for agent messages:
+    # - "queue": add to session's pending queue (default)
+    # - "idle": only send when session is idle, skip if busy
+    # - "interrupt": cancel current task and send immediately
+    policy: Literal["queue", "idle", "interrupt"] = "queue"
 
 
 @dataclass

@@ -315,7 +315,7 @@ class GatewayApplication:
         from nanobot.agent.tools.cron import CronTool
         from nanobot.agent.tools.message import MessageTool
         from nanobot.agent.tools.send_file import FileTool
-        from nanobot.bus.events import OutboundMessage
+        from nanobot.bus.events import InboundMessage, OutboundMessage
 
         def _channel_session_key(channel: str, chat_id: str) -> str:
             return f"{channel}:{chat_id}"
@@ -432,7 +432,6 @@ class GatewayApplication:
         # Cron job handler
         async def on_cron_job(job: Any) -> str | None:
             from nanobot.agent.tools.message import MessageTool
-            from nanobot.utils.evaluator import evaluate_response
 
             if job.name == "extractor":
                 try:
@@ -446,8 +445,15 @@ class GatewayApplication:
                 await self._monitor_log_errors(_deliver_to_channel)
                 return None
 
-            # Check if this is a test/dry-run execution
-            isinstance(getattr(self.agent.tools.get("cron"), "_test_mode", None), object)
+            # Get the dispatch policy for this job
+            policy = getattr(job.payload, "policy", "queue")
+            if policy not in ("queue", "idle", "interrupt"):
+                policy = "queue"
+
+            # Use the session from job.payload or default
+            target_channel = job.payload.channel or "cli"
+            target_chat_id = job.payload.to or "direct"
+            target_session = job.payload.session_key or f"{target_channel}:{target_chat_id}"
 
             reminder_note = (
                 "The scheduled time has arrived. Deliver this reminder to the user now, "
@@ -461,35 +467,22 @@ class GatewayApplication:
                 f"- `cron action=remove job_id={job.id}` — cancel this job"
             )
 
-# Check if this is a test/dry-run execution
             cron = self.agent.tools.get("cron")
             cron_token = None
             cron_job_token = None
-            if isinstance(cron, CronTool):
-                # Safely access deliver flag - with verbose error for debugging
-                try:
-                    job_deliver = getattr(job.payload, "deliver", True)
-                    if job_deliver is None:
-                        job_deliver = True
-                    dry_run = not bool(job_deliver)
-                except Exception as e:
-                    logger.warning("Failed to access job.payload.deliver: {}, job.payload={}", e, job.payload)
-                    dry_run = False
-                cron_token = cron.set_cron_context(True, dry_run=dry_run)
+            dry_run = not job.payload.deliver
+            is_test = False
 
-            # Build progress callback for visible execution
-            async def _progress(step: str, done: bool = False) -> None:
-                # In test/dry-run mode, progress is captured for display
-                # In normal mode, progress is silent unless testing
-                pass
+            if isinstance(cron, CronTool):
+                is_test = bool(getattr(cron, "_test_mode", None) and cron._test_mode.get())
+                cron_token = cron.set_cron_context(True, dry_run=dry_run)
+                cron_job_token = cron.set_current_job_id(job.id)
 
             message_record_token = None
             if isinstance(message, MessageTool):
-                message_record_token = (
-                    message.set_record_channel_delivery(True)
-                )
+                message_record_token = message.set_record_channel_delivery(True)
 
-            # Wire progress callback: capture agent tool steps for display
+            # Helper: build progress callback for visible execution
             async def _visible_progress(
                 content: str, *, tool_hint: bool = False, tool_events: list = None
             ) -> None:
@@ -501,7 +494,6 @@ class GatewayApplication:
                                 tool_name = ev.get("tool", "?")
                                 log.append(f"  [Tool] {tool_name}()")
                     elif content:
-                        # thought / hint content
                         line = content.strip().split("\n")[0][:80]
                         if line:
                             log.append(f"  [Thought] {line}")
@@ -509,62 +501,77 @@ class GatewayApplication:
             async def _silent(content: str, *, tool_hint: bool = False, tool_events: list = None) -> None:
                 pass
 
-            # Determine on_progress: use visible in test mode, silent otherwise
-            is_test = getattr(cron, "_test_mode", None) and cron._test_mode.get()
             on_progress = _visible_progress if is_test else _silent
 
-            try:
-                resp = await self.agent.process_direct(
-                    reminder_note,
-                    session_key=f"cron:{job.id}",
-                    channel=job.payload.channel or "cli",
-                    chat_id=job.payload.to or "direct",
-                    on_progress=on_progress,
-                )
-            finally:
+            def _cleanup():
                 if isinstance(cron, CronTool) and cron_token is not None:
                     cron.reset_cron_context(cron_token)
                 if isinstance(cron, CronTool) and cron_job_token is not None:
                     cron.reset_current_job_id(cron_job_token)
-                if (
-                    isinstance(message, MessageTool)
-                    and message_record_token is not None
-                ):
-                    message.reset_record_channel_delivery(
-                        message_record_token
+                if isinstance(message, MessageTool) and message_record_token is not None:
+                    message.reset_record_channel_delivery(message_record_token)
+
+            # For test/dry-run mode: use process_direct (synchronous, returns response)
+            if dry_run or is_test:
+                try:
+                    resp = await self.agent.process_direct(
+                        reminder_note,
+                        session_key=f"cron:{job.id}",
+                        channel=target_channel,
+                        chat_id=target_chat_id,
+                        on_progress=on_progress,
                     )
+                finally:
+                    _cleanup()
 
-            response = resp.content if resp else ""
+                response = resp.content if resp else ""
 
-            # In test mode: append execution log to result
-            if is_test and isinstance(cron, CronTool):
-                log = cron.get_execution_log()
-                if log:
-                    response = "[Test Execution Log]\n" + "\n".join(log) + "\n\n[Result]\n" + response
+                if is_test and isinstance(cron, CronTool):
+                    log = cron.get_execution_log()
+                    if log:
+                        response = "[Test Execution Log]\n" + "\n".join(log) + "\n\n[Result]\n" + response
 
-            # Test/dry-run: return result but don't deliver to user
-            if not job.payload.deliver:
                 return response
 
-            if job.payload.deliver and job.payload.to and response:
-                should_notify = await evaluate_response(
-                    response,
-                    reminder_note,
-                    self.provider,
-                    self.agent.model,
-                )
-                if should_notify:
-                    await _deliver_to_channel(
-                        OutboundMessage(
-                            channel=job.payload.channel or "cli",
-                            chat_id=job.payload.to,
-                            content=response,
-                            metadata=dict(job.payload.channel_meta),
-                        ),
-                        record=True,
-                        session_key=job.payload.session_key,
-                    )
-            return response
+            # --- Live execution with policy ---
+
+            # "idle" policy: skip if session is busy
+            if policy == "idle" and self.agent.is_session_busy(target_session):
+                logger.info("Cron job '{}' skipped (idle policy, session busy)", job.name)
+                _cleanup()
+                return None
+
+            # "interrupt" policy: cancel current tasks
+            if policy == "interrupt":
+                cancelled = await self.agent.cancel_session_tasks(target_session)
+                if cancelled > 0:
+                    logger.info("Cron job '{}' interrupted {} active task(s)", job.name, cancelled)
+
+            # "queue" and "interrupt" policies: publish to bus
+            # The agentloop will pick it up and process it naturally.
+            # Response is delivered through the normal channel flow.
+            cron_msg = InboundMessage(
+                channel=target_channel,
+                sender_id="scheduler",  # Distinct from user/bot sender IDs
+                chat_id=target_chat_id,
+                content=reminder_note,
+                media=[],
+                metadata={
+                    "source": "cron",
+                    "job_id": job.id,
+                    "job_name": job.name,
+                },
+                session_key_override=target_session,
+            )
+
+            # Publish to bus - agentloop.run() will pick it up
+            await self.bus.publish_inbound(cron_msg)
+
+            # Clean up cron context immediately (agent will handle its own context)
+            _cleanup()
+
+            logger.info("Cron job '{}' dispatched to bus (policy={})", job.name, policy)
+            return None
 
         self.cron.on_job = on_cron_job
 

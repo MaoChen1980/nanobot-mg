@@ -23,6 +23,7 @@ def _make_mocked_app(config: Config | None = None) -> GatewayApplication:
     app = GatewayApplication(config or Config())
     app.bus = MagicMock()
     app.bus.publish_outbound = AsyncMock()
+    app.bus.publish_inbound = AsyncMock()
     app.provider = MagicMock()
     app.nanobot_db = MagicMock()
     app.session_manager = MagicMock()
@@ -671,27 +672,29 @@ class TestOnCronJob:
         app.agent.process_direct.assert_awaited_once()
         app.bus.publish_outbound.assert_not_called()
 
-    async def test_reminder_delivery_evaluate_skips(self, config: Config) -> None:
-        """evaluate_response returns False -> message is NOT delivered."""
+    async def test_reminder_delivery_via_bus(self, config: Config) -> None:
+        """With deliver=True, message is published to bus for queue policy."""
         app = _make_mocked_app(config)
-        app.agent.process_direct = AsyncMock(return_value=MagicMock(content="Routine"))
-
         app._wire_callbacks()
-        with patch(
-            "nanobot.utils.evaluator.evaluate_response",
-            AsyncMock(return_value=False),
-        ):
-            job = CronJob(
-                id="r1", name="reminder",
-                payload=CronPayload(
-                    message="Test", deliver=True,
-                    channel="cli", to="user1",
-                ),
-            )
-            result = await app.cron.on_job(job)
 
-        assert result == "Routine"
-        app.bus.publish_outbound.assert_not_called()
+        job = CronJob(
+            id="r1", name="reminder",
+            payload=CronPayload(
+                message="Test", deliver=True,
+                channel="cli", to="user1",
+            ),
+        )
+        result = await app.cron.on_job(job)
+
+        # With bus-based approach, on_cron_job returns None for queue policy
+        # and the message is delivered through normal channel flow
+        assert result is None
+        app.bus.publish_inbound.assert_called_once()
+        call_args = app.bus.publish_inbound.call_args
+        msg = call_args[0][0]
+        assert msg.channel == "cli"
+        assert msg.chat_id == "user1"
+        assert "Test" in msg.content
 
     async def test_cron_context_set_and_reset(self, config: Config) -> None:
         """set_cron_context / reset_cron_context are called when cron tool exists."""

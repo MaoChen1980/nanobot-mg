@@ -38,6 +38,14 @@ _CRON_PARAMETERS = build_parameters_schema(
     deliver=p("boolean", "Whether to deliver the execution result to the user channel (default true)",
         default=True,
     ),
+    policy=p("string",
+        "Dispatch policy when job triggers:\n"
+        "- 'queue': add to session's pending queue, wait for current task to finish (default)\n"
+        "- 'idle': only send when session is idle, skip if user is busy\n"
+        "- 'interrupt': cancel current task and send immediately",
+        enum=["queue", "idle", "interrupt"],
+        default="queue",
+    ),
     job_id=p("string", "REQUIRED for action='remove', 'update', or 'test'. "
         "Optional when inside a cron job (defaults to current job). "
         "Obtain via action='list'.",
@@ -179,12 +187,13 @@ class CronTool(Tool):
         job_id: str | None = None,
         deliver: bool = True,
         dry_run: bool = False,
+        policy: str = "queue",
         **kwargs: Any,
     ) -> str:
         if action == "add":
             if self._in_cron_context.get():
                 return "Error: cannot schedule new jobs from within a cron job execution"
-            return self._add_job(name, message, every_seconds, cron_expr, tz, at, deliver)
+            return self._add_job(name, message, every_seconds, cron_expr, tz, at, deliver, policy)
         elif action == "list":
             return self._list_jobs()
         elif action == "remove":
@@ -204,6 +213,7 @@ class CronTool(Tool):
         tz: str | None,
         at: str | None,
         deliver: bool = True,
+        policy: str = "queue",
     ) -> str:
         if not message:
             return (
@@ -257,6 +267,7 @@ class CronTool(Tool):
             delete_after_run=delete_after,
             channel_meta=self._metadata.get(),
             session_key=self._session_key.get() or None,
+            policy=policy,
         )
         return f"Created job '{job.name}' (id: {job.id})"
 
