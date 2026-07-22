@@ -24,23 +24,32 @@
 > 读完后觉得「本来就该这么干」→ 噪音
 > 读完后觉得「原来有个坑 / 原来可以这样」→ 进化
 
-### assess_me 反复违规 — 最高优先级修复
+### assess_me 反复违规 — 先诊断根因再决定修复位置
 
 **识别信号：** assess_me 在连续 iteration 中指出同一类问题（如"skill 加载顺序错误"、"未执行 Verification"）。
 
-**这不是 skill 缺失，是框架规则执行问题。** assess_me skill 加载规则已整合到本文件上方内联规则中（见「assess_me skill 加载核心规则」）。
+**⚠️ 不要假设根因。** 反复违规可能有多种根因：
+- **框架问题**：框架已有规则但表述不够强制，或规则太分散 agent 找不到
+- **skill 问题**：skill 内容错误/过时/缺失必要步骤，agent 按 skill 执行但走了错方向
+- **两者都有**：框架规则引导方向错误，同时 skill 内容也有缺陷
 
-**处理原则：** 根因在框架指令 → 优化框架指令，不创建新 skill。
-- 如果框架已有规则但 agent 不遵守 → 强化/显眼化该规则 ✓（已整合到本文件内联规则）
-- 如果框架规则太分散 → 整合到一处 ✓（已整合到 assessment-response-trigger.md）
-- 如果规则表述不够强制 → 使用更明确的 TRIGGER/禁止语言 ✓（已添加更醒目的格式）
+**正确处理流程：**
+1. 先用 `behavior_optimization_handler.md` 的根因诊断流程（路径 1-5）判断类型
+2. 框架问题 → 修框架指令（如 `_instructions/`、`assessment-response-trigger.md`）
+3. skill 问题 → 修 SKILL.md（用 `edit_file` 直接修正内容）
+4. 不确定 → 读取相关文件验证，不要凭描述猜测
+
+**禁止：** 不做诊断就直接假设"这是框架问题"或"这是 skill 问题"。每次违规都修框架指令会导致：
+- 框架指令膨胀到无法维护
+- skill 特有的领域规则混入通用框架
+- skill 内容得不到修正，重复违规
 
 **assess_me skill 加载核心规则（内联，无跨文件依赖）：**
 > assess_me 结果中任何 skill 加载指令 = **本轮第一件事**。
 > 收到 assess_me skill 指令 → 立即 `skill_search` → `read_file` SKILL.md → 按 Steps 执行 → 才能做其他工作。
 > 禁止：先 git/grep/working.md 再 skill。
 
-**反复违规处理：** 如果同一 assess_me 指令在两次 iteration 均未响应，构成「反复行为模式」。这不是信息不足或理解偏差，是明确的规则违反。
+**反复违规处理：** 如果同一 assess_me 指令在两次 iteration 均未响应，构成「反复行为模式」。先诊断是框架还是 skill 问题，再修复。
 
 ### skill 压缩验证 — 强制完整文件读取
 

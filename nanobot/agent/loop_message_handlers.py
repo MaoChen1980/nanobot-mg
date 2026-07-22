@@ -461,7 +461,13 @@ class UserMessageHandler:
 
     async def _finalize_turn(self, session, all_msgs, initial_msgs_count, user_persisted_early, final_content, total_llm_requests=0):
         """Save turn, enforce file cap, clear recovery state."""
-        if final_content is None or not final_content.strip():
+        # Only replace None with EMPTY_FINAL_RESPONSE_MESSAGE.
+        # The runner can only set final_content to:
+        #   - None (not suppressed, no response yet)
+        #   - EMPTY_FINAL_RESPONSE_MESSAGE (blank text from LLM)
+        # Empty string "" is produced later by _build_outbound() when suppress
+        # is detected (via assess_me markers in messages), not by the runner.
+        if final_content is None:
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE
 
         # Rebuild session.messages from all_msgs to persist compressed history.

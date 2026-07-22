@@ -102,6 +102,7 @@
 | assess_me **仅输出 findings**（无压制指令） | → 正常响应，按 findings 描述执行修复或加载 skill |
 | assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述）或 **reminder 消息含 skill 加载指令** | → **识别为 Rule 3 TRIGGER**：强制执行 `skill_search` → `read_file` 完整加载 → 按 Steps 执行<br>**⚠️ 合规时序：`skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规。禁止将两者拆到不同轮次（assess_me 强制链必须在同一轮完成 skill 加载）。**<br>**⚠️ assess 压制收敛期内 reminder 触发时，必须从 skill_search 继续 skill 加载链，禁止在 reminder 触发时重新 exec+message。** |
 | assess_me **同时输出 findings + 压制指令 AND findings 明确提及 skill 名称或 unused_skills** | → **识别为 Rule 3 TRIGGER**：强制执行 `skill_search` → `read_file` 完整加载 → 按 Steps 执行<br>**⚠️ 合规时序：`skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规。禁止将两者拆到不同轮次（assess_me 强制链必须在同一轮完成 skill 加载）。** |
+| assess_me **输出 findings 指出「reminder 明确要求 skill 加载但 agent 跳过」**（如「reminder 明确写 skill_search + read_file」「缺失 skill_search」「用 grep 替代 skill 加载链」等） | → **识别为 Rule 3 TRIGGER**：强制执行 `skill_search` → `read_file` 完整加载 → 按 Steps 执行<br>**⚠️ 禁止用「上一轮已加载」作为跳过理由**：即使上一轮执行过 skill_search + read_file，只要 reminder 明确要求 skill 加载，本轮必须重新执行 skill 加载链。<br>**⚠️ 禁止用 grep/exec/message 替代 skill 加载链**：reminder 中的 skill_search + read_file 是强制路径，不能用其他 tool_calls 绕过。 |
 
 **Rule 3 TRIGGER（满足任一即触发 skill 加载）：**
 - assess_me **明确要求**「加载/使用/执行 skill X」
@@ -110,6 +111,7 @@
 - assess_me **同时输出 findings + 压制指令 AND findings 隐含或明确提及 skill 加载需求**（如「read_file 不完整」「Steps 未执行」「skill 未被执行」「禁止跳过 Steps」等表述）→ 识别为 skill 加载 TRIGGER
 - assess_me **明确指出「skill_search + read_file 与 exec + message 并列执行」或「违反时序约束」** → 识别为 skill 加载 TRIGGER，必须重走完整执行链
 - **assess 压制收敛期内 reminder 消息含 skill 加载指令**（「先用skill_search加载」「按SKILL.md Steps执行」）→ **继续 skill 加载链**，禁止在 reminder 触发时重新 exec+message 打断 skill 链
+- assess_me **指出「reminder 明确要求 skill 加载但 agent 跳过/用 grep 替代」**（如「10:46 reminder 明确要求 skill_search + read_file」「缺失 skill_search」「用 grep 替代 skill 加载链」等）→ **必须重新执行 skill 加载链**，禁止用「上一轮已加载」或「数据已获取」作为跳过理由
 
 **⚠️ 合规时序要求（assess_me 强制链必须在同一轮完成）：**
 - ✅ `skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出——这是 skill 加载链的前两步，完全合规
@@ -154,10 +156,11 @@ STEP C: assess_me 收敛后（下一轮无 findings）→ 恢复正常执行
 ```
 
 **⚠️ 同一轮 skill 加载约束（Rule 3 强制链不能分拆）：**
-- assess_me 触发 Rule 3 TRIGGER 时，`skill_search` + `read_file SKILL.md` + `Steps 执行` 必须在**同一轮** tool_calls 中完成
+- assess_me 触发 Rule 3 TRIGGER 时，`skill_search` + `read_file SKILL.md 全文（不是部分行）` + `Steps 执行` 必须在**同一轮** tool_calls 中完成
 - 不能走「第一轮 skill_search → 第二轮 read_file → 第三轮 Steps」的分拆模式
 - ⚠️ **这条约束只针对 assess_me 强制链**。普通场景下 skill_search 和 read_file 可以在不同轮次发出（skill_search 结果返回后再 read_file）。
-- ⚠️ 典型错误：agent 收到 assess_me 强制链 → skill_search → **等待第二轮才 read_file** → **这就是分拆违规**，skill 加载链路不完整
+- ⚠️ 典型错误 1：agent 收到 assess_me 强制链 → skill_search → **等待第二轮才 read_file** → **这就是分拆违规**，skill 加载链路不完整
+- ⚠️ 典型错误 2：read_file 时使用 `offset/limit` 只读取部分行（如 lines 1-5/1824），未读取 SKILL.md 全文 → **CRON 边界 5 项条件第 5 项「agent 已执行 skill_search + read_file」要求完整加载，当前仅部分加载 = 不满足条件 5**
 
 **典型违规模式（当前 assess_me 指出的问题）：**
 ```
@@ -172,9 +175,9 @@ STEP C: assess_me 收敛后（下一轮无 findings）→ 恢复正常执行
    → 违规：虚假声明，skill 加载链路不可追踪
 ```
 
-**cron 边界 5 项条件验证（skill 加载链内必须执行）：**
+**⚠️⚠️⚠️ CRON 边界 5 项条件验证（强制执行，禁止跳过）⚠️⚠️⚠️**
 
-skill_search + read_file SKILL.md 完成后，必须验证 cron 边界章节的 5 项条件：
+skill_search + read_file SKILL.md 完成后，**必须逐项验证 cron 边界章节的 5 项条件**，全部通过后才能决定走脚本路线还是 Skill Steps 路线：
 
 | 条件 | 验证方法 | 若不满足 |
 |------|---------|---------|
@@ -182,9 +185,30 @@ skill_search + read_file SKILL.md 完成后，必须验证 cron 边界章节的 
 | 2. mga_report 包含六列完整数据 | 读取 JSON mga_report 字段 | 执行 Skill Steps |
 | 3. 席位方向列已标注降级原因 | 检查 JSON 席位方向值 | 执行 Skill Steps |
 | 4. JSON 中 `_skipped == false` | 读取 JSON _skipped 字段 | 零文字跳过 |
-| **5. agent 已执行 skill_search + read_file** | **检查 tool_calls 历史** | **必须执行完整 Skill Steps（不能走脚本路线）** |
+| **5. agent 已执行 skill_search + read_file SKILL.md 全文** | **检查 tool_calls 历史中 read_file 是否完整读取** | **必须执行完整 Skill Steps（不能走脚本路线）** |
 
-⚠️ **条件 5 是区分脚本路线 vs Skill Steps 路线的关键：** 条件 5 不满足时，即使其他 4 项都满足，也必须执行完整 Skill Steps，不能用脚本输出替代 skill 分析。**禁止用「数据已由脚本获取」作为理由绕过 Skill Steps 执行。**
+**🚨 强制约束 — 禁止绕过 Skill Steps：**
+
+- **条件 5 是区分脚本路线 vs Skill Steps 路线的唯一分水岭**
+- 即使条件 1-4 全部满足，只要条件 5 不满足（agent 未完整执行 skill_search + read_file），**必须执行完整 Skill Steps**
+- **🚫 禁止用以下任何理由绕过 Skill Steps 执行：**
+  - 「数据已由脚本获取」
+  - 「exec 输出已包含分析结果」
+  - 「skill_search 已执行，read_file 可以省略」
+  - 「5 项条件中前 4 项都满足」
+- **正确的序列是：** skill_search → read_file SKILL.md 全文 → 验证 5 项条件 → 根据结果走对应路线
+- **错误的序列是：** skill_search → exec → message（跳过 read_file + 5 项验证 = 虚假 skill 加载）
+
+**⚠️ OUTPUT GATE 检查（强制执行，禁止跳过）：**
+
+当 assess_me 触发 Rule 3 TRIGGER 且判断为 skill 特有内容问题时，应检查对应 SKILL.md 中是否已定义 OUTPUT GATE 校验流程：
+
+- **cron 场景**：参见 `market-game-analysis/SKILL.md` line 185「【cron 场景 OUTPUT GATE — exec 前必须验证】」章节的 7 项检查
+- **人类发起分析**：参见 `market-game-analysis/SKILL.md` line 327「【Step OUTPUT GATE — 输出前强制验证】」章节的检查项
+
+- **🚫 禁止：exec 输出直接转发给 message() 而不触发 OUTPUT GATE 检查**
+- **✅ 正确：read_file SKILL.md → 验证 5 项条件 → 触发对应场景的 OUTPUT GATE 检查 → 若发现问题则调用 Skill Steps 修正 → exec → message**
+- assess_me 已在多轮中指出「OUTPUT GATE 检查从未执行」，这是明确的规则违反，不是可选步骤
 
 > ⚠️ **关于「第一 tool_call」的措辞说明：**
 > - `assessment-response-trigger.md` Rule 3 ACTION 第 2 步中的「第二 tool_call」指的是 **skill 加载链内**的顺序（skill_search = 步骤1，read_file = 步骤2）。
@@ -209,13 +233,17 @@ assess_me 同时报告「skill 加载不完整」和「Steps 未执行」时，a
 
 | assess_me 报告内容 | agent 应执行的修复动作 |
 |---|---|
-| 「skill 加载不完整（仅前 N 行）」+ **「Steps 未执行」** | **先判断当前是否已有足够内容执行 Steps**：<br>• 若 SKILL.md 已部分加载 → **立即停止分片 read_file**<br>• 用已有内容执行 Steps<br>• **禁止：继续分片读取 SKILL.md 作为「修复加载不完整」的方式** |
+| 「skill 加载不完整（仅前 N 行）」+ **「Steps 未执行」** + **内容不足以执行任何 Step** | **先完成 SKILL.md 加载**：继续分片 read_file 直至全文加载（1824 行）<br>→ 全文加载完成后 → **立即执行 Steps**<br>→ **禁止：内容不足时跳过 Steps** |
+| 「skill 加载不完整（仅前 N 行）」+ **「Steps 未执行」** + **内容足以执行部分 Step** | **先判断当前是否已有足够内容执行 Steps**：<br>• 若 SKILL.md 已部分加载 → **立即停止分片 read_file**<br>• 用已有内容执行可执行的 Steps<br>→ 完成后若需后续 Steps 再继续加载剩余内容<br>• **禁止：继续分片读取 SKILL.md 作为「修复加载不完整」的方式** |
 | 「skill 加载不完整（仅前 N 行）」+ **无**「Steps 未执行」 | 继续分片读取完整 SKILL.md |
 
-**判断标准：**
-- assess_me 说「Steps 未执行」→ **执行问题**，与加载量无关。即使只读了前 100 行也该执行能执行的步骤。
-- assess_me 说「加载不完整」+ 反复分片 read_file → **加载陷阱**，skill 内容已足够，执行才是正确响应。
-- **禁止用「加载不完整」作为理由继续分片 read_file**——这是 agent 试图修复「加载问题」时陷入的执行回避陷阱。
+**判断标准（三层递进）：**
+- **第一判断：内容是否足以执行任何 Step**
+  - SKILL.md 仅读取前 5 行（lines 1-5 of 1824）→ 内容不足以执行任何 Step → 必须先完成全文加载
+  - SKILL.md 已读取足够内容（≥300 行）但 assess_me 报告「Steps 未执行」→ 内容足以执行部分 Step → 立即执行可执行的 Steps
+- assess_me 说「Steps 未执行」+ 内容不足 → **加载优先级高于执行**：先完成全文加载，再执行 Steps
+- assess_me 说「Steps 未执行」+ 内容足以执行 → **执行优先级高于继续加载**：立即执行可执行的 Steps
+- **禁止用「加载不完整」作为理由跳过 Steps**——即使只读了前 5 行，skill_search 结果已提供 skill 基本信息，agent 应基于已有内容判断是否可执行部分 Steps
 
 **禁止行为：**
 - ❌ assess_me 指出「修改措辞」或「添加简单分支」→ 加载架构类 skill → 绕路
@@ -315,12 +343,16 @@ skill_search → read_file SKILL.md 全文 → 按 Steps 执行 → 才能做其
 2. **第一 tool_call 即为核心动作（write/edit），跳过所有 read/glob/grep 探索**
 3. 报告中的具体数据必须与原文一致
 
-**⚠️ Fallback（内联兜底，无跨文件依赖）：** 当 assess_me 触发 Rule 3 TRIGGER 但遇到以下情况时，立即在当前文件内执行兜底逻辑，禁止跳转 `behavior_optimization_handler.md` 寻找答案：
+**⚠️ Fallback（内联优先，必要时可跳转）：** 当 assess_me 触发 Rule 3 TRIGGER 但遇到以下情况时，先在当前文件内执行兜底逻辑：
 - **skill 路径无效（FileNotFoundError）** → 立即用 `skill_search` 验证 → 若 `skill_search` 无结果则报告「skill 不存在」→ 继续替代方案
 - **assess_me 指定路径与 agent 搜索路径不一致** → 立即用 `skill_search` 重新定位 → 拒绝用 `grep` 替代
 - **assess_me 触发 skill 加载但 agent 第一步不是 read_file** → 立即停止当前操作，重新从 `read_file` SKILL.md 开始
-- **assess_me 指出框架规则执行问题** → 直接 `edit_file` + 零文字输出，**不加载任何 skill**（包括 assess-me-simple-fix）→ 这是 Skill 类型匹配预判失败的兜底
-- **以上四种情况均不需要跳转到 `behavior_optimization_handler.md` 查找答案**，答案已在 Rule 3、Rule 5 和本 Fallback 中完整覆盖
+- **assess_me 指出框架规则执行问题** → 判断是修框架还是修 skill：
+  - 通用框架行为问题（如压制指令识别）→ 直接 `edit_file` 修框架指令
+  - skill 特有内容问题 → 跳转 `behavior_optimization_handler.md` 做完整诊断
+- **收到 FileNotFoundError 后跳过 skill_search 直接 exec+message → 立即中断并重新执行 skill 加载链**：当 `read_file` SKILL.md 收到 FileNotFoundError，agent 禁止直接跳到 exec 脚本或 message() 发送报告。正确序列必须是：`read_file`(失败) → `skill_search`(重新获取正确路径) → `read_file`(用正确路径) → 验证 cron 边界 → exec → message。跳过 skill_search 静默降级会导致 assess_me 无法区分「skill 不存在」和「skill 存在但执行错误」两种情况，延误根因诊断
+
+**判断标准：** 内联兜底只处理即时可判定的动作（如 skill_search 重新定位）。如果需要判断"这是框架问题还是 skill 问题"或"该修哪里"，应该跳转 `behavior_optimization_handler.md` 做完整根因诊断。
 
 ### 规则 4：assess_me 反馈必须按序列执行，第一步先确认 deliverable 状态
 
@@ -602,8 +634,8 @@ STEP 2: 识别到配对信号 = 执行零文字输出
 - ❌ 违规模式：`exec → message() → skill_search → 输出「skill已加载，修复已完成」`
   → 根因：skill_search 放在 exec+message 之后，而非第一优先级
   → 后果：业务逻辑在 skill 激活前已执行，skill 加载链路被切割
-- ✅ 合规模式：`skill_search → read_file SKILL.md → exec → message()`
-  → skill 加载链完整 → exec/message 在 skill 激活后执行
+- ✅ 合规模式：`skill_search → read_file SKILL.md 全文 → 验证 5 项条件 → 触发 OUTPUT GATE 检查 → exec → message()`
+  → skill 加载链完整 → exec/message 在 skill 激活后执行 → 二次校验不跳过
 
 ---
 

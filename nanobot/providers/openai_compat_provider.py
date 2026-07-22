@@ -1297,6 +1297,12 @@ class OpenAICompatProvider(LLMProvider):
             msg[:200],
         )
 
+        # error_retry_after_s is the canonical retry-after hint for structured
+        # error reporting.  Prefer the locally-computed retry_after (which already
+        # carries the 30 s default for connection errors) over the one baked into
+        # error_meta by _extract_error_metadata, so callers always get the hint.
+        error_retry_after_s = retry_after if retry_after is not None else error_meta.get("error_retry_after_s")
+
         return LLMResponse(
             content=msg,
             finish_reason="error",
@@ -1305,7 +1311,7 @@ class OpenAICompatProvider(LLMProvider):
             error_type=error_meta.get("error_type"),
             error_code=error_meta.get("error_code"),
             error_status_code=error_meta.get("error_status_code"),
-            error_retry_after_s=error_meta.get("error_retry_after_s"),
+            error_retry_after_s=error_retry_after_s,
             error_should_retry=error_meta.get("error_should_retry"),
         )
 

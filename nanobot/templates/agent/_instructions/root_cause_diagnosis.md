@@ -27,6 +27,13 @@
 
 **优先用通用指令覆盖，避免为每个领域创建 skill。** 一条通用规则（如"先验证再修改"）可以覆盖多个领域场景，不需要每个写一个 skill。
 
+**⚠️ 关键区分：领域特化问题 ≠ 通用行为约束。** 如果问题只发生在特定场景（如 MGA cron 任务、期货分析、代码审查），这是领域特有的业务规则，应该走分类 3 修 SKILL.md，而不是修通用框架。
+
+**常见误判示例：**
+- ❌ "MGA cron 任务必须执行 OUTPUT GATE 校验" → 这是 MGA 特有的业务规则，应该修 `market-game-analysis/SKILL.md`
+- ❌ "期货分析必须先加载 skill" → 这是 MGA 场景的 skill 加载规则，应该修 `market-game-analysis/SKILL.md`
+- ✅ "所有任务都必须先 skill_search 再 read_file" → 这是通用框架行为约束，可以修框架
+
 **你无法直接访问运行时动态构建的完整 system prompt。** 但它的源模板和框架指令块在以下路径，你可以用工具读取：
 - `{{ nanobot_path }}/templates/agent/_instructions/` — 框架指令块
 - `{{ nanobot_path }}/templates/agent/_snippets/` — 代码片段（通过 Jinja2 include 注入到 system prompt 中）
@@ -45,6 +52,7 @@
 2. 判断是否有已有规则覆盖，或是否可以新增一条通用规则替代
 3. 用 `read_file` 读相关文件，确认描述与当前内容是否一致（可能缺少、多余、或描述错误）
 4. 如果所有文件已有对应规则但 LLM 仍行为异常，则不是指令缺陷，重新考虑分类
+5. **重要**：如果问题描述包含具体场景名称（MGA、期货、市场博弈）、具体 skill 名称（market-game-analysis）、或具体业务术语，这是领域特化问题 → 走分类 3
 
 **→ 如果是：** {{ action_instruction or "修复 prompt/指令" }}
 

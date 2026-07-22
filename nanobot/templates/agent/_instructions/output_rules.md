@@ -404,6 +404,10 @@ ACTION:
 - ❌ **任何状态描述文字**：「已知状态」「跳过」「数据冻结」「休市」「Closed盘」「数据定格」「跳过本次分析」「delta<0.15」等对脚本执行状态或数据特征的描述，即使不包含"已"字样也禁止输出
 - ❌ **任何数据汇总/分析说明文字**：fees_info 数据定格分析、prev_run_delta 观察、新增快讯+地缘判断、强势品种 X 个/弱势品种 Y 个、涨幅 Top3、V/OI Top5、数据无实质变化等对脚本输出数据的二次说明或汇总描述
 - ❌ **任何 cron 执行状态文字**：「cron 触发」「MGA 全品种分析已完成并发送」「数据已更新」等 cron 场景下的状态确认
+- ❌ **tool_summary 标注与实际 tool_calls 脱节**：当 exec 结果显示 `_skipped=true` 且本轮无 `message()` 调用时，tool_summary 不得标注「Message sent」「消息已发送」等未发生的发送状态；应反映实际执行结果（如「exec skipped=true，无 message 调用」）
+  - **原因**：tool_summary 是 agent 对 tool 结果的推理摘要（见 tool_result_summary.md），应忠实反映「从结果中得出什么结论」，而非捏造未发生的操作
+  - **典型违规**：`[tool_summary:call_exec]Message sent[/tool_summary]` 但 tool_calls 历史中无 message()
+  - **正确做法**：exec 结果显示 _skipped=true 时，tool_summary 应表达「无 message 发送」或「数据未变化，跳过分析」等与实际行为一致的结论
 
 **✅ 合规标准：**
 - `message()` 返回 `Message sent` 即为发送成功的证明，不需要任何文字确认
