@@ -151,25 +151,34 @@ ACTION: 开始前将步骤列表记录在 context 中，每完成一步立即标
 2. git stash push → 暂存未提交修改
 3. git pull origin main → 拉取远程更新
 4. git stash pop / git stash pop --index → 恢复暂存内容（⚠️ 中间状态，不是完成点）
-5. 解决合并冲突（如有）→ git add 已解决的文件
-6. review diff → 确认变更内容
-7. re-fix（如有冲突未完全解决）→ 继续处理
-8. git commit → 提交合并结果
-9. git push → 推送到远程
+5. **验证 modified 文件** → `git stash pop` 后若 `git status` 仍显示 modified 文件，立即执行 `git diff <file>` 确认修改内容是否与远程一致：
+   - diff 为空 → 内容一致，状态正常
+   - diff 有内容 → 存在未合并的修改，需手动处理（进入步骤 6 冲突解决）
+   - ⚠️ 禁止：看到 modified 文件后假设「自动合并就没事」，跳过 diff 验证
+6. 解决合并冲突（如有）→ git add 已解决的文件
+7. review diff → 确认变更内容
+8. re-fix（如有冲突未完全解决）→ 继续处理
+9. git commit → 提交合并结果
+10. git push → 推送到远程
 ```
 
 **关键判断标准：**
-- `git stash pop` 后 → 仍需处理冲突、review、re-fix、commit、push
+- `git stash pop` 后 → 仍需验证 modified 文件（diff 确认）、处理冲突、review、re-fix、commit、push
+- `git stash pop` 后 `git status` 仍有 modified 文件 → **必须**立即 `git diff <file>` 验证，不允许跳过
 - 合并冲突标记存在时 → 未完成，task 未交付
 - 输出"审视已完成""修复完成"类结论前 → 验证所有步骤已执行
 
 **典型错误模式：**
 ```
 ❌ 完成步骤 1-4（git status / diff / stash push / pull）后输出"已完成"
-   → 遗漏：merge stash → review → re-fix → commit → push
-   → 根因：误将 pull 后的"无冲突"当作任务完成的信号，未识别 stash pop 后的冲突处理仍是未完成步骤
+   → 遗漏：验证 modified → merge stash → review → re-fix → commit → push
+   → 根因：误将 pull 后的"无冲突"当作任务完成的信号，未识别 stash pop 后仍有 modified 文件时需要 diff 验证
 
-✅ 完成步骤 1-9 后输出"审视已完成"
+❌ 完成步骤 1-5（stash pop + git status 显示 modified）后输出"已完成"
+   → 遗漏：diff 验证 modified 内容 → 冲突解决 → review → re-fix → commit → push
+   → 根因：看到 modified 文件后假设"自动合并就没事"，未用 diff 确认修改内容是否与远程一致
+
+✅ 完成步骤 1-10 后输出"审视已完成"
    → 每个 git 操作步骤都执行并验证后才输出结论
 ```
 

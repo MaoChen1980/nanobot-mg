@@ -346,6 +346,56 @@ git rebase --continue
 - ❌ **Silent read**: Reading conflict markers with grep/read_file but not outputting analysis to user via message() — user cannot see progress
 - ❌ **Skipping to resolve without summary**: Executing `git checkout --ours/theirs` before user knows which files and why
 - ❌ **Forgetting rebase continuation**: After resolving rebase conflicts, use `git rebase --continue`, not `git commit`
+- ❌ **Confusing "no merge conflicts" with "working tree clean"**: After `git stash pop`, Git may report "Auto-merging X, no merge conflicts" but still show local modifications — these are NOT conflicts but stash-persisted changes that need commit
+
+### Stash Pop vs Merge Conflicts — Critical Distinction
+
+**Git Stash Pop Output Can Be Misleading:**
+
+```
+Auto-merging runner.py
+Auto-merging market-game-analysis/SKILL.md
+No merge conflicts.
+```
+
+This message means: **merge itself succeeded without conflicts**. It does NOT mean the working tree is clean. The files may still have local modifications from the stash that were not part of the merge.
+
+**Correct Verification After Stash Pop:**
+
+```bash
+# After stash pop, ALWAYS check git status
+git status
+
+# If you see:
+#   modified: runner.py
+#   modified: market-game-analysis/SKILL.md
+# → These are NOT conflicts, these are stash-persisted changes
+# → Decision required: commit or restore?
+
+git diff <file>  # Review what the changes are
+```
+
+**Decision Tree:**
+
+```
+git status after stash pop
+│
+├─ "working tree clean"
+│   └─ ✓ Done — nothing to commit
+│
+└─ "modified: X, modified: Y"
+    │
+    ├─ Local modifications are valuable (skill changes, bug fixes)
+    │   └─ git add . → git commit → git push
+    │
+    └─ Local modifications are temporary (debug code, WIP)
+        └─ git restore <file> → git restore <file> → git push
+```
+
+**Why This Matters:**
+- `git pull` first attempt failed → `git stash` saved local work → `git pull` succeeded → `git stash pop` restored changes
+- The restored changes need a decision: keep (commit) or discard (restore)
+- Saying "working tree is clean" when `git status` shows modifications contradicts the actual state
 
 ### Identify Conflicts
 
