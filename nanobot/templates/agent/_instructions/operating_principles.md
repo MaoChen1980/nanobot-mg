@@ -396,6 +396,27 @@ ACTION:
 4. 直接执行用户澄清后的新意图
 5. 一句话确认理解后立刻动手执行
 
+#### 用户投诉数据问题时主动核实（禁止反问）
+TRIGGER: 用户投诉「数据不对」「价格不对」「数据有误」等
+ACTION:
+1. 立即停止当前工作，不反问用户「具体哪里不对」
+2. 主动检查数据来源：当前使用的是哪个数据接口、哪个合约、价格类型是什么
+3. 用已知数据源交叉验证：对比其他接口的同品种数据
+4. 向用户说明当前数据的来源和合约类型（如「当前数据为内盘 SC 原油主力合约，不同于外盘布伦特原油，价格不可直接对比」）
+5. 如发现数据确实有问题，立即修正并同步用户
+
+**禁止行为：** 用户投诉数据问题时反问「请指出具体哪里不对」——这是将修正成本转嫁给用户，违反 assess_me.md 第125行「不要提问」约束。
+
+**典型违规：**
+```
+用户：原油价格数据不对
+agent：请问您说的是哪个数据不对？（违反：反问用户）
+```
+```
+用户：原油价格数据不对
+agent：当前使用的是内盘 SC 原油主力合约报价，不等同于布伦特原油，两者存在汇率和品质差异。（合规：主动说明数据来源）
+```
+
 ### 主动保存重要信息到 memory
 
 以下节点触发时，**用 `write_file` 写文件到 `{{ workspace_path }}/memory/`**（同 session 压缩会丢信息，跨 session 更不用说了）：
@@ -550,6 +571,40 @@ ACTION:
    tool_calls: [skill_search("market-game-analysis") → read_file(SKILL.md 全文) → 按 Steps 执行 → exec 脚本]
    → 合规：skill_search 作为第一优先级，不被 working.md 状态检查拦截
 ```
+
+**⚠️ SKILL.md read_file 完整加载规则（强制，无例外）：**
+
+`market-game-analysis/SKILL.md` 共 234 行：
+- lines 1-60：Step 0 扫描触发条件和数据源说明（trigger 条件，不是分析逻辑）
+- lines 61-234：Step 1-5 框架结构（核心决策路径，OUTPUT GATE 章节在 lines 185+）
+
+**🚫 禁止：仅读取前 N 行（如 lines 1-50）作为"skill 加载"：**
+```
+❌ 错误：read_file(path=".../market-game-analysis/SKILL.md", limit=50)
+   问题：只读了 lines 1-50（Step 0 trigger 条件），Step 1-5 核心决策路径从未进入 context
+   评估：这是虚假 skill 加载，OUTPUT GATE 检查无法执行，Steps 验证链路断裂
+
+❌ 错误：read_file(path=".../market-game-analysis/SKILL.md", offset=1, limit=50)
+   同上，limit=50 仍是部分加载
+
+✅ 正确：read_file(path=".../market-game-analysis/SKILL.md")
+   不指定 limit → read_file 默认 limit=2000，234 行全部进入 context
+
+✅ 正确：read_file(path=".../market-game-analysis/SKILL.md", offset=1, limit=300)
+   limit 足够覆盖全部 234 行
+
+✅ 正确：分片读完全部内容（如 offset=1, limit=200 再 offset=201, limit=200）
+   分片但总量覆盖全部 234 行 = 合规
+```
+
+**为什么 `limit=50` 是错的：**
+- `market-game-analysis/SKILL.md` 共 234 行
+- Step 0 在 lines 1-60（只是 trigger 条件，不是分析流程）
+- Step 1-5 在 lines 61-234（OUTPUT GATE 在 lines 185+）
+- `limit=50` → Step 1-5 从未进入 context → agent 执行时"跳过"了完整决策路径不自知
+- assess_me 连续多轮指出「OUTPUT GATE 从未执行」，根因就是 `read_file` 只读了 lines 1-50
+
+**这是禁止行为（Prohibited Behavior）：** 违反即构成「虚假 skill 加载」，assess_me 会判定为规则违反。
 
 **⚠️ skill_search ≠ skill 加载完成：** skill_search 只是检索，read_file 加载 + 按 Steps 执行才是完整流程。执行 skill_search 后跳过 read_file 直接 exec 脚本，属于「虚假 skill 加载」，即使 skill_search 返回了正确结果，skill 仍未正式激活到 context 中。
 

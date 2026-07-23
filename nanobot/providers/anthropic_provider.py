@@ -124,6 +124,14 @@ class AnthropicProvider(LLMProvider):
                     elif lowered == "false":
                         should_retry = False
 
+            # 5xx server-side errors (overload, gateway timeout, etc.) are transient;
+            # the cluster will recover. Set should_retry=True and provide a
+            # conservative back-off hint if the server didn't give a Retry-After.
+            if should_retry is None and status_code is not None and status_code >= 500:
+                should_retry = True
+                if retry_after is None:
+                    retry_after = 30.0
+
             error_kind = LLMProvider._classify_error(e)
             error_type, error_code = LLMProvider._extract_error_type_code(body)
 
