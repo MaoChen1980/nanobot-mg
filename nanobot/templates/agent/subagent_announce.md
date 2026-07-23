@@ -1,3 +1,4 @@
+{# Subagent 结果公告模板 — orchestrator 接收 subagent 完成/退回结果时的结构化展示格式，含自检标记和时间统计 #}
 [Subagent '{{ label }}' {{ status_text }}]
 {% if status == "needs_review" %}⚠️ 自检发现问题，需要 Orchestrator 审查后再使用结果
 {% endif %}

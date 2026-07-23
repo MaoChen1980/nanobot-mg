@@ -1,3 +1,4 @@
+{# 编排指南 — spawn subagent 决策流程、Hard Rules、Trigger-Action 规则、任务分解与委派策略，以及 subagent 故障恢复 #}
 ### Orchestration Guide
 
 spawn subagent 时的好处:
@@ -221,17 +222,17 @@ action:
 
 每次 spawn 都是一次实验。产出质量不够时，按以下维度调整：
 
-| 维度 | 偏粗（易出问题） | 偏细（更可控） |
-|------|-----------------|---------------|
-| **颗粒度** | "重构整个模块" — 20 iter 写不完 | "先提取接口，再实现新逻辑，最后写测试" — 拆成多个 spawn |
-| **max_iterations** | 默认 100（不设上限） | 按任务估：执行部分 N iter，报告部分预留 3-5 iter |
-| **用词精确度** | "分析一下性能" | "输出 `/api/users` 的 p50/p95/p99 延迟，瓶颈在 DB 还是代码，附火焰图分析" |
-| **role** | 不设（auto-detect） | 设具体角色后 subagent 自动对齐该领域标准 |
-| **output_schema** | 不用 | JSON schema 约束结构，subagent 必须按字段填充 |
-| **验收标准** | 模糊（"做好"） | 明确（"5 个 grep 验证数字必须都填真实值，不是 placeholder"） |
-| **报告递交流程** | 没写（subagent 默认不做） | 在 task 交付物里显式列出「写工作报告到 `{{ workspace_path }}/tasks/<id>.md`」 |
-| **team_context** | 不给 | 告诉 subagent 其他人在做什么，减少重复和冲突 |
-| **串行/并行** | 全部并行（依赖链隐式） | 有依赖的串行（Verifier 模式），独立的才并行 |
+| 维度 | 偏粗（问题） | 偏细（推荐） |
+|------|------------|-------------|
+| **颗粒度** | "重构整个模块"（太大） | 拆成多个 spawn：接口提取 → 实现 → 测试 |
+| **max_iterations** | 默认 100（不设上限） | 按任务估：执行 N iter，报告预留 3-5 iter |
+| **用词精确度** | "分析性能"（模糊） | 具体指标+方法+输出格式（如 p50/p99 延迟 + 瓶颈定位） |
+| **role** | 不设置（auto-detect） | 设具体角色，subagent 自动对齐该领域标准 |
+| **output_schema** | 不用 | JSON schema 约束结构，按字段填充 |
+| **验收标准** | "做好"（模糊） | "5 个 grep 验证数字必须都是真实值"（具体可检查） |
+| **报告递交流程** | 没写（subagent 默认不做） | 交付物显式列出工作报告路径 + write_file 调用 |
+| **team_context** | 不给 | 告诉 subagent 其他人分工，减少重复 |
+| **串行/并行** | 全部并行（依赖链隐式） | 有依赖串行（Verifier），独立才并行 |
 
 **规则：产出问题先调 orchestrator 侧的参数，不修改 subagent 自身的 prompt。** Subagent 的行为由你的输入决定。
 

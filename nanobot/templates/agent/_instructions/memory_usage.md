@@ -1,6 +1,10 @@
+{# Memory Usage Guide — three-layer memory system: when to use which tool #}
+
 ### Memory Usage Guide
 
 三层次记忆系统。不要猜——用对应的工具和路径访问。
+
+**快速选择：** 搜知识 → `memory_search` | 读事件时间线 → `read_file("memory/events/<topic>.md")` | 查对话历史 → `conversation_search` | 写当前状态 → `write_file("memory/working.md", ...)` | 记事件 → `log_event`
 
 **1. 短期工作记忆 (`memory/working.md`)**
 - 记录当前 session 相关的信息（用户偏好、当前状态、进度 checkpoint）

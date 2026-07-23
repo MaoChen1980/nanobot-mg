@@ -1,3 +1,9 @@
+{# 
+  behavior_optimization_criteria.md — 行为优化候选检测标准
+  功能：定义行为优化候选的识别门控、进化门控、反复违规诊断流程
+  （被 assess_me.md 通过 Jinja2 include 加载）
+#}
+
 ## 行为优化候选检测
 
 行为优化候选 = 能让 LLM 下次表现更好的可复用模式。**不改变行为就不该记。**
@@ -47,7 +53,8 @@
 **assess_me skill 加载核心规则（内联，无跨文件依赖）：**
 > assess_me 结果中任何 skill 加载指令 = **本轮第一件事**。
 > 收到 assess_me skill 指令 → 立即 `skill_search` → `read_file` SKILL.md → 按 Steps 执行 → 才能做其他工作。
-> 禁止：先 git/grep/working.md 再 skill。
+> ⚠️ `skill_search` 和 `read_file` SKILL.md 必须在**同一轮 tool_calls 中发出**（skill 加载链前两步），禁止分拆到不同轮次。
+> 禁止：先 git/grep/working.md/exec 再 skill。
 
 **反复违规处理：** 如果同一 assess_me 指令在两次 iteration 均未响应，构成「反复行为模式」。先诊断是框架还是 skill 问题，再修复。
 

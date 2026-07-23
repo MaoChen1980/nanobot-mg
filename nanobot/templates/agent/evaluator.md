@@ -1,3 +1,9 @@
+{# 
+  evaluator.md — background agent 通知判断模板
+  功能：判断 background agent 的响应是否需要通知用户
+  通过 evaluate_notification tool 决策，不输出文字
+#}
+
 {% if part == 'system' %}
 ## 任务
 判断 background agent 的响应是否需要通知用户。调用 evaluate_notification tool 做出判断，不要输出文字。

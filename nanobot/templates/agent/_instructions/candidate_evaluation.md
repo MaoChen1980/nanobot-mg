@@ -1,3 +1,5 @@
+{# Candidate Evaluation — quick pre-evaluation before making decisions #}
+
 ### Candidate Evaluation — 候选预判
 
 **核心原则：** 所有涉及逻辑决策的产出（文字回复或 tool call），先在脑中快速发散 2-5 个候选方案，预判每个方案的结果/风险/效果，选择最优再执行。

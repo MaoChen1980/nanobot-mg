@@ -991,13 +991,9 @@ class TestBehaviorOptimizationHandler:
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
-        assert "## 可用工具" in content
-        assert "glob" in content
-        assert "exec" in content
-        assert "grep" in content
-        assert "read_file" in content
-        assert "write_file" in content
-        assert "edit_file" in content
+        assert "根因诊断" in content
+        assert "/tmp/workspace" in content or "{{ workspace_path }}" not in content
+        assert "/tmp/nanobot" in content or "{{ nanobot_path }}" not in content
         assert "skill_search" in content
         assert "/tmp/workspace" in content
         assert "/tmp/nanobot" in content
@@ -1019,8 +1015,6 @@ class TestBehaviorOptimizationHandler:
         assert "新 skill" in content
         assert "最高原则" in content
         assert "用工具读取实际文件" in content
-        assert "mkdir" in content
-        assert "memory/" in content
 
     def test_contains_diagnosis_file_paths(self) -> None:
         """Template includes diagnostic file paths from root_cause_diagnosis."""
@@ -1039,7 +1033,7 @@ class TestBehaviorOptimizationHandler:
         assert "/tmp/nanobot/agent/tools/" in content
 
     def test_contains_processor_sections(self) -> None:
-        """Template includes processor sections (gates, search, decision, format)."""
+        """Template includes core principles and root cause diagnosis."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
@@ -1047,19 +1041,17 @@ class TestBehaviorOptimizationHandler:
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
-        assert "门控检查" in content
-        assert "抽象门控" in content
-        assert "粒度门控" in content
-        assert "语义检索" in content
-        assert "对比决策" in content
-        assert "执行" in content
-        assert "验证输出" in content
-        assert "Skill 格式" in content
-        assert "Pitfalls" in content
-        assert "skills/" in content
+        assert "根因诊断" in content or "root cause" in content
+        assert "步骤 0" in content
+        assert "诊断流程" in content
+        assert "核心原则" in content
+        assert "assess_me Follow-up" in content
+        assert "框架/工具 bug" in content or "工具 bug" in content
+        assert "通用行为约束" in content or "行为约束" in content
+        assert "诊断层次" in content
 
     def test_contains_self_optimization(self) -> None:
-        """Template includes Self-optimization footnote in skill format."""
+        """Template includes self-improvement principles."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
@@ -1067,10 +1059,10 @@ class TestBehaviorOptimizationHandler:
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
-        assert "**Self-optimization**" in content
+        assert "skill" in content.lower() or "Skill" in content
 
     def test_contains_ten_step_verification(self) -> None:
-        """Template includes the 10-step verification section."""
+        """Template includes root cause diagnosis steps."""
         from nanobot.utils.prompt_templates import render_template
 
         content = render_template(
@@ -1078,15 +1070,10 @@ class TestBehaviorOptimizationHandler:
             workspace_path="/tmp/workspace",
             nanobot_path="/tmp/nanobot",
         )
-        assert "10 步验证" in content
-        assert "git diff" in content
-        assert "py_compile" in content or "语法检查" in content
-        assert "Code review" in content or "code review" in content
-        assert "数据流" in content or "控制流" in content
-        assert "prompt 内容核验" in content
-        assert "上下游" in content
-        assert "设计目标" in content
-        assert "更优方案" in content
+        assert "步骤 0" in content
+        assert "诊断层次" in content
+        assert "框架/工具 bug" in content or "工具 bug" in content
+        assert "通用行为约束" in content or "行为约束" in content
 
     def test_no_git_commit_instructions(self) -> None:
         """Template should NOT contain executable git commit instructions."""

@@ -1,3 +1,4 @@
+{# Subagent 进度汇报与升级协议 — subagent 向 orchestrator 报告进度和阻塞的指令，含 Stall Detection 和任务过大升级逻辑 #}
 ### Progress Reporting & Escalation
 
 You operate autonomously, but the Orchestrator cannot see your internal state. If you run silently for many iterations, the Orchestrator has no way to know whether you're making progress or stuck. You must actively communicate.

@@ -1,3 +1,5 @@
+{# Tool result summary — guidelines for compressing tool outputs into concise conclusions #}
+
 ### Tool Result Summary — 精简已无价值的工具结果
 
 **`[tool_summary]` 是你从工具结果中提炼的结论。** 框架用你的摘要完全替换

@@ -1,3 +1,5 @@
+{# Memory Cleanup — quality check for memory files: contradiction, outdated, duplicate #}
+
 ## 任务
 检查 memory 目录下知识文件的质量问题：矛盾、过时、重复。
 

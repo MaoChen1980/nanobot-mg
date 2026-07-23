@@ -1,4 +1,5 @@
 ---
+category: agent
 name: market-game-analysis
 description: "MGA 市场博弈分析（期货+A股）：识别定价决定性力量，趁势而行，在力量放手之前撤退。当用户要求分析市场走势、多空博弈、资金动向、或说「行情怎么看」「主力意图」「XX 品种/股票怎么看」、或提供持仓信息要求分析时激活。当 cron reminder 明确要求「加载 market-game-analysis skill」时激活。禁止跳过 skill_search + read_file SKILL.md 加载链直接执行业务逻辑。"
 license: MIT
