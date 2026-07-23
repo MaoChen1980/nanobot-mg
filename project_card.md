@@ -1,6 +1,6 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-07-24T01:36:55+0800
+Last scanned: 2026-07-24T05:14:42+0800
 Project root: `E:\claude\nanobot-mg`
 
 ## Overview
@@ -11,13 +11,13 @@ Project root: `E:\claude\nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~103,042
+- **Approx LOC**: ~103,197
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 390 | ~102,435 |
+| Python | 390 | ~102,590 |
 | Shell | 8 | ~607 |
 
 ## Directory Structure
@@ -85,7 +85,7 @@ E:\claude\nanobot-mg/
         list_subagents.py (1KB)
         log_event.py (5KB)
         memory_search.py (6KB)
-        message.py (6KB)
+        message.py (8KB)
         notify_orchestrator.py (2KB)
         output_cache.py (3KB)
         reframe.py (5KB)

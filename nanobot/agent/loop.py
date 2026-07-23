@@ -1083,7 +1083,7 @@ class AgentLoop:
                     task.add_done_callback(
                         _make_fix_done_callback(loop, dedup_key)
                     )
-                    logger.info("assess_me: spawning fix sub-agent for behavior_optimization=%s", skill_pattern)
+                    logger.info("assess_me: spawning fix sub-agent for behavior_optimization={}", skill_pattern)
                 else:
                     logger.info("assess_me: fix already in-flight for this item — skipping")
 
@@ -1250,7 +1250,7 @@ class AgentLoop:
         from pathlib import Path
         import nanobot
 
-        logger.info("Fix sub-agent: building for behavior_pattern=%s", behavior_pattern)
+        logger.info("Fix sub-agent: building for behavior_pattern={}", behavior_pattern)
 
         system_prompt = render_template(
             "agent/behavior_optimization_handler.md",
