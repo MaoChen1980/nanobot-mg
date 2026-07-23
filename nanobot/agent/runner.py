@@ -137,6 +137,9 @@ class AgentRunSpec:
     # Tool names to suppress/block during assess_me suppress phases (e.g. message/notify).
     # When set, execute_tools will skip these tools and return a suppressed result.
     suppress_tool_names: tuple[str, ...] = ()
+    # Internal flag set by convergence guard to force next LLM response to content="".
+    # Set via assess_me_callback -> AssessResult.force_zero_content. Used internally.
+    force_zero_content: bool = False
 
 
 @dataclass(slots=True)
