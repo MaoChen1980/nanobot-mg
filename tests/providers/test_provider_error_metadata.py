@@ -103,7 +103,6 @@ def test_openai_handle_error_5xx_overload_error_is_transient() -> None:
         pass
 
     err = FakeServerError("overloaded")
-    err.status_code = 529
     err.response = SimpleNamespace(
         status_code=529,
         headers={},
@@ -119,6 +118,33 @@ def test_openai_handle_error_5xx_overload_error_is_transient() -> None:
     # 5xx should trigger retry
     assert response.error_should_retry is True
     # Conservative 30 s back-off when no Retry-After header
+    assert response.error_retry_after_s == 30.0
+
+
+def test_openai_handle_error_5xx_without_direct_status_code() -> None:
+    """HTTP 5xx where status_code is on .response, not the exception itself (mimics openai.InternalServerError)."""
+
+    class FakeServerError(Exception):
+        pass
+
+    err = FakeServerError("Error code: 529 - overloaded_error")
+    # Mimic openai.InternalServerError: no .status_code directly on exception,
+    # only on .response. This is the real-world pattern that caused the bug.
+    err.response = SimpleNamespace(
+        status_code=529,
+        headers={},
+        text='{"type": "overloaded_error", "message": "当前为整点高峰时段，服务器短暂繁忙"}',
+    )
+    err.body = {"type": "overloaded_error", "message": "当前为整点高峰时段，服务器短暂繁忙"}
+
+    response = OpenAICompatProvider._handle_error(err)
+
+    assert response.finish_reason == "error"
+    assert response.error_status_code == 529
+    assert response.error_type == "overloaded_error"
+    # 5xx must trigger retry even when status_code is only on .response
+    assert response.error_should_retry is True
+    # retry_after must be 30 s default, not None (the original bug)
     assert response.error_retry_after_s == 30.0
 
 
