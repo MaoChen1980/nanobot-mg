@@ -141,6 +141,11 @@ class BaseProxyChannel:
             self._writer.write((json.dumps(register_msg) + "\n").encode())
             await self._writer.drain()
             resp_line = await self._reader.readline()
+            if not resp_line:
+                raise ConnectionError(
+                    "Hub closed connection during registration — "
+                    "check Hub is running and proxy config is valid"
+                )
             resp = json.loads(resp_line.decode())
             if resp.get("success"):
                 logger.info("Registered with Hub via TCP")
@@ -230,6 +235,11 @@ class BaseProxyChannel:
         self._writer.write((json.dumps(register_msg) + "\n").encode())
         await self._writer.drain()
         resp_line = await self._reader.readline()
+        if not resp_line:
+            raise ConnectionError(
+                "Hub closed connection during re-registration — "
+                "Hub may have restarted"
+            )
         resp = json.loads(resp_line.decode())
         if not resp.get("success"):
             raise RuntimeError(f"Re-registration with Hub failed: {resp}")
@@ -250,7 +260,11 @@ class BaseProxyChannel:
                 if not line:
                     logger.error("Hub TCP connection closed, exiting")
                     break
-                data = json.loads(line.decode())
+                try:
+                    data = json.loads(line.decode())
+                except json.JSONDecodeError:
+                    logger.warning("Background reader: non-JSON from hub, skipping")
+                    continue
                 if data.get("type") == "deliver":
                     try:
                         await self._handle_deliver(data)

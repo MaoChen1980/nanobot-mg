@@ -281,6 +281,7 @@ class HubTCPServer:
                             "Proxy registration rejected: {}:{} (pid={})",
                             channel, bot, pid,
                         )
+                        await _write(HubResponse(success=False, error="registration rejected").to_dict())
                         break
 
                     logger.info("Proxy registered: {}:{} (pid={})", channel, bot, pid)
