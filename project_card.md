@@ -1,7 +1,7 @@
 # Project Card: nanobot-mg
 
-Last scanned: 2026-07-10T04:43:45+0800
-Project root: `/Users/chenmao/projects/nanobot-mg`
+Last scanned: 2026-07-24T01:36:55+0800
+Project root: `E:\claude\nanobot-mg`
 
 ## Overview
 
@@ -11,26 +11,28 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
 - **Linter**: ruff
 - **CI/CD**: GitHub Actions (Test Suite)
 - **Type**: Python Library
-- **Approx LOC**: ~102,393
+- **Approx LOC**: ~103,042
 
 ### Language Breakdown
 
 | Language | Files | Approx LOC |
 |----------|-------|------------|
-| Python | 390 | ~101,786 |
+| Python | 390 | ~102,435 |
 | Shell | 8 | ~607 |
 
 ## Directory Structure
 
-/Users/chenmao/projects/nanobot-mg/
+E:\claude\nanobot-mg/
   docs/
+    assess-me-design/
+    ideas/
     agent-social-network.md (7KB)
     AGENTS.md (13KB)
     channel-plugin-guide.md (14KB)
     chat-apps.md (4KB)
     chat-commands.md (2KB)
     cli-reference.md (8KB)
-    configuration.md (25KB)
+    configuration.md (26KB)
     cron.md (13KB)
     deployment.md (5KB)
     mcp.md (15KB)
@@ -38,7 +40,7 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
     multiple-instances.md (7KB)
     my-tool.md (5KB)
     openai-api.md (7KB)
-    prompt-templates.md (31KB)
+    prompt-templates.md (32KB)
     python-sdk.md (8KB)
     quick-start.md (4KB)
     README.md (2KB)
@@ -48,7 +50,7 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
     transcription.md (2KB)
     troubleshooting.md (25KB)
     websocket.md (5KB)
-    webui.md (19KB)
+    webui.md (20KB)
   hooks/
     write_commit.py (1KB)
   images/
@@ -56,6 +58,7 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
     nanobot_arch.png (490KB)
     nanobot_logo.png (187KB)
     nanobot_webui.png (295KB)
+  memory/
   nanobot/
     agent/
       commands/
@@ -64,19 +67,19 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
         filesystem/
         mcp/
         shell/
-        __init__.py (338B)
+        __init__.py (352B)
         _section_utils.py (9KB)
-        _semantic_base.py (15KB)
-        analyze.py (7KB)
+        _semantic_base.py (16KB)
+        analyze.py (8KB)
         assess_me.py (3KB)
         base.py (15KB)
         cancel_subagent.py (1KB)
         check_subagent.py (2KB)
-        checkpoint.py (14KB)
+        checkpoint.py (15KB)
         conversation_search.py (5KB)
-        cron.py (19KB)
+        cron.py (21KB)
         danger.py (2KB)
-        debug_root_cause.py (11KB)
+        debug_root_cause.py (12KB)
         explore_module.py (21KB)
         file_state.py (8KB)
         list_subagents.py (1KB)
@@ -91,48 +94,48 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
         sandbox.py (2KB)
         scan_project.py (2KB)
         schema.py (2KB)
-        search.py (27KB)
+        search.py (28KB)
         self.py (21KB)
         semantic_search.py (4KB)
         send_file.py (6KB)
-        shell_validators.py (7KB)
+        shell_validators.py (10KB)
         skill_search.py (3KB)
         spawn.py (9KB)
         tell_subagent.py (2KB)
         tool_call_log.py (3KB)
-        web.py (22KB)
+        web.py (23KB)
       __init__.py (584B)
-      assess_me.py (8KB)
-      compress.py (18KB)
+      assess_me.py (11KB)
+      compress.py (19KB)
       compressor.py (7KB)
-      context.py (53KB)
-      context_vars.py (961B)
-      db.py (23KB)
+      context.py (55KB)
+      context_vars.py (985B)
+      db.py (24KB)
       hook.py (9KB)
       llm_context.py (2KB)
-      loop.py (85KB)
+      loop.py (92KB)
       loop_checkpoint.py (6KB)
       loop_constants.py (1KB)
       loop_dispatch.py (6KB)
       loop_hook.py (11KB)
       loop_mcp.py (2KB)
-      loop_message_handlers.py (27KB)
+      loop_message_handlers.py (30KB)
       loop_utils.py (3KB)
       memory.py (352B)
-      memory_extractor.py (84KB)
+      memory_extractor.py (86KB)
       memory_store.py (20KB)
       memory_vector.py (26KB)
       message_pipe.py (8KB)
       project_scanner.py (21KB)
-      runner.py (72KB)
-      runner_constants.py (552B)
+      runner.py (82KB)
+      runner_constants.py (566B)
       runner_context.py (8KB)
-      runner_execution.py (8KB)
+      runner_execution.py (10KB)
       runner_injection.py (5KB)
       runner_llm.py (7KB)
       runner_retry.py (4KB)
       skills.py (15KB)
-      subagent.py (31KB)
+      subagent.py (32KB)
       subagent_prompt.py (5KB)
       subagent_status.py (2KB)
       subagent_tools.py (4KB)
@@ -140,10 +143,6 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
       __init__.py (46B)
       server.py (25KB)
     bus/
-      __init__.py (236B)
-      events.py (1KB)
-      manager.py (4KB)
-      queue.py (1KB)
     cli/
     command/
     config/
@@ -155,6 +154,7 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
     onboard/
     providers/
     proxy/
+    scripts/
     security/
     session/
     skills/
@@ -163,11 +163,13 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
     web/
     __init__.py (1KB)
     __main__.py (147B)
-    _commit.py (54B)
+    _commit.py (56B)
     nanobot.py (8KB)
     project_card.md (4KB)
   scripts/
+  tasks/
   tests/
+  AGENTS.md (10KB)
   CONTRIBUTING.md (4KB)
   docker-compose.yml (701B)
   Dockerfile (995B)
@@ -182,7 +184,6 @@ Project root: `/Users/chenmao/projects/nanobot-mg`
   setup.py (6KB)
   setup.sh (634B)
   THIRD_PARTY_NOTICES.md (6KB)
-  uv.lock (1365KB)
 
 ## Key Configuration
 

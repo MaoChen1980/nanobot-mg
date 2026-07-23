@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from nanobot.agent.assess_me import is_assessment_message, is_debug_root_cause_message, contains_suppress_output_marker  # noqa: F401
 from nanobot.agent.context import ContextState, _sanitize_session_key
+from nanobot.agent.tools.message import strip_framework_markers
 
 from nanobot.bus.events import OutboundMessage
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
@@ -574,6 +575,13 @@ class UserMessageHandler:
             final_content = ""
         elif final_content is None:
             final_content = ""
+        else:
+            # Strip framework-internal markers (e.g. [assess]...[/assess]) before
+            # sending to external channels. This is a safety net — the model and
+            # message tool should not emit these, but if they do they must not reach
+            # the user.
+            final_content = strip_framework_markers(final_content)
+
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
         meta = dict(msg.metadata or {})

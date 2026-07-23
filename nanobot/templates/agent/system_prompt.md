@@ -188,6 +188,11 @@ assistant response content = ""
 
 
 
+{% if always_skills %}
+══════════════
+{{ always_skills }}
+{% endif %}
+
 {% if runtime_context %}
 ══════════════
 ## Runtime Context

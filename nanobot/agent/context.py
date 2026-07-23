@@ -119,6 +119,8 @@ class ContextBuilder:
         self._memory_quality_cache: tuple[float, str] | None = None
         # Gate: only rebuild tools index once per session (mtime cache avoids redundant disk writes)
         self._tools_index_built = False
+        # Always-skills cache — populated in warmup(), used in build_system_prompt()
+        self._always_skills: list[str] = []
 
 
     def warmup(self) -> None:
@@ -127,7 +129,7 @@ class ContextBuilder:
         self.memory.read_memory()
         self._load_bootstrap_files()
         self.skills.build_skills_summary()
-        self.skills.get_always_skills()
+        self._always_skills = self.skills.get_always_skills()
         # Preload embedding model in background — loading SentenceTransformer
         # synchronously blocks the event loop for ~8s, starving proxy heartbeats.
         threading.Thread(
@@ -171,6 +173,11 @@ class ContextBuilder:
         _t0 = time.time()
         identity = self._get_identity(channel=channel)
 
+        # Auto-inject always-skills into system prompt
+        always_skills_content = ""
+        if self._always_skills:
+            always_skills_content = self.skills.format_skills_for_context(self._always_skills)
+
         tools = None
         # Tools are sent via the API's structured `tools` parameter (full schema + description).
         # A prose summary in the system prompt is redundant — the model reads the API param natively.
@@ -195,6 +202,8 @@ class ContextBuilder:
             tools=tools,
             bootstrap=bootstrap or None,
             runtime_context=runtime_context,
+            # Always-skills auto-injected into system prompt
+            always_skills=always_skills_content,
             # Workspace path — used by included templates (framework_core etc.)
             workspace_path=self._workspace_path_str,
             # Session-scoped paths (full and relative)

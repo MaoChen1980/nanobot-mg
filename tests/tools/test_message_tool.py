@@ -2,9 +2,74 @@ import os
 
 import pytest
 
-from nanobot.agent.tools.message import MessageTool
+from nanobot.agent.tools.message import MessageTool, strip_framework_markers
 from nanobot.bus.events import OutboundMessage
 from nanobot.config.paths import get_workspace_path
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        # [assess]...[/assess] block stripped
+        (
+            "Here is the result.\n[assess]\nSome calibration text.\n[/assess]\nDone.",
+            "Here is the result.\nDone.",
+        ),
+        # [debug_root_cause] block stripped
+        (
+            "[debug_root_cause]Root cause analysis[/debug_root_cause]\nUser sees this.",
+            "User sees this.",
+        ),
+        # [tool_summary] block stripped
+        (
+            "[tool_summary]tool call info[/tool_summary]\nReal content.",
+            "Real content.",
+        ),
+        # truncated chars placeholder stripped
+        (
+            "First line\n(truncated, 1234 chars)\nSecond line",
+            "First line\nSecond line",
+        ),
+        # [...] truncated marker stripped (3 dots variant)
+        (
+            "Start [...100 characters truncated] End",
+            "Start  End",
+        ),
+        # <!-- no-assess --> stripped (consecutive newlines collapsed)
+        (
+            "Text\n<!-- no-assess -->\nmore text",
+            "Text\nmore text",
+        ),
+        # [assess_me] stripped (leaves spaces/words on either side untouched)
+        (
+            "Content [assess_me] extra",
+            "Content  extra",
+        ),
+        # case-insensitive
+        (
+            "[ASSESS]inner[/ASSESS] clean",
+            "clean",
+        ),
+        # no markers — unchanged
+        ("Just user content.", "Just user content."),
+        ("", ""),
+    ],
+)
+def test_strip_framework_markers(raw: str, expected: str) -> None:
+    assert strip_framework_markers(raw) == expected
+
+
+@pytest.mark.asyncio
+async def test_message_tool_strips_framework_markers() -> None:
+    sent: list[OutboundMessage] = []
+
+    async def _send(msg: OutboundMessage) -> None:
+        sent.append(msg)
+
+    tool = MessageTool(send_callback=_send)
+    dirty = "Real data.\n[assess]calibration[/assess]\nMore data."
+    await tool.execute(content=dirty, channel="feishu", chat_id="chat1")
+    assert sent[0].content == "Real data.\nMore data."
 
 
 @pytest.mark.asyncio

@@ -8,10 +8,41 @@ from typing import Any
 
 from loguru import logger
 
+import re
+
 from nanobot.agent.tools.base import Tool, tool_parameters
 from nanobot.agent.tools.schema import p, build_parameters_schema
 from nanobot.bus.events import OutboundMessage
 from nanobot.config.paths import get_workspace_path
+
+# Framework-level markers that must never reach external channels.
+# These are system-internal signals, not user-facing content.
+_FRAMEWORK_MARKER_PATTERNS = [
+    re.compile(r"\[assess\][\s\S]*?\[/assess\]", re.IGNORECASE),
+    re.compile(r"\[debug_root_cause\][\s\S]*?\[/debug_root_cause\]", re.IGNORECASE),
+    re.compile(r"\[tool_summary\][\s\S]*?\[/tool_summary\]", re.IGNORECASE),
+    re.compile(r"\(truncated,\s*\d+\s*chars\)", re.IGNORECASE),
+    re.compile(r"\[\.\.\.\d+\s*characters?\s*truncated\]", re.IGNORECASE),
+    re.compile(r"<!--\s*no-assess\s*-->", re.IGNORECASE),
+    re.compile(r"\[assess_me\]", re.IGNORECASE),
+]
+
+
+def strip_framework_markers(text: str) -> str:
+    """Remove framework-internal markers from message content.
+
+    These markers (e.g. [assess]...[/assess]) are injected by the system for
+    cognitive calibration and must not reach external channels (Feishu, etc.).
+
+    After stripping, normalizes internal whitespace by collapsing consecutive
+    blank lines into a single newline so removed blocks don't leave gaps.
+    """
+    for pattern in _FRAMEWORK_MARKER_PATTERNS:
+        text = pattern.sub("", text)
+    # Collapse 2+ consecutive newlines to a single blank line after block
+    # removal, preventing large gaps from removed markers.
+    text = re.sub(r"\n{2,}", "\n", text)
+    return text.strip()
 
 
 @tool_parameters(
@@ -117,7 +148,8 @@ class MessageTool(Tool):
         **kwargs: Any
     ) -> str:
         from nanobot.agent.loop_utils import strip_think
-        content = strip_think(content)
+        # Strip think blocks first, then framework markers before external delivery.
+        content = strip_framework_markers(strip_think(content))
 
         if buttons is not None:
             if not isinstance(buttons, list) or any(
