@@ -43,15 +43,15 @@ metadata:
 >
 > **时序强制（全部在同一轮 tool_calls 执行，禁止拆分）：**
 > 1. `skill_search("market-game-analysis", k=6)` → 返回 SKILL.md 路径
-> 2. `read_file(SKILL.md, offset=1, limit=331)` → **必须覆盖完整 SKILL.md（331行）**，不得截断到前 20 行就跳过
-> 3. 验证触发条件（见下方 5 项）
+> 2. `read_file(SKILL.md, offset=1, limit=451)` → **必须覆盖完整 SKILL.md（451行）**，不得截断到前 20 行就跳过
+> 3. 验证触发条件（见下方 6 项）
 > 4. 按 Steps 执行（三元逻辑：Step 1 匹配新闻 → Step 2 识别资金 → Step 4 量价印证 → Step 5 退出信号）
 > 5. exec 数据获取
 > 6. message 发送
 
 **⚠️ 读取完整性强制：**
-- `read_file` 必须指定 `limit=331`（完整行数）
-- 仅读取 lines 1-20 不满足要求 —— Steps 1-5/框架结构图/数据获取规范在后 311 行
+- `read_file` 必须指定 `limit=451`（完整行数）
+- 仅读取 lines 1-20 不满足要求 —— Steps 1-5/框架结构图/数据获取规范在后 431 行
 - action 标签（「可持」「不追空」「观望」等）必须对照 Step 4 量价印证标准生成，不能用脚本内置逻辑替代
 
 **DCE 降级处理：**
@@ -61,9 +61,11 @@ metadata:
 
 **禁止行为：**
 - ❌ 在 read_file SKILL.md 之前执行任何 exec/web_fetch 业务逻辑
+- ❌ **收到 cron reminder 后先 exec market-scan.mjs，再声称"稍后加载 skill"；必须先 skill_search + read_file 再 exec**
+- ❌ **以"上一轮已加载"为由跳过当前轮的 skill_search + read_file；每轮 cron reminder 触发时必须重新加载（每轮重载原则）**
 - ❌ 用 grep 代替 skill_search 定位 SKILL.md
 - ❌ 声称"已加载 skill"但未完成 skill_search + read_file 全链路
-- ❌ read_file 只读前 20 行就跳过完整加载（lines 21-331 含核心 Steps）
+- ❌ read_file 只读前 20 行就跳过完整加载（lines 21-451 含核心 Steps）
 - ❌ DCE 数据获取失败时跳过 seat-data-tempfile skill 直接跳过该交易所
 - ❌ **分片读取 SKILL.md 后，在 truncated=true 时执行业务逻辑（exec/web_fetch/web_search）；必须分片读至 truncated=false**
 - ❌ **在 truncated=true 时错误判定「已获取足够信息执行 Steps」——必须完成完整加载后才可判定是否足以执行**
@@ -77,11 +79,13 @@ metadata:
 | 条件 | 标准 | 未通过处理 |
 |------|------|-----------|
 | cron reminder 明确要求加载 skill | payload 含「market-game-analysis」或「MGA」 | 不走 skill 加载链 |
-| agent 尚未执行 skill_search | 当前轮次无 skill_search 调用 | 必须执行 skill_search |
-| agent 尚未 read_file SKILL.md | 当前轮次无 read_file 调用 | 必须 read_file 全文 |
-| SKILL.md 路径有效 | `/nanobot/skills/market-game-analysis/SKILL.md` 或 skill_search 返回路径 | 用 skill_search 重新定位 |
+| **⚠️ 当前轮次尚未执行 skill_search** | 当前轮次无 `skill_search("market-game-analysis")` 调用 | **必须执行 skill_search；上一轮已加载不是跳过理由** |
+| **⚠️ 当前轮次尚未 read_file SKILL.md 全文** | 当前轮次无 `read_file(SKILL.md, limit=331)` 调用且 truncated≠false | **必须 read_file 全文（limit=331）；上一轮已加载不是跳过理由** |
+| SKILL.md 路径有效 | `skill_search` 返回路径或 `E:\...\SKILL.md` | 用 skill_search 重新定位 |
 | cron 未进入压制期 | assess_me 无「findings + 压制指令」共存 | 按压制协议执行 |
 | **数据源可用且有效** | `market-scan.mjs` 已执行且返回有效报价数据（非空数组） | **数据无效时：禁止声称已发送报告；报告状态设为「待生成」并说明原因；不调用 message()** |
+
+> **⚠️ 每轮重载原则：** 收到 cron reminder 时，即使上一轮已完成 skill 加载，**当前轮次仍必须重新执行完整加载链**（skill_search + read_file）。上一轮加载记录不能替代当前轮次加载。
 
 ### 降级路径（5 项条件部分满足时）
 
