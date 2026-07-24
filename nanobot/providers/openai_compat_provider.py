@@ -1227,11 +1227,10 @@ class OpenAICompatProvider(LLMProvider):
         if retry_after_s is None and error_kind == "connection":
             retry_after_s = 30.0
         # 5xx overload errors get a 30 s default if no server hint is present.
-        # Use error_meta status code (already an int, or None) so this branch is
+        # Use status_code_val (already an int, or None) so this branch is
         # reachable even when the raw exception attribute is missing — e.g.
         # openai.InternalServerError carries status_code on .response, not directly.
-        status_code_int = error_meta.get("error_status_code")
-        if retry_after_s is None and status_code_int is not None and status_code_int >= 500:
+        if retry_after_s is None and status_code_val is not None and status_code_val >= 500:
             retry_after_s = 30.0
 
         return {

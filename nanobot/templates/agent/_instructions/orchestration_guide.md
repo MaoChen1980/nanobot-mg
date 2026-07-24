@@ -103,11 +103,25 @@ action:
 **TRIGGER: Subagent 结果到达**
 action:
   1. 检查结果是否符合验收标准
-  2. 更新 {{ tree_path }} 对应节点状态
-  3. **写 {{ team_board_path }}** — 将 Subagent 发现中值得共享的事实写入黑板（跨节点收益），同时移除黑板中已过时/无效的旧条目
-  4. 规划下一步——直接 spawn 新 subagent 或自己做，不等确认
-  5. 检查 {{ tree_path }} 是否全部 completed → 是则执行归档流程
-  6. 用 message 同步决策和进展给用户，详细透明
+  2. **立即调用 `list_subagents` 检查是否有 blocker** — 即使显示全部 completed，也必须检查各 subagent 的 blocker 状态
+  3. 有 blocker → **优先处理或确认这些错误已被修复**，在 blocker 解决前不得输出确定性结论（如「移植完成」「BUILD SUCCESSFUL」）
+  4. 无 blocker → 继续正常收尾流程
+  5. 更新 {{ tree_path }} 对应节点状态
+  6. **写 {{ team_board_path }}** — 将 Subagent 发现中值得共享的事实写入黑板（跨节点收益），同时移除黑板中已过时/无效的旧条目
+  7. 规划下一步——直接 spawn 新 subagent 或自己做，不等确认
+  8. 检查 {{ tree_path }} 是否全部 completed → 是则执行归档流程
+  9. 用 message 同步决策和进展给用户，详细透明
+
+**⚠️ Blocker 检查强制规则：**
+- 收到 subagent 结果后，第一件事是调用 `list_subagents` 确认 blocker 状态
+- subagent 报告了编译错误但 agent 未处理就声称「完成」→ 违反此规则
+- 输出「BUILD SUCCESSFUL」或「移植完成」前必须确认无 blocker
+
+**⚠️ 增量 BUILD 验证规则（Android 项目特有）：**
+- 增量 `assembleDebug` 成功 ≠ 新增文件已验证 — 增量 build 跳过未变更文件，新增源文件必须通过 **clean build** 验证
+- 输出「BUILD SUCCESSFUL」或「移植完成」前必须确认：
+  1. `list_subagents` 无 blocker
+  2. 增量 build 成功后追加 `clean assembleDebug`（或 `compileDebugKotlin --rerun-tasks`）验证新增文件被实际编译
 
 **TRIGGER: spawn subagent 后（进入并行执行阶段）**
 action:

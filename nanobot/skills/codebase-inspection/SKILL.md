@@ -128,6 +128,21 @@ Special pseudo-languages:
 2. **Markdown shows 0 code lines** — pygount classifies all Markdown content as comments, not code. This is expected behavior.
 3. **JSON files show low code counts** — pygount may count JSON lines conservatively. For accurate JSON line counts, use `wc -l` directly.
 4. **Large monorepos** — for very large repos, consider using `--suffix` to target specific languages rather than scanning everything.
-- **Self-optimization**: 此 Skill 执行结束时，要检查针对 skill 做出优化。
-  - Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
-  - Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
+5. **⚠️ Skill 加载不等于执行** — `skill_search` + `read_file` SKILL.md 只是加载，完整的 skill 执行必须包含 Steps 执行。加载不执行 = 未完成，assess_me 会标记为 `unused_skills`。
+6. **⚠️ exec 成功 ≠ 任务完成** — `pygount.command.main()` 成功返回（Exit:0）只说明命令执行无误，必须在 exec 结果返回后立即提取关键指标（总 Code 行数、语言占比、文件数）并输出。exec 成功后切换任务未保存结果 → assess_me 会标记为「未完成」。
+
+## Self-optimization
+
+此 Skill 执行结束时，要检查针对 skill 做出优化。
+
+**Verification 失败定义（必须全部满足才视为通过）：**
+- ✅ skill_search + read_file SKILL.md 全文已完成
+- ✅ 按 Steps 执行了分析操作（pygount 命令已执行）
+- ✅ 输出了量化结果（LOC/语言占比/文件数等）
+- ✅ exec 成功后立即提取并输出关键指标，未切换到其他任务
+- ❌ 仅加载 skill 但未执行 Steps → Verification 未通过，需修复
+- ❌ exec 成功后未保存结果即切换任务 → Verification 未通过，需修复
+
+**修复方向：**
+- Verification 未通过 → 加载 skill-manager 修复：修正步骤、补充边界情况、修复 bug
+- Verification 全部通过 → 加载 skill-manager 优化：简化步骤、增强执行确定性、改进验证标准
