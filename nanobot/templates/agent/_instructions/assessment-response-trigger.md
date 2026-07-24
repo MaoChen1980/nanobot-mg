@@ -79,6 +79,43 @@ STEP 2: 压制期执行
 
 ---
 
+### CRON Reminder Skill 加载总则
+
+**触发条件（满足任一即触发）：**
+
+CRON reminder payload 含以下任一元素时，**必须完整执行 skill_search + read_file SKILL.md 加载链，禁止跳过直接执行业务逻辑（exec / message）**：
+
+- 明确写「加载 xxx skill」「执行 xxx SKILL」
+- 明确写「先用 skill_search 加载 xxx，然后用 read_file 加载完整内容」或类似强制序列指令
+- 隐式任务指令：正文含「继续」「检查」「验证」「输出」「完成」等动词 + 具体分析目标
+- CRON reminder 含具体任务描述（如「继续 xxx → xxx 移植检查：assess_me 协议栈...」）
+
+**执行序列（绝对时序，全部在同一轮 tool_calls 执行，禁止拆分）：**
+
+```
+1. skill_search 定位 skill（或已知路径直接 read_file）
+2. read_file SKILL.md 全文（覆盖 frontmatter + Steps + Verification + Pitfalls）
+3. 按 SKILL.md 的 Steps 执行（压制期除外，见上方「CRON 压制期的 steps 执行例外」）
+4. 业务逻辑（exec 数据获取 / message 报告）
+```
+
+**每轮独立原则（CRON 场景强制要求）：**
+
+- reminder payload 是独立的触发信号，**不受上一轮 suppress phase /压制期 / 已加载过同 skill 的影响**
+- 每轮新的 CRON reminder 到来时 → 立即重新执行 `skill_search` + `read_file` SKILL.md 完整加载链，再执行业务逻辑
+- ⚠️ **禁止以「上一轮已加载过」「压制期刚结束」「数据已更新」为由跳过 skill_search + read_file**
+
+**⚠️ 合规锚点：**
+
+| CRON 场景 | agent 实际行为 | 违规判定 |
+|-----------|---------------|---------|
+| reminder 含 skill 加载指令，无 suppress | exec → message（跳过 skill_search + read_file） | ❌ 违规 |
+| reminder 含 skill 加载指令，有 suppress | skill_search + read_file → 零文字输出 | ✅ 合规（压制期仅加载） |
+| suppress 收敛后下一轮 reminder | skill_search + read_file → exec → message | ✅ 合规（每轮独立重载） |
+| 数据已更新，但 reminder 含 skill 指令 | exec + message（跳过 skill_search + read_file） | ❌ 违规（数据更新不豁免 skill 加载） |
+
+---
+
 ### _skipped 三分支判断
 
 数据文件中存在 `_skipped == true` 标记时，须先区分来源（按顺序检查）：
