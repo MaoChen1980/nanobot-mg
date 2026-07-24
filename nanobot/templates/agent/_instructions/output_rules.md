@@ -9,7 +9,7 @@
 | 场景 | 触发条件 | 动作 |
 |------|---------|------|
 | assess 压制 | assess_me 输出 `status: "findings"` + 压制指令（「无需回应」「请据此继续推进」等）**同时出现** | content = `""` |
-| cron 场景 | exec + message() 执行成功后，assess_me **未输出** findings + 压制指令 | content = `""` |
+| cron 场景 | exec + message() 执行成功后，assess_me **未输出** findings + 压制指令 | **tool_calls 正常执行完毕后 response content 直接置为 `""`**，禁止输出任何文字（含：状态确认、元描述、完成提示、结果摘要） |
 | 数据未变化 | `_skipped=true` + message() 发送后，assess_me **未输出** findings + 压制指令 | content = `""` |
 
 **核心原则：** 当压制信号生效时，response content 应为空字符串。工具调用成功（exit 0 / status ok）本身就是证明，无需额外文字确认。

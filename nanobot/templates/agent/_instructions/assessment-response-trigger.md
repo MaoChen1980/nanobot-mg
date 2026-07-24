@@ -90,6 +90,10 @@ STEP 2: 压制期执行
   - 明确要求执行 skill 或脚本（如「加载 xxx skill」「执行 xxx 脚本」）
   - 隐式任务指令（reminder 正文含「继续」「检查」「验证」「输出」「完成」「移植」等动词 + 明确目标）
   - **CRON reminder 含具体任务描述（如「继续 nanobot-mg → mobile-ai-agent 移植检查：assess_me 协议栈...」）** → 直接执行任务，禁止仅回显 reminder 文本
+- ⚠️ **每轮重载原则（CRON 场景强制要求）：即使本轮对话历史已加载过某 skill，每轮新的 cron reminder 到来时仍需重新执行 `skill_search` + `read_file` SKILL.md 加载链，再执行业务逻辑。**
+  - 判定标准：reminder payload 是否提到具体 skill 名称或明确要求执行某分析流程？→ 是则必须重载
+  - **禁止以「上一轮已加载过」为由跳过 skill_search + read_file**
+  - ⚠️ 合规锚点：MGA cron reminder 明确写「先用 skill_search 加载 market-game-analysis SKILL，然后用 read_file 加载完整内容」→ 该指令为 mandatory，必须遵守
 - ⚠️ 判断标准：reminder 正文是否包含「做什么」的具体指令？→ 是则执行，不是则回显
 - ✅ `message()` 发送报告 → content = `"`
 
