@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -81,7 +82,7 @@ def _format_datetime(dt: datetime) -> str:
 
 
 _UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*]')
-_TOOL_RESULT_PREVIEW_CHARS = 1200
+_TOOL_RESULT_PREVIEW_CHARS = 600
 _TOOL_RESULTS_DIR = "tool-results"
 _TOOL_RESULT_RETENTION_SECS = 7 * 24 * 60 * 60
 _TOOL_RESULT_MAX_BUCKETS = 32
@@ -197,6 +198,126 @@ def maybe_persist_tool_result(
         preview=preview,
         truncated_preview=len(text_payload) > _TOOL_RESULT_PREVIEW_CHARS,
     )
+
+
+def truncate_consumed_tool_results(
+    messages: list[dict],
+    *,
+    threshold: int = 600,
+    delay_rounds: int = 10,
+    workspace: Path | None = None,
+) -> None:
+    """Truncate old tool results that have aged beyond *delay_rounds* assistant turns.
+
+    In nanobot-mg, tool messages store their content as a **JSON wrapper**
+    produced by ``_normalize()`` (runner.py), e.g.::
+
+        {"status":"ok","tool":"read_file","result":"<actual content>",
+         "result_length":12000,"truncated":false,"result_file":null}
+
+    This function parses that JSON and operates only on the ``result`` field.
+
+    Steps:
+      1. Scan backwards to find the *delay_rounds*-th assistant from the end
+         → that index is the *boundary*.
+      2. For every ``role == "tool"`` message **before** the boundary:
+         - If ``result`` is a string that exceeds *threshold* chars and is not
+           already persisted (``truncated`` is false), save the full result to
+           ``workspace/tool-results/truncated/<hash>.txt`` and replace the
+           ``result`` field with head *threshold* chars + a ``read_file`` hint.
+         - Update ``result_length`` and set ``truncated`` to ``true``.
+      3. Messages at or after the boundary are left untouched.
+    """
+    if not messages or threshold <= 0:
+        return
+
+    # ── Find boundary: the *delay_rounds*-th assistant from the end ──
+    assistant_count = 0
+    boundary = -1
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "assistant" and messages[i].get("content"):
+            assistant_count += 1
+            if assistant_count == delay_rounds:
+                boundary = i
+                break
+
+    if boundary < 0:
+        return  # fewer rounds than delay_rounds — nothing to truncate
+
+    # ── Determine output dir if workspace is available ──
+    output_dir: Path | None = None
+    if workspace is not None:
+        output_dir = ensure_dir(workspace / _TOOL_RESULTS_DIR / "truncated")
+
+    for i in range(boundary):
+        m = messages[i]
+        if m.get("role") != "tool":
+            continue
+        content = m.get("content")
+        if not isinstance(content, str) or len(content) <= threshold:
+            continue
+
+        # Parse the JSON wrapper to get the actual result field
+        try:
+            payload = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            # Not JSON — treat as plain text (edge case)
+            if output_dir is not None:
+                c_hash = hashlib.md5(content.encode("utf-8")).hexdigest()[:12]
+                path = output_dir / f"tool_{c_hash}.txt"
+                if not path.exists():
+                    _write_text_atomic(path, content)
+                m["content"] = (
+                    f"{content[:threshold]}\n\n"
+                    f"--- 完整结果已截断 (原 {len(content)} 字符) ---\n"
+                    f"完整数据已保存到文件。如需继续处理，用 read_file 读取该文件:\n"
+                    f'read_file(path="{path}")\n'
+                    f"--- 截断结束 ---"
+                )
+            else:
+                m["content"] = content[:threshold] + "\n... (truncated)"
+            continue
+
+        if not isinstance(payload, dict):
+            continue
+
+        # Already persisted — leave it
+        if payload.get("truncated") is True:
+            continue
+
+        raw_result = payload.get("result")
+        if not isinstance(raw_result, str) or len(raw_result) <= threshold:
+            continue
+
+        # Skip content that was already persisted by maybe_persist_tool_result
+        if raw_result.startswith("[tool output persisted]"):
+            continue
+
+        if output_dir is not None:
+            # Save full result to file (dedup by content hash)
+            c_hash = hashlib.md5(raw_result.encode("utf-8")).hexdigest()[:12]
+            path = output_dir / f"tool_{c_hash}.txt"
+            if not path.exists():
+                _write_text_atomic(path, raw_result)
+
+            head = raw_result[:threshold]
+            payload["result"] = (
+                f"[tool output truncated]\n"
+                f"Full output saved to: {path}\n"
+                f"Original size: {len(raw_result)} chars\n"
+                f"Head:\n{head}\n"
+                f"--- 截断结束 ---\n"
+                f"如需完整数据，用 read_file 读取上述文件。"
+            )
+            payload["result_length"] = len(payload["result"])
+            payload["truncated"] = True
+            payload["result_file"] = str(path)
+            m["content"] = json.dumps(payload, ensure_ascii=False)
+        else:
+            # No workspace: truncate result in-place within the JSON wrapper
+            payload["result"] = raw_result[:threshold] + "\n... (truncated)"
+            payload["result_length"] = len(payload["result"])
+            m["content"] = json.dumps(payload, ensure_ascii=False)
 
 
 def split_message(content: str, max_len: int = 2000) -> list[str]:

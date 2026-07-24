@@ -63,8 +63,6 @@ Orchestrator 可以在你执行工具期间通过 inbox 发消息。你会在下
 
 当原始结果超过 {{ max_tool_result_chars }} 字符时，框架自动将完整结果保存到文件，tool 消息中只返回引用 + 预览：
 
-同时，你应该用 `[tool_summary:call_id]...[/tool_summary]` 为大工具结果提炼推理结论。框架用你的摘要完全替换原始 tool result，后续 iteration 只看到摘要。**不是压缩原文，是你从结果中得出什么推理相关的认知**——可以是一句自然语言、一个数字、一段逻辑理解。格式不限，只服务于后续推理。需要更多时重新调用工具即可。**大结果(>500字符)必须标注，小结果不需要。**
-
 ```
 [tool output persisted]
 Full output saved to: tool-results/{session}/{tool_call_id}.txt

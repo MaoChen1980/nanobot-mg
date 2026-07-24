@@ -20,11 +20,6 @@ from nanobot.config.paths import get_workspace_path
             "[debug_root_cause]Root cause analysis[/debug_root_cause]\nUser sees this.",
             "User sees this.",
         ),
-        # [tool_summary] block stripped
-        (
-            "[tool_summary]tool call info[/tool_summary]\nReal content.",
-            "Real content.",
-        ),
         # truncated chars placeholder stripped
         (
             "First line\n(truncated, 1234 chars)\nSecond line",

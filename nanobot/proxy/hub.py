@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import socket
 import time
 from typing import Any, Awaitable, Callable
@@ -19,15 +18,6 @@ from loguru import logger
 from nanobot.proxy.manager import ProxyManager
 from nanobot.proxy.protocol import HubResponse, ProxyMessage, outbound_to_hub_response
 from nanobot.utils.tool_hints import format_single_tool_hint
-
-# Regex to strip LLM-provided tool result summaries from final content.
-# Streaming already strips these (loop_hook._USER_TOOL_SUMMARY_RE), but
-# final_content preserves them for session bookkeeping.  Strip before
-# user-facing delivery and before comparing with streaming buffer.
-_SUMMARY_RE = re.compile(
-    r'\[tool_summary:([^\]]+)\](.*?)\[/tool_summary\]',
-    re.DOTALL,
-)
 
 
 class _PendingItem:
@@ -403,7 +393,7 @@ class HubTCPServer:
         """
 
         async def _on_outbound(outbound_msg: Any) -> None:
-            content = _SUMMARY_RE.sub("", outbound_msg.content or "")
+            content = outbound_msg.content or ""
             if not content:
                 return
             hub_resp = outbound_to_hub_response(outbound_msg, reply_to=msg.message_id)
@@ -598,13 +588,6 @@ class HubTCPServer:
         proxy_key = f"{msg.channel}:{msg.bot}"
         resp_dict = resp.to_dict()
         content = resp_dict.get("content", "")
-
-        # Strip tool_summary markers from final content before user-facing delivery.
-        # The markers are preserved in final_content for session bookkeeping
-        # (loop.py replaces them with tool results).
-        if content:
-            content = _SUMMARY_RE.sub("", content)
-            resp_dict["content"] = content
 
         if not content:
             logger.debug("Hub response empty — skipping deliver to proxy {}", proxy_key)

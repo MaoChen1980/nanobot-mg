@@ -2,19 +2,8 @@
 
 from __future__ import annotations
 
-import re
-
 _RUNTIME_CHECKPOINT_KEY = "runtime_checkpoint"
 _PENDING_USER_TURN_KEY = "pending_user_turn"
-
-# Regex for LLM-provided tool result summaries (see tool_result_summary instruction).
-# Strip tool_summary markers entirely (tag + content) from user-facing output.
-# The summary replaces the tool result in session history, not the assistant's
-# visible response.
-_SUMMARY_RE = re.compile(
-    r'\[tool_summary:([^\]]+)\](.*?)\[/tool_summary\]',
-    re.DOTALL,
-)
 
 # ----------------------------------------------------------------------
 # Retry / backoff defaults

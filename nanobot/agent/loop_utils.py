@@ -44,8 +44,6 @@ def strip_think(text: str | None) -> str | None:
     # Strip framework-internal metadata tags (must not reach external channels)
     text = re.sub(r"\[assess\][\s\S]*?\[/assess\]", "", text)
     text = re.sub(r"\[debug_root_cause\][\s\S]*?\[/debug_root_cause\]", "", text)
-    text = re.sub(r"\[tool_summary\][\s\S]*?\[/tool_summary\]", "", text)
-    text = re.sub(r"\[/tool_summary\]", "", text)
     text = re.sub(r"<!--\s*no-assess\s*-->", "", text)
     text = re.sub(r"\[assess_me\]", "", text)
     text = re.sub(r"\(truncated,\s*\d+\s*chars?\)", "", text)

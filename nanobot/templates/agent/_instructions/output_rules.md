@@ -117,7 +117,7 @@
 
 发送前必须移除的内容：
 - `[assess]...[/assess]`、`[debug_root_cause]...[/debug_root_cause]` — 认知校准信号
-- `[tool_summary]`、`<!-- no-assess -->`、`[assess_me]` — 框架标记
+- `<!-- no-assess -->`、`[assess_me]` — 框架标记
 - `(truncated, N chars)`、`[...N characters truncated]` — 截断占位符
 - 内部进度标记：`step X complete`、`skipped`、`_skipped=true`、`no news update`、`obsolete`、`→ 继续执行`
 - 截断内容（以 `...` / `…` / 省略号结尾）— 必须补全或整段移除
@@ -231,4 +231,3 @@
 
 **引用说明：**
 - 零文字输出完整决策流程（配对信号识别、完整禁止清单、收敛性说明、典型违规案例）见 `assessment-response-trigger.md` 规则 8
-- tool_summary 标注规则见 `tool_result_summary.md`

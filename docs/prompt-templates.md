@@ -63,7 +63,6 @@ nanobot/templates/                          # 模板根目录（Jinja2 FileSyste
 │   │   ├── skill_refinement.md             #   Skill 优化规则
 │   │   ├── subagent_escalation.md          #   Subagent 升级规则
 │   │   ├── task_tree.md                    #   任务树管理规则
-│   │   ├── tool_result_summary.md          #   工具结果摘要规则
 │   │   └── (其他指令文件...)
 │   └── _snippets/                          # ★ 可复用代码片段（Jinja2 {% include %}）
 │       ├── framework_core.md               #   框架核心信息（迭代循环、上下文窗口、记忆、skills等）
@@ -261,7 +260,6 @@ Preferred language ：
 | `skill_refinement.md` | 优化已有 skill 的规则 |
 | `subagent_escalation.md` | Subagent 遇到问题时的升级规则 |
 | `task_tree.md` | 任务树管理规则 |
-| `tool_result_summary.md` | 大型工具结果的摘要规则 |
 | `operating_principles_subagent.md` | Subagent 版本的操作原则 |
 | `output_rules_subagent.md` | Subagent 版本的输出规则 |
 

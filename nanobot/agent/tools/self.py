@@ -208,12 +208,12 @@ class SelfTool(Tool):
     @staticmethod
     def _format_status(st: SubagentStatus, indent: str = "  ") -> str:
         elapsed = time.monotonic() - st.started_at
-        tool_summary = ", ".join(
+        tool_names = ", ".join(
             f"{e.get('name', '?')}({e.get('status', '?')})" for e in st.tool_events[-5:]
         ) or "none"
         lines = [
             f"{indent}phase: {st.phase}, iteration: {st.iteration}, elapsed: {elapsed:.1f}s",
-            f"{indent}tools: {tool_summary}",
+            f"{indent}tools: {tool_names}",
             f"{indent}usage: {st.usage or 'n/a'}",
         ]
         if st.error:

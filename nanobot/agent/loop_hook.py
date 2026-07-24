@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from loguru import logger
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
-from nanobot.agent.loop_constants import _SUMMARY_RE as _USER_TOOL_SUMMARY_RE
 from nanobot.utils.progress_events import (
     build_tool_event_finish_payloads,
     build_tool_event_start_payload,
@@ -72,16 +71,10 @@ class _LoopHook(AgentHook):
     async def on_stream(self, context: AgentHookContext, delta: str) -> None:
         from nanobot.agent.loop_utils import strip_think
 
-        clean_buf = _USER_TOOL_SUMMARY_RE.sub("", self._stream_buf)
-        if len(clean_buf) != len(self._stream_buf):
-            matches = _USER_TOOL_SUMMARY_RE.findall(self._stream_buf)
-            marker_info = "; ".join(f"[{cid}]{summary[:60]}[/{cid}]" for cid, summary in matches)
-            logger.info("TOOL_SUMMARY: stripped markers from streaming (delta={} chars, markers: {})", len(self._stream_buf) - len(clean_buf), marker_info)
-        prev_clean = strip_think(clean_buf) or ""
+        prev_clean = strip_think(self._stream_buf) or ""
         prev_think = self._extract_think_content(self._stream_buf)
         self._stream_buf += delta
-        new_clean_buf = _USER_TOOL_SUMMARY_RE.sub("", self._stream_buf)
-        new_clean = strip_think(new_clean_buf) or ""
+        new_clean = strip_think(self._stream_buf) or ""
         new_think = self._extract_think_content(self._stream_buf)
 
         # Forward incremental non-think text
@@ -237,10 +230,6 @@ class _LoopHook(AgentHook):
     def finalize_content(self, context: AgentHookContext, content: str | None) -> str | None:
         if content is None:
             return None
-        # NOTE: do NOT strip [tool_summary] markers here — they must survive in
-        # result.messages so _append_turn_to_session can collect and replace
-        # tool results.  Streaming output is cleaned by on_stream(), and the
-        # non-streaming final_content is cleaned in _build_outbound().
         return self._loop._strip_think(content)
 
     def before_llm_call(

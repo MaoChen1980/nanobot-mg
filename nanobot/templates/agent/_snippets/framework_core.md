@@ -73,8 +73,6 @@ message(content="你好，查天气")
 
 原始结果超过 {{ max_tool_result_chars }} 字符时，框架自动保存到文件，tool 消息中只返回引用 + 预览。可用 `read_file` 读取完整内容。
 
-同时，你应该用 `[tool_summary:call_id]...[/tool_summary]` 为大工具结果提炼推理结论。框架用你的摘要完全替换原始 tool result。**大结果(>500字符)必须标注，小结果不需要。** 不是压缩原文，是你从结果中得出什么推理相关的认知。
-
 **格式参考：**
 ```
 [tool output persisted]

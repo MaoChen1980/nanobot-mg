@@ -31,6 +31,7 @@ from nanobot.utils.helpers import (
     format_timestamp_cst,
     maybe_persist_tool_result,
     split_thinking_messages,
+    truncate_consumed_tool_results,
     truncate_text,
 )
 from nanobot.utils.runtime import (
@@ -696,6 +697,16 @@ class AgentRunner:
                 spec, messages, initial_msg_count, _overflow_summary,
             )
             # --- END PROACTIVE COMPRESSION ---
+
+            # --- TRUNCATE CONSUMED TOOL RESULTS (abot-style) ---
+            truncate_consumed_tool_results(
+                messages,
+                threshold=600,
+                delay_rounds=10,
+                workspace=spec.workspace,
+            )
+            # --- END TRUNCATE CONSUMED TOOL RESULTS ---
+
             try:
                 messages_for_model = strip_bypassed_tool_messages(messages)
                 messages_for_model = deduplicate_tool_call_ids(messages_for_model)
@@ -1489,11 +1500,6 @@ class AgentRunner:
             return
         if messages and messages[-1].get("role") == "assistant" and not messages[-1].get("tool_calls"):
             existing = messages[-1].get("content", "")
-            # Don't overwrite content containing tool_summary markers —
-            # _append_turn_to_session needs them to replace tool results.
-            if isinstance(existing, str) and "[tool_summary:" in existing:
-                messages.append({"role": "assistant", "content": content})
-                return
             messages[-1]["content"] = content
             return
         messages.append({"role": "assistant", "content": content})

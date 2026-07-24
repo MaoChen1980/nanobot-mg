@@ -57,7 +57,6 @@ from .loop_constants import (
     _DEFAULT_RETRY_BACKOFF_MULTIPLIER,
     _PENDING_USER_TURN_KEY,
     _RUNTIME_CHECKPOINT_KEY,
-    _SUMMARY_RE,
 )
 from .loop_dispatch import DispatchManager
 from .loop_mcp import close_mcp as _close_mcp
@@ -928,10 +927,7 @@ class AgentLoop:
 
         # (IV markers re-entry and completion detection removed)
 
-        # Strip tool_summary markers from user-facing final_content.
-        # Markers must remain in result.messages so _append_turn_to_session
-        # can collect summaries and replace tool results.
-        fc = _SUMMARY_RE.sub("", result.final_content) if result.final_content else None
+        fc = result.final_content
 
         if result.stop_reason == "max_iterations":
             logger.warning("Max iterations ({}) reached", self.max_iterations)
@@ -1615,40 +1611,8 @@ class AgentLoop:
         Appends ``messages[skip:]`` into ``session.messages``, stripping
         runtime-only blocks and oversized tool results. Does **not** persist
         to storage — call ``sessions.save()`` separately if needed.
-
-        Also replaces tool results with LLM-provided summaries when the model
-        annotated them with ``[tool_summary:call_id]...[/tool_summary]``
-        in a subsequent assistant message (see tool_result_summary instruction).
         """
         from datetime import datetime, timezone
-
-        # ── collect LLM-provided tool summaries ──
-        _tc_summary: dict[str, str] = {}
-        # Track read_file calls on instructional paths — never replace these
-        # with summaries since the LLM needs the full content for correct behavior.
-        _protected_read: set[str] = set()
-        _INSTRUCTIONAL_PATHS = ("skills/", "framework/", "memory/", "SOUL.md", "USER.md", "TOOLS.md")
-        for m in messages[skip:]:
-            if m.get("role") != "assistant":
-                continue
-            content = m.get("content", "")
-            if isinstance(content, str):
-                for match in _SUMMARY_RE.finditer(content):
-                    cid, summary = match.group(1), match.group(2).strip()
-                    if summary and cid not in _tc_summary:
-                        _tc_summary[cid] = summary
-                        logger.info("TOOL_SUMMARY: collected summary for call_id={} ({} chars) {!r}", cid, len(summary), summary[:120])
-            # Collect protected read_file call_ids (instructional paths)
-            for tc in m.get("tool_calls") or ():
-                if tc.get("function", {}).get("name") != "read_file":
-                    continue
-                try:
-                    args = json.loads(tc["function"].get("arguments", "{}"))
-                    path = args.get("path", "")
-                except (json.JSONDecodeError, KeyError, TypeError):
-                    continue
-                if any(path.startswith(p) or f"/{p}" in path for p in _INSTRUCTIONAL_PATHS):
-                    _protected_read.add(tc["id"])
 
         for m in messages[skip:]:
             entry = dict(m)
@@ -1658,17 +1622,19 @@ class AgentLoop:
             if is_assessment_message(entry) or is_debug_root_cause_message(entry):
                 continue  # skip ephemeral framework-injected messages — not part of real conversation
             if role == "tool":
-                # Replace with LLM-provided summary when available
-                tc_id = entry.get("tool_call_id")
-                if tc_id and isinstance(tc_id, str) and tc_id in _tc_summary:
-                    if tc_id in _protected_read:
-                        logger.info("TOOL_SUMMARY: SKIPPED summary replacement for protected call_id={} (instructional path)", tc_id)
+                if isinstance(content, str) and len(content) > self.max_tool_result_chars:
+                    # Tool content is JSON-wrapped by _normalize(). Parse and
+                    # truncate only the result field to avoid breaking the wrapper.
+                    try:
+                        payload = json.loads(content)
+                    except (json.JSONDecodeError, TypeError):
+                        payload = None
+                    if isinstance(payload, dict) and isinstance(payload.get("result"), str):
+                        payload["result"] = truncate_text_fn(payload["result"], self.max_tool_result_chars)
+                        payload["result_length"] = len(payload["result"])
+                        entry["content"] = json.dumps(payload, ensure_ascii=False)
                     else:
-                        old_len = len(entry["content"]) if isinstance(entry.get("content"), str) else -1
-                        entry["content"] = _tc_summary[tc_id]
-                        logger.info("TOOL_SUMMARY: replaced tool result {} ({} chars → {} chars)", tc_id, old_len, len(entry["content"]))
-                elif isinstance(content, str) and len(content) > self.max_tool_result_chars:
-                    entry["content"] = truncate_text_fn(content, self.max_tool_result_chars)
+                        entry["content"] = truncate_text_fn(content, self.max_tool_result_chars)
                 elif isinstance(content, list):
                     filtered = self._sanitize_persisted_blocks(content, should_truncate_text=True)
                     if not filtered:
@@ -1676,8 +1642,6 @@ class AgentLoop:
                     entry["content"] = filtered
             elif role == "user":
                 if isinstance(content, str) and content.startswith(ContextBuilder._RUNTIME_CONTEXT_TAG):
-                    # Strip the entire runtime-context block (including any session summary).
-                    # The block is bounded by _RUNTIME_CONTEXT_TAG and _RUNTIME_CONTEXT_END.
                     end_marker = ContextBuilder._RUNTIME_CONTEXT_END
                     end_pos = content.find(end_marker)
                     if end_pos >= 0:
@@ -1689,7 +1653,6 @@ class AgentLoop:
                         else:
                             continue
                     else:
-                        # Fallback: no end marker found, strip the tag prefix
                         after_tag = content[len(ContextBuilder._RUNTIME_CONTEXT_TAG):].lstrip("\n")
                         if after_tag.strip():
                             entry["content"] = after_tag
@@ -1700,9 +1663,6 @@ class AgentLoop:
                     if not filtered:
                         continue
                     entry["content"] = filtered
-            # Strip tool_summary markers from assistant content
-            if role == "assistant" and isinstance(entry.get("content"), str):
-                entry["content"] = _SUMMARY_RE.sub("", entry["content"]).strip()
             from nanobot.utils.helpers import format_timestamp_cst
             entry.setdefault("timestamp", format_timestamp_cst())
             session.messages.append(entry)

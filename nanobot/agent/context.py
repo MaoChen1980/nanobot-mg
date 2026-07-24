@@ -326,7 +326,6 @@ class ContextBuilder:
                 "operating_principles_subagent",
                 "subagent_escalation",
                 "skill_refinement",
-                "tool_result_summary",
                 "memory_usage",
             ]
         else:
@@ -340,7 +339,6 @@ class ContextBuilder:
                 "orchestration_guide",
                 "task_tree",
                 "skill_refinement",
-                "tool_result_summary",
                 "memory_usage",
             ]
 

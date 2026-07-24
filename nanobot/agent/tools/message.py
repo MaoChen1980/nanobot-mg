@@ -20,7 +20,6 @@ from nanobot.config.paths import get_workspace_path
 _FRAMEWORK_MARKER_PATTERNS = [
     re.compile(r"\[assess\][\s\S]*?\[/assess\]", re.IGNORECASE),
     re.compile(r"\[debug_root_cause\][\s\S]*?\[/debug_root_cause\]", re.IGNORECASE),
-    re.compile(r"\[tool_summary\][\s\S]*?\[/tool_summary\]", re.IGNORECASE),
     re.compile(r"\(truncated,\s*\d+\s*chars\)", re.IGNORECASE),
     re.compile(r"\[\.\.\.\d+\s*characters?\s*truncated\]", re.IGNORECASE),
     re.compile(r"<!--\s*no-assess\s*-->", re.IGNORECASE),
