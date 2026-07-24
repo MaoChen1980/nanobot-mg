@@ -61,16 +61,25 @@ const rows = raw.split(/\r?\n/).flatMap((line) => {
 
 if (!rows.length) throw new Error("No usable quotes returned. Check network access, symbols, and trading session.");
 
+const STALE_THRESHOLD_MINUTES = 15;
+
 rows.sort((left, right) => Math.abs(right.changePct) - Math.abs(left.changePct));
 const freshRows = rows.filter((row) => row.isFresh);
 const triggers = freshRows.filter((row) => Math.abs(row.changePct) >= 1);
 const activeShorts = freshRows.filter((row) => row.changePct <= -1 && row.volumeOpenInterest && row.volumeOpenInterest > 1);
+const staleRows = rows.filter((row) => row.ageMinutes !== null && row.ageMinutes > STALE_THRESHOLD_MINUTES);
+const hasStaleData = staleRows.length > 0;
 const output = {
   fetchedAt: fetchedAt.toISOString(),
   scope: "Liquid continuous-contract watchlist; not a whole-market or member-position scan.",
   quoteCaveat: "Volume/open-interest fields are a third-party intraday proxy. Confirm settlement, open-interest change, and member ranks with the exchange after close.",
+  staleThresholdMinutes: STALE_THRESHOLD_MINUTES,
+  hasStaleData,
+  staleCount: staleRows.length,
+  totalCount: rows.length,
   quotes: rows,
   freshQuotes: freshRows,
+  staleQuotes: staleRows,
   triggers,
   activeShorts,
 };
@@ -82,12 +91,18 @@ if (jsonOutput) {
 
 const formatRow = (row) => {
   const proxy = row.volumeOpenInterest ? ` | V/OI代理 ${row.volumeOpenInterest.toFixed(2)}` : "";
-  return `${row.code.padEnd(4)} ${row.name.padEnd(6)} ${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}% | 最新 ${row.last} | 昨结 ${row.previousSettlement}${proxy} | ${row.sourceTime}`;
+  const stale = row.ageMinutes !== null && row.ageMinutes > STALE_THRESHOLD_MINUTES;
+  const staleTag = stale ? ` ⚠️数据定格(${row.ageMinutes.toFixed(0)}分钟前)` : "";
+  return `${row.code.padEnd(4)} ${row.name.padEnd(6)} ${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}% | 最新 ${row.last} | 昨结 ${row.previousSettlement}${proxy} | ${row.sourceTime}${staleTag}`;
 };
 
-console.log(`MGA 盘中候选扫描 | ${output.fetchedAt}`);
+const staleWarning = hasStaleData
+  ? `\n⚠️ 警告：${staleRows.length}/${rows.length} 个报价数据定格 >${STALE_THRESHOLD_MINUTES}分钟，分析结论置信度降级。`
+  : "";
+
+console.log(`MGA 盘中候选扫描 | ${output.fetchedAt}${staleWarning}`);
 console.log(output.scope);
-console.log(`新鲜报价 ${freshRows.length}/${rows.length}（15 分钟内）；旧报价只保留在 JSON 原始结果中。`);
+console.log(`新鲜报价 ${freshRows.length}/${rows.length}（${STALE_THRESHOLD_MINUTES} 分钟内）；陈旧报价仅保留在 JSON 原始结果中。`);
 console.log("\n涨跌幅绝对值 >= 1%：");
 if (triggers.length) {
   triggers.forEach((row) => console.log(`  ${formatRow(row)}`));
