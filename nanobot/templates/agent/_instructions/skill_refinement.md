@@ -66,4 +66,11 @@
 | SKILL.md 1824 行，只读前 300 行 | `read_file(lines 1-300/1824)` → Steps 1-3 | `read_file(全文) → Steps 1-4 → 验证 → exec` |
 | skill_search 后直接 exec | `skill_search → exec → message` | `skill_search → read_file 全文 → Steps → exec → message` |
 
+**⚠️ 同一轮 tool_calls 的时序要求：**
+
+skill_search + read_file + exec + message 在同一轮并列发出时，**read_file 必须先于 exec/message 完成**，即：
+- ✅ `skill_search` + `read_file(SKILL.md 全文 offset=1 limit=完整行数)` → `exec` → `message`
+- ✅ `read_file(SKILL.md 全文 offset=1)` → `read_file(offset=完整行数前一行)` → `exec` → `message`
+- ❌ `skill_search` + `read_file(SKILL.md 前20行)` + `exec` → `message`（exec 先于 read_file 完整加载完成）
+
 **验证方法：** 加载 skill 后，问自己："skill 的操作逻辑（函数/算法/评分）是否已实现到脚本中？" 如果脚本中仍是简单硬编码而非 skill 定义的逻辑，说明跳过了实现步骤。

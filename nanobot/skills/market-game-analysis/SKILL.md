@@ -41,18 +41,30 @@ metadata:
 
 > **触发条件：** cron reminder payload 明确写「请加载 market-game-analysis skill」或类似指令时。
 >
-> **时序强制：**
-> 1. `skill_search("market-game-analysis")` → 返回 SKILL.md 路径
-> 2. `read_file(SKILL.md)` 全文 → 必须完整读取后才可执行后续步骤
+> **时序强制（全部在同一轮 tool_calls 执行，禁止拆分）：**
+> 1. `skill_search("market-game-analysis", k=6)` → 返回 SKILL.md 路径
+> 2. `read_file(SKILL.md, offset=1, limit=331)` → **必须覆盖完整 SKILL.md（331行）**，不得截断到前 20 行就跳过
 > 3. 验证触发条件（见下方 5 项）
-> 4. 按 Steps 执行
+> 4. 按 Steps 执行（三元逻辑：Step 1 匹配新闻 → Step 2 识别资金 → Step 4 量价印证 → Step 5 退出信号）
 > 5. exec 数据获取
 > 6. message 发送
+
+**⚠️ 读取完整性强制：**
+- `read_file` 必须指定 `limit=331`（完整行数）
+- 仅读取 lines 1-20 不满足要求 —— Steps 1-5/框架结构图/数据获取规范在后 311 行
+- action 标签（「可持」「不追空」「观望」等）必须对照 Step 4 量价印证标准生成，不能用脚本内置逻辑替代
+
+**DCE 降级处理：**
+- 当 akshare DCE API 超时或返回空数据时，激活 `seat-data-tempfile` skill
+- 执行 `skill_search("seat-data-tempfile")` + `read_file` 加载替代路径
+- 详见「数据获取 → DCE 降级」章节
 
 **禁止行为：**
 - ❌ 在 read_file SKILL.md 之前执行任何 exec/web_fetch 业务逻辑
 - ❌ 用 grep 代替 skill_search 定位 SKILL.md
 - ❌ 声称"已加载 skill"但未完成 skill_search + read_file 全链路
+- ❌ read_file 只读前 20 行就跳过完整加载（lines 21-331 含核心 Steps）
+- ❌ DCE 数据获取失败时跳过 seat-data-tempfile skill 直接跳过该交易所
 - ❌ **分片读取 SKILL.md 后，在 truncated=true 时执行业务逻辑（exec/web_fetch/web_search）；必须分片读至 truncated=false**
 - ❌ **在 truncated=true 时错误判定「已获取足够信息执行 Steps」——必须完成完整加载后才可判定是否足以执行**
 - ❌ **分片读取验证规范：read_file 后检查 truncated 字段；truncated=true → 继续分片读取（offset+=limit）直至 truncated=false**
@@ -197,9 +209,20 @@ metadata:
 
 ---
 
-## Step 4 — 量价印证
+## Step 4 — 量价印证 ⚠️（action 标签必须来源此步骤）
 
 **因果逻辑和量价关系是否匹配？**
+
+**⚠️ action 标签来源规范：**
+- 「可持」「可开多」「加仓」→ Step 4 匹配 + Step 2 资金可识别 + Step 3 知识可匹配
+- 「不追空」「不追多」「观望」→ Step 4 匹配但 Step 2/3 有不确定性
+- 「撤退」「止盈/止损」→ Step 4 不匹配 或 Step 5 退出信号触发
+- 「无法判断」→ 缺 Step 2 席位数据 或 Step 3 知识库无匹配
+
+**禁止：**
+- ❌ 用脚本内置逻辑生成 action 标签而不经验证
+- ❌ 缺少 Step 2 资金识别就写「主力拉升」
+- ❌ 缺少 Step 3 知识匹配就写「历史规律支持」
 
 ### 匹配的典型（大资金意图与量价表现对照）
 
@@ -278,6 +301,20 @@ metadata:
 2. 查询前二十会员成交/持仓排名，判断多空集中度和方向；没有公开数据时明确写“无法确认席位”。
 3. 查询仓单、库存、供需和宏观发布，解释价格异动；新闻只作解释，不能单独作为资金证据。
 数据超时、合约映射不清、或第三方价格与官方结算不一致时，结论只能是"观望/待核验"。
+
+### DCE 降级处理 ⚠️
+
+**触发条件：** akshare DCE API 超时（>8秒）或返回空数据/截断数据时。
+
+**处理流程（必须按序执行）：**
+1. **立即激活** `seat-data-tempfile` skill：执行 `skill_search("seat-data-tempfile", k=6)` + `read_file(SKILL.md)` 全文
+2. 使用该 skill 的临时文件方案获取 DCE 数据（不走 stdout，绕过 8KB 限制）
+3. 若仍超时，标记 DCE 数据「不可用」，结论中注明「DCE 席位数据缺失，无法确认空头席位」
+
+**禁止：**
+- ❌ DCE 数据获取失败时直接跳过该交易所
+- ❌ 不尝试 seat-data-tempfile skill 直接用其他交易所数据推断
+- ❌ 声称「DCE 数据正常」但未验证临时文件内容
 
 ### 原油合约标注规范
 
