@@ -152,7 +152,7 @@ async def assess_me(
         reasoning_effort="none",
     )
     if resp.finish_reason == "error":
-        logger.warning("assess_me LLM call failed: {}", (resp.content or "")[:200])
+        logger.warning("assess_me LLM call failed: {}", (resp.content or "")[:400])
         return ""
     if not resp.content:
         logger.warning(
@@ -171,7 +171,7 @@ async def assess_me(
     if "{" not in stripped:
         logger.warning(
             "assess_me response not JSON, retrying once (preview={})",
-            content[:100],
+            content[:400],
         )
         retry_prompt = (
             prompt
@@ -187,7 +187,7 @@ async def assess_me(
             return ""
         content = resp.content.strip()
 
-    logger.debug("assess_me raw response (len={}, preview={})", len(content), content[:200])
+    logger.debug("assess_me raw response (len={}, preview={})", len(content), content[:400])
     return content
 
 
@@ -216,7 +216,7 @@ async def assess_message_content(
         reasoning_effort="none",
     )
     if resp.finish_reason == "error" or not resp.content:
-        logger.warning("assess_message_content LLM call failed: {}", (resp.content or "")[:200])
+        logger.warning("assess_message_content LLM call failed: {}", (resp.content or "")[:400])
         return None
 
     raw = resp.content.strip()
@@ -224,11 +224,11 @@ async def assess_message_content(
     try:
         parsed = json.loads(stripped)
     except json.JSONDecodeError:
-        logger.warning("assess_message_content non-JSON response: {}…", raw[:100])
+        logger.warning("assess_message_content non-JSON response: {}…", raw[:400])
         return None
 
     if not isinstance(parsed, dict):
-        logger.warning("assess_message_content unexpected type: {} ({})", type(parsed).__name__, str(parsed)[:100])
+        logger.warning("assess_message_content unexpected type: {} ({})", type(parsed).__name__, str(parsed)[:400])
         return None
 
     return parsed

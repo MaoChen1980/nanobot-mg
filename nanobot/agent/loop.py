@@ -935,7 +935,7 @@ class AgentLoop:
                 await on_stream(fc or "")
                 await on_stream_end(resuming=False)
         elif result.stop_reason == "error":
-            logger.warning("LLM returned error: {}", (result.final_content or "")[:200])
+            logger.warning("LLM returned error: {}", (result.final_content or "")[:400])
 
         _t_post = time.time()
         await hook.after_turn()
@@ -1046,7 +1046,7 @@ class AgentLoop:
             # trailing human text after the JSON object doesn't cause failure.
             parsed = AgentLoop._extract_assess_json(result)
             if parsed is None:
-                logger.warning("assess_me returned non-JSON: {}…", result[:100])
+                logger.warning("assess_me returned non-JSON: {}…", result[:400])
                 return AssessResult()
 
             status = parsed.get("status", "findings")
@@ -1309,7 +1309,7 @@ class AgentLoop:
         result = await runner.run(spec)
 
         if result.final_content:
-            logger.info("Fix sub-agent completed: {}", result.final_content[:200])
+            logger.info("Fix sub-agent completed:\n{}", result.final_content)
         else:
             logger.info("Fix sub-agent completed with no output")
 

@@ -1065,7 +1065,7 @@ class MemoryExtractor:
         if result.final_content:
             logger.info(
                 "Skill materialization sub-agent: {}",
-                result.final_content[:200],
+                result.final_content[:400],
             )
 
         # Detect changes: skills (new/modified SKILL.md) and memory files

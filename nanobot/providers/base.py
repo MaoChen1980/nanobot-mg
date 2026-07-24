@@ -908,7 +908,7 @@ class LLMProvider(ABC):
                 logger.warning(
                     "Stopping persistent retry after {} identical transient errors: {}",
                     identical_error_count,
-                    (response.content or "")[:120].lower(),
+                    (response.content or "")[:200].lower(),
                 )
                 if on_retry_wait:
                     await on_retry_wait(
@@ -920,7 +920,7 @@ class LLMProvider(ABC):
                 logger.warning(
                     "LLM request failed after {} retries, giving up: {}",
                     attempt,
-                    (response.content or "")[:120].lower(),
+                    (response.content or "")[:200].lower(),
                 )
                 if on_retry_wait:
                     await on_retry_wait(
@@ -946,7 +946,7 @@ class LLMProvider(ABC):
                 attempt,
                 "+" if persistent and attempt > len(delays) else f"/{len(delays)}",
                 int(round(delay)),
-                (response.content or "")[:120].lower(),
+                (response.content or "")[:200].lower(),
             )
             await self._sleep_with_heartbeat(
                 delay,

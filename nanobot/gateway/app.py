@@ -890,7 +890,7 @@ class GatewayApplication:
 
         logger.info(
             "Log fixer: diagnosis for {} - {}",
-            entry.get("f", "?"), diagnosis[:100],
+            entry.get("f", "?"), diagnosis[:200],
         )
 
         # Deliver fixer result to active proxy sessions

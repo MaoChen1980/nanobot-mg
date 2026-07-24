@@ -239,7 +239,7 @@ async def _run_tool(
         event = {
             "name": tool_call.name,
             "status": "error",
-            "detail": result.replace("\n", " ").strip()[:120],
+            "detail": result.replace("\n", " ").strip()[:200],
             "duration_ms": duration_ms,
         }
         self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, result, False, result, duration_ms)
@@ -252,7 +252,7 @@ async def _run_tool(
     detail = detail.replace("\n", " ").strip()
     if not detail:
         detail = "(empty)"
-    elif len(detail) > 120:
-        detail = detail[:120] + "..."
+    elif len(detail) > 200:
+        detail = detail[:200] + "..."
     self_ref._log_tool_call(spec.session_key, iteration, turn, tool_call.name, tool_call.arguments, detail_raw, True, None, duration_ms)
     return result, {"name": tool_call.name, "status": "ok", "detail": detail, "duration_ms": duration_ms}, None

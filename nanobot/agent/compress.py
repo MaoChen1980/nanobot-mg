@@ -260,7 +260,7 @@ async def summarize_turns(
             logger.warning(
                 "Summary attempt {}/6 failed (LLM error): {}",
                 attempt + 1,
-                (resp.content or "")[:200],
+                (resp.content or "")[:400],
             )
             if attempt < 9:
                 await asyncio.sleep(10)

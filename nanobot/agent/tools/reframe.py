@@ -124,6 +124,6 @@ class ReframeTool(Tool):
             return f"Error: LLM call failed — {e}"
 
         if resp.finish_reason == "error":
-            logger.warning("reframe LLM error response: {}", (resp.content or "")[:200])
+            logger.warning("reframe LLM error response: {}", (resp.content or "")[:400])
             return "问题太难，目前没有结论"
         return (resp.content or "").strip() or "问题太难，目前没有结论"
