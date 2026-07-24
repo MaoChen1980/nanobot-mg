@@ -44,6 +44,17 @@ _EDIT_FILE_SCHEMA = build_parameters_schema(
         "and returns matching line numbers and content. "
         "Helps verify the edit landed correctly."
     ),
+    then_check=p("string",
+        "If set, type-checks the file after writing before executing then_exec. "
+        "Type checker to use: 'auto' (detect from extension), 'pyright' (Python), or 'tsc' (TypeScript/JavaScript). Returns pass/fail + errors. "
+        "Works with then_exec: write → check → exec.",
+        enum=["auto", "pyright", "tsc"],
+    ),
+    then_exec=p("string",
+        "If set to a shell command string, executes it after writing (and after then_check if set) "
+        "and returns the command output. Working directory is the written file's parent. "
+        "Example: 'python main.py'. Useful for script-then-run workflows."
+    ),
     danger_override=p("boolean",
         "When true, bypasses danger detection for edits that remove large amounts of content. "
         "Use only after verifying the edit is safe. "
@@ -176,6 +187,8 @@ class EditFileTool(_FsTool):
         first_line: int | None = None,
         last_line: int | None = None,
         then_grep: str | None = None,
+        then_check: str | None = None,
+        then_exec: str | None = None,
         danger_override: bool = False,
         **kwargs: Any,
     ) -> str:
@@ -211,6 +224,17 @@ class EditFileTool(_FsTool):
                         vr = self._verify_write(fp, verify_lines[0])
                         if vr:
                             result += f"\n{vr}"
+                    if then_check:
+                        check_result = await self._run_type_check(fp, then_check)
+                        if check_result:
+                            result += f"\n{check_result}"
+                    if then_exec:
+                        from nanobot.agent.tools.shell import ExecTool
+                        exec_tool = ExecTool(
+                            working_dir=str(fp.parent),
+                            restrict_to_workspace=True,
+                        )
+                        result += f"\n\nExec output:\n{await exec_tool.execute(then_exec)}"
                 return result
 
             if old_text is None:
@@ -234,6 +258,17 @@ class EditFileTool(_FsTool):
                             msg += f"\n{vr}"
                     if then_grep:
                         msg += f"\n{self._find_in_file(fp, then_grep)}"
+                    if then_check:
+                        check_result = await self._run_type_check(fp, then_check)
+                        if check_result:
+                            msg += f"\n{check_result}"
+                    if then_exec:
+                        from nanobot.agent.tools.shell import ExecTool
+                        exec_tool = ExecTool(
+                            working_dir=str(fp.parent),
+                            restrict_to_workspace=True,
+                        )
+                        msg += f"\n\nExec output:\n{await exec_tool.execute(then_exec)}"
                     return msg
                 return self._file_not_found_msg(path, fp)
 
@@ -268,6 +303,17 @@ class EditFileTool(_FsTool):
                         msg += f"\n{vr}"
                 elif then_grep:
                     msg += f"\n{self._find_in_file(fp, then_grep)}"
+                if then_check:
+                    check_result = await self._run_type_check(fp, then_check)
+                    if check_result:
+                        msg += f"\n{check_result}"
+                if then_exec:
+                    from nanobot.agent.tools.shell import ExecTool
+                    exec_tool = ExecTool(
+                        working_dir=str(fp.parent),
+                        restrict_to_workspace=True,
+                    )
+                    msg += f"\n\nExec output:\n{await exec_tool.execute(then_exec)}"
                 return msg
 
             # Staleness warning (informational -- does not block edit)
@@ -328,6 +374,26 @@ class EditFileTool(_FsTool):
                 msg += f"\n{verify_result}"
             if then_grep:
                 msg += f"\n{self._find_in_file(fp, then_grep)}"
+
+            # Type-check before exec (if requested)
+            check_result = ""
+            if then_check:
+                check_result = await self._run_type_check(fp, then_check)
+            if check_result:
+                msg += f"\n{check_result}"
+
+            # Execute if requested
+            exec_result = ""
+            if then_exec:
+                from nanobot.agent.tools.shell import ExecTool
+                exec_tool = ExecTool(
+                    working_dir=str(fp.parent),
+                    restrict_to_workspace=True,
+                )
+                exec_result = f"\n\nExec output:\n{await exec_tool.execute(then_exec)}"
+            if exec_result:
+                msg += exec_result
+
             return msg
         except PermissionError as e:
             logger.warning("EditFile permission denied: {}", e)
@@ -366,6 +432,83 @@ class EditFileTool(_FsTool):
                 "then use the grep-matched content as old_text."
             )
         return f"Error: old_text not found in {path}. No similar text found. Before retrying: grep for a unique fragment to verify the text exists."
+
+    # ------------------------------------------------------------------
+    # then_check chain — type checking
+    # ------------------------------------------------------------------
+
+    async def _run_type_check(self, fp: Path, checker: str) -> str:
+        """Run a type checker on the written file. Returns pass/fail summary."""
+        if checker == "auto":
+            ext = fp.suffix.lower()
+            if ext == ".py":
+                checker = "pyright"
+            elif ext in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts"):
+                checker = "tsc"
+            else:
+                return f"\nCheck: skipped (no checker for '{ext}')"
+
+        from nanobot.agent.tools.shell import ExecTool
+
+        wd = self._workspace or fp.parent
+        exec_tool = ExecTool(working_dir=str(wd), restrict_to_workspace=True)
+
+        if checker == "pyright":
+            cmd = f"npx --prefix tools pyright {fp} --outputjson"
+            raw = await exec_tool.execute(cmd)
+            return self._format_pyright_result(raw)
+        elif checker == "tsc":
+            cmd = f"npx --prefix tools tsc --noEmit --allowJs --checkJs {fp}"
+            raw = await exec_tool.execute(cmd)
+            return self._format_tsc_result(raw)
+        else:
+            return f"\nCheck: unknown checker '{checker}' (use 'auto', 'pyright', or 'tsc')"
+
+    @staticmethod
+    def _format_pyright_result(raw: str) -> str:
+        """Parse pyright --outputjson and return a readable summary."""
+        try:
+            import json
+            lines = raw.split("\n")
+            json_lines = []
+            in_json = False
+            for line in lines:
+                if not in_json and line.strip().startswith("{"):
+                    in_json = True
+                if in_json:
+                    json_lines.append(line)
+                    if line.strip() == "}":
+                        break
+            if not json_lines:
+                return f"\nCheck: pyright output (raw):\n{raw[:500]}"
+            data = json.loads("\n".join(json_lines))
+            summary = data.get("summary", {})
+            errors = summary.get("errorCount", 0)
+            warnings = summary.get("warningCount", 0)
+            diags = data.get("generalDiagnostics", [])
+            if errors == 0 and warnings == 0:
+                return "\nCheck: PASSED (pyright)"
+            lines_out = [f"\nCheck: FAILED — {errors} errors, {warnings} warnings (pyright)"]
+            for d in diags[:5]:
+                lines_out.append(f"  line {d['range']['start']['line']}: {d['message']}")
+            if len(diags) > 5:
+                lines_out.append(f"  ... and {len(diags) - 5} more")
+            return "\n".join(lines_out)
+        except Exception:
+            logger.warning("Failed to parse pyright output")
+            return f"\nCheck: pyright output (raw):\n{raw[:500]}"
+
+    @staticmethod
+    def _format_tsc_result(raw: str) -> str:
+        """Parse tsc output and return a readable summary."""
+        lines = raw.strip().split("\n")
+        error_lines = [l for l in lines if l and "error TS" in l]
+        if not error_lines:
+            return "\nCheck: PASSED (tsc)"
+        summary = f"\nCheck: FAILED — {len(error_lines)} type errors (tsc)"
+        body = "\n".join(f"  {l}" for l in error_lines[:5])
+        tail = f"\n  ... and {len(error_lines) - 5} more" if len(error_lines) > 5 else ""
+        return f"{summary}\n{body}{tail}"
 
     async def _edit_by_lines(
         self, path: str, new_text: str, first_line: int, last_line: int,

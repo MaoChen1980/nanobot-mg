@@ -28,7 +28,7 @@ def get_model() -> Any:
         try:
             from sentence_transformers import SentenceTransformer
 
-            _MODEL = SentenceTransformer(str(_MODEL_PATH))
+            _MODEL = SentenceTransformer(str(_MODEL_PATH), device="cpu")
             return _MODEL
         except ImportError:
             return None

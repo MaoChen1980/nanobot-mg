@@ -51,7 +51,9 @@ class MemoryVectorIndex:
             try:
                 from sentence_transformers import SentenceTransformer
 
-                self._model = SentenceTransformer(str(_MODEL_PATH))
+                # Force CPU to avoid MPS OOM on Apple Silicon (MPS has ~9 GiB limit;
+                # loading the model + running inference during cron jobs exhausts it).
+                self._model = SentenceTransformer(str(_MODEL_PATH), device="cpu")
                 return True
             except Exception:
                 logger.warning("Failed to load SentenceTransformer model", exc_info=True)
@@ -190,6 +192,10 @@ class MemoryVectorIndex:
         try:
             import faiss
             import numpy as np
+            # Disable MPS memory watermark so encode() can allocate tensors
+            # on Apple Silicon even when the pool is near its artificial 9 GiB limit.
+            import os as _os
+            _os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
         except ImportError:
             logger.warning("FAISS/numpy not installed, cannot build vector index")
             return

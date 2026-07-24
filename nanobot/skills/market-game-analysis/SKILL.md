@@ -53,6 +53,12 @@ metadata:
 - ❌ 在 read_file SKILL.md 之前执行任何 exec/web_fetch 业务逻辑
 - ❌ 用 grep 代替 skill_search 定位 SKILL.md
 - ❌ 声称"已加载 skill"但未完成 skill_search + read_file 全链路
+- ❌ **分片读取 SKILL.md 后，在 truncated=true 时执行业务逻辑（exec/web_fetch/web_search）；必须分片读至 truncated=false**
+- ❌ **在 truncated=true 时错误判定「已获取足够信息执行 Steps」——必须完成完整加载后才可判定是否足以执行**
+- ❌ **分片读取验证规范：read_file 后检查 truncated 字段；truncated=true → 继续分片读取（offset+=limit）直至 truncated=false**
+- ❌ MODULE_NOT_FOUND 后转向 web_search 替代数据源；应先用 `glob` 确认文件位置，再用正确路径重新执行
+- ❌ 未执行 Step 0.5 持仓方向校验就发送行情报告；持仓方向校验是每次分析前必做项
+- ❌ 用 web_search 返回的旧数据替代 market-scan.mjs 输出的当日结构化数据；market-scan.mjs 数据时效性优先
 
 ### 5 项触发条件验证（exec 前必须全部通过）
 
@@ -103,7 +109,7 @@ metadata:
 
 > 详见「数据获取方法」章节
 
-先运行 `node references/market-scan.mjs`。它扫描高流动性连续主力合约，输出涨跌、成交/持仓代理与多空候选；它**不是**全市场或席位数据。
+先运行 `node nanobot/skills/market-game-analysis/references/market-scan.mjs`（cwd=`/Users/chenmao/projects/nanobot-mg`）。它扫描高流动性连续主力合约，输出涨跌、成交/持仓代理与多空候选；它**不是**全市场或席位数据。
 
 再按 `references/data-sources.md` 补齐：
 - 用交易所每日行情的同合约持仓差计算增仓；不得从单一实时接口推断增仓。
@@ -112,9 +118,10 @@ metadata:
 
 ---
 
-## Step 0.5 — 持仓方向校验 ⚠️（每次分析前必做）
+## Step 0.5 — 持仓方向校验 ⚠️（每次分析前必做）⚠️
 
-> **触发条件：** 用户明确提及持仓、仓位、或询问某个持仓品种时。
+> **⚠️ 强制执行：未执行 Step 0.5 禁止发送行情报告或给出操作建议。**
+> **触发条件：** 用户明确提及持仓、仓位、或询问某个持仓品种时。**即使用户未提及，每次分析前也必须主动确认持仓方向。**
 
 ### 持仓校验清单
 
@@ -257,7 +264,7 @@ metadata:
 
 ### 盘中候选（连续主力报价）
 
-运行 `node references/market-scan.mjs`，或以 `node references/market-scan.mjs SC0 AU0 AG0` 限定品种；`--json` 输出可保存的结构化结果。
+运行 `node nanobot/skills/market-game-analysis/references/market-scan.mjs`（cwd=`/Users/chenmao/projects/nanobot-mg`），或以 `node nanobot/skills/market-game-analysis/references/market-scan.mjs SC0 AU0 AG0` 限定品种；`--json` 输出可保存的结构化结果。
 
 - 该脚本只依赖 Node.js 内置 `fetch`，请求新浪连续主力报价并用报价中的昨结字段计算涨跌。
 - 报价中的成交、持仓和 V/OI 仅为热度代理；不得据此计算增仓、成交额排名或会员资金流。

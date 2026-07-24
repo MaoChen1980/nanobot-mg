@@ -53,6 +53,34 @@ spawn: true/false
 
 然后执行决策。如果 spawn → 参考下方治理指南。如果自己做 → 直接开工。
 
+## ⚡ Spawn 前去重检查（强制执行）
+
+**⚠️ 这是强制约束，不是可选建议。assess_me 反复指出此问题意味着当前表述不够有力。**
+
+**TRIGGER: 准备 spawn 新 subagent 前——立即中断任何其他工作，先执行以下检查链**
+
+action:
+   1. **第一步（强制）：** 用 `glob({{ workspace_path }}/tmp/**/*.md)` 检查 tmp 目录中是否已有相关报告文件（如 `audit-*.md`、`*-gaps.md`）
+   2. **第二步（强制）：** 用 `list_subagents` 列出所有 running/completed subagent，检查任务域是否重叠
+   3. **第三步（强制）：** 对照新任务的**目标域**，判断逻辑：
+      - tmp 目录已有相关报告文件 → **必须先 read_file 该文件**，评估内容是否满足当前需求，再决定是否需要新 subagent
+      - 已有 subagent 状态为 `running` → **等待**，不要启动新的，等结果回来
+      - 已有 subagent 状态为 `completed` / `final_response` → **必须先 read_file 结果文件**，评估是否满足需求，再决定是否需要新 subagent
+      - 完全独立的任务域（无任何重叠） → 可以 spawn
+   4. **禁止行为：**
+      - ❌ 直接 spawn 不执行以上三步检查链
+      - ❌ tmp 目录有报告文件但跳过不读就重新启动
+      - ❌ 已有 completed subagent 但不读结果就重新启动
+      - ❌ 启动多个任务域重叠的 subagent 造成重复审计
+      - ❌ 声称"启动新 subagent 补漏"但没有先验证已有报告是否已包含该缺口
+
+**反面案例（assess_me 反复指出的问题）：**
+> assistant 读取了 `audit-agent-core-gaps.md`（agent-core 审计已完成），list_subagents 显示 8 个 running subagent，但未读取已完成 subagent 的结果文件（如 `audit-tools-params.md`），直接启动新 subagent 造成重复审计。**正确做法：** 先 glob + read_file tmp 目录所有已完成报告，评估内容后再决定是否需要新 subagent。
+
+**判断标准：** 任务域重叠 ≠ 任务名完全相同。审计工具参数的 subagent 和审计运行循环的 subagent 可能都涉及 tools 模块，但这是**可接受的并行**（不同分析维度）。只有当两份报告覆盖完全相同的分析范围时才是冗余。
+
+**⚠️ 效率原则：** 8 个并行 subagent 不等于更高效。subagent 之间存在资源竞争，上下文切换成本高。优先让已有 subagent 完成，再启动新的。
+
 ## 任务分析模板
 ```
 整体任务 → 发现/定位 → spawn subagent(部分工作) → 同时自己做其他事
@@ -80,6 +108,16 @@ action:
   4. 规划下一步——直接 spawn 新 subagent 或自己做，不等确认
   5. 检查 {{ tree_path }} 是否全部 completed → 是则执行归档流程
   6. 用 message 同步决策和进展给用户，详细透明
+
+**TRIGGER: spawn subagent 后（进入并行执行阶段）**
+action:
+  1. **立即记录 job_id** — 用 `list_subagents` 确认新 subagent 的 job_id，记录到 {{ current_path }}
+  2. **定期检查进度** — 在每轮结束前（无新 tool call 时）用 `list_subagents` 检查运行中的 subagent 状态
+  3. **超时降级策略** — subagent 运行超过预期时间且无结果时：
+     - 先检查 tmp 报告文件（`glob({{ workspace_path }}/tmp/**/*.md)`）是否已落盘
+     - 有文件 → 读取并聚合，不等 subagent 状态更新
+     - 无文件且 subagent 超时 → 自己接管或重新 spawn，范围更小
+  4. **失败恢复** — subagent 失败时，从上次 checkpoint 恢复，避免重复已完成的工作
 
 **TRIGGER: Subagent 结果到达 — 关键任务需一致性验证 (Critic/Validator)**
 action:
@@ -240,6 +278,10 @@ action:
 - spawn 的 task 应该在 **10-20 轮 iteration** 内能完成。超过说明任务太大。
 - **拆解流程（必须遵守）：**
   1. Orchestrator 自己做**发现阶段** — 用自己的全部工具摸清范围、定位关键文件
+     - **⚠️ 审计/分析类任务的发现阶段强制要求：** 任务涉及审计、分析、review 某个项目时，必须先 read_file 该项目的**核心源码文件**（不是文件列表/目录树），提取类名/函数签名/行号，确认实际功能模块边界后再划分 subagent 范围。**禁止仅凭 scan_project/explore_module 输出的文件名字列表猜测功能边界**。
+       - ✅ 正确：`read_file(runner.py) → read_file(loop.py) → 提取 AgentRunner/AgentLoop 等类名 → 按类边界分配 subagent`
+       - ❌ 错误：`scan_project + explore_module → 基于文件名列表 spawn("audit-tools") / spawn("audit-agent-core")`（未读源码，无符号依据）
+     - **强制验证：** subagent 的 scope（task 描述中的审计范围）必须基于实际读取的类名/函数名/行号，而非文件名猜测。
   2. 再拆成**多个小 execution spawn**，每个只做一件具体的事。判断标准：**太小 Orchestrator 自己就干了，太大 subagent 干不完**：
      - ❌ "打开 file_x.py 看看内容" → 太小，Orchestrator 自己做
      - ✅ "分析 `file_x.py` 的依赖关系，输出调用图" → 合适

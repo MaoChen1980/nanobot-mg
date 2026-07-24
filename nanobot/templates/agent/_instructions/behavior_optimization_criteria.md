@@ -50,6 +50,11 @@
 - skill 特有的领域规则混入通用框架
 - skill 内容得不到修正，重复违规
 
+**反复违规诊断路径：** 用 `behavior_optimization_handler.md` 的「步骤 0：根因诊断」（路径 1-5）判断类型：
+- 框架问题（规则缺失/冲突/分散）→ 修框架指令
+- skill 问题（步骤错/内容缺失）→ 修 SKILL.md
+- 不确定 → 读取相关文件验证，不凭描述猜测
+
 **assess_me skill 加载核心规则（内联，无跨文件依赖）：**
 > assess_me 结果中任何 skill 加载指令 = **本轮第一件事**。
 > 收到 assess_me skill 指令 → 立即 `skill_search` → `read_file` SKILL.md → 按 Steps 执行 → 才能做其他工作。

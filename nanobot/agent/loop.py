@@ -1125,6 +1125,32 @@ class AgentLoop:
                 and status == "findings"
             )
             _is_suppress = _suppress_keywords or _assess_meta_text_patterns
+
+            # ── user-override guard ───────────────────────────────────────────
+            # When the user sends a NEW directive during a suppress phase, it
+            # signals the end of the suppress period. The user's action directive
+            # takes priority over the suppress signal — the agent must immediately
+            # pivot to the user's task instead of outputting zero content.
+            #
+            # Detection: look for a user message that arrived AFTER the assistant's
+            # last zero-content response (i.e., a non-trivial user input in the
+            # current batch of messages). A fresh user message with actual content
+            # means the suppress convergence is overridden by user intent.
+            #
+            # Edge case: suppress-phase + user sends empty/placeholder → still
+            # suppress (user hasn't provided actionable directive).
+            _has_fresh_user_input = False
+            if _is_suppress:
+                for msg in messages:
+                    if msg.get("role") == "user":
+                        content = msg.get("content") or ""
+                        # Strip framework sentinel tags before checking content
+                        clean = content.replace("[FRAMEWORK: FORCE_ZERO_CONTENT]", "").replace("[/FRAMEWORK_SENTINEL]", "")
+                        if clean.strip():
+                            _has_fresh_user_input = True
+                            break
+            # ── end user-override guard ────────────────────────────────────────
+
             # Track whether convergence guard confirmed deadlock (1+ consecutive suppress rounds).
             # When True, the runner injects a sentinel and forces the next LLM response
             # to have content = "", breaking the meta-text deadlock loop.
@@ -1132,8 +1158,11 @@ class AgentLoop:
             # NOTE: Changed from >= 2 to >= 1 to handle first-round suppress correctly.
             # The first suppress round should also trigger zero-content output to prevent
             # the LLM from outputting meta-descriptive text like "(Zero text per assess suppress.)".
+            #
+            # NOTE: user-override guard above — when _has_fresh_user_input is True,
+            # skip the suppress path entirely so the agent can process the user's directive.
             _force_zero_content = False
-            if _is_suppress:
+            if _is_suppress and not _has_fresh_user_input:
                 loop._suppress_phase_count[_session_key] = (
                     loop._suppress_phase_count.get(_session_key, 0) + 1
                 )

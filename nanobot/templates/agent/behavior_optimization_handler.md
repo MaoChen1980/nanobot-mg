@@ -68,6 +68,14 @@ assess_me 报告描述的是"agent 应该做了什么但没做"。收到 assess_
 
 **⚠️ 强制中断：** 立即停止一切当前工作。`skill_search` → `read_file` SKILL.md 全文 → 按 Steps 执行。禁止在加载前声称"已完成"或 spawn subagent。
 
+**⚠️ 合规锚点 — assess_me 常见违规对应的规则文件位置（规则已存在，违规=未检索到）：**
+
+| assess_me 报告 | 根因 | 规则所在文件 |
+|---|---|---|
+| 「skill_search 缺失」/「未先 skill_search」 | 已读文件但跳过 skill_search，违规插入 exec/list_subagents/cancel | `assessment-response-trigger.md:101-113`（Skill 加载协议·合规时序） |
+| 「Steps 未执行」/「未按 Steps 执行」 | read_file SKILL.md 全文但跳过 Steps | `assessment-response-trigger.md:115-121`（强制区分：加载不完整 vs Steps 未执行）、`skill_refinement.md:29-30`（典型违规序列） |
+| 「subagent scope 猜测」/「仅凭文件名划分」 | 未 read_file 源码，凭文件名字列表 spawn | `orchestration_guide.md:273-275`（审计/分析类任务的发现阶段强制要求） |
+
 ### 2. 诊断验证清单 — 声称修复方向前必须验证
 
 **TRIGGER: 声称"修复方向是 X"或"根因是 Y"之前**
