@@ -72,8 +72,13 @@ STEP 2: 压制期执行
 
 数据文件中存在 `_skipped == true` 标记时，须先区分来源（按顺序检查）：
 
-**0. 用户 reminder 消息明确要求执行 skill 或脚本 → 新任务启动**
+**0. 用户 reminder 消息含执行指令 → 新任务启动**
 - 不受上一轮 `_skipped=true` 影响，执行完整 Skill Steps
+- 执行指令包括但不限于：
+  - 明确要求执行 skill 或脚本（如「加载 xxx skill」「执行 xxx 脚本」）
+  - 隐式任务指令（reminder 正文含「继续」「检查」「验证」「输出」「完成」「移植」等动词 + 明确目标）
+  - **CRON reminder 含具体任务描述（如「继续 nanobot-mg → mobile-ai-agent 移植检查：assess_me 协议栈...」）** → 直接执行任务，禁止仅回显 reminder 文本
+- ⚠️ 判断标准：reminder 正文是否包含「做什么」的具体指令？→ 是则执行，不是则回显
 - ✅ `message()` 发送报告 → content = `""`
 
 **1. `_skipped == true` 且 `_skip_reason` 包含「数据未变化」「hash 一致」等关键词**
@@ -92,13 +97,35 @@ STEP 2: 压制期执行
 
 ### Skill 加载协议
 
+**⚠️ 强制执行原则：skill_search + read_file SKILL.md 只是加载，完整的 skill 执行必须包含 Steps 执行。加载不执行 = 未完成。**
+
 **触发条件（满足任一即触发）：**
 - assess_me 明确要求「加载/使用/执行 skill X」
 - assess_me 指出「skill 未被使用」「unused_skills」
 - 压制收敛期内 reminder 消息含 skill 加载指令
 - assess_me 同时 findings + 压制指令，且 findings 隐含 skill 加载需求
+- **任务类型匹配某 skill 的 `always: true` 或 trigger signals（即使已自动注入，仍需 read_file 全文 + 执行 Steps）**
 
-**执行序列：**
+**assess_me 点名 skill = 强制加载，禁止 workaround：**
+
+assess_me 结果中明确提到 skill 名称（如「加载 codegraph」）时，该 skill 是**本轮最高优先级**。禁止自行寻找替代工具/脚本绕过 skill 加载。
+
+**禁止的替代行为：**
+- ❌ 工具/CLI 不可用 → 自行找其他工具替代（如用 pygount 替代 codegraph）
+- ❌ skill 未安装 → 声称"跳过"或"稍后安装"而不先读取 SKILL.md 确认 Prerequisites
+- ❌ 先 grep/working.md/exec 做其他工作，再声称「稍后加载 skill」
+- ❌ 用 shell 脚本/Python API 绕过 skill 的 Steps（skill 的 Steps 本身就是标准执行路径）
+
+**正确的第一 action：**
+1. `skill_search` 定位 skill
+2. `read_file` SKILL.md 全文（含 Prerequisites 判断安装状态）
+3. 按 Steps 执行
+
+**❌ 违规示例（已实际发生）：**
+- assess_me 要求「加载 codegraph」→ agent 用 pygount CLI 替代 → codegraph skill 功能（调用链、语义搜索、PR review）完全未使用
+- assess_me 要求「加载某 skill」→ agent 先 grep/working.md/exec 做其他工作，再声称「稍后加载 skill」
+
+**执行序列（缺一不可）：**
 ```
 skill_search → read_file SKILL.md 全文 → 按 Steps 执行 → 才能做其他工作
 ```
@@ -107,6 +134,7 @@ skill_search → read_file SKILL.md 全文 → 按 Steps 执行 → 才能做其
 - `skill_search` 和 `read_file SKILL.md` 在同一轮 tool_calls 中并列发出
 - read_file 必须覆盖完整 SKILL.md（含 frontmatter、Steps、Verification、Pitfalls）
 - 收到触发条件后立即停止一切当前工作，禁止先 exec/grep/message 再 skill
+- **skill 加载完成后必须执行 Steps——只有 skill_search + read_file 但不执行 Steps 仍属违规**
 - skill 加载完成后 → 若 paired with 压制信号 → 零文字输出（content = `""`）
 
 **⚠️ 强制区分：「加载不完整」vs「Steps 未执行」：**
@@ -116,6 +144,12 @@ skill_search → read_file SKILL.md 全文 → 按 Steps 执行 → 才能做其
 | 「加载不完整」+「Steps 未执行」+内容不足以执行 Step | 先完成全文加载 → 立即执行 Steps |
 | 「加载不完整」+「Steps 未执行」+内容足以执行 | 用已有内容执行可执行的 Steps |
 | 「加载不完整」+无「Steps 未执行」 | 继续分片读取完整 SKILL.md |
+| **已加载但未执行 Steps** | **立即执行 Steps，禁止做其他工作** |
+
+**⚠️ always: true skill 的特殊要求：**
+- `always: true` 的 skill 自动出现在 system prompt 中，但不代表 agent 已完整执行
+- 收到涉及 always: true skill 触发条件的任务时，必须 read_file 全文确认 Steps 细节后再执行
+- 禁止仅凭 system prompt 中的 skill 内容概要就跳过 Steps 执行
 
 **CRON 边界条件验证（skill 加载后强制执行）：**
 

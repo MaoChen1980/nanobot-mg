@@ -526,6 +526,21 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
     return added
 
 
+def _filter_gitignored(workspace: Path, paths: list[str]) -> list[str]:
+    """Filter out paths that are ignored by .gitignore in the workspace."""
+    if not paths:
+        return paths
+    result = subprocess.run(
+        ["git", "check-ignore"] + paths,
+        capture_output=True, text=True, cwd=str(workspace), timeout=30,
+    )
+    # git check-ignore exits 0 when any path is ignored; ignored paths are on stdout.
+    if result.returncode != 0:
+        return paths  # Nothing is ignored
+    ignored = set(result.stdout.strip().splitlines())
+    return [p for p in paths if p not in ignored]
+
+
 def commit_workspace_changes(
     workspace: Path,
     rel_dirs: list[str] | None = None,
@@ -546,6 +561,12 @@ def commit_workspace_changes(
     if not rel_dirs:
         rel_dirs = ["skills"]
 
+    # Strip '.' entries and filter out gitignored directories
+    rel_dirs = [d for d in rel_dirs if d != "."]
+    rel_dirs = _filter_gitignored(workspace, rel_dirs)
+    if not rel_dirs:
+        return None
+
     try:
         # Check for changes first
         status = subprocess.run(
@@ -558,7 +579,7 @@ def commit_workspace_changes(
         # Stage
         subprocess.run(
             ["git", "add"] + rel_dirs,
-            capture_output=True, cwd=str(workspace), timeout=30, check=True,
+            capture_output=True, cwd=str(workspace), timeout=30,
         )
 
         # Commit

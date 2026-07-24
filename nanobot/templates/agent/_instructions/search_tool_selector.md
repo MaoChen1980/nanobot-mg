@@ -8,6 +8,7 @@
 | 在 events 时间线中查历史事件经过 | `read_file` | 直接文件读取 |
 | 从过往对话中找特定事实或话题 | `conversation_search` | 字符子串 (SQL LIKE) |
 | 在代码/文件中找精确关键词或标识符 | `grep` | 正则/字符 |
+| 分析代码结构、调用链、依赖、架构报告、做影响分析 | `skill_search("codegraph")` → 按 SKILL.md Steps 执行 | 结构+语义图谱 |
 | 对已有文档内容做语义匹配 | `semantic_search` | 语义 (embedding) |
 | 找可用 skill 匹配当前任务 | `skill_search` | 语义 (FAISS) |
 | 查最新信息、文档或新闻 | `web_search` | 网络搜索 |
@@ -17,4 +18,5 @@
 1. 用户提到 "之前做过"、"以前遇到过" → `memory_search` / `conversation_search`
 2. 需要查最新技术方案、API 用法 → `web_search`
 3. 需要精确匹配代码/标识符 → `grep`
-4. 需要对已有文档语义匹配 → `semantic_search`
+4. 需要分析代码结构、调用链、依赖、架构报告 → `skill_search("codegraph")` → 按 Steps 执行
+5. 需要对已有文档语义匹配 → `semantic_search`
