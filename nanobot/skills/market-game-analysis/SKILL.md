@@ -72,7 +72,7 @@ metadata:
 - ❌ 未执行 Step 0.5 持仓方向校验就发送行情报告；持仓方向校验是每次分析前必做项
 - ❌ 用 web_search 返回的旧数据替代 market-scan.mjs 输出的当日结构化数据；market-scan.mjs 数据时效性优先
 
-### 5 项触发条件验证（exec 前必须全部通过）
+### 6 项触发条件验证（exec 前必须全部通过）
 
 | 条件 | 标准 | 未通过处理 |
 |------|------|-----------|
@@ -81,6 +81,7 @@ metadata:
 | agent 尚未 read_file SKILL.md | 当前轮次无 read_file 调用 | 必须 read_file 全文 |
 | SKILL.md 路径有效 | `/nanobot/skills/market-game-analysis/SKILL.md` 或 skill_search 返回路径 | 用 skill_search 重新定位 |
 | cron 未进入压制期 | assess_me 无「findings + 压制指令」共存 | 按压制协议执行 |
+| **数据源可用且有效** | `mga_all_results.json` 存在且 `_skipped != true` | **禁止声称已发送报告；报告状态设为「待生成」并说明原因** |
 
 ## Step 0 — 市场扫描（每天必做）
 
