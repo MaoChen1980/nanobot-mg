@@ -599,7 +599,7 @@ class GatewayApplication:
 
         try:
             import sentence_transformers  # noqa: F401
-        except ImportError:
+        except (ImportError, Exception):
             console.print()
             console.print("[red]╔══════════════════════════════════════════════════════════════════╗[/red]")
             console.print("[red]║  Smart Search Disabled — search ideas, decisions & notes         ║[/red]")

@@ -480,6 +480,7 @@ class MemoryVectorIndex:
 
         Returns up to *k* results with ``source``, ``heading``, ``text``, and ``score`` keys.
         """
+        self.load()
         if not self._chunks:
             return []
 

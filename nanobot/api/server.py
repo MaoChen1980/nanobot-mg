@@ -83,7 +83,7 @@ async def handle_memory_search(request: Request) -> Response:
     store = _get_memory_store(workspace)
 
     # Try vector search first
-    store.vector_index.load()
+    store.ensure_memory_index()
     results = store.vector_index.search(q, k=5)
 
     # Fall back to grep when FAISS index unavailable or empty

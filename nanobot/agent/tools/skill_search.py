@@ -59,6 +59,7 @@ class SkillSearchTool(Tool):
         if skills_index is None:
             return "No skills index available."
 
+        self._store.ensure_skills_index()
         results = skills_index.search(query, k=k)
         if not results:
             return "No relevant skills found."

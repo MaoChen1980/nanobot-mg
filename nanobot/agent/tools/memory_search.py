@@ -68,12 +68,14 @@ class MemorySearchTool(Tool):
         if not query:
             return "Please provide a query."
 
+        self._store.ensure_memory_index()
         results = self._store.vector_index.search(query, k=k)
 
         # Also search tasks/ index if available
         tasks_results: list[dict[str, Any]] = []
         tasks_index = getattr(self._store, "tasks_index", None)
         if tasks_index is not None:
+            self._store.ensure_tasks_index()
             tasks_results = tasks_index.search(query, k=min(k, 3))
 
         if not results and not tasks_results:

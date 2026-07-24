@@ -71,23 +71,21 @@ class MemoryStore:
         # mtime-based file read cache: path_key -> (mtime, content)
         self._file_cache: dict[str, tuple[float, str]] = {}
         self.vector_index = MemoryVectorIndex(self.memory_dir)
-        if not self.vector_index.load() and self.list_memory_files():
-            logger.info("No vector index found — building from existing memory/ files")
-            self.build_vector_index()
+        self.vector_index.load()
+        self._memory_index_built = False
         self.tasks_dir = workspace / "tasks"
         if self.tasks_dir.is_dir():
             self.tasks_index = MemoryVectorIndex(self.tasks_dir, index_dir=".tasks_index")
-            if not self.tasks_index.load() and list(self._list_tasks_files()):
-                logger.info("No tasks FAISS index found — building from existing tasks/ files")
-                self.build_tasks_index()
+            self.tasks_index.load()
+            self._tasks_index_built = False
         else:
             self.tasks_index = None
+            self._tasks_index_built = True
         self.skills_loader = SkillsLoader(workspace)
         self.skills_index = MemoryVectorIndex(self.memory_dir, index_dir=".skills_index")
-        self.skills_index.load()  # pre-load existing index for immediate use
+        self.skills_index.load()
         self._last_skills_rebuild: float = 0.0
-        if self.skills_loader.list_skills(filter_unavailable=False):
-            self.build_skills_index()  # always rebuild to pick up any changes
+        self._skills_index_built = False
 
     @property
     def git(self) -> GitStore:
@@ -152,6 +150,19 @@ class MemoryStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
 
+    def ensure_memory_index(self) -> None:
+        """Lazily build the memory FAISS index if not already built."""
+        if self._memory_index_built:
+            return
+        if self.vector_index._index is not None and self.vector_index._chunks:
+            self._memory_index_built = True
+            return
+        if not self.list_memory_files():
+            self._memory_index_built = True
+            return
+        logger.info("No vector index found — building from existing memory/ files")
+        self.build_vector_index()
+
     def build_vector_index(self) -> None:
         """Full rebuild of the FAISS vector index from all memory files."""
         file_texts: dict[str, str] = {}
@@ -161,6 +172,7 @@ class MemoryStore:
                 rel = f.relative_to(self.memory_dir).as_posix()
                 file_texts[rel] = content
         self.vector_index.build_from_files(file_texts)
+        self._memory_index_built = True
 
     def _list_tasks_files(self) -> list[Path]:
         """Return all .md files under tasks/ (excluding .tasks_index/)."""
@@ -170,6 +182,22 @@ class MemoryStore:
             p for p in self.tasks_dir.rglob("*.md")
             if ".tasks_index" not in p.parts
         )
+
+    def ensure_tasks_index(self) -> None:
+        """Lazily build the tasks FAISS index if not already built."""
+        if self._tasks_index_built:
+            return
+        if self.tasks_index is None:
+            self._tasks_index_built = True
+            return
+        if self.tasks_index._index is not None and self.tasks_index._chunks:
+            self._tasks_index_built = True
+            return
+        if not self._list_tasks_files():
+            self._tasks_index_built = True
+            return
+        logger.info("No tasks FAISS index found — building from existing tasks/ files")
+        self.build_tasks_index()
 
     def build_tasks_index(self) -> None:
         """Full rebuild of the tasks FAISS index from all tasks files."""
@@ -182,6 +210,20 @@ class MemoryStore:
                 rel = f.relative_to(self.tasks_dir).as_posix()
                 file_texts[rel] = content
         self.tasks_index.build_from_files(file_texts)
+        self._tasks_index_built = True
+
+    def ensure_skills_index(self) -> None:
+        """Lazily build the skills FAISS index if not already built."""
+        if self._skills_index_built:
+            return
+        if self.skills_index._index is not None and self.skills_index._chunks:
+            self._skills_index_built = True
+            return
+        if not self.skills_loader.list_skills(filter_unavailable=False):
+            self._skills_index_built = True
+            return
+        logger.info("No skills index found — building from SKILL.md files")
+        self.build_skills_index()
 
     def build_skills_index(self) -> None:
         """Full rebuild of the skills FAISS index from frontmatter metadata.
@@ -226,6 +268,7 @@ class MemoryStore:
         self.skills_loader._list_cache = None
         self.skills_index.build_from_files(file_texts)
         self._last_skills_rebuild = time.time()
+        self._skills_index_built = True
 
     def _auto_classify_skills(self, skills_data: list[dict[str, Any]]) -> None:
         """Auto-classify uncategorized skills using embedding similarity.
